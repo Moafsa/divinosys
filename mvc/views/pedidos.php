@@ -1,0 +1,979 @@
+<?php
+$config = \System\Config::getInstance();
+$session = \System\Session::getInstance();
+$router = \System\Router::getInstance();
+$db = \System\Database::getInstance();
+
+// Get current user, tenant and filial
+$user = $session->getUser();
+$tenant = $session->getTenant();
+$filial = $session->getFilial();
+
+// Get pedidos data
+$pedidos = [];
+if ($tenant && $filial) {
+    $pedidos = $db->fetchAll(
+        "SELECT p.*, m.id_mesa, m.nome as mesa_nome, u.login as usuario_nome
+         FROM pedido p 
+         LEFT JOIN mesas m ON p.idmesa::varchar = m.id_mesa AND m.tenant_id = p.tenant_id AND m.filial_id = p.filial_id
+         LEFT JOIN usuarios u ON p.usuario_id = u.id AND u.tenant_id = p.tenant_id
+         WHERE p.tenant_id = ? AND p.filial_id = ? 
+         AND p.data = CURRENT_DATE
+         ORDER BY p.hora_pedido DESC",
+        [$tenant['id'], $filial['id']]
+    );
+}
+
+// Group pedidos by status
+$pedidos_por_status = [
+    'Pendente' => [],
+    'Em Preparo' => [],
+    'Pronto' => [],
+    'Saiu para Entrega' => [],
+    'Entregue' => [],
+    'Finalizado' => [],
+    'Cancelado' => []
+];
+
+foreach ($pedidos as $pedido) {
+    $status = $pedido['status'] ?? 'Pendente';
+    if (isset($pedidos_por_status[$status])) {
+        $pedidos_por_status[$status][] = $pedido;
+    }
+}
+
+// Get stats
+$stats = [
+    'total_pedidos' => count($pedidos),
+    'valor_total' => array_sum(array_column($pedidos, 'valor_total')),
+    'pendentes' => count($pedidos_por_status['Pendente']),
+    'em_preparo' => count($pedidos_por_status['Em Preparo'])
+];
+?>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pedidos - <?php echo $config->get('app.name'); ?></title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: <?php echo $tenant['cor_primaria'] ?? '#007bff'; ?>;
+            --primary-light: <?php echo $tenant['cor_primaria'] ?? '#007bff'; ?>20;
+        }
+        
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .sidebar {
+            background: linear-gradient(135deg, var(--primary-color), #6c757d);
+            min-height: 100vh;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+        }
+        
+        .sidebar .nav-link {
+            color: rgba(255,255,255,0.8);
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            margin: 0.25rem 0;
+            transition: all 0.3s ease;
+        }
+        
+        .sidebar .nav-link:hover,
+        .sidebar .nav-link.active {
+            color: white;
+            background-color: rgba(255,255,255,0.1);
+            transform: translateX(5px);
+        }
+        
+        .sidebar .nav-link i {
+            width: 20px;
+            margin-right: 0.5rem;
+        }
+        
+        .main-content {
+            padding: 2rem;
+        }
+        
+        .kanban-column {
+            background: white;
+            border-radius: 15px;
+            padding: 1.5rem;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            min-height: 600px;
+        }
+        
+        .column-header {
+            text-align: center;
+            padding: 1rem;
+            border-radius: 10px;
+            margin-bottom: 1rem;
+            font-weight: 600;
+            color: white;
+        }
+        
+        .column-header.pendente { background: linear-gradient(45deg, #ffc107, #fd7e14); }
+        .column-header.preparo { background: linear-gradient(45deg, #17a2b8, #20c997); }
+        .column-header.pronto { background: linear-gradient(45deg, #28a745, #20c997); }
+        .column-header.entrega { background: linear-gradient(45deg, #6f42c1, #e83e8c); }
+        .column-header.entregue { background: linear-gradient(45deg, #007bff, #6610f2); }
+        .column-header.finalizado { background: linear-gradient(45deg, #6c757d, #495057); }
+        .column-header.cancelado { background: linear-gradient(45deg, #dc3545, #e83e8c); }
+        
+        .pedido-card {
+            background: white;
+            border-radius: 10px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+            border-left: 4px solid var(--primary-color);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .pedido-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+        
+        .pedido-header {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        
+        .pedido-numero {
+            font-weight: 700;
+            color: var(--primary-color);
+            font-size: 1.1rem;
+        }
+        
+        .pedido-hora {
+            font-size: 0.8rem;
+            color: #6c757d;
+        }
+        
+        .pedido-mesa {
+            background: var(--primary-light);
+            color: var(--primary-color);
+            padding: 0.25rem 0.5rem;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .pedido-valor {
+            font-weight: 700;
+            color: #28a745;
+            font-size: 1.1rem;
+        }
+        
+        .pedido-cliente {
+            color: #6c757d;
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+        
+        .stats-card {
+            background: white;
+            border-radius: 15px;
+            padding: 1.5rem;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            border-left: 4px solid var(--primary-color);
+            text-align: center;
+        }
+        
+        .stats-number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+        
+        .stats-label {
+            color: #6c757d;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .header {
+            background: white;
+            border-radius: 15px;
+            padding: 1.5rem;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            margin-bottom: 2rem;
+        }
+        
+        .btn-primary {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        
+        .btn-primary:hover {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+            opacity: 0.9;
+        }
+        
+        /* Estilos para a modal do pedido */
+        .pedido-details {
+            padding: 1rem;
+        }
+        
+        .status-card, .total-card, .info-card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 1rem;
+            border-left: 4px solid var(--primary-color);
+        }
+        
+        .info-card h6 {
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+        
+        .itens-section {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .itens-section h6 {
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+        
+        .table-hover tbody tr:hover {
+            background-color: rgba(0, 123, 255, 0.1);
+        }
+        
+        .input-group-sm .btn {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+        }
+        
+        .input-group-sm .form-control {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+        }
+        
+        .modal-lg {
+            max-width: 900px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-3 col-lg-2 sidebar">
+                <div class="p-3">
+                    <h4 class="text-white mb-4">
+                        <i class="fas fa-utensils me-2"></i>
+                        <?php echo $tenant['nome'] ?? 'Divino Lanches'; ?>
+                    </h4>
+                    <nav class="nav flex-column">
+                        <a class="nav-link" href="<?php echo $router->url('dashboard'); ?>">
+                            <i class="fas fa-tachometer-alt"></i>
+                            Dashboard
+                        </a>
+                        <a class="nav-link" href="<?php echo $router->url('gerar_pedido'); ?>">
+                            <i class="fas fa-plus-circle"></i>
+                            Novo Pedido
+                        </a>
+                        <a class="nav-link active" href="<?php echo $router->url('pedidos'); ?>">
+                            <i class="fas fa-list"></i>
+                            Pedidos
+                        </a>
+                        <a class="nav-link" href="<?php echo $router->url('mesas'); ?>">
+                            <i class="fas fa-table"></i>
+                            Mesas
+                        </a>
+                        <a class="nav-link" href="<?php echo $router->url('delivery'); ?>">
+                            <i class="fas fa-motorcycle"></i>
+                            Delivery
+                        </a>
+                        <a class="nav-link" href="<?php echo $router->url('gerenciar_produtos'); ?>">
+                            <i class="fas fa-box"></i>
+                            Produtos
+                        </a>
+                        <a class="nav-link" href="<?php echo $router->url('estoque'); ?>">
+                            <i class="fas fa-warehouse"></i>
+                            Estoque
+                        </a>
+                        <a class="nav-link" href="<?php echo $router->url('financeiro'); ?>">
+                            <i class="fas fa-chart-line"></i>
+                            Financeiro
+                        </a>
+                        <a class="nav-link" href="<?php echo $router->url('relatorios'); ?>">
+                            <i class="fas fa-chart-bar"></i>
+                            Relatórios
+                        </a>
+                        <a class="nav-link" href="<?php echo $router->url('clientes'); ?>">
+                            <i class="fas fa-users"></i>
+                            Clientes
+                        </a>
+                        <a class="nav-link" href="<?php echo $router->url('configuracoes'); ?>">
+                            <i class="fas fa-cog"></i>
+                            Configurações
+                        </a>
+                        <hr class="text-white-50">
+                        <a class="nav-link" href="<?php echo $router->url('logout'); ?>">
+                            <i class="fas fa-sign-out-alt"></i>
+                            Sair
+                        </a>
+                    </nav>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="col-md-9 col-lg-10 main-content">
+                <!-- Header -->
+                <div class="header">
+                    <div class="row align-items-center">
+                        <div class="col-md-6">
+                            <h2 class="mb-0">
+                                <i class="fas fa-list me-2"></i>
+                                Pedidos
+                            </h2>
+                            <p class="text-muted mb-0">Gerenciamento de pedidos em tempo real</p>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="d-flex justify-content-end gap-2">
+                                <button class="btn btn-outline-primary" onclick="atualizarPedidos()">
+                                    <i class="fas fa-sync-alt me-1"></i>
+                                    Atualizar
+                                </button>
+                                <a href="<?php echo $router->url('gerar_pedido'); ?>" class="btn btn-primary">
+                                    <i class="fas fa-plus me-1"></i>
+                                    Novo Pedido
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="row mb-4">
+                    <div class="col-md-3 mb-3">
+                        <div class="stats-card">
+                            <div class="stats-number"><?php echo $stats['total_pedidos']; ?></div>
+                            <div class="stats-label">Total Hoje</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="stats-card">
+                            <div class="stats-number">R$ <?php echo number_format($stats['valor_total'], 2, ',', '.'); ?></div>
+                            <div class="stats-label">Faturamento</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="stats-card">
+                            <div class="stats-number"><?php echo $stats['pendentes']; ?></div>
+                            <div class="stats-label">Pendentes</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="stats-card">
+                            <div class="stats-number"><?php echo $stats['em_preparo']; ?></div>
+                            <div class="stats-label">Em Preparo</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Kanban Board -->
+                <div class="row">
+                    <?php foreach ($pedidos_por_status as $status => $pedidos_status): ?>
+                        <div class="col-lg-2 col-md-4 col-sm-6 mb-3">
+                            <div class="kanban-column">
+                                <div class="column-header <?php echo strtolower(str_replace(' ', '_', $status)); ?>">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span><?php echo $status; ?></span>
+                                        <span class="badge bg-light text-dark"><?php echo count($pedidos_status); ?></span>
+                                    </div>
+                                </div>
+                                
+                                <div class="pedidos-list">
+                                    <?php foreach ($pedidos_status as $pedido): ?>
+                                        <div class="pedido-card" onclick="verPedido(<?php echo $pedido['idpedido']; ?>)">
+                                            <div class="pedido-header">
+                                                <div class="pedido-numero">#<?php echo $pedido['idpedido']; ?></div>
+                                                <div class="pedido-hora"><?php echo $pedido['hora_pedido']; ?></div>
+                                            </div>
+                                            
+                                            <?php if ($pedido['idmesa']): ?>
+                                                <div class="pedido-mesa">
+                                                    <i class="fas fa-table me-1"></i>
+                                                    Mesa <?php echo $pedido['id_mesa']; ?>
+                                                </div>
+                                            <?php else: ?>
+                                                <div class="pedido-mesa">
+                                                    <i class="fas fa-motorcycle me-1"></i>
+                                                    Delivery
+                                                </div>
+                                            <?php endif; ?>
+                                            
+                                            <div class="pedido-valor">
+                                                R$ <?php echo number_format($pedido['valor_total'], 2, ',', '.'); ?>
+                                            </div>
+                                            
+                                            <?php if ($pedido['cliente']): ?>
+                                                <div class="pedido-cliente">
+                                                    <i class="fas fa-user me-1"></i>
+                                                    <?php echo htmlspecialchars($pedido['cliente']); ?>
+                                                </div>
+                                            <?php endif; ?>
+                                            
+                                            <div class="mt-2">
+                                                <button class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); atualizarStatus(<?php echo $pedido['idpedido']; ?>, '<?php echo $status; ?>')">
+                                                    <i class="fas fa-arrow-right"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-danger" onclick="event.stopPropagation(); excluirPedido(<?php echo $pedido['idpedido']; ?>)">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Pedido -->
+    <div class="modal fade" id="modalPedido" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-receipt me-2"></i>
+                        Pedido #<span id="pedidoNumero"></span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="modalPedidoBody">
+                    <!-- Content will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        function verPedido(pedidoId) {
+            document.getElementById('pedidoNumero').textContent = pedidoId;
+            
+            // Load pedido content via AJAX
+            fetch(`index.php?action=pedidos&buscar_pedido=1&pedido_id=${pedidoId}`, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Generate HTML content from pedido data
+                        const pedido = data.pedido;
+                        let html = `
+                            <div class="pedido-details">
+                                <!-- Header com ações -->
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <div>
+                                        <h5 class="mb-1">Pedido #${pedido.idpedido}</h5>
+                                        <small class="text-muted">${pedido.data} às ${pedido.hora_pedido}</small>
+                                    </div>
+                                    <div class="btn-group" role="group">
+                                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="editarPedido(${pedido.idpedido})">
+                                            <i class="fas fa-edit"></i> Editar
+                                        </button>
+                                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="excluirPedido(${pedido.idpedido})">
+                                            <i class="fas fa-trash"></i> Excluir
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Status e Total -->
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <div class="status-card">
+                                            <label class="form-label">Status Atual</label>
+                                            <select class="form-select" id="statusSelect" onchange="atualizarStatusRapido(${pedido.idpedido}, this.value)">
+                                                <option value="Pendente" ${pedido.status === 'Pendente' ? 'selected' : ''}>Pendente</option>
+                                                <option value="Em Preparo" ${pedido.status === 'Em Preparo' ? 'selected' : ''}>Em Preparo</option>
+                                                <option value="Pronto" ${pedido.status === 'Pronto' ? 'selected' : ''}>Pronto</option>
+                                                <option value="Saiu para Entrega" ${pedido.status === 'Saiu para Entrega' ? 'selected' : ''}>Saiu para Entrega</option>
+                                                <option value="Entregue" ${pedido.status === 'Entregue' ? 'selected' : ''}>Entregue</option>
+                                                <option value="Finalizado" ${pedido.status === 'Finalizado' ? 'selected' : ''}>Finalizado</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="total-card">
+                                            <label class="form-label">Valor Total</label>
+                                            <div class="h4 text-success mb-0">R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Informações do Cliente/Mesa -->
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <div class="info-card">
+                                            <h6><i class="fas fa-user me-2"></i>Cliente</h6>
+                                            <p class="mb-1"><strong>Nome:</strong> ${pedido.cliente || 'N/A'}</p>
+                                            <p class="mb-0"><strong>Usuário:</strong> ${pedido.usuario_nome || 'N/A'}</p>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="info-card">
+                                            <h6><i class="fas fa-table me-2"></i>Local</h6>
+                                            <p class="mb-1"><strong>Mesa:</strong> ${pedido.mesa_nome || 'Delivery'}</p>
+                                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="editarMesa(${pedido.idpedido}, '${pedido.idmesa}')">
+                                                <i class="fas fa-edit"></i> Editar Mesa
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Observações -->
+                                <div class="mb-3">
+                                    <label class="form-label">Observações</label>
+                                    <textarea class="form-control" id="observacaoPedido" rows="2" placeholder="Observações do pedido...">${pedido.observacao || ''}</textarea>
+                                    <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="salvarObservacao(${pedido.idpedido})">
+                                        <i class="fas fa-save"></i> Salvar Observação
+                                    </button>
+                                </div>
+                        `;
+                        
+                        if (pedido.itens && pedido.itens.length > 0) {
+                            html += `
+                                <!-- Itens do Pedido -->
+                                <div class="itens-section">
+                                    <h6><i class="fas fa-list me-2"></i>Itens do Pedido</h6>
+                                    <div class="table-responsive">
+                                        <table class="table table-hover">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Produto</th>
+                                                    <th width="80">Qtd</th>
+                                                    <th width="100">Valor Unit.</th>
+                                                    <th width="100">Total</th>
+                                                    <th width="80">Ações</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                            `;
+                            
+                            pedido.itens.forEach((item, index) => {
+                                html += `
+                                    <tr>
+                                        <td>
+                                            <strong>${item.produto_nome || 'Produto'}</strong>
+                                            ${item.observacao ? `<br><small class="text-muted">${item.observacao}</small>` : ''}
+                                        </td>
+                                        <td>
+                                            <div class="input-group input-group-sm">
+                                                <button class="btn btn-outline-secondary" type="button" onclick="alterarQuantidade(${pedido.idpedido}, ${item.id}, ${item.quantidade - 1})">-</button>
+                                                <input type="number" class="form-control text-center" value="${item.quantidade}" min="1" onchange="alterarQuantidade(${pedido.idpedido}, ${item.id}, this.value)">
+                                                <button class="btn btn-outline-secondary" type="button" onclick="alterarQuantidade(${pedido.idpedido}, ${item.id}, ${parseInt(item.quantidade) + 1})">+</button>
+                                            </div>
+                                        </td>
+                                        <td>R$ ${parseFloat(item.valor_unitario).toFixed(2).replace('.', ',')}</td>
+                                        <td><strong>R$ ${parseFloat(item.valor_total).toFixed(2).replace('.', ',')}</strong></td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-danger" onclick="removerItem(${pedido.idpedido}, ${item.id})" title="Remover item">
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                `;
+                            });
+                            
+                            html += `
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                        
+                        html += `</div>`;
+                        
+                        document.getElementById('modalPedidoBody').innerHTML = html;
+                        new bootstrap.Modal(document.getElementById('modalPedido')).show();
+                    } else {
+                        Swal.fire('Erro', data.message, 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    Swal.fire('Erro', 'Erro ao carregar dados do pedido', 'error');
+                });
+        }
+
+        function atualizarStatus(pedidoId, statusAtual) {
+            const statuses = ['Pendente', 'Em Preparo', 'Pronto', 'Saiu para Entrega', 'Entregue', 'Finalizado'];
+            const currentIndex = statuses.indexOf(statusAtual);
+            
+            if (currentIndex < statuses.length - 1) {
+                const novoStatus = statuses[currentIndex + 1];
+                atualizarStatusRapido(pedidoId, novoStatus);
+            }
+        }
+        
+        function atualizarStatusRapido(pedidoId, novoStatus) {
+            console.log('Atualizando status:', pedidoId, novoStatus);
+            
+            // Fazer chamada AJAX para atualizar status sem confirmação
+            const formData = new URLSearchParams();
+            formData.append('action', 'atualizar_status');
+            formData.append('pedido_id', pedidoId);
+            formData.append('status', novoStatus);
+            
+            fetch('index.php?action=pedidos', {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: formData
+            })
+            .then(response => {
+                console.log('Response status:', response.status);
+                return response.json();
+            })
+            .then(data => {
+                console.log('Response data:', data);
+                if (data.success) {
+                    // Fechar modal e recarregar página
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('modalPedido'));
+                    if (modal) {
+                        modal.hide();
+                    }
+                    setTimeout(() => location.reload(), 500);
+                } else {
+                    Swal.fire('Erro', data.message, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                Swal.fire('Erro', 'Erro ao atualizar status do pedido', 'error');
+            });
+        }
+
+        function excluirPedido(pedidoId) {
+            Swal.fire({
+                title: 'Excluir Pedido',
+                text: `Deseja realmente excluir o pedido #${pedidoId}?`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sim, excluir',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#dc3545'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Fazer chamada AJAX para excluir pedido
+                    const formData = new URLSearchParams();
+                    formData.append('action', 'excluir_pedido');
+                    formData.append('pedido_id', pedidoId);
+                    
+                    fetch('index.php?action=pedidos', {
+                        method: 'POST',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Sucesso', data.message, 'success');
+                            setTimeout(() => location.reload(), 1500);
+                        } else {
+                            Swal.fire('Erro', data.message, 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        Swal.fire('Erro', 'Erro ao excluir pedido', 'error');
+                    });
+                }
+            });
+        }
+
+        function atualizarPedidos() {
+            location.reload();
+        }
+        
+        function salvarObservacao(pedidoId) {
+            const observacao = document.getElementById('observacaoPedido').value;
+            
+            const formData = new URLSearchParams();
+            formData.append('action', 'atualizar_observacao');
+            formData.append('pedido_id', pedidoId);
+            formData.append('observacao', observacao);
+            
+            fetch('index.php?action=pedidos', {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire('Sucesso', 'Observação salva com sucesso!', 'success');
+                } else {
+                    Swal.fire('Erro', data.message, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                Swal.fire('Erro', 'Erro ao salvar observação', 'error');
+            });
+        }
+        
+        function alterarQuantidade(pedidoId, itemId, novaQuantidade) {
+            if (novaQuantidade < 1) {
+                novaQuantidade = 1;
+            }
+            
+            const formData = new URLSearchParams();
+            formData.append('action', 'alterar_quantidade');
+            formData.append('pedido_id', pedidoId);
+            formData.append('item_id', itemId);
+            formData.append('quantidade', novaQuantidade);
+            
+            fetch('index.php?action=pedidos', {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Recarregar modal com dados atualizados
+                    verPedido(pedidoId);
+                } else {
+                    Swal.fire('Erro', data.message, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                Swal.fire('Erro', 'Erro ao alterar quantidade', 'error');
+            });
+        }
+        
+        function removerItem(pedidoId, itemId) {
+            Swal.fire({
+                title: 'Remover Item',
+                text: 'Deseja realmente remover este item do pedido?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sim, remover',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#dc3545'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const formData = new URLSearchParams();
+                    formData.append('action', 'remover_item');
+                    formData.append('pedido_id', pedidoId);
+                    formData.append('item_id', itemId);
+                    
+                    fetch('index.php?action=pedidos', {
+                        method: 'POST',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Sucesso', 'Item removido com sucesso!', 'success');
+                            // Recarregar modal com dados atualizados
+                            verPedido(pedidoId);
+                        } else {
+                            Swal.fire('Erro', data.message, 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        Swal.fire('Erro', 'Erro ao remover item', 'error');
+                    });
+                }
+            });
+        }
+        
+        function editarPedido(pedidoId) {
+            // Redirecionar para página de edição de pedido
+            window.location.href = `index.php?view=gerar_pedido&editar=${pedidoId}`;
+        }
+        
+        function editarMesa(pedidoId, mesaAtual) {
+            // Buscar mesas disponíveis
+            fetch('index.php?action=mesas&buscar_mesas=1', {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    mostrarModalEditarMesa(pedidoId, mesaAtual, data.mesas);
+                } else {
+                    Swal.fire('Erro', data.message, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                Swal.fire('Erro', 'Erro ao carregar mesas', 'error');
+            });
+        }
+        
+        function mostrarModalEditarMesa(pedidoId, mesaAtual, mesas) {
+            let html = `
+                <div class="mb-3">
+                    <label class="form-label">Selecionar Mesa(s)</label>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="tipoMesa" id="delivery" value="delivery" ${mesaAtual === '999' ? 'checked' : ''}>
+                                <label class="form-check-label" for="delivery">
+                                    <i class="fas fa-motorcycle me-2"></i>Delivery
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="tipoMesa" id="mesa" value="mesa" ${mesaAtual !== '999' ? 'checked' : ''}>
+                                <label class="form-check-label" for="mesa">
+                                    <i class="fas fa-table me-2"></i>Mesa
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="mesasContainer" style="display: none;">
+                    <label class="form-label">Mesas Disponíveis</label>
+                    <div class="row">
+            `;
+            
+            mesas.forEach(mesa => {
+                html += `
+                    <div class="col-md-3 mb-2">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="mesas[]" id="mesa_${mesa.id_mesa}" value="${mesa.id_mesa}" ${mesaAtual === mesa.id_mesa ? 'checked' : ''}>
+                            <label class="form-check-label" for="mesa_${mesa.id_mesa}">
+                                Mesa ${mesa.id_mesa} (${mesa.status === '1' ? 'Livre' : 'Ocupada'})
+                            </label>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += `
+                    </div>
+                </div>
+            `;
+            
+            Swal.fire({
+                title: 'Editar Mesa do Pedido',
+                html: html,
+                showCancelButton: true,
+                confirmButtonText: 'Salvar',
+                cancelButtonText: 'Cancelar',
+                didOpen: () => {
+                    // Mostrar/esconder mesas baseado no tipo selecionado
+                    document.querySelectorAll('input[name="tipoMesa"]').forEach(radio => {
+                        radio.addEventListener('change', function() {
+                            const mesasContainer = document.getElementById('mesasContainer');
+                            if (this.value === 'mesa') {
+                                mesasContainer.style.display = 'block';
+                            } else {
+                                mesasContainer.style.display = 'none';
+                            }
+                        });
+                    });
+                    
+                    // Trigger change event para mostrar/esconder inicialmente
+                    const selectedTipo = document.querySelector('input[name="tipoMesa"]:checked');
+                    if (selectedTipo) {
+                        selectedTipo.dispatchEvent(new Event('change'));
+                    }
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const tipoMesa = document.querySelector('input[name="tipoMesa"]:checked').value;
+                    let novaMesa = '';
+                    
+                    if (tipoMesa === 'delivery') {
+                        novaMesa = '999';
+                    } else {
+                        const mesasSelecionadas = Array.from(document.querySelectorAll('input[name="mesas[]"]:checked')).map(cb => cb.value);
+                        if (mesasSelecionadas.length === 0) {
+                            Swal.fire('Erro', 'Selecione pelo menos uma mesa', 'error');
+                            return;
+                        }
+                        novaMesa = mesasSelecionadas.join(',');
+                    }
+                    
+                    // Atualizar mesa do pedido
+                    const formData = new URLSearchParams();
+                    formData.append('action', 'atualizar_mesa');
+                    formData.append('pedido_id', pedidoId);
+                    formData.append('mesa_id', novaMesa);
+                    
+                    fetch('index.php?action=pedidos', {
+                        method: 'POST',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Sucesso', data.message, 'success');
+                            // Fechar modal e recarregar página
+                            bootstrap.Modal.getInstance(document.getElementById('modalPedido')).hide();
+                            setTimeout(() => location.reload(), 1000);
+                        } else {
+                            Swal.fire('Erro', data.message, 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        Swal.fire('Erro', 'Erro ao atualizar mesa', 'error');
+                    });
+                }
+            });
+        }
+
+        // Auto-refresh every 30 seconds
+        setInterval(() => {
+            atualizarPedidos();
+        }, 30000);
+    </script>
+</body>
+</html>

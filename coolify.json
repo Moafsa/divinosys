@@ -1,0 +1,80 @@
+{
+  "name": "Divino Lanches 2.0",
+  "description": "Sistema de gestão completo para restaurantes e lanchonetes",
+  "version": "2.0.0",
+  "type": "web",
+  "framework": "php",
+  "build": {
+    "context": ".",
+    "dockerfile": "Dockerfile"
+  },
+  "environment": {
+    "required": [
+      "DB_HOST",
+      "DB_PORT", 
+      "DB_NAME",
+      "DB_USER",
+      "DB_PASSWORD",
+      "APP_URL",
+      "APP_KEY"
+    ],
+    "optional": [
+      "REDIS_HOST",
+      "REDIS_PORT",
+      "REDIS_PASSWORD",
+      "MAIL_MAILER",
+      "MAIL_HOST",
+      "MAIL_PORT",
+      "MAIL_USERNAME",
+      "MAIL_PASSWORD",
+      "MAIL_ENCRYPTION",
+      "MAIL_FROM_ADDRESS",
+      "MAIL_FROM_NAME"
+    ]
+  },
+  "services": {
+    "postgres": {
+      "image": "postgres:15-alpine",
+      "environment": {
+        "POSTGRES_DB": "${DB_NAME}",
+        "POSTGRES_USER": "${DB_USER}",
+        "POSTGRES_PASSWORD": "${DB_PASSWORD}"
+      },
+      "volumes": [
+        "postgres_data:/var/lib/postgresql/data",
+        "./database/init:/docker-entrypoint-initdb.d"
+      ]
+    },
+    "redis": {
+      "image": "redis:7-alpine",
+      "volumes": [
+        "redis_data:/data"
+      ]
+    }
+  },
+  "volumes": [
+    "postgres_data",
+    "redis_data",
+    "uploads",
+    "logs"
+  ],
+  "healthcheck": {
+    "path": "/",
+    "interval": 30,
+    "timeout": 10,
+    "retries": 3
+  },
+  "domains": {
+    "primary": "${APP_URL}",
+    "subdomains": true
+  },
+  "ssl": {
+    "enabled": true,
+    "force": true
+  },
+  "backup": {
+    "enabled": true,
+    "schedule": "0 2 * * *",
+    "retention": 7
+  }
+}

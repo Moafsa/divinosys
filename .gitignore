@@ -1,0 +1,48 @@
+# Environment files
+.env
+.env.local
+.env.production
+
+# Logs
+logs/*.log
+*.log
+
+# Uploads
+uploads/*
+!uploads/.gitkeep
+
+# Composer
+vendor/
+composer.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.docker/
+
+# Cache
+cache/
+tmp/
+
+# Database
+*.sql
+*.db
+
+# Backup files
+*.bak
+*.backup
+
+# Node modules (if using npm)
+node_modules/
+
+# Build files
+build/
+dist/

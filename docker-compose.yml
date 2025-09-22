@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: divino-lanches-app
+    ports:
+      - "8080:80"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=divino_db
+      - DB_USER=divino_user
+      - DB_PASSWORD=divino_password
+      - APP_ENV=production
+      - APP_URL=http://localhost:8080
+    depends_on:
+      - postgres
+    volumes:
+      - ./uploads:/var/www/html/uploads
+      - ./logs:/var/www/html/logs
+    networks:
+      - divino-network
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: divino-lanches-db
+    environment:
+      - POSTGRES_DB=divino_db
+      - POSTGRES_USER=divino_user
+      - POSTGRES_PASSWORD=divino_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    networks:
+      - divino-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: divino-lanches-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - divino-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  divino-network:
+    driver: bridge

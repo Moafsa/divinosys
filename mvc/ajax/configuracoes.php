@@ -1,0 +1,80 @@
+<?php
+header('Content-Type: application/json');
+
+// Simples e direto - usar require_once
+require_once __DIR__ . '/../../system/Config.php';
+require_once __DIR__ . '/../../system/Database.php';
+require_once __DIR__ . '/../../system/Session.php';
+
+try {
+    $action = $_POST['action'] ?? '';
+    
+    switch ($action) {
+        case 'salvar_aparencia':
+            $corPrimaria = $_POST['cor_primaria'] ?? '';
+            $nomeEstabelecimento = $_POST['nome_estabelecimento'] ?? '';
+            
+            if (empty($corPrimaria) || empty($nomeEstabelecimento)) {
+                throw new \Exception('Todos os campos são obrigatórios');
+            }
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId();
+            
+            // Atualizar tenant
+            $db->update(
+                'tenants',
+                ['cor_primaria' => $corPrimaria, 'nome' => $nomeEstabelecimento],
+                'id = ?',
+                [$tenantId]
+            );
+            
+            // Atualizar sessão
+            $tenant = $session->getTenant();
+            $tenant['cor_primaria'] = $corPrimaria;
+            $tenant['nome'] = $nomeEstabelecimento;
+            $session->setTenant($tenant);
+            
+            echo json_encode(['success' => true, 'message' => 'Configurações de aparência salvas com sucesso!']);
+            break;
+            
+        case 'salvar_mesas':
+            $numeroMesas = (int) ($_POST['numero_mesas'] ?? 0);
+            $capacidadeMesa = (int) ($_POST['capacidade_mesa'] ?? 0);
+            
+            if ($numeroMesas <= 0 || $capacidadeMesa <= 0) {
+                throw new \Exception('Número de mesas e capacidade devem ser maiores que zero');
+            }
+            
+            $db = \System\Database::getInstance();
+            
+            // Usar valores padrão para tenant_id e filial_id
+            $tenantId = 1;
+            $filialId = 1;
+            
+            // Deletar mesas existentes
+            $db->delete('mesas', 'tenant_id = ? AND filial_id = ?', [$tenantId, $filialId]);
+            
+            // Criar novas mesas
+            for ($i = 1; $i <= $numeroMesas; $i++) {
+                $db->insert('mesas', [
+                    'id_mesa' => (string)$i,
+                    'nome' => "Mesa {$i}",
+                    'status' => '1', // 1 = livre, 2 = ocupada
+                    'tenant_id' => $tenantId,
+                    'filial_id' => $filialId
+                ]);
+            }
+            
+            echo json_encode(['success' => true, 'message' => 'Configurações de mesas salvas com sucesso!']);
+            break;
+            
+        default:
+            throw new \Exception('Ação não encontrada: ' . $action);
+    }
+    
+} catch (\Exception $e) {
+    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+}
+?>
