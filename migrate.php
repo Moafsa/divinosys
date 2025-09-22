@@ -13,8 +13,20 @@ use System\Database;
 try {
     echo "Starting database migration...\n";
     
+    // Debug environment variables
+    echo "Environment variables:\n";
+    echo "DB_HOST: " . (getenv('DB_HOST') ?: 'NOT SET') . "\n";
+    echo "DB_PORT: " . (getenv('DB_PORT') ?: 'NOT SET') . "\n";
+    echo "DB_NAME: " . (getenv('DB_NAME') ?: 'NOT SET') . "\n";
+    echo "DB_USER: " . (getenv('DB_USER') ?: 'NOT SET') . "\n";
+    echo "DB_PASSWORD: " . (getenv('DB_PASSWORD') ?: 'NOT SET') . "\n\n";
+    
     // Initialize configuration
     $config = Config::getInstance();
+    $dbConfig = $config->getDatabaseConfig();
+    echo "Database config from Config class:\n";
+    print_r($dbConfig);
+    
     $db = Database::getInstance();
     
     echo "Database connection established successfully!\n";

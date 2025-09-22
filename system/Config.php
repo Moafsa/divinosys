@@ -24,6 +24,7 @@ class Config
 
     private function loadEnv()
     {
+        // First try to load from .env file (for local development)
         if (file_exists(__DIR__ . '/../.env')) {
             $lines = file(__DIR__ . '/../.env', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
             foreach ($lines as $line) {
@@ -31,6 +32,25 @@ class Config
                     list($key, $value) = explode('=', $line, 2);
                     $this->env[trim($key)] = trim($value);
                 }
+            }
+        }
+        
+        // Then load from system environment variables (for production/Coolify)
+        $envVars = [
+            'DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD',
+            'APP_NAME', 'APP_VERSION', 'APP_ENV', 'APP_DEBUG', 'APP_URL', 'APP_KEY',
+            'SESSION_LIFETIME', 'SESSION_ENCRYPT',
+            'REDIS_HOST', 'REDIS_PORT', 'REDIS_PASSWORD',
+            'MAIL_MAILER', 'MAIL_HOST', 'MAIL_PORT', 'MAIL_USERNAME', 'MAIL_PASSWORD',
+            'MAIL_ENCRYPTION', 'MAIL_FROM_ADDRESS', 'MAIL_FROM_NAME',
+            'UPLOAD_MAX_SIZE', 'ALLOWED_EXTENSIONS',
+            'ENABLE_MULTI_TENANT', 'DEFAULT_TENANT_ID'
+        ];
+        
+        foreach ($envVars as $var) {
+            $value = getenv($var);
+            if ($value !== false) {
+                $this->env[$var] = $value;
             }
         }
     }
