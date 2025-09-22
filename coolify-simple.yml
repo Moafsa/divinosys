@@ -3,8 +3,6 @@ version: '3.8'
 services:
   app:
     build: .
-    ports:
-      - "3000:80"
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432
@@ -30,10 +28,7 @@ services:
       - POSTGRES_PASSWORD=${DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/init:/docker-entrypoint-initdb.d
     restart: unless-stopped
-    ports:
-      - "5432:5432"
 
 volumes:
   postgres_data:

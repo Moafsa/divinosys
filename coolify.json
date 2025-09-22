@@ -6,7 +6,6 @@
   "framework": "php",
   "buildpack": "docker",
   "dockerfile": "Dockerfile",
-  "port": 80,
   "environment": {
     "DB_HOST": "postgres",
     "DB_PORT": "5432",
@@ -23,8 +22,7 @@
         "POSTGRES_USER": "postgres"
       },
       "volumes": [
-        "postgres_data:/var/lib/postgresql/data",
-        "./database/init:/docker-entrypoint-initdb.d"
+        "postgres_data:/var/lib/postgresql/data"
       ]
     }
   },
