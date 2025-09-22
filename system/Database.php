@@ -30,11 +30,14 @@ class Database
         try {
             $dbConfig = $this->config->getDatabaseConfig();
             
+            // Debug: Log the database configuration
+            error_log("Database Config: " . print_r($dbConfig, true));
+            
             $dsn = sprintf(
                 'pgsql:host=%s;port=%s;dbname=%s',
-                $dbConfig['host'],
-                $dbConfig['port'],
-                $dbConfig['name']
+                $dbConfig['host'] ?? 'postgres',
+                $dbConfig['port'] ?? '5432',
+                $dbConfig['name'] ?? 'divino_lanches'
             );
 
             $options = [

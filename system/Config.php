@@ -75,7 +75,7 @@ class Config
             ],
             'upload' => [
                 'max_size' => $this->getEnv('UPLOAD_MAX_SIZE'),
-                'allowed_extensions' => explode(',', $this->getEnv('ALLOWED_EXTENSIONS')),
+                'allowed_extensions' => explode(',', $this->getEnv('ALLOWED_EXTENSIONS', 'jpg,jpeg,png,gif,pdf,doc,docx')),
             ],
             'multi_tenant' => [
                 'enabled' => $this->getEnv('ENABLE_MULTI_TENANT') === 'true',

@@ -13,6 +13,8 @@ services:
       - APP_URL=${APP_URL}
       - APP_DEBUG=false
       - MULTI_TENANT_ENABLED=true
+      - UPLOAD_MAX_SIZE=10M
+      - ALLOWED_EXTENSIONS=jpg,jpeg,png,gif,pdf,doc,docx
     depends_on:
       - postgres
     volumes:
