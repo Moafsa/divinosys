@@ -41,9 +41,14 @@ try {
         $schemaFile = '/var/www/html/database/init/01_create_schema.sql';
         if (file_exists($schemaFile)) {
             echo "Found schema file: $schemaFile\n";
-            $schema = file_get_contents($schemaFile);
-            $db->query($schema);
-            echo "Schema created successfully!\n";
+            try {
+                $schema = file_get_contents($schemaFile);
+                $db->query($schema);
+                echo "Schema created successfully!\n";
+            } catch (Exception $e) {
+                echo "Schema creation failed: " . $e->getMessage() . "\n";
+                throw $e;
+            }
         } else {
             echo "Schema file not found: $schemaFile\n";
             echo "Current directory: " . getcwd() . "\n";
@@ -67,10 +72,15 @@ try {
         $dataFile = '/var/www/html/database/init/02_insert_default_data.sql';
         if (file_exists($dataFile)) {
             echo "Found data file: $dataFile\n";
-            $data = file_get_contents($dataFile);
-            echo "Data file size: " . strlen($data) . " bytes\n";
-            $db->query($data);
-            echo "Default data inserted successfully!\n";
+            try {
+                $data = file_get_contents($dataFile);
+                echo "Data file size: " . strlen($data) . " bytes\n";
+                $db->query($data);
+                echo "Default data inserted successfully!\n";
+            } catch (Exception $e) {
+                echo "Data insertion failed: " . $e->getMessage() . "\n";
+                throw $e;
+            }
         } else {
             echo "Data file not found: $dataFile\n";
         }
@@ -81,35 +91,49 @@ try {
         echo "Found tables: " . implode(', ', array_column($tables, 'table_name')) . "\n";
         
         // Check if usuarios table has data
-        $userCount = $db->query("SELECT COUNT(*) as count FROM usuarios")->fetch()['count'];
-        echo "Users in database: $userCount\n";
-        
-        if ($userCount == 0) {
-            echo "No users found. Running data migration...\n";
+        try {
+            $userCount = $db->query("SELECT COUNT(*) as count FROM usuarios")->fetch()['count'];
+            echo "Users in database: $userCount\n";
             
-            // Read and execute data file
-            $dataFile = '/var/www/html/database/init/02_insert_default_data.sql';
-            if (file_exists($dataFile)) {
-                echo "Found data file: $dataFile\n";
-                $data = file_get_contents($dataFile);
-                echo "Data file size: " . strlen($data) . " bytes\n";
-                $db->query($data);
-                echo "Default data inserted successfully!\n";
+            if ($userCount == 0) {
+                echo "No users found. Running data migration...\n";
+                
+                // Read and execute data file
+                $dataFile = '/var/www/html/database/init/02_insert_default_data.sql';
+                if (file_exists($dataFile)) {
+                    echo "Found data file: $dataFile\n";
+                    try {
+                        $data = file_get_contents($dataFile);
+                        echo "Data file size: " . strlen($data) . " bytes\n";
+                        $db->query($data);
+                        echo "Default data inserted successfully!\n";
+                    } catch (Exception $e) {
+                        echo "Data insertion failed: " . $e->getMessage() . "\n";
+                        throw $e;
+                    }
+                } else {
+                    echo "Data file not found: $dataFile\n";
+                }
             } else {
-                echo "Data file not found: $dataFile\n";
+                echo "Data migration not needed. Users already exist.\n";
             }
-        } else {
-            echo "Data migration not needed. Users already exist.\n";
+        } catch (Exception $e) {
+            echo "Error checking users: " . $e->getMessage() . "\n";
+            echo "This might be because the usuarios table doesn't exist yet.\n";
         }
     }
     
     // Test login credentials
     echo "Testing login credentials...\n";
-    $user = $db->query("SELECT * FROM usuarios WHERE login = 'admin'")->fetch();
-    if ($user) {
-        echo "Admin user found: " . $user['nome'] . "\n";
-    } else {
-        echo "Admin user not found!\n";
+    try {
+        $user = $db->query("SELECT * FROM usuarios WHERE login = 'admin'")->fetch();
+        if ($user) {
+            echo "Admin user found: " . $user['nome'] . "\n";
+        } else {
+            echo "Admin user not found!\n";
+        }
+    } catch (Exception $e) {
+        echo "Login test failed: " . $e->getMessage() . "\n";
     }
     
 } catch (Exception $e) {
