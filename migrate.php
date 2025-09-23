@@ -38,17 +38,32 @@ try {
         echo "No tables found. Running initial migration...\n";
         
         // Read and execute schema file
-        $schemaFile = 'database/init/01_create_schema.sql';
+        $schemaFile = '/var/www/html/database/init/01_create_schema.sql';
         if (file_exists($schemaFile)) {
             $schema = file_get_contents($schemaFile);
             $db->query($schema);
             echo "Schema created successfully!\n";
         } else {
             echo "Schema file not found: $schemaFile\n";
+            echo "Current directory: " . getcwd() . "\n";
+            echo "Files in current directory:\n";
+            $files = scandir('.');
+            foreach ($files as $file) {
+                echo "- $file\n";
+            }
+            echo "Files in database directory:\n";
+            if (is_dir('database')) {
+                $dbFiles = scandir('database');
+                foreach ($dbFiles as $file) {
+                    echo "- database/$file\n";
+                }
+            } else {
+                echo "Database directory does not exist!\n";
+            }
         }
         
         // Read and execute data file
-        $dataFile = 'database/init/02_insert_default_data.sql';
+        $dataFile = '/var/www/html/database/init/02_insert_default_data.sql';
         if (file_exists($dataFile)) {
             $data = file_get_contents($dataFile);
             $db->query($data);
