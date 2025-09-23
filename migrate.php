@@ -173,6 +173,39 @@ try {
             echo "Warning: Could not fix pedido_itens table: " . $e->getMessage() . "\n";
         }
         
+        // Run categories/products update
+        echo "Running categories/products update...\n";
+        $updateFile = '/var/www/html/database/init/03_update_categories_products.sql';
+        if (file_exists($updateFile)) {
+            echo "Found update file: $updateFile\n";
+            try {
+                $update = file_get_contents($updateFile);
+                
+                // Split by semicolon and execute each statement
+                $statements = explode(';', $update);
+                $executed = 0;
+                
+                foreach ($statements as $statement) {
+                    $statement = trim($statement);
+                    if (!empty($statement)) {
+                        try {
+                            $db->query($statement);
+                            $executed++;
+                        } catch (Exception $e) {
+                            echo "Warning: Error executing update statement: " . $e->getMessage() . "\n";
+                            echo "Statement: " . substr($statement, 0, 100) . "...\n";
+                        }
+                    }
+                }
+                
+                echo "Categories/Products update completed! Executed $executed statements\n";
+            } catch (Exception $e) {
+                echo "Categories/Products update failed: " . $e->getMessage() . "\n";
+            }
+        } else {
+            echo "Update file not found: $updateFile\n";
+        }
+        
         // Test login credentials
         echo "Testing login credentials...\n";
         try {

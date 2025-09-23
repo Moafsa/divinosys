@@ -9,7 +9,7 @@ $user = $session->getUser();
 $tenant = $session->getTenant();
 $filial = $session->getFilial();
 
-// Get produtos data
+// Get produtos data with ingredients
 $produtos = [];
 if ($tenant && $filial) {
     $produtos = $db->fetchAll(
@@ -20,13 +20,34 @@ if ($tenant && $filial) {
          ORDER BY c.nome, p.nome",
         [$tenant['id'], $filial['id']]
     );
+    
+    // Get ingredients for each product
+    foreach ($produtos as &$produto) {
+        $ingredientes = $db->fetchAll(
+            "SELECT i.*, pi.obrigatorio, pi.preco_adicional 
+             FROM ingredientes i 
+             JOIN produto_ingredientes pi ON i.id = pi.ingrediente_id 
+             WHERE pi.produto_id = ? AND i.tenant_id = ? AND i.filial_id = ?",
+            [$produto['id'], $tenant['id'], $filial['id']]
+        );
+        $produto['ingredientes'] = $ingredientes;
+    }
 }
 
 // Get categorias
 $categorias = [];
 if ($tenant && $filial) {
     $categorias = $db->fetchAll(
-        "SELECT * FROM categorias WHERE tenant_id = ? AND filial_id = ? ORDER BY nome",
+        "SELECT * FROM categorias WHERE tenant_id = ? AND filial_id = ? AND ativo = true ORDER BY nome",
+        [$tenant['id'], $filial['id']]
+    );
+}
+
+// Get ingredientes
+$ingredientes = [];
+if ($tenant && $filial) {
+    $ingredientes = $db->fetchAll(
+        "SELECT * FROM ingredientes WHERE tenant_id = ? AND filial_id = ? AND ativo = true ORDER BY nome",
         [$tenant['id'], $filial['id']]
     );
 }
