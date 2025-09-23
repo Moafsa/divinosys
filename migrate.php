@@ -40,6 +40,7 @@ try {
         // Read and execute schema file
         $schemaFile = '/var/www/html/database/init/01_create_schema.sql';
         if (file_exists($schemaFile)) {
+            echo "Found schema file: $schemaFile\n";
             $schema = file_get_contents($schemaFile);
             $db->query($schema);
             echo "Schema created successfully!\n";
@@ -65,7 +66,9 @@ try {
         // Read and execute data file
         $dataFile = '/var/www/html/database/init/02_insert_default_data.sql';
         if (file_exists($dataFile)) {
+            echo "Found data file: $dataFile\n";
             $data = file_get_contents($dataFile);
+            echo "Data file size: " . strlen($data) . " bytes\n";
             $db->query($data);
             echo "Default data inserted successfully!\n";
         } else {
@@ -74,8 +77,30 @@ try {
         
         echo "Migration completed successfully!\n";
     } else {
-        echo "Tables already exist. Migration not needed.\n";
+        echo "Tables already exist. Checking if data migration is needed...\n";
         echo "Found tables: " . implode(', ', array_column($tables, 'table_name')) . "\n";
+        
+        // Check if usuarios table has data
+        $userCount = $db->query("SELECT COUNT(*) as count FROM usuarios")->fetch()['count'];
+        echo "Users in database: $userCount\n";
+        
+        if ($userCount == 0) {
+            echo "No users found. Running data migration...\n";
+            
+            // Read and execute data file
+            $dataFile = '/var/www/html/database/init/02_insert_default_data.sql';
+            if (file_exists($dataFile)) {
+                echo "Found data file: $dataFile\n";
+                $data = file_get_contents($dataFile);
+                echo "Data file size: " . strlen($data) . " bytes\n";
+                $db->query($data);
+                echo "Default data inserted successfully!\n";
+            } else {
+                echo "Data file not found: $dataFile\n";
+            }
+        } else {
+            echo "Data migration not needed. Users already exist.\n";
+        }
     }
     
     // Test login credentials
