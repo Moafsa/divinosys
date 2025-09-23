@@ -33,6 +33,12 @@ try {
     $buscarPedido = $_GET['buscar_pedido'] ?? $_POST['buscar_pedido'] ?? '';
     $atualizarStatus = $_GET['atualizar_status'] ?? $_POST['atualizar_status'] ?? '';
     $excluirPedido = $_GET['excluir_pedido'] ?? $_POST['excluir_pedido'] ?? '';
+    $fecharMesa = $_GET['fechar_mesa'] ?? $_POST['fechar_mesa'] ?? '';
+    $fecharPedido = $_GET['fechar_pedido'] ?? $_POST['fechar_pedido'] ?? '';
+    $atualizarObservacao = $_GET['atualizar_observacao'] ?? $_POST['atualizar_observacao'] ?? '';
+    $alterarQuantidade = $_GET['alterar_quantidade'] ?? $_POST['alterar_quantidade'] ?? '';
+    $removerItem = $_GET['remover_item'] ?? $_POST['remover_item'] ?? '';
+    $atualizarMesa = $_GET['atualizar_mesa'] ?? $_POST['atualizar_mesa'] ?? '';
     
     if ($buscarPedido == '1') {
         $action = 'buscar_pedido';
@@ -40,6 +46,18 @@ try {
         $action = 'atualizar_status';
     } elseif ($excluirPedido == '1') {
         $action = 'excluir_pedido';
+    } elseif ($fecharMesa == '1') {
+        $action = 'fechar_mesa';
+    } elseif ($fecharPedido == '1') {
+        $action = 'fechar_pedido';
+    } elseif ($atualizarObservacao == '1') {
+        $action = 'atualizar_observacao';
+    } elseif ($alterarQuantidade == '1') {
+        $action = 'alterar_quantidade';
+    } elseif ($removerItem == '1') {
+        $action = 'remover_item';
+    } elseif ($atualizarMesa == '1') {
+        $action = 'atualizar_mesa';
     }
     
     switch ($action) {
