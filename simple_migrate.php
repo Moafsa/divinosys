@@ -3,7 +3,9 @@
 echo "=== SIMPLE MIGRATION SCRIPT ===\n";
 
 try {
-    require_once 'system/Config.php';
+    // Load Composer autoloader
+    require_once 'vendor/autoload.php';
+    
     $config = System\Config::getInstance();
     $db = System\Database::getInstance();
     

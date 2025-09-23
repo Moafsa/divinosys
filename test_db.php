@@ -3,8 +3,10 @@
 echo "<h1>Database Test - Divino Lanches</h1>";
 
 try {
+    // Load Composer autoloader
+    require_once 'vendor/autoload.php';
+    
     // Load environment variables
-    require_once 'system/Config.php';
     $config = System\Config::getInstance();
     
     echo "<h2>Environment Variables:</h2>";

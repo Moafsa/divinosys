@@ -4,8 +4,8 @@
  * This script initializes the database with required tables and data
  */
 
-require_once 'system/Config.php';
-require_once 'system/Database.php';
+// Load Composer autoloader
+require_once 'vendor/autoload.php';
 
 use System\Config;
 use System\Database;
