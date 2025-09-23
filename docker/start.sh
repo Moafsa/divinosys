@@ -30,11 +30,35 @@ $password = getenv('DB_PASSWORD') ?: 'divino_password';
 echo "Testing database connection...\n";
 
 try {
-    // Try to connect to PostgreSQL server
+    // Try to connect to PostgreSQL server with different methods
     $dsn = "pgsql:host=$host;port=$port";
-    $pdo = new PDO($dsn, 'postgres', '', [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-    ]);
+    
+    // First try with postgres user and no password
+    try {
+        $pdo = new PDO($dsn, 'postgres', '', [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        ]);
+        echo "Connected with postgres user (no password)!\n";
+    } catch (PDOException $e) {
+        echo "Failed with postgres user (no password): " . $e->getMessage() . "\n";
+        
+        // Try with postgres user and password
+        try {
+            $pdo = new PDO($dsn, 'postgres', '$password', [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            ]);
+            echo "Connected with postgres user (with password)!\n";
+        } catch (PDOException $e2) {
+            echo "Failed with postgres user (with password): " . $e2->getMessage() . "\n";
+            
+            // Try connecting to template1 database
+            $dsn = "pgsql:host=$host;port=$port;dbname=template1";
+            $pdo = new PDO($dsn, 'postgres', '', [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            ]);
+            echo "Connected to template1 database!\n";
+        }
+    }
     
     echo "Connected to PostgreSQL server!\n";
     
