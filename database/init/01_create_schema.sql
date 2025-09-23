@@ -201,7 +201,8 @@ CREATE TABLE IF NOT EXISTS pedido_itens (
     ingredientes_sem TEXT,
     ingredientes_com TEXT,
     tamanho VARCHAR(10) NOT NULL DEFAULT 'normal',
-    tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE
+    tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    filial_id INTEGER NOT NULL REFERENCES filiais(id) ON DELETE CASCADE
 );
 
 -- Create pedido_item_ingredientes table

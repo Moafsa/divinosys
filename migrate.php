@@ -37,36 +37,53 @@ try {
     if (empty($tables)) {
         echo "No tables found. Running initial migration...\n";
         
-        // Read and execute schema file
-        $schemaFile = '/var/www/html/database/init/01_create_schema.sql';
-        if (file_exists($schemaFile)) {
-            echo "Found schema file: $schemaFile\n";
-            try {
-                $schema = file_get_contents($schemaFile);
-                $db->query($schema);
-                echo "Schema created successfully!\n";
-            } catch (Exception $e) {
-                echo "Schema creation failed: " . $e->getMessage() . "\n";
-                throw $e;
-            }
-        } else {
-            echo "Schema file not found: $schemaFile\n";
-            echo "Current directory: " . getcwd() . "\n";
-            echo "Files in current directory:\n";
-            $files = scandir('.');
-            foreach ($files as $file) {
-                echo "- $file\n";
-            }
-            echo "Files in database directory:\n";
-            if (is_dir('database')) {
-                $dbFiles = scandir('database');
-                foreach ($dbFiles as $file) {
-                    echo "- database/$file\n";
+            // Read and execute schema file
+            $schemaFile = '/var/www/html/database/init/01_create_schema.sql';
+            if (file_exists($schemaFile)) {
+                echo "Found schema file: $schemaFile\n";
+                try {
+                    $schema = file_get_contents($schemaFile);
+                    
+                    // Split by semicolon and execute each statement
+                    $statements = explode(';', $schema);
+                    $executed = 0;
+                    
+                    foreach ($statements as $statement) {
+                        $statement = trim($statement);
+                        if (!empty($statement)) {
+                            try {
+                                $db->query($statement);
+                                $executed++;
+                            } catch (Exception $e) {
+                                echo "Warning: Error executing statement: " . $e->getMessage() . "\n";
+                                echo "Statement: " . substr($statement, 0, 100) . "...\n";
+                            }
+                        }
+                    }
+                    
+                    echo "Schema created successfully! Executed $executed statements\n";
+                } catch (Exception $e) {
+                    echo "Schema creation failed: " . $e->getMessage() . "\n";
+                    throw $e;
                 }
             } else {
-                echo "Database directory does not exist!\n";
+                echo "Schema file not found: $schemaFile\n";
+                echo "Current directory: " . getcwd() . "\n";
+                echo "Files in current directory:\n";
+                $files = scandir('.');
+                foreach ($files as $file) {
+                    echo "- $file\n";
+                }
+                echo "Files in database directory:\n";
+                if (is_dir('database')) {
+                    $dbFiles = scandir('database');
+                    foreach ($dbFiles as $file) {
+                        echo "- database/$file\n";
+                    }
+                } else {
+                    echo "Database directory does not exist!\n";
+                }
             }
-        }
         
         // Read and execute data file
         $dataFile = '/var/www/html/database/init/02_insert_default_data.sql';
