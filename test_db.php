@@ -69,21 +69,49 @@ try {
     }
     
     echo "<h2>Manual Migration Test:</h2>";
-    if (file_exists($dataFile) && $userCount == 0) {
-        echo "Attempting to run data migration manually...<br>";
+    
+    // First, run schema migration if no tables exist
+    if (count($tables) == 0) {
+        echo "No tables found. Running schema migration first...<br>";
         try {
-            $data = file_get_contents($dataFile);
-            $db->query($data);
-            echo "✅ Data migration successful!<br>";
+            $schema = file_get_contents($schemaFile);
+            $db->query($schema);
+            echo "✅ Schema migration successful!<br>";
             
-            // Check users again
-            $newUserCount = $db->query("SELECT COUNT(*) as count FROM usuarios")->fetch()['count'];
-            echo "Users after migration: $newUserCount<br>";
+            // Check tables again
+            $newTables = $db->query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")->fetchAll();
+            echo "Tables after schema migration: " . count($newTables) . "<br>";
+            foreach ($newTables as $table) {
+                echo "- " . $table['table_name'] . "<br>";
+            }
+        } catch (Exception $e) {
+            echo "❌ Schema migration failed: " . $e->getMessage() . "<br>";
+        }
+    }
+    
+    // Then run data migration if no users exist
+    if (file_exists($dataFile)) {
+        try {
+            $userCount = $db->query("SELECT COUNT(*) as count FROM usuarios")->fetch()['count'];
+            echo "Users in database: $userCount<br>";
+            
+            if ($userCount == 0) {
+                echo "No users found. Running data migration...<br>";
+                $data = file_get_contents($dataFile);
+                $db->query($data);
+                echo "✅ Data migration successful!<br>";
+                
+                // Check users again
+                $newUserCount = $db->query("SELECT COUNT(*) as count FROM usuarios")->fetch()['count'];
+                echo "Users after migration: $newUserCount<br>";
+            } else {
+                echo "Users already exist. Data migration not needed.<br>";
+            }
         } catch (Exception $e) {
             echo "❌ Data migration failed: " . $e->getMessage() . "<br>";
         }
     } else {
-        echo "Skipping migration - data file not found or users already exist<br>";
+        echo "Data file not found: $dataFile<br>";
     }
     
 } catch (Exception $e) {

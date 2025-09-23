@@ -17,7 +17,28 @@ try {
     
     echo "Tables found: " . implode(', ', $tableNames) . "\n";
     
-    if (in_array('usuarios', $tableNames)) {
+    // If no tables exist, run schema migration first
+    if (empty($tableNames)) {
+        echo "No tables found. Running schema migration first...\n";
+        
+        $schemaFile = '/var/www/html/database/init/01_create_schema.sql';
+        if (file_exists($schemaFile)) {
+            echo "Schema file found: $schemaFile\n";
+            $schema = file_get_contents($schemaFile);
+            $db->query($schema);
+            echo "✅ Schema migration successful!\n";
+            
+            // Check tables again
+            $newTables = $db->query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")->fetchAll();
+            $newTableNames = array_column($newTables, 'table_name');
+            echo "Tables after schema migration: " . implode(', ', $newTableNames) . "\n";
+        } else {
+            echo "❌ Schema file not found: $schemaFile\n";
+            exit(1);
+        }
+    }
+    
+    if (in_array('usuarios', $tableNames) || in_array('usuarios', $newTableNames ?? [])) {
         echo "usuarios table exists!\n";
         
         // Check if users exist
