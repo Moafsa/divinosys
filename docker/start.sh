@@ -62,28 +62,39 @@ try {
     
     echo "Connected to PostgreSQL server!\n";
     
-    // Create user if it doesn't exist
+    // FORCE RECREATE USER AND DATABASE
+    echo "Force recreating user and database...\n";
+    
+    // Drop user if exists
+    try {
+        $pdo->exec("DROP USER IF EXISTS postgres;");
+        echo "Dropped existing postgres user.\n";
+    } catch (PDOException $e) {
+        echo "Error dropping user: " . $e->getMessage() . "\n";
+    }
+    
+    // Create user
     try {
         $pdo->exec("CREATE USER postgres WITH PASSWORD '$password' SUPERUSER CREATEDB CREATEROLE;");
         echo "Created postgres user!\n";
     } catch (PDOException $e) {
-        if (strpos($e->getMessage(), 'already exists') !== false) {
-            echo "Postgres user already exists.\n";
-        } else {
-            echo "Error creating user: " . $e->getMessage() . "\n";
-        }
+        echo "Error creating user: " . $e->getMessage() . "\n";
     }
     
-    // Create database if it doesn't exist
+    // Drop database if exists
     try {
-        $pdo->exec("CREATE DATABASE \"$dbname\";");
+        $pdo->exec("DROP DATABASE IF EXISTS \"$dbname\";");
+        echo "Dropped existing database $dbname.\n";
+    } catch (PDOException $e) {
+        echo "Error dropping database: " . $e->getMessage() . "\n";
+    }
+    
+    // Create database
+    try {
+        $pdo->exec("CREATE DATABASE \"$dbname\" OWNER postgres;");
         echo "Created database $dbname!\n";
     } catch (PDOException $e) {
-        if (strpos($e->getMessage(), 'already exists') !== false) {
-            echo "Database $dbname already exists.\n";
-        } else {
-            echo "Error creating database: " . $e->getMessage() . "\n";
-        }
+        echo "Error creating database: " . $e->getMessage() . "\n";
     }
     
     echo "Database setup completed!\n";
