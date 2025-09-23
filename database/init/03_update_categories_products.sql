@@ -1,6 +1,7 @@
 -- Update categories table to support hierarchy and images
 ALTER TABLE categorias ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES categorias(id) ON DELETE CASCADE;
 ALTER TABLE categorias ADD COLUMN IF NOT EXISTS imagem VARCHAR(500);
+ALTER TABLE categorias ADD COLUMN IF NOT EXISTS descricao TEXT;
 ALTER TABLE categorias ADD COLUMN IF NOT EXISTS ordem INTEGER DEFAULT 0;
 ALTER TABLE categorias ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT true;
 
@@ -23,6 +24,9 @@ CREATE TABLE IF NOT EXISTS ingredientes (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Add tipo column to existing ingredientes table if it doesn't exist
+ALTER TABLE ingredientes ADD COLUMN IF NOT EXISTS tipo VARCHAR(50) DEFAULT 'ingrediente';
 
 -- Create produto_ingredientes table (many-to-many)
 CREATE TABLE IF NOT EXISTS produto_ingredientes (
@@ -69,15 +73,15 @@ INSERT INTO categorias (nome, descricao, parent_id, tenant_id, filial_id, ativo,
 ON CONFLICT DO NOTHING;
 
 -- Insert default ingredients
-INSERT INTO ingredientes (nome, descricao, preco_adicional, tenant_id, filial_id, ativo) VALUES
-('Bacon', 'Bacon crocante', 3.00, 1, 1, true),
-('Queijo Extra', 'Porção adicional de queijo', 2.50, 1, 1, true),
-('Ovo', 'Ovo frito', 2.00, 1, 1, true),
-('Cebola', 'Cebola roxa', 1.50, 1, 1, true),
-('Tomate', 'Tomate fresco', 1.50, 1, 1, true),
-('Alface', 'Alface americana', 1.00, 1, 1, true),
-('Picles', 'Picles de pepino', 1.00, 1, 1, true),
-('Maionese', 'Maionese caseira', 1.00, 1, 1, true),
-('Ketchup', 'Ketchup Heinz', 1.00, 1, 1, true),
-('Mostarda', 'Mostarda Dijon', 1.00, 1, 1, true)
+INSERT INTO ingredientes (nome, descricao, preco_adicional, tenant_id, filial_id, ativo, tipo) VALUES
+('Bacon', 'Bacon crocante', 3.00, 1, 1, true, 'ingrediente'),
+('Queijo Extra', 'Porção adicional de queijo', 2.50, 1, 1, true, 'ingrediente'),
+('Ovo', 'Ovo frito', 2.00, 1, 1, true, 'ingrediente'),
+('Cebola', 'Cebola roxa', 1.50, 1, 1, true, 'ingrediente'),
+('Tomate', 'Tomate fresco', 1.50, 1, 1, true, 'ingrediente'),
+('Alface', 'Alface americana', 1.00, 1, 1, true, 'ingrediente'),
+('Picles', 'Picles de pepino', 1.00, 1, 1, true, 'ingrediente'),
+('Maionese', 'Maionese caseira', 1.00, 1, 1, true, 'ingrediente'),
+('Ketchup', 'Ketchup Heinz', 1.00, 1, 1, true, 'ingrediente'),
+('Mostarda', 'Mostarda Dijon', 1.00, 1, 1, true, 'ingrediente')
 ON CONFLICT DO NOTHING;

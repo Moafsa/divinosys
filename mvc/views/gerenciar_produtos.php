@@ -21,35 +21,48 @@ if ($tenant && $filial) {
         [$tenant['id'], $filial['id']]
     );
     
-    // Get ingredients for each product
+    // Get ingredients for each product (if tables exist)
     foreach ($produtos as &$produto) {
-        $ingredientes = $db->fetchAll(
-            "SELECT i.*, pi.obrigatorio, pi.preco_adicional 
-             FROM ingredientes i 
-             JOIN produto_ingredientes pi ON i.id = pi.ingrediente_id 
-             WHERE pi.produto_id = ? AND i.tenant_id = ? AND i.filial_id = ?",
-            [$produto['id'], $tenant['id'], $filial['id']]
-        );
-        $produto['ingredientes'] = $ingredientes;
+        try {
+            $ingredientes = $db->fetchAll(
+                "SELECT i.*, pi.obrigatorio, pi.preco_adicional 
+                 FROM ingredientes i 
+                 JOIN produto_ingredientes pi ON i.id = pi.ingrediente_id 
+                 WHERE pi.produto_id = ? AND i.tenant_id = ? AND i.filial_id = ?",
+                [$produto['id'], $tenant['id'], $filial['id']]
+            );
+            $produto['ingredientes'] = $ingredientes;
+        } catch (Exception $e) {
+            // Tables don't exist yet, set empty array
+            $produto['ingredientes'] = [];
+        }
     }
 }
 
 // Get categorias
 $categorias = [];
 if ($tenant && $filial) {
-    $categorias = $db->fetchAll(
-        "SELECT * FROM categorias WHERE tenant_id = ? AND filial_id = ? AND ativo = true ORDER BY nome",
-        [$tenant['id'], $filial['id']]
-    );
+    try {
+        $categorias = $db->fetchAll(
+            "SELECT * FROM categorias WHERE tenant_id = ? AND filial_id = ? ORDER BY nome",
+            [$tenant['id'], $filial['id']]
+        );
+    } catch (Exception $e) {
+        $categorias = [];
+    }
 }
 
-// Get ingredientes
+// Get ingredientes (if table exists)
 $ingredientes = [];
 if ($tenant && $filial) {
-    $ingredientes = $db->fetchAll(
-        "SELECT * FROM ingredientes WHERE tenant_id = ? AND filial_id = ? AND ativo = true ORDER BY nome",
-        [$tenant['id'], $filial['id']]
-    );
+    try {
+        $ingredientes = $db->fetchAll(
+            "SELECT * FROM ingredientes WHERE tenant_id = ? AND filial_id = ? ORDER BY nome",
+            [$tenant['id'], $filial['id']]
+        );
+    } catch (Exception $e) {
+        $ingredientes = [];
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -150,6 +163,33 @@ if ($tenant && $filial) {
             border-color: var(--primary-color);
             opacity: 0.9;
         }
+        
+        .ingredientes-container {
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            background-color: #f8f9fa;
+        }
+        
+        .ingrediente-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem;
+            margin-bottom: 0.5rem;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 0.25rem;
+        }
+        
+        .ingrediente-item .ingrediente-info {
+            flex-grow: 1;
+        }
+        
+        .ingrediente-item .ingrediente-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
     </style>
 </head>
 <body>
@@ -237,6 +277,10 @@ if ($tenant && $filial) {
                                 <button class="btn btn-outline-secondary" onclick="abrirModalCategoria()">
                                     <i class="fas fa-tags me-1"></i>
                                     Categorias
+                                </button>
+                                <button class="btn btn-outline-success" onclick="abrirModalIngrediente()">
+                                    <i class="fas fa-leaf me-1"></i>
+                                    Ingredientes
                                 </button>
                             </div>
                         </div>
@@ -341,6 +385,38 @@ if ($tenant && $filial) {
                                     <label class="form-label">Preço de Custo</label>
                                     <input type="number" class="form-control" id="produtoPrecoCusto" step="0.01">
                                 </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Imagem do Produto</label>
+                                    <input type="file" class="form-control" id="produtoImagem" accept="image/*">
+                                    <div class="form-text">Formatos aceitos: JPG, PNG, GIF (máx. 2MB)</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="mb-3">
+                                    <label class="form-label">Ingredientes</label>
+                                    <div class="ingredientes-container">
+                                        <div class="d-flex gap-2 mb-2">
+                                            <select class="form-select" id="ingrediente_select">
+                                                <option value="">Selecione um ingrediente</option>
+                                                <?php foreach ($ingredientes as $ingrediente): ?>
+                                                    <option value="<?php echo $ingrediente['id']; ?>" data-preco="<?php echo $ingrediente['preco_adicional']; ?>">
+                                                        <?php echo htmlspecialchars($ingrediente['nome']); ?> - R$ <?php echo number_format($ingrediente['preco_adicional'], 2, ',', '.'); ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                            <button type="button" class="btn btn-outline-primary" onclick="adicionarIngrediente()">
+                                                <i class="fas fa-plus"></i>
+                                            </button>
+                                        </div>
+                                        <div id="ingredientes_lista" class="ingredientes-lista">
+                                            <!-- Ingredientes serão adicionados aqui -->
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </form>
@@ -352,6 +428,114 @@ if ($tenant && $filial) {
                         Salvar
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Categoria -->
+    <div class="modal fade" id="modalCategoria" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-tags me-2"></i>
+                        <span id="modalCategoriaTitulo">Nova Categoria</span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="formCategoria">
+                    <div class="modal-body">
+                        <input type="hidden" id="categoriaId" name="id">
+                        
+                        <div class="mb-3">
+                            <label for="categoriaNome" class="form-label">Nome da Categoria *</label>
+                            <input type="text" class="form-control" id="categoriaNome" name="nome" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="categoriaDescricao" class="form-label">Descrição</label>
+                            <textarea class="form-control" id="categoriaDescricao" name="descricao" rows="3"></textarea>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="categoriaParent" class="form-label">Categoria Pai</label>
+                            <select class="form-select" id="categoriaParent" name="parent_id">
+                                <option value="">Categoria Principal</option>
+                                <?php foreach ($categorias as $categoria): ?>
+                                    <option value="<?php echo $categoria['id']; ?>"><?php echo htmlspecialchars($categoria['nome']); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="categoriaImagem" class="form-label">Imagem da Categoria</label>
+                            <input type="file" class="form-control" id="categoriaImagem" name="imagem" accept="image/*">
+                            <div class="form-text">Formatos aceitos: JPG, PNG, GIF (máx. 2MB)</div>
+                        </div>
+                        
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="categoriaAtivo" name="ativo" checked>
+                            <label class="form-check-label" for="categoriaAtivo">
+                                Categoria Ativa
+                            </label>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Salvar Categoria
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Ingrediente -->
+    <div class="modal fade" id="modalIngrediente" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-leaf me-2"></i>
+                        <span id="modalIngredienteTitulo">Novo Ingrediente</span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="formIngrediente">
+                    <div class="modal-body">
+                        <input type="hidden" id="ingredienteId" name="id">
+                        
+                        <div class="mb-3">
+                            <label for="ingredienteNome" class="form-label">Nome do Ingrediente *</label>
+                            <input type="text" class="form-control" id="ingredienteNome" name="nome" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="ingredienteDescricao" class="form-label">Descrição</label>
+                            <textarea class="form-control" id="ingredienteDescricao" name="descricao" rows="3"></textarea>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="ingredientePreco" class="form-label">Preço Adicional (R$)</label>
+                            <input type="number" class="form-control" id="ingredientePreco" name="preco_adicional" 
+                                   step="0.01" min="0" value="0.00">
+                        </div>
+                        
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="ingredienteAtivo" name="ativo" checked>
+                            <label class="form-check-label" for="ingredienteAtivo">
+                                Ingrediente Ativo
+                            </label>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-save"></i> Salvar Ingrediente
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
@@ -394,7 +578,59 @@ if ($tenant && $filial) {
         }
 
         function abrirModalCategoria() {
-            Swal.fire('Info', 'Modal de categorias será implementado', 'info');
+            document.getElementById('modalCategoriaTitulo').textContent = 'Nova Categoria';
+            document.getElementById('formCategoria').reset();
+            document.getElementById('categoriaId').value = '';
+            new bootstrap.Modal(document.getElementById('modalCategoria')).show();
+        }
+        
+        function abrirModalIngrediente() {
+            document.getElementById('modalIngredienteTitulo').textContent = 'Novo Ingrediente';
+            document.getElementById('formIngrediente').reset();
+            document.getElementById('ingredienteId').value = '';
+            new bootstrap.Modal(document.getElementById('modalIngrediente')).show();
+        }
+        
+        function adicionarIngrediente() {
+            const select = document.getElementById('ingrediente_select');
+            const ingredienteId = select.value;
+            const ingredienteNome = select.options[select.selectedIndex].text.split(' - ')[0];
+            const ingredientePreco = select.options[select.selectedIndex].dataset.preco || 0;
+            
+            if (!ingredienteId) {
+                Swal.fire('Atenção', 'Selecione um ingrediente', 'warning');
+                return;
+            }
+            
+            // Verificar se já foi adicionado
+            const existing = document.querySelector(`[data-ingrediente-id="${ingredienteId}"]`);
+            if (existing) {
+                Swal.fire('Atenção', 'Este ingrediente já foi adicionado', 'warning');
+                return;
+            }
+            
+            const lista = document.getElementById('ingredientes_lista');
+            const item = document.createElement('div');
+            item.className = 'ingrediente-item';
+            item.setAttribute('data-ingrediente-id', ingredienteId);
+            item.innerHTML = `
+                <div class="ingrediente-info">
+                    <strong>${ingredienteNome}</strong>
+                    <br><small class="text-muted">R$ ${parseFloat(ingredientePreco).toFixed(2).replace('.', ',')}</small>
+                </div>
+                <div class="ingrediente-actions">
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="removerIngrediente(this)">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `;
+            
+            lista.appendChild(item);
+            select.value = '';
+        }
+        
+        function removerIngrediente(button) {
+            button.closest('.ingrediente-item').remove();
         }
     </script>
 </body>

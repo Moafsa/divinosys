@@ -35,8 +35,6 @@ class Router
             'mesas' => 'mesas.php',
             'delivery' => 'delivery.php',
             'gerenciar_produtos' => 'gerenciar_produtos.php',
-            'gerenciar_categorias' => 'gerenciar_categorias.php',
-            'gerenciar_ingredientes' => 'gerenciar_ingredientes.php',
             'estoque' => 'estoque.php',
             'financeiro' => 'financeiro.php',
             'relatorios' => 'relatorios.php',
