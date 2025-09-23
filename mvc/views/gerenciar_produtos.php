@@ -275,20 +275,42 @@ if ($tenant && $filial) {
                                     Novo Produto
                                 </button>
                                 <button class="btn btn-outline-secondary" onclick="abrirModalCategoria()">
-                                    <i class="fas fa-tags me-1"></i>
-                                    Categorias
+                                    <i class="fas fa-plus me-1"></i>
+                                    Nova Categoria
                                 </button>
                                 <button class="btn btn-outline-success" onclick="abrirModalIngrediente()">
-                                    <i class="fas fa-leaf me-1"></i>
-                                    Ingredientes
+                                    <i class="fas fa-plus me-1"></i>
+                                    Novo Ingrediente
                                 </button>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Produtos Grid -->
-                <div class="produtos-grid">
+                <!-- Tabs Navigation -->
+                <ul class="nav nav-tabs mb-4" id="managementTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="produtos-tab" data-bs-toggle="tab" data-bs-target="#produtos" type="button" role="tab">
+                            <i class="fas fa-box me-2"></i>Produtos
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="categorias-tab" data-bs-toggle="tab" data-bs-target="#categorias" type="button" role="tab">
+                            <i class="fas fa-tags me-2"></i>Categorias
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="ingredientes-tab" data-bs-toggle="tab" data-bs-target="#ingredientes" type="button" role="tab">
+                            <i class="fas fa-leaf me-2"></i>Ingredientes
+                        </button>
+                    </li>
+                </ul>
+
+                <!-- Tabs Content -->
+                <div class="tab-content" id="managementTabsContent">
+                    <!-- Produtos Tab -->
+                    <div class="tab-pane fade show active" id="produtos" role="tabpanel">
+                        <div class="produtos-grid">
                     <div class="row">
                         <?php foreach ($produtos as $produto): ?>
                             <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
@@ -325,6 +347,99 @@ if ($tenant && $filial) {
                                 </div>
                             </div>
                         <?php endforeach; ?>
+                    </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Categorias Tab -->
+                    <div class="tab-pane fade" id="categorias" role="tabpanel">
+                        <div class="categorias-grid">
+                            <div class="row">
+                                <?php foreach ($categorias as $categoria): ?>
+                                    <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
+                                        <div class="produto-card">
+                                            <?php if ($categoria['imagem']): ?>
+                                                <img src="<?php echo htmlspecialchars($categoria['imagem']); ?>" class="produto-imagem" alt="<?php echo htmlspecialchars($categoria['nome']); ?>">
+                                            <?php else: ?>
+                                                <div class="produto-imagem d-flex align-items-center justify-content-center bg-light">
+                                                    <i class="fas fa-tags text-muted"></i>
+                                                </div>
+                                            <?php endif; ?>
+                                            
+                                            <div class="produto-nome fw-bold mb-2"><?php echo htmlspecialchars($categoria['nome']); ?></div>
+                                            
+                                            <?php if ($categoria['descricao']): ?>
+                                                <div class="text-muted small mb-2">
+                                                    <?php echo htmlspecialchars($categoria['descricao']); ?>
+                                                </div>
+                                            <?php endif; ?>
+                                            
+                                            <div class="mb-2">
+                                                <span class="badge <?php echo $categoria['ativo'] ? 'bg-success' : 'bg-danger'; ?>">
+                                                    <?php echo $categoria['ativo'] ? 'Ativa' : 'Inativa'; ?>
+                                                </span>
+                                                <?php if ($categoria['parent_id']): ?>
+                                                    <span class="badge bg-secondary">Subcategoria</span>
+                                                <?php endif; ?>
+                                            </div>
+                                            
+                                            <div class="d-flex gap-2">
+                                                <button class="btn btn-sm btn-outline-primary flex-fill" onclick="editarCategoria(<?php echo $categoria['id']; ?>)">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-danger" onclick="excluirCategoria(<?php echo $categoria['id']; ?>)">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Ingredientes Tab -->
+                    <div class="tab-pane fade" id="ingredientes" role="tabpanel">
+                        <div class="ingredientes-grid">
+                            <div class="row">
+                                <?php foreach ($ingredientes as $ingrediente): ?>
+                                    <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
+                                        <div class="produto-card">
+                                            <div class="produto-imagem d-flex align-items-center justify-content-center bg-light">
+                                                <i class="fas fa-leaf text-success"></i>
+                                            </div>
+                                            
+                                            <div class="produto-nome fw-bold mb-2"><?php echo htmlspecialchars($ingrediente['nome']); ?></div>
+                                            
+                                            <?php if ($ingrediente['descricao']): ?>
+                                                <div class="text-muted small mb-2">
+                                                    <?php echo htmlspecialchars($ingrediente['descricao']); ?>
+                                                </div>
+                                            <?php endif; ?>
+                                            
+                                            <div class="produto-preco h5 text-primary mb-2">
+                                                +R$ <?php echo number_format($ingrediente['preco_adicional'], 2, ',', '.'); ?>
+                                            </div>
+                                            
+                                            <div class="mb-2">
+                                                <span class="badge <?php echo $ingrediente['ativo'] ? 'bg-success' : 'bg-danger'; ?>">
+                                                    <?php echo $ingrediente['ativo'] ? 'Ativo' : 'Inativo'; ?>
+                                                </span>
+                                            </div>
+                                            
+                                            <div class="d-flex gap-2">
+                                                <button class="btn btn-sm btn-outline-primary flex-fill" onclick="editarIngrediente(<?php echo $ingrediente['id']; ?>)">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-danger" onclick="excluirIngrediente(<?php echo $ingrediente['id']; ?>)">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -589,6 +704,120 @@ if ($tenant && $filial) {
             document.getElementById('formIngrediente').reset();
             document.getElementById('ingredienteId').value = '';
             new bootstrap.Modal(document.getElementById('modalIngrediente')).show();
+        }
+
+        // Funções para editar e excluir categorias
+        function editarCategoria(id) {
+            // Buscar dados da categoria via AJAX
+            fetch('mvc/ajax/produtos.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `action=buscar_categoria&id=${id}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Preencher modal com dados da categoria
+                    document.getElementById('categoriaId').value = data.categoria.id;
+                    document.getElementById('categoriaNome').value = data.categoria.nome;
+                    document.getElementById('categoriaDescricao').value = data.categoria.descricao || '';
+                    document.getElementById('categoriaParentId').value = data.categoria.parent_id || '';
+                    document.getElementById('categoriaAtivo').checked = data.categoria.ativo;
+                    
+                    // Abrir modal
+                    abrirModalCategoria();
+                } else {
+                    alert('Erro ao buscar categoria: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                alert('Erro ao buscar categoria');
+            });
+        }
+
+        function excluirCategoria(id) {
+            if (confirm('Tem certeza que deseja excluir esta categoria?')) {
+                fetch('mvc/ajax/produtos.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `action=excluir_categoria&id=${id}`
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Categoria excluída com sucesso!');
+                        location.reload();
+                    } else {
+                        alert('Erro ao excluir categoria: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Erro:', error);
+                    alert('Erro ao excluir categoria');
+                });
+            }
+        }
+
+        // Funções para editar e excluir ingredientes
+        function editarIngrediente(id) {
+            // Buscar dados do ingrediente via AJAX
+            fetch('mvc/ajax/produtos.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `action=buscar_ingrediente&id=${id}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Preencher modal com dados do ingrediente
+                    document.getElementById('ingredienteId').value = data.ingrediente.id;
+                    document.getElementById('ingredienteNome').value = data.ingrediente.nome;
+                    document.getElementById('ingredienteDescricao').value = data.ingrediente.descricao || '';
+                    document.getElementById('ingredientePreco').value = data.ingrediente.preco_adicional;
+                    document.getElementById('ingredienteAtivo').checked = data.ingrediente.ativo;
+                    
+                    // Abrir modal
+                    abrirModalIngrediente();
+                } else {
+                    alert('Erro ao buscar ingrediente: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                alert('Erro ao buscar ingrediente');
+            });
+        }
+
+        function excluirIngrediente(id) {
+            if (confirm('Tem certeza que deseja excluir este ingrediente?')) {
+                fetch('mvc/ajax/produtos.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `action=excluir_ingrediente&id=${id}`
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Ingrediente excluído com sucesso!');
+                        location.reload();
+                    } else {
+                        alert('Erro ao excluir ingrediente: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Erro:', error);
+                    alert('Erro ao excluir ingrediente');
+                });
+            }
         }
         
         function adicionarIngrediente() {

@@ -65,6 +65,120 @@ try {
             ]);
             break;
             
+        case 'buscar_categoria':
+            $categoriaId = $_GET['id'] ?? $_POST['id'] ?? '';
+            
+            if (empty($categoriaId)) {
+                throw new \Exception('ID da categoria é obrigatório');
+            }
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId() ?? 1;
+            $filialId = $session->getFilialId() ?? 1;
+            
+            $stmt = $db->prepare("SELECT * FROM categorias WHERE id = ? AND tenant_id = ? AND filial_id = ?");
+            $stmt->execute([$categoriaId, $tenantId, $filialId]);
+            $categoria = $stmt->fetch(\PDO::FETCH_ASSOC);
+            
+            if (!$categoria) {
+                throw new \Exception('Categoria não encontrada');
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'categoria' => $categoria
+            ]);
+            break;
+            
+        case 'excluir_categoria':
+            $categoriaId = $_GET['id'] ?? $_POST['id'] ?? '';
+            
+            if (empty($categoriaId)) {
+                throw new \Exception('ID da categoria é obrigatório');
+            }
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId() ?? 1;
+            $filialId = $session->getFilialId() ?? 1;
+            
+            // Verificar se há produtos usando esta categoria
+            $stmt = $db->prepare("SELECT COUNT(*) FROM produtos WHERE categoria_id = ? AND tenant_id = ? AND filial_id = ?");
+            $stmt->execute([$categoriaId, $tenantId, $filialId]);
+            $produtosCount = $stmt->fetchColumn();
+            
+            if ($produtosCount > 0) {
+                throw new \Exception('Não é possível excluir categoria que possui produtos associados');
+            }
+            
+            // Excluir categoria
+            $stmt = $db->prepare("DELETE FROM categorias WHERE id = ? AND tenant_id = ? AND filial_id = ?");
+            $stmt->execute([$categoriaId, $tenantId, $filialId]);
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Categoria excluída com sucesso'
+            ]);
+            break;
+            
+        case 'buscar_ingrediente':
+            $ingredienteId = $_GET['id'] ?? $_POST['id'] ?? '';
+            
+            if (empty($ingredienteId)) {
+                throw new \Exception('ID do ingrediente é obrigatório');
+            }
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId() ?? 1;
+            $filialId = $session->getFilialId() ?? 1;
+            
+            $stmt = $db->prepare("SELECT * FROM ingredientes WHERE id = ? AND tenant_id = ? AND filial_id = ?");
+            $stmt->execute([$ingredienteId, $tenantId, $filialId]);
+            $ingrediente = $stmt->fetch(\PDO::FETCH_ASSOC);
+            
+            if (!$ingrediente) {
+                throw new \Exception('Ingrediente não encontrado');
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'ingrediente' => $ingrediente
+            ]);
+            break;
+            
+        case 'excluir_ingrediente':
+            $ingredienteId = $_GET['id'] ?? $_POST['id'] ?? '';
+            
+            if (empty($ingredienteId)) {
+                throw new \Exception('ID do ingrediente é obrigatório');
+            }
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId() ?? 1;
+            $filialId = $session->getFilialId() ?? 1;
+            
+            // Verificar se há produtos usando este ingrediente
+            $stmt = $db->prepare("SELECT COUNT(*) FROM produto_ingredientes WHERE ingrediente_id = ? AND tenant_id = ? AND filial_id = ?");
+            $stmt->execute([$ingredienteId, $tenantId, $filialId]);
+            $produtosCount = $stmt->fetchColumn();
+            
+            if ($produtosCount > 0) {
+                throw new \Exception('Não é possível excluir ingrediente que está sendo usado em produtos');
+            }
+            
+            // Excluir ingrediente
+            $stmt = $db->prepare("DELETE FROM ingredientes WHERE id = ? AND tenant_id = ? AND filial_id = ?");
+            $stmt->execute([$ingredienteId, $tenantId, $filialId]);
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Ingrediente excluído com sucesso'
+            ]);
+            break;
+            
         default:
             throw new \Exception('Ação não encontrada: ' . $action);
     }
