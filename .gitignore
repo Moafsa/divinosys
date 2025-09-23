@@ -33,8 +33,9 @@ cache/
 tmp/
 
 # Database
-*.sql
 *.db
+# Allow migration files
+!database/init/*.sql
 
 # Backup files
 *.bak
