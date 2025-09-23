@@ -33,18 +33,38 @@ if ($tenant && $filial) {
     );
 }
 
-// Get pedidos ativos
+// Get pedidos ativos grouped by mesa
 $pedidos = [];
 if ($tenant && $filial) {
     $pedidos = $db->fetchAll(
-        "SELECT p.*, m.id_mesa, m.nome as mesa_nome 
+        "SELECT p.*, m.id_mesa, m.nome as mesa_nome,
+                COUNT(p.idpedido) OVER (PARTITION BY p.idmesa) as total_pedidos_mesa
          FROM pedido p 
          LEFT JOIN mesas m ON p.idmesa::varchar = m.id_mesa AND m.tenant_id = p.tenant_id AND m.filial_id = p.filial_id
          WHERE p.tenant_id = ? AND p.filial_id = ? 
          AND p.status NOT IN ('Finalizado', 'Cancelado')
-         ORDER BY p.data DESC, p.hora_pedido DESC",
+         ORDER BY p.idmesa, p.created_at ASC",
         [$tenant['id'], $filial['id']]
     );
+}
+
+// Group pedidos by mesa
+$pedidosPorMesa = [];
+foreach ($pedidos as $pedido) {
+    $mesaId = $pedido['idmesa'];
+    if (!isset($pedidosPorMesa[$mesaId])) {
+        $pedidosPorMesa[$mesaId] = [
+            'mesa' => [
+                'id_mesa' => $pedido['id_mesa'],
+                'nome' => $pedido['mesa_nome']
+            ],
+            'pedidos' => [],
+            'total_pedidos' => $pedido['total_pedidos_mesa'],
+            'valor_total' => 0
+        ];
+    }
+    $pedidosPorMesa[$mesaId]['pedidos'][] = $pedido;
+    $pedidosPorMesa[$mesaId]['valor_total'] += $pedido['valor_total'];
 }
 
 // Get stats
@@ -506,14 +526,8 @@ if ($tenant && $filial) {
                 <div class="row" id="mesasGrid">
                     <?php foreach ($mesas as $mesa): ?>
                         <?php
-                        $pedidoMesa = null;
-                        foreach ($pedidos as $pedido) {
-                            if ($pedido['idmesa'] == $mesa['id_mesa']) {
-                                $pedidoMesa = $pedido;
-                                break;
-                            }
-                        }
-                        $status = $pedidoMesa ? 'ocupada' : 'livre';
+                        $pedidosMesa = isset($pedidosPorMesa[$mesa['id_mesa']]) ? $pedidosPorMesa[$mesa['id_mesa']] : null;
+                        $status = $pedidosMesa ? 'ocupada' : 'livre';
                         ?>
                         <div class="col-lg-2 col-md-3 col-sm-4 col-6 mb-3">
                             <div class="mesa-card <?php echo $status; ?>" onclick="verMesa(<?php echo $mesa['id_mesa']; ?>, <?php echo $mesa['id_mesa']; ?>)">
@@ -522,11 +536,15 @@ if ($tenant && $filial) {
                                     <span class="mesa-numero"><?php echo $mesa['id_mesa']; ?></span>
                                 </div>
                                 <div class="mesa-info">
-                                    <?php if ($pedidoMesa): ?>
+                                    <?php if ($pedidosMesa): ?>
                                         <div class="fw-bold text-danger">Ocupada</div>
-                                        <div>Pedido #<?php echo $pedidoMesa['idpedido']; ?></div>
-                                        <div>R$ <?php echo number_format($pedidoMesa['valor_total'], 2, ',', '.'); ?></div>
-                                        <div class="small"><?php echo $pedidoMesa['hora_pedido']; ?></div>
+                                        <?php if ($pedidosMesa['total_pedidos'] > 1): ?>
+                                            <div><?php echo $pedidosMesa['total_pedidos']; ?> Pedidos</div>
+                                        <?php else: ?>
+                                            <div>Pedido #<?php echo $pedidosMesa['pedidos'][0]['idpedido']; ?></div>
+                                        <?php endif; ?>
+                                        <div>R$ <?php echo number_format($pedidosMesa['valor_total'], 2, ',', '.'); ?></div>
+                                        <div class="small"><?php echo $pedidosMesa['pedidos'][0]['hora_pedido']; ?></div>
                                     <?php else: ?>
                                         <div class="fw-bold text-success">Livre</div>
                                         <div>Disponível</div>
@@ -565,7 +583,7 @@ if ($tenant && $filial) {
             document.getElementById('mesaNumero').textContent = mesaNumero;
             
             // Load mesa content via AJAX
-            fetch(`index.php?action=dashboard_ajax&ver_mesa=1&mesa_id=${mesaId}`, {
+            fetch(`index.php?action=mesa_multiplos_pedidos&ver_mesa=1&mesa_id=${mesaId}`, {
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest'
                 }
@@ -1000,6 +1018,136 @@ if ($tenant && $filial) {
             const timeString = now.toLocaleString('pt-BR');
             document.querySelector('.user-info .text-end small').textContent = timeString;
         }, 60000);
+        
+        function fecharPedidoIndividual(pedidoId) {
+            Swal.fire({
+                title: 'Fechar Pedido Individual',
+                html: `
+                    <div class="mb-3">
+                        <label class="form-label">Forma de Pagamento</label>
+                        <select class="form-select" id="formaPagamento">
+                            <option value="Dinheiro">Dinheiro</option>
+                            <option value="Cartão Débito">Cartão Débito</option>
+                            <option value="Cartão Crédito">Cartão Crédito</option>
+                            <option value="PIX">PIX</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Número de Pessoas</label>
+                        <input type="number" class="form-control" id="numeroPessoas" value="1" min="1">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Observação</label>
+                        <textarea class="form-control" id="observacao" rows="2"></textarea>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Fechar Pedido',
+                cancelButtonText: 'Cancelar',
+                preConfirm: () => {
+                    const formaPagamento = document.getElementById('formaPagamento').value;
+                    const numeroPessoas = document.getElementById('numeroPessoas').value;
+                    const observacao = document.getElementById('observacao').value;
+                    
+                    if (!formaPagamento) {
+                        Swal.showValidationMessage('Forma de pagamento é obrigatória');
+                        return false;
+                    }
+                    
+                    return { formaPagamento, numeroPessoas, observacao };
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const formData = new FormData();
+                    formData.append('fechar_pedido', '1');
+                    formData.append('pedido_id', pedidoId);
+                    formData.append('forma_pagamento', result.value.formaPagamento);
+                    formData.append('numero_pessoas', result.value.numeroPessoas);
+                    formData.append('observacao', result.value.observacao);
+                    
+                    fetch('index.php?action=mesa_multiplos_pedidos', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Sucesso!', data.message, 'success');
+                            // Recarregar o modal da mesa
+                            const mesaId = document.getElementById('mesaNumero').textContent;
+                            verMesa(mesaId, mesaId);
+                        } else {
+                            Swal.fire('Erro!', data.message, 'error');
+                        }
+                    });
+                }
+            });
+        }
+        
+        function fecharMesaCompleta(mesaId) {
+            Swal.fire({
+                title: 'Fechar Mesa Completa',
+                html: `
+                    <div class="mb-3">
+                        <label class="form-label">Forma de Pagamento</label>
+                        <select class="form-select" id="formaPagamento">
+                            <option value="Dinheiro">Dinheiro</option>
+                            <option value="Cartão Débito">Cartão Débito</option>
+                            <option value="Cartão Crédito">Cartão Crédito</option>
+                            <option value="PIX">PIX</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Número de Pessoas</label>
+                        <input type="number" class="form-control" id="numeroPessoas" value="1" min="1">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Observação</label>
+                        <textarea class="form-control" id="observacao" rows="2"></textarea>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Fechar Mesa',
+                cancelButtonText: 'Cancelar',
+                preConfirm: () => {
+                    const formaPagamento = document.getElementById('formaPagamento').value;
+                    const numeroPessoas = document.getElementById('numeroPessoas').value;
+                    const observacao = document.getElementById('observacao').value;
+                    
+                    if (!formaPagamento) {
+                        Swal.showValidationMessage('Forma de pagamento é obrigatória');
+                        return false;
+                    }
+                    
+                    return { formaPagamento, numeroPessoas, observacao };
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const formData = new FormData();
+                    formData.append('fechar_mesa', '1');
+                    formData.append('mesa_id', mesaId);
+                    formData.append('forma_pagamento', result.value.formaPagamento);
+                    formData.append('numero_pessoas', result.value.numeroPessoas);
+                    formData.append('observacao', result.value.observacao);
+                    
+                    fetch('index.php?action=mesa_multiplos_pedidos', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Sucesso!', data.message, 'success');
+                            // Fechar modal e recarregar página
+                            bootstrap.Modal.getInstance(document.getElementById('modalMesa')).hide();
+                            location.reload();
+                        } else {
+                            Swal.fire('Erro!', data.message, 'error');
+                        }
+                    });
+                }
+            });
+        }
     </script>
 </body>
 </html>

@@ -206,6 +206,39 @@ try {
             echo "Update file not found: $updateFile\n";
         }
         
+        // Run mesa pedidos update
+        echo "Running mesa pedidos update...\n";
+        $mesaPedidosFile = '/var/www/html/database/init/04_update_mesa_pedidos.sql';
+        if (file_exists($mesaPedidosFile)) {
+            echo "Found mesa pedidos file: $mesaPedidosFile\n";
+            try {
+                $mesaPedidos = file_get_contents($mesaPedidosFile);
+                
+                // Split by semicolon and execute each statement
+                $statements = explode(';', $mesaPedidos);
+                $executed = 0;
+                
+                foreach ($statements as $statement) {
+                    $statement = trim($statement);
+                    if (!empty($statement)) {
+                        try {
+                            $db->query($statement);
+                            $executed++;
+                        } catch (Exception $e) {
+                            echo "Warning: Error executing mesa pedidos statement: " . $e->getMessage() . "\n";
+                            echo "Statement: " . substr($statement, 0, 100) . "...\n";
+                        }
+                    }
+                }
+                
+                echo "Mesa pedidos update completed! Executed $executed statements\n";
+            } catch (Exception $e) {
+                echo "Mesa pedidos update failed: " . $e->getMessage() . "\n";
+            }
+        } else {
+            echo "Mesa pedidos file not found: $mesaPedidosFile\n";
+        }
+        
         // Test login credentials
         echo "Testing login credentials...\n";
         try {
