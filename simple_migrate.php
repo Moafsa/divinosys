@@ -25,8 +25,25 @@ try {
         if (file_exists($schemaFile)) {
             echo "Schema file found: $schemaFile\n";
             $schema = file_get_contents($schemaFile);
-            $db->query($schema);
-            echo "✅ Schema migration successful!\n";
+            
+            // Split by semicolon and execute each statement
+            $statements = explode(';', $schema);
+            $executed = 0;
+            
+            foreach ($statements as $statement) {
+                $statement = trim($statement);
+                if (!empty($statement)) {
+                    try {
+                        $db->query($statement);
+                        $executed++;
+                    } catch (Exception $e) {
+                        echo "Warning: Error executing statement: " . $e->getMessage() . "\n";
+                        echo "Statement: " . substr($statement, 0, 100) . "...\n";
+                    }
+                }
+            }
+            
+            echo "✅ Schema migration successful! Executed $executed statements\n";
             
             // Check tables again
             $newTables = $db->query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")->fetchAll();

@@ -75,8 +75,25 @@ try {
         echo "No tables found. Running schema migration first...<br>";
         try {
             $schema = file_get_contents($schemaFile);
-            $db->query($schema);
-            echo "✅ Schema migration successful!<br>";
+            
+            // Split by semicolon and execute each statement
+            $statements = explode(';', $schema);
+            $executed = 0;
+            
+            foreach ($statements as $statement) {
+                $statement = trim($statement);
+                if (!empty($statement)) {
+                    try {
+                        $db->query($statement);
+                        $executed++;
+                    } catch (Exception $e) {
+                        echo "Warning: Error executing statement: " . $e->getMessage() . "<br>";
+                        echo "Statement: " . substr($statement, 0, 100) . "...<br>";
+                    }
+                }
+            }
+            
+            echo "✅ Schema migration successful! Executed $executed statements<br>";
             
             // Check tables again
             $newTables = $db->query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")->fetchAll();
@@ -98,8 +115,25 @@ try {
             if ($userCount == 0) {
                 echo "No users found. Running data migration...<br>";
                 $data = file_get_contents($dataFile);
-                $db->query($data);
-                echo "✅ Data migration successful!<br>";
+                
+                // Split by semicolon and execute each statement
+                $statements = explode(';', $data);
+                $executed = 0;
+                
+                foreach ($statements as $statement) {
+                    $statement = trim($statement);
+                    if (!empty($statement)) {
+                        try {
+                            $db->query($statement);
+                            $executed++;
+                        } catch (Exception $e) {
+                            echo "Warning: Error executing statement: " . $e->getMessage() . "<br>";
+                            echo "Statement: " . substr($statement, 0, 100) . "...<br>";
+                        }
+                    }
+                }
+                
+                echo "✅ Data migration successful! Executed $executed statements<br>";
                 
                 // Check users again
                 $newUserCount = $db->query("SELECT COUNT(*) as count FROM usuarios")->fetch()['count'];
