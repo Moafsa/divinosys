@@ -11,6 +11,19 @@ done
 
 echo "PostgreSQL is ready!"
 
+# Wait for Redis to be ready
+echo "Waiting for Redis to be ready..."
+until redis-cli -h redis -p 6379 ping; do
+  echo "Redis is unavailable - sleeping"
+  sleep 2
+done
+
+echo "Redis is ready!"
+
+# Run database migration automatically
+echo "Running database migration..."
+php migrate.php
+
 # Start Apache
 echo "Starting Apache..."
 exec apache2-foreground
