@@ -14,6 +14,8 @@ RUN apt-get update && apt-get install -y \
     libjpeg62-turbo-dev \
     libpng-dev \
     postgresql-client \
+    postgresql \
+    postgresql-contrib \
     && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
@@ -57,9 +59,11 @@ RUN composer install --no-dev --optimize-autoloader
 # Create .env file from template if it doesn't exist
 RUN if [ ! -f .env ]; then cp env.example .env; fi
 
-# Copy and make startup script executable
+# Copy and make startup scripts executable
 COPY docker/start.sh /usr/local/bin/start.sh
+COPY docker/init-postgres.sh /usr/local/bin/init-postgres.sh
 RUN chmod +x /usr/local/bin/start.sh
+RUN chmod +x /usr/local/bin/init-postgres.sh
 
 EXPOSE 80
 
