@@ -28,10 +28,20 @@ services:
       - POSTGRES_DB=divino_lanches
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_INITDB_ARGS=--auth-local=trust --auth-host=md5
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init:/docker-entrypoint-initdb.d
     restart: unless-stopped
+    command: >
+      bash -c "
+        if [ ! -f /var/lib/postgresql/data/PG_VERSION ]; then
+          echo 'Initializing PostgreSQL database...'
+          initdb -D /var/lib/postgresql/data -U postgres --auth-local=trust --auth-host=md5
+          echo 'PostgreSQL initialized!'
+        fi
+        exec postgres -D /var/lib/postgresql/data
+      "
 
 volumes:
   postgres_data:

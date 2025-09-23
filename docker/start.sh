@@ -14,9 +14,10 @@ echo "PostgreSQL is ready!"
 # Wait a bit more for PostgreSQL to fully initialize
 sleep 5
 
-# RUN POSTGRESQL INITIALIZATION SCRIPT
-echo "Running PostgreSQL initialization script..."
-/usr/local/bin/init-postgres.sh
+# FORCE CLEAN POSTGRESQL DATA DIRECTORY
+echo "Force cleaning PostgreSQL data directory..."
+rm -rf /var/lib/postgresql/data/*
+echo "PostgreSQL data directory cleaned!"
 
 # Try to fix database connection
 echo "Attempting to fix database connection..."
