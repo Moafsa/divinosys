@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     libfreetype6-dev \
     libjpeg62-turbo-dev \
     libpng-dev \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
@@ -56,6 +57,10 @@ RUN composer install --no-dev --optimize-autoloader
 # Create .env file from template if it doesn't exist
 RUN if [ ! -f .env ]; then cp env.example .env; fi
 
+# Copy and make startup script executable
+COPY docker/start.sh /usr/local/bin/start.sh
+RUN chmod +x /usr/local/bin/start.sh
+
 EXPOSE 80
 
-CMD ["apache2-foreground"]
+CMD ["/usr/local/bin/start.sh"]
