@@ -140,18 +140,51 @@ try {
         }
     }
     
-    // Test login credentials
-    echo "Testing login credentials...\n";
-    try {
-        $user = $db->query("SELECT * FROM usuarios WHERE login = 'admin'")->fetch();
-        if ($user) {
-            echo "Admin user found: " . $user['nome'] . "\n";
-        } else {
-            echo "Admin user not found!\n";
+        // Fix pedido_itens table if needed
+        echo "Checking pedido_itens table structure...\n";
+        try {
+            $columns = $db->query("
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'pedido_itens' 
+                AND column_name = 'filial_id'
+            ")->fetchAll();
+
+            if (empty($columns)) {
+                echo "Adding missing filial_id column to pedido_itens table...\n";
+                
+                $db->query("
+                    ALTER TABLE pedido_itens 
+                    ADD COLUMN filial_id INTEGER NOT NULL DEFAULT 1 
+                    REFERENCES filiais(id) ON DELETE CASCADE
+                ");
+                
+                $updated = $db->query("
+                    UPDATE pedido_itens 
+                    SET filial_id = 1 
+                    WHERE filial_id IS NULL OR filial_id = 0
+                ")->rowCount();
+                
+                echo "✅ Added filial_id column and updated $updated records\n";
+            } else {
+                echo "✅ filial_id column already exists in pedido_itens table\n";
+            }
+        } catch (Exception $e) {
+            echo "Warning: Could not fix pedido_itens table: " . $e->getMessage() . "\n";
         }
-    } catch (Exception $e) {
-        echo "Login test failed: " . $e->getMessage() . "\n";
-    }
+        
+        // Test login credentials
+        echo "Testing login credentials...\n";
+        try {
+            $user = $db->query("SELECT * FROM usuarios WHERE login = 'admin'")->fetch();
+            if ($user) {
+                echo "Admin user found: " . ($user['nome'] ?? 'admin') . "\n";
+            } else {
+                echo "Admin user not found!\n";
+            }
+        } catch (Exception $e) {
+            echo "Login test failed: " . $e->getMessage() . "\n";
+        }
     
 } catch (Exception $e) {
     echo "Migration failed: " . $e->getMessage() . "\n";
