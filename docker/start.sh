@@ -72,16 +72,16 @@ try {
     
     // Drop user if exists
     try {
-        $pdo->exec("DROP USER IF EXISTS postgres;");
-        echo "Dropped existing postgres user.\n";
+        $pdo->exec("DROP USER IF EXISTS $user;");
+        echo "Dropped existing $user user.\n";
     } catch (PDOException $e) {
         echo "Error dropping user: " . $e->getMessage() . "\n";
     }
     
     // Create user
     try {
-        $pdo->exec("CREATE USER postgres WITH PASSWORD '$password' SUPERUSER CREATEDB CREATEROLE;");
-        echo "Created postgres user!\n";
+        $pdo->exec("CREATE USER $user WITH PASSWORD '$password' SUPERUSER CREATEDB CREATEROLE;");
+        echo "Created $user user!\n";
     } catch (PDOException $e) {
         echo "Error creating user: " . $e->getMessage() . "\n";
     }
@@ -96,7 +96,7 @@ try {
     
     // Create database
     try {
-        $pdo->exec("CREATE DATABASE \"$dbname\" OWNER postgres;");
+        $pdo->exec("CREATE DATABASE \"$dbname\" OWNER $user;");
         echo "Created database $dbname!\n";
     } catch (PDOException $e) {
         echo "Error creating database: " . $e->getMessage() . "\n";
