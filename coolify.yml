@@ -1,13 +1,17 @@
 version: '3.8'
 
+networks:
+  divino_network:
+    driver: bridge
+
 services:
   app:
     build: .
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432
-      - DB_NAME=divino_lanches
-      - DB_USER=postgres
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - APP_NAME=Divino Lanches
       - APP_URL=${APP_URL}
@@ -20,6 +24,8 @@ services:
     volumes:
       - ./uploads:/var/www/html/uploads
       - ./logs:/var/www/html/logs
+    networks:
+      - divino_network
     restart: unless-stopped
 
   postgres:
@@ -29,9 +35,11 @@ services:
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - divino_postgres_data:/var/lib/postgresql/data
       - ./database/init:/docker-entrypoint-initdb.d
+    networks:
+      - divino_network
     restart: unless-stopped
 
 volumes:
-  postgres_data:
+  divino_postgres_data:
