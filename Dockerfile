@@ -63,4 +63,5 @@ RUN chmod +x /usr/local/bin/start.sh
 
 EXPOSE 80
 
-CMD ["/usr/local/bin/start.sh"]
+# Use bash to execute the script
+CMD ["/bin/bash", "/usr/local/bin/start.sh"]
