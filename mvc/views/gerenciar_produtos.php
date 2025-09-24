@@ -418,7 +418,7 @@ if ($tenant && $filial) {
                                             <?php endif; ?>
                                             
                                             <div class="produto-preco h5 text-primary mb-2">
-                                                +R$ <?php echo number_format($ingrediente['preco_adicional'], 2, ',', '.'); ?>
+                                                +R$ <?php echo number_format($ingrediente['preco_adicional'] ?? 0, 2, ',', '.'); ?>
                                             </div>
                                             
                                             <div class="mb-2">
@@ -459,6 +459,7 @@ if ($tenant && $filial) {
                 </div>
                 <div class="modal-body">
                     <form id="formProduto">
+                        <input type="hidden" id="produtoId" value="">
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="mb-3">
@@ -506,6 +507,15 @@ if ($tenant && $filial) {
                                     <input type="file" class="form-control" id="produtoImagem" accept="image/*">
                                     <div class="form-text">Formatos aceitos: JPG, PNG, GIF (máx. 2MB)</div>
                                 </div>
+                                
+                                <div class="mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="produtoAtivo" checked>
+                                        <label class="form-check-label" for="produtoAtivo">
+                                            Produto Ativo
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         
@@ -527,8 +537,8 @@ if ($tenant && $filial) {
                                                 <i class="fas fa-plus"></i>
                                             </button>
                                         </div>
-                                        <div id="ingredientes_lista" class="ingredientes-lista">
-                                            <!-- Ingredientes serão adicionados aqui -->
+                                        <div id="ingredientes_lista" class="ingredientes-lista d-flex flex-wrap gap-2">
+                                            <!-- Ingredientes serão adicionados aqui como tags -->
                                         </div>
                                     </div>
                                 </div>
@@ -558,7 +568,7 @@ if ($tenant && $filial) {
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <form id="formCategoria">
+                <form id="formCategoria" onsubmit="return false;">
                     <div class="modal-body">
                         <input type="hidden" id="categoriaId" name="id">
                         
@@ -617,7 +627,7 @@ if ($tenant && $filial) {
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <form id="formIngrediente">
+                <form id="formIngrediente" onsubmit="return false;">
                     <div class="modal-body">
                         <input type="hidden" id="ingredienteId" name="id">
                         
@@ -661,13 +671,65 @@ if ($tenant && $filial) {
         function abrirModalProduto() {
             document.getElementById('modalProdutoTitulo').textContent = 'Novo Produto';
             document.getElementById('formProduto').reset();
+            document.getElementById('produtoId').value = '';
+            document.getElementById('produtoPrecoMini').value = '0';
             new bootstrap.Modal(document.getElementById('modalProduto')).show();
         }
 
         function editarProduto(produtoId) {
-            document.getElementById('modalProdutoTitulo').textContent = 'Editar Produto';
-            // Load product data via AJAX
-            new bootstrap.Modal(document.getElementById('modalProduto')).show();
+            console.log('Editando produto ID:', produtoId);
+            
+            // Buscar dados do produto
+            fetch('mvc/ajax/produtos_fix.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `action=buscar_produto&id=${produtoId}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Preencher modal com dados do produto
+                    document.getElementById('produtoId').value = data.produto.id;
+                    document.getElementById('produtoNome').value = data.produto.nome;
+                    document.getElementById('produtoDescricao').value = data.produto.descricao || '';
+                    document.getElementById('produtoPrecoNormal').value = data.produto.preco_normal;
+                    document.getElementById('produtoPrecoMini').value = data.produto.preco_mini || '0';
+                    document.getElementById('produtoCategoria').value = data.produto.categoria_id || '';
+                    document.getElementById('produtoAtivo').checked = data.produto.ativo;
+                    document.getElementById('produtoEstoque').value = data.produto.estoque_atual || '0';
+                    document.getElementById('produtoEstoqueMinimo').value = data.produto.estoque_minimo || '0';
+                    document.getElementById('produtoPrecoCusto').value = data.produto.preco_custo || '0';
+                    
+                    // Limpar ingredientes existentes
+                    document.getElementById('ingredientes_lista').innerHTML = '';
+                    
+                    // Carregar ingredientes do produto se existirem
+                    if (data.ingredientes && data.ingredientes.length > 0) {
+                        data.ingredientes.forEach(ingrediente => {
+                            const tag = document.createElement('span');
+                            tag.className = 'badge bg-primary me-2 mb-2 d-inline-flex align-items-center';
+                            tag.setAttribute('data-ingrediente-id', ingrediente.id);
+                            tag.innerHTML = `
+                                ${ingrediente.nome} (R$ ${parseFloat(ingrediente.preco_adicional).toFixed(2).replace('.', ',')})
+                                <button type="button" class="btn-close btn-close-white ms-2" onclick="removerIngrediente(this)" style="font-size: 0.7em;"></button>
+                            `;
+                            document.getElementById('ingredientes_lista').appendChild(tag);
+                        });
+                    }
+                    
+                    // Abrir modal
+                    document.getElementById('modalProdutoTitulo').textContent = 'Editar Produto';
+                    new bootstrap.Modal(document.getElementById('modalProduto')).show();
+                } else {
+                    alert('Erro ao buscar produto: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                alert('Erro ao buscar produto: ' + error.message);
+            });
         }
 
         function excluirProduto(produtoId) {
@@ -681,15 +743,99 @@ if ($tenant && $filial) {
                 confirmButtonColor: '#dc3545'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    Swal.fire('Sucesso', 'Produto excluído com sucesso!', 'success');
-                    setTimeout(() => location.reload(), 1500);
+            fetch('mvc/ajax/produtos_fix.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `action=excluir_produto&id=${produtoId}`
+            })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Sucesso', data.message, 'success');
+                            setTimeout(() => location.reload(), 1500);
+                        } else {
+                            Swal.fire('Erro', data.message, 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro:', error);
+                        Swal.fire('Erro', 'Erro ao excluir produto', 'error');
+                    });
                 }
             });
         }
 
         function salvarProduto() {
-            Swal.fire('Sucesso', 'Produto salvo com sucesso!', 'success');
-            setTimeout(() => location.reload(), 1500);
+            // Coletar dados manualmente
+            const produtoId = document.getElementById('produtoId').value;
+            const nome = document.getElementById('produtoNome').value;
+            const descricao = document.getElementById('produtoDescricao').value;
+            const precoNormal = document.getElementById('produtoPrecoNormal').value;
+            const precoMini = document.getElementById('produtoPrecoMini').value || '0';
+            const categoriaId = document.getElementById('produtoCategoria').value || null;
+            const ativo = document.getElementById('produtoAtivo').checked ? 1 : 0;
+            const estoqueAtual = document.getElementById('produtoEstoque').value || '0';
+            const estoqueMinimo = document.getElementById('produtoEstoqueMinimo').value || '0';
+            const precoCusto = document.getElementById('produtoPrecoCusto').value || '0';
+            
+            // Coletar ingredientes selecionados
+            const ingredientesSelecionados = [];
+            document.querySelectorAll('#ingredientes_lista .badge[data-ingrediente-id]').forEach(tag => {
+                ingredientesSelecionados.push(tag.getAttribute('data-ingrediente-id'));
+            });
+            
+            console.log('Dados coletados:', {
+                produtoId, nome, descricao, precoNormal, precoMini, categoriaId, ativo, estoqueAtual, estoqueMinimo, precoCusto, ingredientesSelecionados
+            });
+            
+            // Validar dados obrigatórios
+            if (!nome || !precoNormal) {
+                alert('Nome e preço normal são obrigatórios!');
+                return;
+            }
+            
+            // Criar FormData
+            const formData = new FormData();
+            formData.append('action', 'salvar_produto');
+            if (produtoId) formData.append('produto_id', produtoId);
+            formData.append('nome', nome);
+            formData.append('descricao', descricao);
+            formData.append('preco_normal', precoNormal);
+            formData.append('preco_mini', precoMini);
+            if (categoriaId) formData.append('categoria_id', categoriaId);
+            formData.append('ativo', ativo);
+            formData.append('estoque_atual', estoqueAtual);
+            formData.append('estoque_minimo', estoqueMinimo);
+            formData.append('preco_custo', precoCusto);
+            formData.append('ingredientes', JSON.stringify(ingredientesSelecionados));
+            
+            // Adicionar imagem se selecionada
+            const imagemInput = document.getElementById('produtoImagem');
+            if (imagemInput.files.length > 0) {
+                formData.append('imagem', imagemInput.files[0]);
+            }
+            
+            fetch('mvc/ajax/produtos_fix.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Resposta do servidor:', data);
+                if (data.success) {
+                    alert(data.message);
+                    bootstrap.Modal.getInstance(document.getElementById('modalProduto')).hide();
+                    location.reload();
+                } else {
+                    alert('Erro: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                alert('Erro ao salvar produto: ' + error.message);
+            });
         }
 
         function abrirModalCategoria() {
@@ -698,18 +844,109 @@ if ($tenant && $filial) {
             document.getElementById('categoriaId').value = '';
             new bootstrap.Modal(document.getElementById('modalCategoria')).show();
         }
+
+        function salvarCategoria() {
+            // Coletar dados manualmente
+            const categoriaId = document.getElementById('categoriaId').value;
+            const nome = document.getElementById('categoriaNome').value;
+            const descricao = document.getElementById('categoriaDescricao').value;
+            const parentId = document.getElementById('categoriaParent').value;
+            const ativo = document.getElementById('categoriaAtivo').checked ? 1 : 0;
+            
+            console.log('Dados coletados:', {
+                categoriaId, nome, descricao, parentId, ativo
+            });
+            
+            // Criar FormData manualmente
+            const formData = new FormData();
+            formData.append('action', 'salvar_categoria');
+            if (categoriaId) formData.append('categoria_id', categoriaId);
+            formData.append('nome', nome);
+            formData.append('descricao', descricao);
+            formData.append('parent_id', parentId);
+            formData.append('ativo', ativo);
+            
+            console.log('Enviando dados da categoria:', formData);
+            
+            fetch('mvc/ajax/produtos_fix.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    bootstrap.Modal.getInstance(document.getElementById('modalCategoria')).hide();
+                    // Recarregar a página mantendo a aba de categorias
+                    window.location.href = 'index.php?view=gerenciar_produtos#categorias';
+                } else {
+                    alert('Erro: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                alert('Erro ao salvar categoria');
+            });
+        }
         
         function abrirModalIngrediente() {
             document.getElementById('modalIngredienteTitulo').textContent = 'Novo Ingrediente';
             document.getElementById('formIngrediente').reset();
             document.getElementById('ingredienteId').value = '';
+            document.getElementById('ingredientePreco').value = '0.00';
             new bootstrap.Modal(document.getElementById('modalIngrediente')).show();
+        }
+
+        function salvarIngrediente() {
+            // Coletar dados manualmente
+            const ingredienteId = document.getElementById('ingredienteId').value;
+            const nome = document.getElementById('ingredienteNome').value;
+            const descricao = document.getElementById('ingredienteDescricao').value;
+            const precoAdicional = document.getElementById('ingredientePreco').value;
+            const ativo = document.getElementById('ingredienteAtivo').checked ? 1 : 0;
+            
+            console.log('Dados coletados:', {
+                ingredienteId, nome, descricao, precoAdicional, ativo
+            });
+            
+            // Criar FormData manualmente
+            const formData = new FormData();
+            formData.append('action', 'salvar_ingrediente');
+            if (ingredienteId) formData.append('ingrediente_id', ingredienteId);
+            formData.append('nome', nome);
+            formData.append('descricao', descricao);
+            formData.append('preco_adicional', precoAdicional);
+            formData.append('ativo', ativo);
+            
+            console.log('Enviando dados do ingrediente:', formData);
+            
+            fetch('mvc/ajax/produtos_fix.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    bootstrap.Modal.getInstance(document.getElementById('modalIngrediente')).hide();
+                    // Recarregar a página mantendo a aba de ingredientes
+                    window.location.href = 'index.php?view=gerenciar_produtos#ingredientes';
+                } else {
+                    alert('Erro: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                alert('Erro ao salvar ingrediente');
+            });
         }
 
         // Funções para editar e excluir categorias
         function editarCategoria(id) {
+            console.log('Editando categoria ID:', id);
+            
             // Buscar dados da categoria via AJAX
-            fetch('mvc/ajax/produtos.php', {
+            fetch('mvc/ajax/produtos_fix.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -718,29 +955,31 @@ if ($tenant && $filial) {
             })
             .then(response => response.json())
             .then(data => {
+                console.log('Resposta da categoria:', data);
                 if (data.success) {
                     // Preencher modal com dados da categoria
                     document.getElementById('categoriaId').value = data.categoria.id;
                     document.getElementById('categoriaNome').value = data.categoria.nome;
                     document.getElementById('categoriaDescricao').value = data.categoria.descricao || '';
-                    document.getElementById('categoriaParentId').value = data.categoria.parent_id || '';
+                    document.getElementById('categoriaParent').value = data.categoria.parent_id || '';
                     document.getElementById('categoriaAtivo').checked = data.categoria.ativo;
                     
                     // Abrir modal
-                    abrirModalCategoria();
+                    document.getElementById('modalCategoriaTitulo').textContent = 'Editar Categoria';
+                    new bootstrap.Modal(document.getElementById('modalCategoria')).show();
                 } else {
                     alert('Erro ao buscar categoria: ' + data.message);
                 }
             })
             .catch(error => {
                 console.error('Erro:', error);
-                alert('Erro ao buscar categoria');
+                alert('Erro ao buscar categoria: ' + error.message);
             });
         }
 
         function excluirCategoria(id) {
             if (confirm('Tem certeza que deseja excluir esta categoria?')) {
-                fetch('mvc/ajax/produtos.php', {
+                fetch('mvc/ajax/produtos_fix.php', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
@@ -765,8 +1004,10 @@ if ($tenant && $filial) {
 
         // Funções para editar e excluir ingredientes
         function editarIngrediente(id) {
+            console.log('Editando ingrediente ID:', id);
+            
             // Buscar dados do ingrediente via AJAX
-            fetch('mvc/ajax/produtos.php', {
+            fetch('mvc/ajax/produtos_fix.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -775,29 +1016,31 @@ if ($tenant && $filial) {
             })
             .then(response => response.json())
             .then(data => {
+                console.log('Resposta do ingrediente:', data);
                 if (data.success) {
                     // Preencher modal com dados do ingrediente
                     document.getElementById('ingredienteId').value = data.ingrediente.id;
                     document.getElementById('ingredienteNome').value = data.ingrediente.nome;
                     document.getElementById('ingredienteDescricao').value = data.ingrediente.descricao || '';
-                    document.getElementById('ingredientePreco').value = data.ingrediente.preco_adicional;
+                    document.getElementById('ingredientePreco').value = data.ingrediente.preco_adicional || '0.00';
                     document.getElementById('ingredienteAtivo').checked = data.ingrediente.ativo;
                     
                     // Abrir modal
-                    abrirModalIngrediente();
+                    document.getElementById('modalIngredienteTitulo').textContent = 'Editar Ingrediente';
+                    new bootstrap.Modal(document.getElementById('modalIngrediente')).show();
                 } else {
                     alert('Erro ao buscar ingrediente: ' + data.message);
                 }
             })
             .catch(error => {
                 console.error('Erro:', error);
-                alert('Erro ao buscar ingrediente');
+                alert('Erro ao buscar ingrediente: ' + error.message);
             });
         }
 
         function excluirIngrediente(id) {
             if (confirm('Tem certeza que deseja excluir este ingrediente?')) {
-                fetch('mvc/ajax/produtos.php', {
+                fetch('mvc/ajax/produtos_fix.php', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
@@ -839,28 +1082,65 @@ if ($tenant && $filial) {
             }
             
             const lista = document.getElementById('ingredientes_lista');
-            const item = document.createElement('div');
-            item.className = 'ingrediente-item';
-            item.setAttribute('data-ingrediente-id', ingredienteId);
-            item.innerHTML = `
-                <div class="ingrediente-info">
-                    <strong>${ingredienteNome}</strong>
-                    <br><small class="text-muted">R$ ${parseFloat(ingredientePreco).toFixed(2).replace('.', ',')}</small>
-                </div>
-                <div class="ingrediente-actions">
-                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="removerIngrediente(this)">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
+            const tag = document.createElement('span');
+            tag.className = 'badge bg-primary me-2 mb-2 d-inline-flex align-items-center';
+            tag.setAttribute('data-ingrediente-id', ingredienteId);
+            tag.innerHTML = `
+                ${ingredienteNome} (R$ ${parseFloat(ingredientePreco).toFixed(2).replace('.', ',')})
+                <button type="button" class="btn-close btn-close-white ms-2" onclick="removerIngrediente(this)" style="font-size: 0.7em;"></button>
             `;
             
-            lista.appendChild(item);
+            lista.appendChild(tag);
             select.value = '';
         }
         
         function removerIngrediente(button) {
-            button.closest('.ingrediente-item').remove();
+            button.closest('.badge').remove();
         }
+        
+        // Funções para recarregar as abas
+        function carregarCategorias() {
+            // Recarregar apenas a aba de categorias
+            const tabCategorias = document.getElementById('categorias-tab');
+            if (tabCategorias) {
+                tabCategorias.click();
+            }
+        }
+        
+        function carregarIngredientes() {
+            // Recarregar apenas a aba de ingredientes
+            const tabIngredientes = document.getElementById('ingredientes-tab');
+            if (tabIngredientes) {
+                tabIngredientes.click();
+            }
+        }
+        
+        // Ativar aba correta quando a página carregar
+        document.addEventListener('DOMContentLoaded', function() {
+            const hash = window.location.hash;
+            if (hash === '#categorias') {
+                const tabCategorias = document.getElementById('categorias-tab');
+                if (tabCategorias) {
+                    tabCategorias.click();
+                }
+            } else if (hash === '#ingredientes') {
+                const tabIngredientes = document.getElementById('ingredientes-tab');
+                if (tabIngredientes) {
+                    tabIngredientes.click();
+                }
+            }
+            
+            // Adicionar event listeners para os formulários
+            document.getElementById('formCategoria').addEventListener('submit', function(e) {
+                e.preventDefault();
+                salvarCategoria();
+            });
+            
+            document.getElementById('formIngrediente').addEventListener('submit', function(e) {
+                e.preventDefault();
+                salvarIngrediente();
+            });
+        });
     </script>
 </body>
 </html>

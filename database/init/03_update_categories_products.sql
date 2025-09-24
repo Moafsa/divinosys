@@ -5,12 +5,15 @@ ALTER TABLE categorias ADD COLUMN IF NOT EXISTS descricao TEXT;
 ALTER TABLE categorias ADD COLUMN IF NOT EXISTS ordem INTEGER DEFAULT 0;
 ALTER TABLE categorias ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT true;
 
--- Update produtos table to support images
+-- Update produtos table to support images and stock
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS imagem VARCHAR(500);
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS imagens JSONB; -- Multiple images
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT true;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS destaque BOOLEAN DEFAULT false;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS ordem INTEGER DEFAULT 0;
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS estoque_atual INTEGER DEFAULT 0;
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS estoque_minimo INTEGER DEFAULT 0;
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS preco_custo DECIMAL(10,2) DEFAULT 0.00;
 
 -- Create ingredientes table if not exists
 CREATE TABLE IF NOT EXISTS ingredientes (

@@ -65,6 +65,121 @@ try {
             ]);
             break;
             
+        case 'salvar_produto':
+            $produtoId = $_POST['produto_id'] ?? '';
+            $nome = $_POST['nome'] ?? '';
+            $descricao = $_POST['descricao'] ?? '';
+            $precoNormal = $_POST['preco_normal'] ?? 0;
+            $precoMini = $_POST['preco_mini'] ?? 0;
+            $categoriaId = $_POST['categoria_id'] ?? '';
+            $ativo = isset($_POST['ativo']) ? 1 : 0;
+            
+            if (empty($nome) || empty($precoNormal)) {
+                throw new \Exception('Nome e preço são obrigatórios');
+            }
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId() ?? 1;
+            $filialId = $session->getFilialId() ?? 1;
+            
+            if (empty($produtoId)) {
+                // Criar novo produto
+                $stmt = $db->prepare("
+                    INSERT INTO produtos (nome, descricao, preco_normal, preco_mini, categoria_id, ativo, tenant_id, filial_id) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([$nome, $descricao, $precoNormal, $precoMini, $categoriaId, $ativo, $tenantId, $filialId]);
+                $message = 'Produto criado com sucesso!';
+            } else {
+                // Atualizar produto existente
+                $stmt = $db->prepare("
+                    UPDATE produtos 
+                    SET nome = ?, descricao = ?, preco_normal = ?, preco_mini = ?, categoria_id = ?, ativo = ? 
+                    WHERE id = ? AND tenant_id = ? AND filial_id = ?
+                ");
+                $stmt->execute([$nome, $descricao, $precoNormal, $precoMini, $categoriaId, $ativo, $produtoId, $tenantId, $filialId]);
+                $message = 'Produto atualizado com sucesso!';
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'message' => $message
+            ]);
+            break;
+            
+        case 'excluir_produto':
+            $produtoId = $_GET['id'] ?? $_POST['id'] ?? '';
+            
+            if (empty($produtoId)) {
+                throw new \Exception('ID do produto é obrigatório');
+            }
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId() ?? 1;
+            $filialId = $session->getFilialId() ?? 1;
+            
+            // Verificar se há pedidos usando este produto
+            $stmt = $db->prepare("SELECT COUNT(*) FROM pedido_itens WHERE produto_id = ? AND tenant_id = ? AND filial_id = ?");
+            $stmt->execute([$produtoId, $tenantId, $filialId]);
+            $pedidosCount = $stmt->fetchColumn();
+            
+            if ($pedidosCount > 0) {
+                throw new \Exception('Não é possível excluir produto que possui pedidos associados');
+            }
+            
+            // Excluir produto
+            $stmt = $db->prepare("DELETE FROM produtos WHERE id = ? AND tenant_id = ? AND filial_id = ?");
+            $stmt->execute([$produtoId, $tenantId, $filialId]);
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Produto excluído com sucesso'
+            ]);
+            break;
+            
+        case 'salvar_categoria':
+            $categoriaId = $_POST['categoria_id'] ?? '';
+            $nome = $_POST['nome'] ?? '';
+            $descricao = $_POST['descricao'] ?? '';
+            $parentId = $_POST['parent_id'] ?? null;
+            $ativo = isset($_POST['ativo']) ? 1 : 0;
+            
+            if (empty($nome)) {
+                throw new \Exception('Nome da categoria é obrigatório');
+            }
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId() ?? 1;
+            $filialId = $session->getFilialId() ?? 1;
+            
+            if (empty($categoriaId)) {
+                // Criar nova categoria
+                $stmt = $db->prepare("
+                    INSERT INTO categorias (nome, descricao, parent_id, ativo, tenant_id, filial_id) 
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([$nome, $descricao, $parentId, $ativo, $tenantId, $filialId]);
+                $message = 'Categoria criada com sucesso!';
+            } else {
+                // Atualizar categoria existente
+                $stmt = $db->prepare("
+                    UPDATE categorias 
+                    SET nome = ?, descricao = ?, parent_id = ?, ativo = ? 
+                    WHERE id = ? AND tenant_id = ? AND filial_id = ?
+                ");
+                $stmt->execute([$nome, $descricao, $parentId, $ativo, $categoriaId, $tenantId, $filialId]);
+                $message = 'Categoria atualizada com sucesso!';
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'message' => $message
+            ]);
+            break;
+            
         case 'buscar_categoria':
             $categoriaId = $_GET['id'] ?? $_POST['id'] ?? '';
             
@@ -119,6 +234,47 @@ try {
             echo json_encode([
                 'success' => true,
                 'message' => 'Categoria excluída com sucesso'
+            ]);
+            break;
+            
+        case 'salvar_ingrediente':
+            $ingredienteId = $_POST['ingrediente_id'] ?? '';
+            $nome = $_POST['nome'] ?? '';
+            $descricao = $_POST['descricao'] ?? '';
+            $precoAdicional = $_POST['preco_adicional'] ?? 0;
+            $ativo = isset($_POST['ativo']) ? 1 : 0;
+            
+            if (empty($nome)) {
+                throw new \Exception('Nome do ingrediente é obrigatório');
+            }
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId() ?? 1;
+            $filialId = $session->getFilialId() ?? 1;
+            
+            if (empty($ingredienteId)) {
+                // Criar novo ingrediente
+                $stmt = $db->prepare("
+                    INSERT INTO ingredientes (nome, descricao, preco_adicional, ativo, tenant_id, filial_id) 
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([$nome, $descricao, $precoAdicional, $ativo, $tenantId, $filialId]);
+                $message = 'Ingrediente criado com sucesso!';
+            } else {
+                // Atualizar ingrediente existente
+                $stmt = $db->prepare("
+                    UPDATE ingredientes 
+                    SET nome = ?, descricao = ?, preco_adicional = ?, ativo = ? 
+                    WHERE id = ? AND tenant_id = ? AND filial_id = ?
+                ");
+                $stmt->execute([$nome, $descricao, $precoAdicional, $ativo, $ingredienteId, $tenantId, $filialId]);
+                $message = 'Ingrediente atualizado com sucesso!';
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'message' => $message
             ]);
             break;
             

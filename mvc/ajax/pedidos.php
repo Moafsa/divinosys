@@ -107,6 +107,22 @@ try {
             
             // Criar itens do pedido
             foreach ($itens as $item) {
+                // Preparar ingredientes
+                $ingredientesCom = [];
+                $ingredientesSem = [];
+                
+                if (isset($item['ingredientes_adicionados']) && is_array($item['ingredientes_adicionados'])) {
+                    foreach ($item['ingredientes_adicionados'] as $ing) {
+                        $ingredientesCom[] = $ing['nome'];
+                    }
+                }
+                
+                if (isset($item['ingredientes_removidos']) && is_array($item['ingredientes_removidos'])) {
+                    foreach ($item['ingredientes_removidos'] as $ing) {
+                        $ingredientesSem[] = $ing['nome'];
+                    }
+                }
+                
                 $db->insert('pedido_itens', [
                     'pedido_id' => $pedidoId,
                     'produto_id' => $item['id'],
@@ -115,6 +131,8 @@ try {
                     'valor_total' => $item['preco'] * $item['quantidade'],
                     'tamanho' => $item['tamanho'] ?? 'normal',
                     'observacao' => $item['observacao'] ?? '',
+                    'ingredientes_com' => implode(', ', $ingredientesCom),
+                    'ingredientes_sem' => implode(', ', $ingredientesSem),
                     'tenant_id' => $tenantId,
                     'filial_id' => $filialId
                 ]);
@@ -125,24 +143,31 @@ try {
                 $db->update('mesas', ['status' => '2'], 'id_mesa = ? AND tenant_id = ? AND filial_id = ?', [$mesaId, $tenantId, $filialId]);
             }
             
+            // Buscar dados do pedido criado
+            $pedido = $db->fetch("SELECT * FROM pedido WHERE idpedido = ? AND tenant_id = ? AND filial_id = ?", [$pedidoId, $tenantId, $filialId]);
+            
             echo json_encode([
                 'success' => true, 
                 'message' => 'Pedido criado com sucesso!',
-                'pedido_id' => $pedidoId
+                'pedido_id' => $pedidoId,
+                'pedido' => $pedido
             ]);
             break;
             
         case 'buscar_pedido':
-            $pedidoId = $_GET['pedido_id'] ?? $_POST['pedido_id'] ?? '';
-            
-            if (empty($pedidoId)) {
-                throw new \Exception('ID do pedido é obrigatório');
-            }
-            
-            $db = \System\Database::getInstance();
-            $session = \System\Session::getInstance();
-            $tenantId = $session->getTenantId() ?? 1;
-            $filialId = $session->getFilialId() ?? 1;
+            try {
+                $pedidoId = $_GET['pedido_id'] ?? $_POST['pedido_id'] ?? '';
+                
+                if (empty($pedidoId)) {
+                    throw new \Exception('ID do pedido é obrigatório');
+                }
+                
+                $db = \System\Database::getInstance();
+                $session = \System\Session::getInstance();
+                $tenantId = $session->getTenantId() ?? 1;
+                $filialId = $session->getFilialId() ?? 1;
+                
+                error_log("Buscando pedido ID: $pedidoId, Tenant: $tenantId, Filial: $filialId");
             
                 // Buscar dados do pedido
                 $pedido = $db->fetch(
@@ -176,12 +201,35 @@ try {
                 [$filialId, $pedidoId, $tenantId]
             );
             
+            // Processar ingredientes para cada item
+            foreach ($itens as &$item) {
+                if (!empty($item['ingredientes_com']) && trim($item['ingredientes_com']) !== '') {
+                    $item['ingredientes_com'] = explode(', ', $item['ingredientes_com']);
+                } else {
+                    $item['ingredientes_com'] = [];
+                }
+                
+                if (!empty($item['ingredientes_sem']) && trim($item['ingredientes_sem']) !== '') {
+                    $item['ingredientes_sem'] = explode(', ', $item['ingredientes_sem']);
+                } else {
+                    $item['ingredientes_sem'] = [];
+                }
+            }
+            
             $pedido['itens'] = $itens;
             
-            echo json_encode([
-                'success' => true,
-                'pedido' => $pedido
-            ]);
+                echo json_encode([
+                    'success' => true,
+                    'pedido' => $pedido
+                ]);
+                
+            } catch (\Exception $e) {
+                error_log("Erro ao buscar pedido: " . $e->getMessage());
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Erro ao carregar dados do pedido: ' . $e->getMessage()
+                ]);
+            }
             break;
             
         case 'atualizar_status':
@@ -383,6 +431,13 @@ try {
             $itens = json_decode($_POST['itens'] ?? '[]', true);
             $observacao = $_POST['observacao'] ?? '';
             
+            // Debug: Log dos dados recebidos
+            error_log("=== ATUALIZAR PEDIDO DEBUG ===");
+            error_log("Pedido ID: " . $pedidoId);
+            error_log("Mesa ID: " . $mesaId);
+            error_log("Itens recebidos: " . json_encode($itens));
+            error_log("Observação: " . $observacao);
+            
             if (empty($pedidoId) || empty($mesaId) || empty($itens)) {
                 throw new \Exception('Dados obrigatórios não fornecidos');
             }
@@ -423,7 +478,37 @@ try {
             $db->delete('pedido_itens', 'pedido_id = ? AND tenant_id = ?', [$pedidoId, $tenantId]);
             
             // Adicionar novos itens
-            foreach ($itens as $item) {
+            foreach ($itens as $index => $item) {
+                // Debug: Log do item
+                error_log("Processando item $index: " . json_encode($item));
+                
+                // Preparar ingredientes
+                $ingredientesCom = [];
+                $ingredientesSem = [];
+                
+                if (isset($item['ingredientes_adicionados']) && is_array($item['ingredientes_adicionados'])) {
+                    foreach ($item['ingredientes_adicionados'] as $ing) {
+                        if (is_string($ing)) {
+                            $ingredientesCom[] = $ing;
+                        } elseif (is_array($ing) && isset($ing['nome'])) {
+                            $ingredientesCom[] = $ing['nome'];
+                        }
+                    }
+                }
+                
+                if (isset($item['ingredientes_removidos']) && is_array($item['ingredientes_removidos'])) {
+                    foreach ($item['ingredientes_removidos'] as $ing) {
+                        if (is_string($ing)) {
+                            $ingredientesSem[] = $ing;
+                        } elseif (is_array($ing) && isset($ing['nome'])) {
+                            $ingredientesSem[] = $ing['nome'];
+                        }
+                    }
+                }
+                
+                error_log("Ingredientes COM: " . implode(', ', $ingredientesCom));
+                error_log("Ingredientes SEM: " . implode(', ', $ingredientesSem));
+                
                 $db->insert('pedido_itens', [
                     'pedido_id' => $pedidoId,
                     'produto_id' => $item['id'],
@@ -432,6 +517,8 @@ try {
                     'valor_total' => $item['preco'] * $item['quantidade'],
                     'tamanho' => $item['tamanho'] ?? 'normal',
                     'observacao' => $item['observacao'] ?? '',
+                    'ingredientes_com' => implode(', ', $ingredientesCom),
+                    'ingredientes_sem' => implode(', ', $ingredientesSem),
                     'tenant_id' => $tenantId,
                     'filial_id' => $filialId
                 ]);

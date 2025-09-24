@@ -18,7 +18,7 @@ if ($tenant && $filial) {
          LEFT JOIN mesas m ON p.idmesa::varchar = m.id_mesa AND m.tenant_id = p.tenant_id AND m.filial_id = p.filial_id
          LEFT JOIN usuarios u ON p.usuario_id = u.id AND u.tenant_id = p.tenant_id
          WHERE p.tenant_id = ? AND p.filial_id = ? 
-         AND p.data = CURRENT_DATE
+         AND p.data >= CURRENT_DATE - INTERVAL '7 days'
          ORDER BY p.hora_pedido DESC",
         [$tenant['id'], $filial['id']]
     );
@@ -42,12 +42,33 @@ foreach ($pedidos as $pedido) {
     }
 }
 
-// Get stats
+// Get stats for today only
+$pedidos_hoje = array_filter($pedidos, function($pedido) {
+    return $pedido['data'] === date('Y-m-d');
+});
+
+$pedidos_por_status_hoje = [
+    'Pendente' => [],
+    'Em Preparo' => [],
+    'Pronto' => [],
+    'Saiu para Entrega' => [],
+    'Entregue' => [],
+    'Finalizado' => [],
+    'Cancelado' => []
+];
+
+foreach ($pedidos_hoje as $pedido) {
+    $status = $pedido['status'] ?? 'Pendente';
+    if (isset($pedidos_por_status_hoje[$status])) {
+        $pedidos_por_status_hoje[$status][] = $pedido;
+    }
+}
+
 $stats = [
-    'total_pedidos' => count($pedidos),
-    'valor_total' => array_sum(array_column($pedidos, 'valor_total')),
-    'pendentes' => count($pedidos_por_status['Pendente']),
-    'em_preparo' => count($pedidos_por_status['Em Preparo'])
+    'total_pedidos' => count($pedidos_hoje),
+    'valor_total' => array_sum(array_column($pedidos_hoje, 'valor_total')),
+    'pendentes' => count($pedidos_por_status_hoje['Pendente']),
+    'em_preparo' => count($pedidos_por_status_hoje['Em Preparo'])
 ];
 ?>
 <!DOCTYPE html>
@@ -476,13 +497,14 @@ $stats = [
             document.getElementById('pedidoNumero').textContent = pedidoId;
             
             // Load pedido content via AJAX
-            fetch(`index.php?action=pedidos&buscar_pedido=1&pedido_id=${pedidoId}`, {
+            fetch(`mvc/ajax/pedidos.php?buscar_pedido=1&pedido_id=${pedidoId}`, {
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest'
                 }
             })
                 .then(response => response.json())
                 .then(data => {
+                    console.log('Dados recebidos:', data);
                     if (data.success) {
                         // Generate HTML content from pedido data
                         const pedido = data.pedido;
@@ -582,6 +604,16 @@ $stats = [
                                         <td>
                                             <strong>${item.produto_nome || 'Produto'}</strong>
                                             ${item.observacao ? `<br><small class="text-muted">${item.observacao}</small>` : ''}
+                                            ${item.ingredientes_com && Array.isArray(item.ingredientes_com) && item.ingredientes_com.length > 0 ? `
+                                                <br><small class="text-success">
+                                                    <i class="fas fa-plus"></i> ${item.ingredientes_com.join(', ')}
+                                                </small>
+                                            ` : ''}
+                                            ${item.ingredientes_sem && Array.isArray(item.ingredientes_sem) && item.ingredientes_sem.length > 0 ? `
+                                                <br><small class="text-danger">
+                                                    <i class="fas fa-minus"></i> ${item.ingredientes_sem.join(', ')}
+                                                </small>
+                                            ` : ''}
                                         </td>
                                         <td>
                                             <div class="input-group input-group-sm">
@@ -614,11 +646,12 @@ $stats = [
                         document.getElementById('modalPedidoBody').innerHTML = html;
                         new bootstrap.Modal(document.getElementById('modalPedido')).show();
                     } else {
-                        Swal.fire('Erro', data.message, 'error');
+                        console.error('Erro na resposta:', data);
+                        Swal.fire('Erro', data.message || 'Erro ao carregar dados do pedido', 'error');
                     }
                 })
                 .catch(error => {
-                    console.error('Error:', error);
+                    console.error('Erro na requisição:', error);
                     Swal.fire('Erro', 'Erro ao carregar dados do pedido', 'error');
                 });
         }
