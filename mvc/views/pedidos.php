@@ -29,9 +29,8 @@ $pedidos_por_status = [
     'Pendente' => [],
     'Em Preparo' => [],
     'Pronto' => [],
-    'Saiu para Entrega' => [],
     'Entregue' => [],
-    'Finalizado' => [],
+    'Saiu para Entrega' => [],
     'Cancelado' => []
 ];
 
@@ -51,9 +50,8 @@ $pedidos_por_status_hoje = [
     'Pendente' => [],
     'Em Preparo' => [],
     'Pronto' => [],
-    'Saiu para Entrega' => [],
     'Entregue' => [],
-    'Finalizado' => [],
+    'Saiu para Entrega' => [],
     'Cancelado' => []
 ];
 
@@ -79,6 +77,7 @@ $stats = [
     <title>Pedidos - <?php echo $config->get('app.name'); ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="assets/css/sidebar.css" rel="stylesheet">
     <style>
         :root {
             --primary-color: <?php echo $tenant['cor_primaria'] ?? '#007bff'; ?>;
@@ -138,11 +137,10 @@ $stats = [
         }
         
         .column-header.pendente { background: linear-gradient(45deg, #ffc107, #fd7e14); }
-        .column-header.preparo { background: linear-gradient(45deg, #17a2b8, #20c997); }
+        .column-header.em_preparo { background: linear-gradient(45deg, #28a745, #20c997); }
         .column-header.pronto { background: linear-gradient(45deg, #28a745, #20c997); }
-        .column-header.entrega { background: linear-gradient(45deg, #6f42c1, #e83e8c); }
+        .column-header.saiu_para_entrega { background: linear-gradient(45deg, #17a2b8, #20c997); }
         .column-header.entregue { background: linear-gradient(45deg, #007bff, #6610f2); }
-        .column-header.finalizado { background: linear-gradient(45deg, #6c757d, #495057); }
         .column-header.cancelado { background: linear-gradient(45deg, #dc3545, #e83e8c); }
         
         .pedido-card {
@@ -292,71 +290,82 @@ $stats = [
     </style>
 </head>
 <body>
+    <!-- Sidebar Toggle Button -->
+    <button class="sidebar-toggle" onclick="toggleSidebar()">
+        <i class="fas fa-bars"></i>
+    </button>
+    
     <div class="container-fluid">
         <div class="row">
             <!-- Sidebar -->
-            <div class="col-md-3 col-lg-2 sidebar">
+            <div class="col-md-3 col-lg-2 sidebar collapsed" id="sidebar">
                 <div class="p-3">
-                    <h4 class="text-white mb-4">
-                        <i class="fas fa-utensils me-2"></i>
-                        <?php echo $tenant['nome'] ?? 'Divino Lanches'; ?>
-                    </h4>
+                    <div class="sidebar-brand">
+                        <h4 class="text-white mb-4">
+                            <i class="fas fa-utensils me-2"></i>
+                            <?php echo $tenant['nome'] ?? 'Divino Lanches'; ?>
+                        </h4>
+                        <div class="brand-icon text-white">
+                            <i class="fas fa-utensils"></i>
+                        </div>
+                    </div>
                     <nav class="nav flex-column">
-                        <a class="nav-link" href="<?php echo $router->url('dashboard'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('dashboard'); ?>" data-tooltip="Dashboard">
                             <i class="fas fa-tachometer-alt"></i>
-                            Dashboard
+                            <span>Dashboard</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('gerar_pedido'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('gerar_pedido'); ?>" data-tooltip="Novo Pedido">
                             <i class="fas fa-plus-circle"></i>
-                            Novo Pedido
+                            <span>Novo Pedido</span>
                         </a>
-                        <a class="nav-link active" href="<?php echo $router->url('pedidos'); ?>">
+                        <a class="nav-link active" href="<?php echo $router->url('pedidos'); ?>" data-tooltip="Pedidos">
                             <i class="fas fa-list"></i>
-                            Pedidos
+                            <span>Pedidos</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('mesas'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('mesas'); ?>" data-tooltip="Mesas">
                             <i class="fas fa-table"></i>
-                            Mesas
+                            <span>Mesas</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('delivery'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('delivery'); ?>" data-tooltip="Delivery">
                             <i class="fas fa-motorcycle"></i>
-                            Delivery
+                            <span>Delivery</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('gerenciar_produtos'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('gerenciar_produtos'); ?>" data-tooltip="Produtos">
                             <i class="fas fa-box"></i>
-                            Produtos
+                            <span>Produtos</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('estoque'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('estoque'); ?>" data-tooltip="Estoque">
                             <i class="fas fa-warehouse"></i>
-                            Estoque
+                            <span>Estoque</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('financeiro'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('financeiro'); ?>" data-tooltip="Financeiro">
                             <i class="fas fa-chart-line"></i>
-                            Financeiro
+                            <span>Financeiro</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('relatorios'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('relatorios'); ?>" data-tooltip="Relatórios">
                             <i class="fas fa-chart-bar"></i>
-                            Relatórios
+                            <span>Relatórios</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('clientes'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('clientes'); ?>" data-tooltip="Clientes">
                             <i class="fas fa-users"></i>
-                            Clientes
+                            <span>Clientes</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('configuracoes'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('configuracoes'); ?>" data-tooltip="Configurações">
                             <i class="fas fa-cog"></i>
-                            Configurações
+                            <span>Configurações</span>
                         </a>
                         <hr class="text-white-50">
-                        <a class="nav-link" href="<?php echo $router->url('logout'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('logout'); ?>" data-tooltip="Sair">
                             <i class="fas fa-sign-out-alt"></i>
-                            Sair
+                            <span>Sair</span>
                         </a>
                     </nav>
                 </div>
             </div>
 
             <!-- Main Content -->
-            <div class="col-md-9 col-lg-10 main-content">
+            <div class="main-content expanded">
+                <div class="content-wrapper">
                 <!-- Header -->
                 <div class="header">
                     <div class="row align-items-center">
@@ -535,9 +544,8 @@ $stats = [
                                                 <option value="Pendente" ${pedido.status === 'Pendente' ? 'selected' : ''}>Pendente</option>
                                                 <option value="Em Preparo" ${pedido.status === 'Em Preparo' ? 'selected' : ''}>Em Preparo</option>
                                                 <option value="Pronto" ${pedido.status === 'Pronto' ? 'selected' : ''}>Pronto</option>
-                                                <option value="Saiu para Entrega" ${pedido.status === 'Saiu para Entrega' ? 'selected' : ''}>Saiu para Entrega</option>
                                                 <option value="Entregue" ${pedido.status === 'Entregue' ? 'selected' : ''}>Entregue</option>
-                                                <option value="Finalizado" ${pedido.status === 'Finalizado' ? 'selected' : ''}>Finalizado</option>
+                                                <option value="Saiu para Entrega" ${pedido.status === 'Saiu para Entrega' ? 'selected' : ''}>Saiu para Entrega</option>
                                             </select>
                                         </div>
                                     </div>
@@ -657,7 +665,7 @@ $stats = [
         }
 
         function atualizarStatus(pedidoId, statusAtual) {
-            const statuses = ['Pendente', 'Em Preparo', 'Pronto', 'Saiu para Entrega', 'Entregue', 'Finalizado'];
+            const statuses = ['Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega'];
             const currentIndex = statuses.indexOf(statusAtual);
             
             if (currentIndex < statuses.length - 1) {
@@ -1008,5 +1016,12 @@ $stats = [
             atualizarPedidos();
         }, 30000);
     </script>
+    
+    <!-- Include sidebar JavaScript -->
+    <script src="assets/js/sidebar.js"></script>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

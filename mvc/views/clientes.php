@@ -26,6 +26,7 @@ if ($tenant && $filial) {
     <title>Clientes - <?php echo $config->get('app.name'); ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="assets/css/sidebar.css" rel="stylesheet">
     <style>
         :root {
             --primary-color: <?php echo $tenant['cor_primaria'] ?? '#007bff'; ?>;
@@ -114,68 +115,73 @@ if ($tenant && $filial) {
     <div class="container-fluid">
         <div class="row">
             <!-- Sidebar -->
-            <div class="col-md-3 col-lg-2 sidebar">
-                <div class="p-3">
-                    <h4 class="text-white mb-4">
-                        <i class="fas fa-utensils me-2"></i>
-                        <?php echo $tenant['nome'] ?? 'Divino Lanches'; ?>
-                    </h4>
+            <div class="sidebar collapsed" id="sidebar">
+                <button class="sidebar-toggle" id="sidebarToggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <div class="sidebar-content">
+                    <div class="sidebar-brand">
+                        <div class="brand-icon text-white">
+                            <i class="fas fa-utensils"></i>
+                        </div>
+                    </div>
                     <nav class="nav flex-column">
-                        <a class="nav-link" href="<?php echo $router->url('dashboard'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('dashboard'); ?>" data-tooltip="Dashboard">
                             <i class="fas fa-tachometer-alt"></i>
-                            Dashboard
+                            <span>Dashboard</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('gerar_pedido'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('gerar_pedido'); ?>" data-tooltip="Novo Pedido">
                             <i class="fas fa-plus-circle"></i>
-                            Novo Pedido
+                            <span>Novo Pedido</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('pedidos'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('pedidos'); ?>" data-tooltip="Pedidos">
                             <i class="fas fa-list"></i>
-                            Pedidos
+                            <span>Pedidos</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('mesas'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('mesas'); ?>" data-tooltip="Mesas">
                             <i class="fas fa-table"></i>
-                            Mesas
+                            <span>Mesas</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('delivery'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('delivery'); ?>" data-tooltip="Delivery">
                             <i class="fas fa-motorcycle"></i>
-                            Delivery
+                            <span>Delivery</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('gerenciar_produtos'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('gerenciar_produtos'); ?>" data-tooltip="Produtos">
                             <i class="fas fa-box"></i>
-                            Produtos
+                            <span>Produtos</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('estoque'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('estoque'); ?>" data-tooltip="Estoque">
                             <i class="fas fa-warehouse"></i>
-                            Estoque
+                            <span>Estoque</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('financeiro'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('financeiro'); ?>" data-tooltip="Financeiro">
                             <i class="fas fa-chart-line"></i>
-                            Financeiro
+                            <span>Financeiro</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('relatorios'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('relatorios'); ?>" data-tooltip="Relatórios">
                             <i class="fas fa-chart-bar"></i>
-                            Relatórios
+                            <span>Relatórios</span>
                         </a>
-                        <a class="nav-link active" href="<?php echo $router->url('clientes'); ?>">
+                        <a class="nav-link active" href="<?php echo $router->url('clientes'); ?>" data-tooltip="Clientes">
                             <i class="fas fa-users"></i>
-                            Clientes
+                            <span>Clientes</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('configuracoes'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('configuracoes'); ?>" data-tooltip="Configurações">
                             <i class="fas fa-cog"></i>
-                            Configurações
+                            <span>Configurações</span>
                         </a>
                         <hr class="text-white-50">
-                        <a class="nav-link" href="<?php echo $router->url('logout'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('logout'); ?>" data-tooltip="Sair">
                             <i class="fas fa-sign-out-alt"></i>
-                            Sair
+                            <span>Sair</span>
                         </a>
                     </nav>
                 </div>
             </div>
 
             <!-- Main Content -->
-            <div class="col-md-9 col-lg-10 main-content">
+            <div class="main-content expanded">
+                <div class="content-wrapper">
                 <!-- Header -->
                 <div class="header">
                     <div class="row align-items-center">
@@ -330,5 +336,12 @@ if ($tenant && $filial) {
             setTimeout(() => location.reload(), 1500);
         }
     </script>
+    
+    <!-- Sidebar JavaScript -->
+    <script src="assets/js/sidebar.js"></script>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

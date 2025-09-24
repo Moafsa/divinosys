@@ -120,9 +120,50 @@ try {
                                             <tbody>';
                     
                     foreach ($itens as $item) {
+                        // Processar ingredientes
+                        $ingredientesCom = [];
+                        $ingredientesSem = [];
+                        
+                        if (!empty($item['ingredientes_com'])) {
+                            if (is_string($item['ingredientes_com'])) {
+                                $ingredientesCom = array_filter(explode(', ', $item['ingredientes_com']));
+                            } else {
+                                $ingredientesCom = $item['ingredientes_com'];
+                            }
+                        }
+                        
+                        if (!empty($item['ingredientes_sem'])) {
+                            if (is_string($item['ingredientes_sem'])) {
+                                $ingredientesSem = array_filter(explode(', ', $item['ingredientes_sem']));
+                            } else {
+                                $ingredientesSem = $item['ingredientes_sem'];
+                            }
+                        }
+                        
                         $html .= '
                             <tr>
-                                <td>' . htmlspecialchars($item['produto_nome']) . '</td>
+                                <td>
+                                    <div>
+                                        <strong>' . htmlspecialchars($item['produto_nome']) . '</strong>';
+                        
+                        // Mostrar observação se existir
+                        if (!empty($item['observacao'])) {
+                            $html .= '<br><small class="text-muted"><i class="fas fa-comment"></i> ' . htmlspecialchars($item['observacao']) . '</small>';
+                        }
+                        
+                        // Mostrar ingredientes adicionados
+                        if (!empty($ingredientesCom)) {
+                            $html .= '<br><small class="text-success"><i class="fas fa-plus"></i> ' . implode(', ', $ingredientesCom) . '</small>';
+                        }
+                        
+                        // Mostrar ingredientes removidos
+                        if (!empty($ingredientesSem)) {
+                            $html .= '<br><small class="text-danger"><i class="fas fa-minus"></i> ' . implode(', ', $ingredientesSem) . '</small>';
+                        }
+                        
+                        $html .= '
+                                    </div>
+                                </td>
                                 <td>' . $item['quantidade'] . '</td>
                                 <td>R$ ' . number_format($item['valor_unitario'], 2, ',', '.') . '</td>
                                 <td>R$ ' . number_format($item['valor_total'], 2, ',', '.') . '</td>

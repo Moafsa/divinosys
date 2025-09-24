@@ -72,7 +72,9 @@ $stats = [
     'total_pedidos_hoje' => 0,
     'valor_total_hoje' => 0,
     'pedidos_pendentes' => 0,
-    'mesas_ocupadas' => 0
+    'mesas_ocupadas' => 0,
+    'delivery_pendentes' => 0,
+    'faturamento_delivery' => 0
 ];
 
 if ($tenant && $filial) {
@@ -83,7 +85,24 @@ if ($tenant && $filial) {
             [$tenant['id'], $filial['id']]
         )['total'] ?? 0,
         'pedidos_pendentes' => $db->count('pedido', 'tenant_id = ? AND filial_id = ? AND status = ?', [$tenant['id'], $filial['id'], 'Pendente']),
-        'mesas_ocupadas' => $db->count('mesas', 'tenant_id = ? AND filial_id = ? AND status = ?', [$tenant['id'], $filial['id'], '2'])
+        'mesas_ocupadas' => $db->fetch(
+            "SELECT COUNT(DISTINCT p.idmesa) as count 
+             FROM pedido p 
+             WHERE p.tenant_id = ? AND p.filial_id = ? 
+             AND p.status NOT IN ('Finalizado', 'Cancelado')
+             AND p.delivery = false",
+            [$tenant['id'], $filial['id']]
+        )['count'] ?? 0,
+        'delivery_pendentes' => $db->count('pedido', 'tenant_id = ? AND filial_id = ? AND delivery = true AND status IN (?, ?)', [$tenant['id'], $filial['id'], 'Pendente', 'Em Preparo']),
+        'faturamento_delivery' => $db->fetch(
+            "SELECT COALESCE(SUM(valor_total), 0) as total 
+             FROM pedido 
+             WHERE tenant_id = ? AND filial_id = ? 
+             AND delivery = true 
+             AND data = CURRENT_DATE 
+             AND status NOT IN ('Cancelado')",
+            [$tenant['id'], $filial['id']]
+        )['total'] ?? 0
     ];
 }
 ?>
@@ -95,6 +114,7 @@ if ($tenant && $filial) {
     <title>Dashboard - <?php echo $config->get('app.name'); ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="assets/css/sidebar.css" rel="stylesheet">
     <style>
         :root {
             --primary-color: <?php echo $tenant['cor_primaria'] ?? '#007bff'; ?>;
@@ -110,6 +130,96 @@ if ($tenant && $filial) {
             background: linear-gradient(135deg, var(--primary-color), #6c757d);
             min-height: 100vh;
             box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1000;
+        }
+        
+        .sidebar.collapsed {
+            width: 70px !important;
+        }
+        
+        .sidebar.collapsed .nav-link span {
+            display: none;
+        }
+        
+        .sidebar.collapsed .nav-link {
+            text-align: center;
+            padding: 0.75rem 0.5rem;
+        }
+        
+        .sidebar.collapsed .nav-link i {
+            margin-right: 0;
+        }
+        
+        .sidebar.collapsed .sidebar-brand {
+            text-align: center;
+        }
+        
+        .sidebar.collapsed .sidebar-brand h4 {
+            display: none;
+        }
+        
+        .sidebar.collapsed .sidebar-brand .brand-icon {
+            display: block !important;
+            font-size: 1.5rem;
+        }
+        
+        .sidebar-brand .brand-icon {
+            display: none;
+        }
+        
+        .main-content {
+            margin-left: 250px;
+            transition: all 0.3s ease;
+        }
+        
+        .main-content.expanded {
+            margin-left: 70px;
+        }
+        
+        .sidebar-toggle {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1001;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 250px;
+                transform: translateX(-100%);
+            }
+            
+            .sidebar.show {
+                transform: translateX(0);
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
+            
+            .sidebar-toggle {
+                display: flex;
+            }
+        }
+        
+        @media (min-width: 769px) {
+            .sidebar-toggle {
+                display: none;
+            }
         }
         
         .sidebar .nav-link {
@@ -341,74 +451,130 @@ if ($tenant && $filial) {
         .modal-lg {
             max-width: 900px;
         }
+        
+        /* Delivery Cards */
+        .delivery-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border: 1px solid #e9ecef;
+            transition: all 0.3s ease;
+        }
+        
+        .delivery-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        }
+        
+        .delivery-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+        
+        .delivery-id {
+            font-weight: 600;
+            color: #495057;
+            font-size: 1.1rem;
+        }
+        
+        .delivery-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+        
+        .delivery-time, .delivery-value {
+            display: flex;
+            align-items: center;
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+        
+        .delivery-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .delivery-actions .btn {
+            flex: 1;
+            font-size: 0.8rem;
+        }
     </style>
 </head>
 <body>
     <div class="container-fluid">
         <div class="row">
             <!-- Sidebar -->
-            <div class="col-md-3 col-lg-2 sidebar">
-                <div class="p-3">
-                    <h4 class="text-white mb-4">
-                        <i class="fas fa-utensils me-2"></i>
-                        <?php echo $tenant['nome'] ?? 'Divino Lanches'; ?>
-                    </h4>
+            <div class="sidebar collapsed" id="sidebar">
+                <button class="sidebar-toggle" id="sidebarToggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <div class="sidebar-content">
+                    <div class="sidebar-brand">
+                        <div class="brand-icon text-white">
+                            <i class="fas fa-utensils"></i>
+                        </div>
+                    </div>
                     <nav class="nav flex-column">
-                        <a class="nav-link active" href="<?php echo $router->url('dashboard'); ?>">
+                        <a class="nav-link active" href="<?php echo $router->url('dashboard'); ?>" data-tooltip="Dashboard">
                             <i class="fas fa-tachometer-alt"></i>
-                            Dashboard
+                            <span>Dashboard</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('gerar_pedido'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('gerar_pedido'); ?>" data-tooltip="Novo Pedido">
                             <i class="fas fa-plus-circle"></i>
-                            Novo Pedido
+                            <span>Novo Pedido</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('pedidos'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('pedidos'); ?>" data-tooltip="Pedidos">
                             <i class="fas fa-list"></i>
-                            Pedidos
+                            <span>Pedidos</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('mesas'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('mesas'); ?>" data-tooltip="Mesas">
                             <i class="fas fa-table"></i>
-                            Mesas
+                            <span>Mesas</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('delivery'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('delivery'); ?>" data-tooltip="Delivery">
                             <i class="fas fa-motorcycle"></i>
-                            Delivery
+                            <span>Delivery</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('gerenciar_produtos'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('gerenciar_produtos'); ?>" data-tooltip="Produtos">
                             <i class="fas fa-box"></i>
-                            Produtos
+                            <span>Produtos</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('estoque'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('estoque'); ?>" data-tooltip="Estoque">
                             <i class="fas fa-warehouse"></i>
-                            Estoque
+                            <span>Estoque</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('financeiro'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('financeiro'); ?>" data-tooltip="Financeiro">
                             <i class="fas fa-chart-line"></i>
-                            Financeiro
+                            <span>Financeiro</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('relatorios'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('relatorios'); ?>" data-tooltip="Relatórios">
                             <i class="fas fa-chart-bar"></i>
-                            Relatórios
+                            <span>Relatórios</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('clientes'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('clientes'); ?>" data-tooltip="Clientes">
                             <i class="fas fa-users"></i>
-                            Clientes
+                            <span>Clientes</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('configuracoes'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('configuracoes'); ?>" data-tooltip="Configurações">
                             <i class="fas fa-cog"></i>
-                            Configurações
+                            <span>Configurações</span>
                         </a>
                         <hr class="text-white-50">
-                        <a class="nav-link" href="<?php echo $router->url('logout'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('logout'); ?>" data-tooltip="Sair">
                             <i class="fas fa-sign-out-alt"></i>
-                            Sair
+                            <span>Sair</span>
                         </a>
                     </nav>
                 </div>
             </div>
 
             <!-- Main Content -->
-            <div class="col-md-9 col-lg-10 main-content">
+            <div class="main-content expanded">
+                <div class="content-wrapper">
                 <!-- Header -->
                 <div class="header">
                     <div class="row align-items-center">
@@ -471,7 +637,95 @@ if ($tenant && $filial) {
                             <div class="stats-label">Mesas Ocupadas</div>
                         </div>
                     </div>
+                    
+                    <!-- Delivery Cards -->
+                    <div class="col-lg-3 col-md-6 mb-4">
+                        <div class="stats-card">
+                            <div class="stats-icon" style="background: linear-gradient(45deg, #17a2b8, #20c997);">
+                                <i class="fas fa-motorcycle"></i>
+                            </div>
+                            <div class="stats-number"><?php echo $stats['delivery_pendentes']; ?></div>
+                            <div class="stats-label">Delivery Pendente</div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-lg-3 col-md-6 mb-4">
+                        <div class="stats-card">
+                            <div class="stats-icon" style="background: linear-gradient(45deg, #6f42c1, #e83e8c);">
+                                <i class="fas fa-dollar-sign"></i>
+                            </div>
+                            <div class="stats-number">R$ <?php echo number_format($stats['faturamento_delivery'], 2, ',', '.'); ?></div>
+                            <div class="stats-label">Faturamento Delivery</div>
+                        </div>
+                    </div>
                 </div>
+
+                <!-- Pedidos de Delivery -->
+                <?php if ($stats['delivery_pendentes'] > 0): ?>
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-motorcycle me-2"></i>
+                                    Pedidos de Delivery Pendentes
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <?php
+                                    // Buscar pedidos de delivery pendentes
+                                    $pedidosDelivery = $db->fetchAll(
+                                        "SELECT p.*, u.login as usuario_nome
+                                         FROM pedido p 
+                                         LEFT JOIN usuarios u ON p.usuario_id = u.id
+                                         WHERE p.tenant_id = ? AND p.filial_id = ? 
+                                         AND p.delivery = true 
+                                         AND p.status IN ('Pendente', 'Em Preparo')
+                                         ORDER BY p.hora_pedido ASC",
+                                        [$tenant['id'], $filial['id']]
+                                    );
+                                    
+                                    foreach ($pedidosDelivery as $pedido): ?>
+                                    <div class="col-md-6 col-lg-4 mb-3">
+                                        <div class="delivery-card">
+                                            <div class="delivery-header">
+                                                <div class="delivery-id">#<?php echo $pedido['idpedido']; ?></div>
+                                                <div class="delivery-status">
+                                                    <span class="badge bg-<?php echo $pedido['status'] === 'Pendente' ? 'warning' : 'info'; ?>">
+                                                        <?php echo $pedido['status']; ?>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div class="delivery-info">
+                                                <div class="delivery-time">
+                                                    <i class="fas fa-clock me-1"></i>
+                                                    <?php echo date('H:i', strtotime($pedido['hora_pedido'])); ?>
+                                                </div>
+                                                <div class="delivery-value">
+                                                    <i class="fas fa-dollar-sign me-1"></i>
+                                                    R$ <?php echo number_format($pedido['valor_total'], 2, ',', '.'); ?>
+                                                </div>
+                                            </div>
+                                            <div class="delivery-actions">
+                                                <button class="btn btn-sm btn-outline-primary" onclick="verPedidoDelivery(<?php echo $pedido['idpedido']; ?>)">
+                                                    <i class="fas fa-eye me-1"></i>
+                                                    Ver Detalhes
+                                                </button>
+                                                <button class="btn btn-sm btn-success" onclick="atualizarStatusDelivery(<?php echo $pedido['idpedido']; ?>, '<?php echo $pedido['status']; ?>')">
+                                                    <i class="fas fa-arrow-right me-1"></i>
+                                                    Avançar
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <?php endif; ?>
 
                 <!-- Quick Actions -->
                 <div class="quick-actions">
@@ -579,6 +833,45 @@ if ($tenant && $filial) {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
+        // Sidebar functionality
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const mainContent = document.getElementById('mainContent');
+            
+            if (sidebar.classList.contains('collapsed')) {
+                sidebar.classList.remove('collapsed');
+                mainContent.classList.remove('expanded');
+            } else {
+                sidebar.classList.add('collapsed');
+                mainContent.classList.add('expanded');
+            }
+        }
+        
+        // Mobile sidebar functionality
+        function toggleMobileSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('show');
+        }
+        
+        // Close sidebar when clicking outside on mobile
+        document.addEventListener('click', function(event) {
+            const sidebar = document.getElementById('sidebar');
+            const toggleButton = document.querySelector('.sidebar-toggle');
+            
+            if (window.innerWidth <= 768) {
+                if (!sidebar.contains(event.target) && !toggleButton.contains(event.target)) {
+                    sidebar.classList.remove('show');
+                }
+            }
+        });
+        
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            const sidebar = document.getElementById('sidebar');
+            if (window.innerWidth > 768) {
+                sidebar.classList.remove('show');
+            }
+        });
         function verMesa(mesaId, mesaNumero) {
             document.getElementById('mesaNumero').textContent = mesaNumero;
             
@@ -620,6 +913,219 @@ if ($tenant && $filial) {
 
         function verPedido(pedidoId) {
             window.location.href = `<?php echo $router->url('pedidos'); ?>&pedido=${pedidoId}`;
+        }
+        
+        function verPedidoDelivery(pedidoId) {
+            console.log('Buscando pedido delivery:', pedidoId);
+            // Buscar dados do pedido via AJAX
+            fetch('mvc/ajax/pedidos.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `action=buscar_pedido&pedido_id=${pedidoId}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const pedido = data.pedido;
+                    const itens = data.itens || [];
+                    console.log('Dados recebidos:', data);
+                    console.log('Pedido:', pedido);
+                    console.log('Itens:', itens);
+                    
+                    // Construir HTML do popup
+                    let itensHtml = '';
+                    itens.forEach(item => {
+                        let ingredientesHtml = '';
+                        if (item.ingredientes_com && item.ingredientes_com.length > 0) {
+                            ingredientesHtml += '<div class="mb-1"><small class="text-success">+ ' + item.ingredientes_com.join(', ') + '</small></div>';
+                        }
+                        if (item.ingredientes_sem && item.ingredientes_sem.length > 0) {
+                            ingredientesHtml += '<div class="mb-1"><small class="text-danger">- ' + item.ingredientes_sem.join(', ') + '</small></div>';
+                        }
+                        if (item.observacao) {
+                            ingredientesHtml += '<div class="mb-1"><small class="text-info">Obs: ' + item.observacao + '</small></div>';
+                        }
+                        
+                        itensHtml += `
+                            <tr>
+                                <td>${item.quantidade}x</td>
+                                <td>${item.nome_produto || 'Produto não encontrado'}</td>
+                                <td>R$ ${parseFloat(item.valor_unitario || 0).toFixed(2)}</td>
+                                <td>R$ ${parseFloat(item.valor_total || 0).toFixed(2)}</td>
+                            </tr>
+                            ${ingredientesHtml ? '<tr><td colspan="4">' + ingredientesHtml + '</td></tr>' : ''}
+                        `;
+                    });
+                    
+                    const popupHtml = `
+                        <div class="modal fade" id="modalPedidoDelivery" tabindex="-1">
+                            <div class="modal-dialog modal-lg">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Pedido Delivery #${pedido.idpedido}</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="row mb-3">
+                                            <div class="col-md-6">
+                                                <strong>Cliente:</strong> ${pedido.cliente || 'Cliente Delivery'}<br>
+                                                <strong>Data:</strong> ${pedido.data}<br>
+                                                <strong>Hora:</strong> ${pedido.hora_pedido}
+                                            </div>
+                                            <div class="col-md-6">
+                                                <strong>Status:</strong> <span class="badge bg-primary">${pedido.status}</span><br>
+                                                <strong>Valor Total:</strong> R$ ${parseFloat(pedido.valor_total).toFixed(2)}
+                                            </div>
+                                        </div>
+                                        
+                                        <h6>Itens do Pedido:</h6>
+                                        <div class="table-responsive">
+                                            <table class="table table-sm">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Qtd</th>
+                                                        <th>Produto</th>
+                                                        <th>Preço Unit.</th>
+                                                        <th>Total</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    ${itensHtml}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        
+                                        ${pedido.observacao ? '<div class="mt-3"><strong>Observação:</strong> ' + pedido.observacao + '</div>' : ''}
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-primary" onclick="editarPedidoDelivery(${pedido.idpedido})">
+                                            <i class="fas fa-edit me-1"></i>
+                                            Editar Pedido
+                                        </button>
+                                        <button type="button" class="btn btn-danger" onclick="excluirPedidoDelivery(${pedido.idpedido})">
+                                            <i class="fas fa-trash me-1"></i>
+                                            Excluir Pedido
+                                        </button>
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Remover modal existente se houver
+                    const existingModal = document.getElementById('modalPedidoDelivery');
+                    if (existingModal) {
+                        existingModal.remove();
+                    }
+                    
+                    // Adicionar novo modal
+                    document.body.insertAdjacentHTML('beforeend', popupHtml);
+                    
+                    // Mostrar modal
+                    const modal = new bootstrap.Modal(document.getElementById('modalPedidoDelivery'));
+                    modal.show();
+                } else {
+                    Swal.fire('Erro', 'Erro ao carregar dados do pedido', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro na requisição:', error);
+                Swal.fire('Erro', 'Erro ao carregar dados do pedido', 'error');
+            });
+        }
+        
+        function atualizarStatusDelivery(pedidoId, statusAtual) {
+            const statuses = ['Pendente', 'Em Preparo', 'Pronto', 'Saiu para Entrega', 'Entregue'];
+            const currentIndex = statuses.indexOf(statusAtual);
+            
+            if (currentIndex < statuses.length - 1) {
+                const novoStatus = statuses[currentIndex + 1];
+                
+                Swal.fire({
+                    title: 'Confirmar Alteração',
+                    text: `Alterar status do pedido #${pedidoId} de "${statusAtual}" para "${novoStatus}"?`,
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonText: 'Sim, alterar',
+                    cancelButtonText: 'Cancelar'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        fetch('mvc/ajax/pedidos.php', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: `action=atualizar_status&pedido_id=${pedidoId}&status=${novoStatus}`
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                Swal.fire('Sucesso', 'Status atualizado com sucesso!', 'success');
+                                setTimeout(() => {
+                                    location.reload();
+                                }, 1500);
+                            } else {
+                                Swal.fire('Erro', data.message || 'Erro ao atualizar status', 'error');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Erro:', error);
+                            Swal.fire('Erro', 'Erro ao atualizar status', 'error');
+                        });
+                    }
+                });
+            } else {
+                Swal.fire('Info', 'Pedido já está no status final', 'info');
+            }
+        }
+        
+        function editarPedidoDelivery(pedidoId) {
+            // Fechar modal atual
+            const modal = bootstrap.Modal.getInstance(document.getElementById('modalPedidoDelivery'));
+            if (modal) {
+                modal.hide();
+            }
+            
+            // Redirecionar para página de edição
+            window.location.href = `<?php echo $router->url('gerar_pedido'); ?>&editar=${pedidoId}`;
+        }
+        
+        function excluirPedidoDelivery(pedidoId) {
+            Swal.fire({
+                title: 'Excluir Pedido',
+                text: `Deseja realmente excluir o pedido #${pedidoId}?`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sim, excluir',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#dc3545'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    fetch('mvc/ajax/pedidos.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: `action=excluir_pedido&pedido_id=${pedidoId}`
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Sucesso', 'Pedido excluído com sucesso!', 'success');
+                            setTimeout(() => location.reload(), 1500);
+                        } else {
+                            Swal.fire('Erro', data.message || 'Erro ao excluir pedido', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro:', error);
+                        Swal.fire('Erro', 'Erro ao excluir pedido', 'error');
+                    });
+                }
+            });
         }
 
         function fecharMesa(mesaId) {
@@ -1149,5 +1655,12 @@ if ($tenant && $filial) {
             });
         }
     </script>
+    
+    <!-- Sidebar JavaScript -->
+    <script src="assets/js/sidebar.js"></script>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

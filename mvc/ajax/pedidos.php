@@ -102,7 +102,8 @@ try {
                 'observacao' => $observacao,
                 'usuario_id' => $usuarioId,
                 'tenant_id' => $tenantId,
-                'filial_id' => $filialId
+                'filial_id' => $filialId,
+                'delivery' => ($mesaId === '999') ? true : false
             ]);
             
             // Criar itens do pedido
@@ -194,7 +195,9 @@ try {
             
             // Buscar itens do pedido
             $itens = $db->fetchAll(
-                "SELECT pi.*, pr.nome as produto_nome 
+                "SELECT pi.*, 
+                        pr.nome as nome_produto,
+                        pr.preco_normal as preco_produto
                  FROM pedido_itens pi 
                  LEFT JOIN produtos pr ON pi.produto_id = pr.id AND pr.tenant_id = pi.tenant_id AND pr.filial_id = ?
                  WHERE pi.pedido_id = ? AND pi.tenant_id = ?",
@@ -203,6 +206,8 @@ try {
             
             // Processar ingredientes para cada item
             foreach ($itens as &$item) {
+                error_log("Item antes do processamento: " . json_encode($item));
+                
                 if (!empty($item['ingredientes_com']) && trim($item['ingredientes_com']) !== '') {
                     $item['ingredientes_com'] = explode(', ', $item['ingredientes_com']);
                 } else {
@@ -214,13 +219,16 @@ try {
                 } else {
                     $item['ingredientes_sem'] = [];
                 }
+                
+                error_log("Item após processamento: " . json_encode($item));
             }
             
             $pedido['itens'] = $itens;
             
                 echo json_encode([
                     'success' => true,
-                    'pedido' => $pedido
+                    'pedido' => $pedido,
+                    'itens' => $itens
                 ]);
                 
             } catch (\Exception $e) {

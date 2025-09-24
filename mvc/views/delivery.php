@@ -18,7 +18,7 @@ if ($tenant && $filial) {
          LEFT JOIN usuarios u ON p.usuario_id = u.id
          WHERE p.tenant_id = ? AND p.filial_id = ? 
          AND p.delivery = true
-         AND p.data = CURRENT_DATE
+         AND p.data >= CURRENT_DATE - INTERVAL '7 days'
          ORDER BY p.hora_pedido DESC",
         [$tenant['id'], $filial['id']]
     );
@@ -28,6 +28,7 @@ if ($tenant && $filial) {
 $pedidos_por_status = [
     'Pendente' => [],
     'Em Preparo' => [],
+    'Pronto' => [],
     'Saiu para Entrega' => [],
     'Entregue' => [],
     'Cancelado' => []
@@ -48,6 +49,7 @@ foreach ($pedidos as $pedido) {
     <title>Delivery - <?php echo $config->get('app.name'); ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="assets/css/sidebar.css" rel="stylesheet">
     <style>
         :root {
             --primary-color: <?php echo $tenant['cor_primaria'] ?? '#007bff'; ?>;
@@ -115,9 +117,10 @@ foreach ($pedidos as $pedido) {
         }
         
         .column-header.pendente { background: linear-gradient(45deg, #ffc107, #fd7e14); }
-        .column-header.preparo { background: linear-gradient(45deg, #17a2b8, #20c997); }
-        .column-header.entrega { background: linear-gradient(45deg, #6f42c1, #e83e8c); }
-        .column-header.entregue { background: linear-gradient(45deg, #28a745, #20c997); }
+        .column-header.em_preparo { background: linear-gradient(45deg, #28a745, #20c997); }
+        .column-header.pronto { background: linear-gradient(45deg, #28a745, #20c997); }
+        .column-header.saiu_para_entrega { background: linear-gradient(45deg, #17a2b8, #20c997); }
+        .column-header.entregue { background: linear-gradient(45deg, #007bff, #6610f2); }
         .column-header.cancelado { background: linear-gradient(45deg, #dc3545, #e83e8c); }
         
         .pedido-card {
@@ -152,68 +155,73 @@ foreach ($pedidos as $pedido) {
     <div class="container-fluid">
         <div class="row">
             <!-- Sidebar -->
-            <div class="col-md-3 col-lg-2 sidebar">
-                <div class="p-3">
-                    <h4 class="text-white mb-4">
-                        <i class="fas fa-utensils me-2"></i>
-                        <?php echo $tenant['nome'] ?? 'Divino Lanches'; ?>
-                    </h4>
+            <div class="sidebar collapsed" id="sidebar">
+                <button class="sidebar-toggle" id="sidebarToggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <div class="sidebar-content">
+                    <div class="sidebar-brand">
+                        <div class="brand-icon text-white">
+                            <i class="fas fa-utensils"></i>
+                        </div>
+                    </div>
                     <nav class="nav flex-column">
-                        <a class="nav-link" href="<?php echo $router->url('dashboard'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('dashboard'); ?>" data-tooltip="Dashboard">
                             <i class="fas fa-tachometer-alt"></i>
-                            Dashboard
+                            <span>Dashboard</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('gerar_pedido'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('gerar_pedido'); ?>" data-tooltip="Novo Pedido">
                             <i class="fas fa-plus-circle"></i>
-                            Novo Pedido
+                            <span>Novo Pedido</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('pedidos'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('pedidos'); ?>" data-tooltip="Pedidos">
                             <i class="fas fa-list"></i>
-                            Pedidos
+                            <span>Pedidos</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('mesas'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('mesas'); ?>" data-tooltip="Mesas">
                             <i class="fas fa-table"></i>
-                            Mesas
+                            <span>Mesas</span>
                         </a>
-                        <a class="nav-link active" href="<?php echo $router->url('delivery'); ?>">
+                        <a class="nav-link active" href="<?php echo $router->url('delivery'); ?>" data-tooltip="Delivery">
                             <i class="fas fa-motorcycle"></i>
-                            Delivery
+                            <span>Delivery</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('gerenciar_produtos'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('gerenciar_produtos'); ?>" data-tooltip="Produtos">
                             <i class="fas fa-box"></i>
-                            Produtos
+                            <span>Produtos</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('estoque'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('estoque'); ?>" data-tooltip="Estoque">
                             <i class="fas fa-warehouse"></i>
-                            Estoque
+                            <span>Estoque</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('financeiro'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('financeiro'); ?>" data-tooltip="Financeiro">
                             <i class="fas fa-chart-line"></i>
-                            Financeiro
+                            <span>Financeiro</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('relatorios'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('relatorios'); ?>" data-tooltip="Relatórios">
                             <i class="fas fa-chart-bar"></i>
-                            Relatórios
+                            <span>Relatórios</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('clientes'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('clientes'); ?>" data-tooltip="Clientes">
                             <i class="fas fa-users"></i>
-                            Clientes
+                            <span>Clientes</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('configuracoes'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('configuracoes'); ?>" data-tooltip="Configurações">
                             <i class="fas fa-cog"></i>
-                            Configurações
+                            <span>Configurações</span>
                         </a>
                         <hr class="text-white-50">
-                        <a class="nav-link" href="<?php echo $router->url('logout'); ?>">
+                        <a class="nav-link" href="<?php echo $router->url('logout'); ?>" data-tooltip="Sair">
                             <i class="fas fa-sign-out-alt"></i>
-                            Sair
+                            <span>Sair</span>
                         </a>
                     </nav>
                 </div>
             </div>
 
             <!-- Main Content -->
-            <div class="col-md-9 col-lg-10 main-content">
+            <div class="main-content expanded">
+                <div class="content-wrapper">
                 <!-- Header -->
                 <div class="header">
                     <div class="row align-items-center">
@@ -230,7 +238,7 @@ foreach ($pedidos as $pedido) {
                                     <i class="fas fa-sync-alt me-1"></i>
                                     Atualizar
                                 </button>
-                                <a href="<?php echo $router->url('gerar_pedido'); ?>" class="btn btn-primary">
+                                <a href="<?php echo $router->url('gerar_pedido'); ?>&mesa=Delivery" class="btn btn-primary">
                                     <i class="fas fa-plus me-1"></i>
                                     Novo Delivery
                                 </a>
@@ -298,11 +306,136 @@ foreach ($pedidos as $pedido) {
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         function verPedido(pedidoId) {
-            window.location.href = `<?php echo $router->url('pedidos'); ?>&pedido=${pedidoId}`;
+            console.log('Buscando pedido:', pedidoId);
+            // Buscar dados do pedido via AJAX
+            fetch('mvc/ajax/pedidos.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `action=buscar_pedido&pedido_id=${pedidoId}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const pedido = data.pedido;
+                    const itens = data.itens || [];
+                    console.log('Dados recebidos:', data);
+                    console.log('Pedido:', pedido);
+                    console.log('Itens:', itens);
+                    
+                    // Construir HTML do popup
+                    let itensHtml = '';
+                    itens.forEach(item => {
+                        let ingredientesHtml = '';
+                        if (item.ingredientes_com && item.ingredientes_com.length > 0) {
+                            ingredientesHtml += '<div class="mb-1"><small class="text-success">+ ' + item.ingredientes_com.join(', ') + '</small></div>';
+                        }
+                        if (item.ingredientes_sem && item.ingredientes_sem.length > 0) {
+                            ingredientesHtml += '<div class="mb-1"><small class="text-danger">- ' + item.ingredientes_sem.join(', ') + '</small></div>';
+                        }
+                        if (item.observacao) {
+                            ingredientesHtml += '<div class="mb-1"><small class="text-info">Obs: ' + item.observacao + '</small></div>';
+                        }
+                        
+                        itensHtml += `
+                            <tr>
+                                <td>${item.quantidade}x</td>
+                                <td>${item.nome_produto || 'Produto não encontrado'}</td>
+                                <td>R$ ${parseFloat(item.valor_unitario || 0).toFixed(2)}</td>
+                                <td>R$ ${parseFloat(item.valor_total || 0).toFixed(2)}</td>
+                            </tr>
+                            ${ingredientesHtml ? '<tr><td colspan="4">' + ingredientesHtml + '</td></tr>' : ''}
+                        `;
+                    });
+                    
+                    const popupHtml = `
+                        <div class="modal fade" id="modalPedido" tabindex="-1">
+                            <div class="modal-dialog modal-lg">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Pedido #${pedido.idpedido}</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="row mb-3">
+                                            <div class="col-md-6">
+                                                <strong>Cliente:</strong> ${pedido.cliente || 'Cliente Mesa'}<br>
+                                                <strong>Data:</strong> ${pedido.data}<br>
+                                                <strong>Hora:</strong> ${pedido.hora_pedido}
+                                            </div>
+                                            <div class="col-md-6">
+                                                <strong>Status:</strong> <span class="badge bg-primary">${pedido.status}</span><br>
+                                                <strong>Valor Total:</strong> R$ ${parseFloat(pedido.valor_total).toFixed(2)}
+                                            </div>
+                                        </div>
+                                        
+                                        <h6>Itens do Pedido:</h6>
+                                        <div class="table-responsive">
+                                            <table class="table table-sm">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Qtd</th>
+                                                        <th>Produto</th>
+                                                        <th>Preço Unit.</th>
+                                                        <th>Total</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    ${itensHtml}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        
+                                        ${pedido.observacao ? '<div class="mt-3"><strong>Observação:</strong> ' + pedido.observacao + '</div>' : ''}
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-primary" onclick="editarPedido(${pedido.idpedido})">
+                                            <i class="fas fa-edit me-1"></i>
+                                            Editar Pedido
+                                        </button>
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Remover modal existente se houver
+                    const existingModal = document.getElementById('modalPedido');
+                    if (existingModal) {
+                        existingModal.remove();
+                    }
+                    
+                    // Adicionar novo modal
+                    document.body.insertAdjacentHTML('beforeend', popupHtml);
+                    
+                    // Mostrar modal
+                    const modal = new bootstrap.Modal(document.getElementById('modalPedido'));
+                    modal.show();
+                } else {
+                    Swal.fire('Erro', 'Erro ao carregar dados do pedido', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro na requisição:', error);
+                Swal.fire('Erro', 'Erro ao carregar dados do pedido', 'error');
+            });
         }
 
+        function editarPedido(pedidoId) {
+            // Fechar modal atual
+            const modal = bootstrap.Modal.getInstance(document.getElementById('modalPedido'));
+            if (modal) {
+                modal.hide();
+            }
+            
+            // Redirecionar para página de edição
+            window.location.href = `<?php echo $router->url('gerar_pedido'); ?>&editar=${pedidoId}`;
+        }
+        
         function atualizarStatus(pedidoId, statusAtual) {
-            const statuses = ['Pendente', 'Em Preparo', 'Saiu para Entrega', 'Entregue'];
+            const statuses = ['Pendente', 'Em Preparo', 'Pronto', 'Saiu para Entrega', 'Entregue'];
             const currentIndex = statuses.indexOf(statusAtual);
             
             if (currentIndex < statuses.length - 1) {
@@ -335,8 +468,26 @@ foreach ($pedidos as $pedido) {
                 confirmButtonColor: '#dc3545'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    Swal.fire('Sucesso', 'Pedido excluído com sucesso!', 'success');
-                    setTimeout(() => location.reload(), 1500);
+                    fetch('mvc/ajax/pedidos.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: `action=excluir_pedido&pedido_id=${pedidoId}`
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Sucesso', 'Pedido excluído com sucesso!', 'success');
+                            setTimeout(() => location.reload(), 1500);
+                        } else {
+                            Swal.fire('Erro', data.message || 'Erro ao excluir pedido', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro:', error);
+                        Swal.fire('Erro', 'Erro ao excluir pedido', 'error');
+                    });
                 }
             });
         }
@@ -350,5 +501,12 @@ foreach ($pedidos as $pedido) {
             atualizarDelivery();
         }, 30000);
     </script>
+    
+    <!-- Sidebar JavaScript -->
+    <script src="assets/js/sidebar.js"></script>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
