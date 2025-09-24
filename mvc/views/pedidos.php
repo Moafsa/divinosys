@@ -610,7 +610,7 @@ $stats = [
                                 html += `
                                     <tr>
                                         <td>
-                                            <strong>${item.produto_nome || 'Produto'}</strong>
+                                            <strong>${item.nome_produto || 'Produto'}</strong>
                                             ${item.observacao ? `<br><small class="text-muted">${item.observacao}</small>` : ''}
                                             ${item.ingredientes_com && Array.isArray(item.ingredientes_com) && item.ingredientes_com.length > 0 ? `
                                                 <br><small class="text-success">

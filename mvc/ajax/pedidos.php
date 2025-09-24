@@ -103,7 +103,7 @@ try {
                 'usuario_id' => $usuarioId,
                 'tenant_id' => $tenantId,
                 'filial_id' => $filialId,
-                'delivery' => ($mesaId === '999') ? true : false
+                'delivery' => ($mesaId === '999') ? 1 : 0
             ]);
             
             // Criar itens do pedido
