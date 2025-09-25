@@ -530,10 +530,35 @@ if ($tenant && $filial) {
 
             let html = '';
             usuarios.forEach(usuario => {
-                // Determinar tipo baseado no email (admin tem email específico)
-                const isAdmin = usuario.email && usuario.email.includes('admin');
-                const tipoClass = isAdmin ? 'danger' : 'secondary';
-                const tipoUsuario = isAdmin ? 'Admin' : 'Cliente';
+                // Determinar tipo e cor baseado no tipo_usuario
+                let tipoClass = 'secondary';
+                let tipoUsuario = 'Cliente';
+                
+                switch(usuario.tipo_usuario) {
+                    case 'admin':
+                        tipoClass = 'danger';
+                        tipoUsuario = 'Admin';
+                        break;
+                    case 'cozinha':
+                        tipoClass = 'warning';
+                        tipoUsuario = 'Cozinha';
+                        break;
+                    case 'garcom':
+                        tipoClass = 'info';
+                        tipoUsuario = 'Garçom';
+                        break;
+                    case 'caixa':
+                        tipoClass = 'success';
+                        tipoUsuario = 'Caixa';
+                        break;
+                    case 'entregador':
+                        tipoClass = 'primary';
+                        tipoUsuario = 'Entregador';
+                        break;
+                    default:
+                        tipoClass = 'secondary';
+                        tipoUsuario = 'Cliente';
+                }
                 
                 html += `
                     <div class="card mb-2">
@@ -546,10 +571,13 @@ if ($tenant && $filial) {
                                 <div class="col-md-2">
                                     <span class="badge bg-${tipoClass}">${tipoUsuario}</span>
                                 </div>
+                                <div class="col-md-2">
+                                    <small class="text-muted">${usuario.telefone || 'Sem telefone'}</small>
+                                </div>
                                 <div class="col-md-3">
                                     <small class="text-muted">${usuario.cpf || usuario.cnpj || 'Sem documento'}</small>
                                 </div>
-                                <div class="col-md-4 text-end">
+                                <div class="col-md-2 text-end">
                                     <button class="btn btn-sm btn-outline-primary me-1" onclick="editarUsuario(${usuario.id})">
                                         <i class="fas fa-edit"></i> Editar
                                     </button>
@@ -579,6 +607,21 @@ if ($tenant && $filial) {
                         <input type="email" class="form-control" id="emailUsuario" placeholder="email@exemplo.com">
                     </div>
                     <div class="mb-3">
+                        <label class="form-label">Telefone</label>
+                        <input type="text" class="form-control" id="telefoneUsuario" placeholder="11999999999">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Tipo de Usuário</label>
+                        <select class="form-control" id="tipoUsuario">
+                            <option value="cliente">Cliente</option>
+                            <option value="admin">Administrador</option>
+                            <option value="cozinha">Cozinha</option>
+                            <option value="garcom">Garçom</option>
+                            <option value="caixa">Caixa</option>
+                            <option value="entregador">Entregador</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label">CPF</label>
                         <input type="text" class="form-control" id="cpfUsuario" placeholder="000.000.000-00">
                     </div>
@@ -597,6 +640,8 @@ if ($tenant && $filial) {
                 preConfirm: () => {
                     const nome = document.getElementById('nomeUsuario').value;
                     const email = document.getElementById('emailUsuario').value;
+                    const telefone = document.getElementById('telefoneUsuario').value;
+                    const tipoUsuario = document.getElementById('tipoUsuario').value;
                     const cpf = document.getElementById('cpfUsuario').value;
                     const cnpj = document.getElementById('cnpjUsuario').value;
                     const endereco = document.getElementById('enderecoUsuario').value;
@@ -606,7 +651,7 @@ if ($tenant && $filial) {
                         return false;
                     }
                     
-                    return { nome, email, cpf, cnpj, endereco };
+                    return { nome, email, telefone, tipo_usuario: tipoUsuario, cpf, cnpj, endereco };
                 }
             }).then((result) => {
                 if (result.isConfirmed) {
@@ -619,6 +664,8 @@ if ($tenant && $filial) {
             const formData = new FormData();
             formData.append('nome', dados.nome);
             formData.append('email', dados.email);
+            formData.append('telefone', dados.telefone);
+            formData.append('tipo_usuario', dados.tipo_usuario);
             formData.append('cpf', dados.cpf);
             formData.append('cnpj', dados.cnpj);
             formData.append('endereco', dados.endereco);
@@ -705,7 +752,125 @@ if ($tenant && $filial) {
         }
 
         function editarUsuario(id) {
-            Swal.fire('Info', 'Funcionalidade de edição será implementada', 'info');
+            // Buscar dados do usuário
+            fetch('index.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: `action=buscar_usuario&id=${id}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const usuario = data.usuario;
+                    
+                    Swal.fire({
+                        title: 'Editar Usuário',
+                        html: `
+                            <div class="mb-3">
+                                <label class="form-label">Nome *</label>
+                                <input type="text" class="form-control" id="editNomeUsuario" value="${usuario.nome || ''}" placeholder="Nome completo">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Email</label>
+                                <input type="email" class="form-control" id="editEmailUsuario" value="${usuario.email || ''}" placeholder="email@exemplo.com">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Telefone</label>
+                                <input type="text" class="form-control" id="editTelefoneUsuario" value="${usuario.telefone || ''}" placeholder="11999999999">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Tipo de Usuário</label>
+                                <select class="form-control" id="editTipoUsuario">
+                                    <option value="cliente" ${usuario.tipo_usuario === 'cliente' ? 'selected' : ''}>Cliente</option>
+                                    <option value="admin" ${usuario.tipo_usuario === 'admin' ? 'selected' : ''}>Administrador</option>
+                                    <option value="cozinha" ${usuario.tipo_usuario === 'cozinha' ? 'selected' : ''}>Cozinha</option>
+                                    <option value="garcom" ${usuario.tipo_usuario === 'garcom' ? 'selected' : ''}>Garçom</option>
+                                    <option value="caixa" ${usuario.tipo_usuario === 'caixa' ? 'selected' : ''}>Caixa</option>
+                                    <option value="entregador" ${usuario.tipo_usuario === 'entregador' ? 'selected' : ''}>Entregador</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">CPF</label>
+                                <input type="text" class="form-control" id="editCpfUsuario" value="${usuario.cpf || ''}" placeholder="000.000.000-00">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">CNPJ</label>
+                                <input type="text" class="form-control" id="editCnpjUsuario" value="${usuario.cnpj || ''}" placeholder="00.000.000/0000-00">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Endereço</label>
+                                <textarea class="form-control" id="editEnderecoUsuario" placeholder="Endereço completo">${usuario.endereco_completo || ''}</textarea>
+                            </div>
+                        `,
+                        showCancelButton: true,
+                        confirmButtonText: 'Salvar Alterações',
+                        cancelButtonText: 'Cancelar',
+                        preConfirm: () => {
+                            const nome = document.getElementById('editNomeUsuario').value;
+                            const email = document.getElementById('editEmailUsuario').value;
+                            const telefone = document.getElementById('editTelefoneUsuario').value;
+                            const tipoUsuario = document.getElementById('editTipoUsuario').value;
+                            const cpf = document.getElementById('editCpfUsuario').value;
+                            const cnpj = document.getElementById('editCnpjUsuario').value;
+                            const endereco = document.getElementById('editEnderecoUsuario').value;
+                            
+                            if (!nome) {
+                                Swal.showValidationMessage('Nome é obrigatório');
+                                return false;
+                            }
+                            
+                            return { id, nome, email, telefone, tipo_usuario: tipoUsuario, cpf, cnpj, endereco };
+                        }
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            salvarEdicaoUsuario(result.value);
+                        }
+                    });
+                } else {
+                    Swal.fire('Erro', 'Erro ao carregar dados do usuário', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire('Erro', 'Erro ao carregar dados do usuário', 'error');
+            });
+        }
+        
+        function salvarEdicaoUsuario(dados) {
+            const formData = new FormData();
+            formData.append('id', dados.id);
+            formData.append('nome', dados.nome);
+            formData.append('email', dados.email);
+            formData.append('telefone', dados.telefone);
+            formData.append('tipo_usuario', dados.tipo_usuario);
+            formData.append('cpf', dados.cpf);
+            formData.append('cnpj', dados.cnpj);
+            formData.append('endereco', dados.endereco);
+
+            fetch('index.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: `action=editar_usuario&${new URLSearchParams(formData).toString()}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire('Sucesso', 'Usuário atualizado com sucesso!', 'success');
+                    carregarUsuarios();
+                } else {
+                    Swal.fire('Erro', data.message || 'Erro ao atualizar usuário', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire('Erro', 'Erro ao atualizar usuário', 'error');
+            });
         }
 
         function deletarUsuario(id) {
@@ -718,7 +883,27 @@ if ($tenant && $filial) {
                 cancelButtonText: 'Cancelar'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    Swal.fire('Info', 'Funcionalidade de exclusão será implementada', 'info');
+                    fetch('index.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        body: `action=deletar_usuario&id=${id}`
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Sucesso', 'Usuário removido com sucesso!', 'success');
+                            carregarUsuarios();
+                        } else {
+                            Swal.fire('Erro', data.message || 'Erro ao remover usuário', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro:', error);
+                        Swal.fire('Erro', 'Erro ao remover usuário', 'error');
+                    });
                 }
             });
         }

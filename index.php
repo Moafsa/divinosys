@@ -67,19 +67,22 @@ try {
         // Try to load AJAX handler
         $action = $_GET['action'] ?? $_POST['action'] ?? '';
         
-        // Mapear ações para arquivos AJAX
-        $ajaxMap = [
-            'login' => 'login.php',
-            'criar_usuario' => 'auth.php',
-            'listar_usuarios' => 'auth.php',
-            'buscar_cliente' => 'auth.php',
-            'criar_instancia' => 'evolution.php',
-            'listar_instancias' => 'evolution.php',
-            'deletar_instancia' => 'evolution.php',
-            'conectar_instancia' => 'evolution.php',
-            'desconectar_instancia' => 'evolution.php',
-            'enviar_mensagem_lgpd' => 'evolution.php'
-        ];
+    // Mapear ações para arquivos AJAX
+    $ajaxMap = [
+        'login' => 'login.php',
+        'criar_usuario' => 'auth.php',
+        'listar_usuarios' => 'auth.php',
+        'editar_usuario' => 'auth.php',
+        'deletar_usuario' => 'auth.php',
+        'buscar_usuario' => 'auth.php',
+        'buscar_cliente' => 'auth.php',
+        'criar_instancia' => 'evolution.php',
+        'listar_instancias' => 'evolution.php',
+        'deletar_instancia' => 'evolution.php',
+        'conectar_instancia' => 'evolution.php',
+        'desconectar_instancia' => 'evolution.php',
+        'enviar_mensagem_lgpd' => 'evolution.php'
+    ];
         
         $ajaxFile = $ajaxMap[$action] ?? $action . '.php';
         $fullPath = MVC_PATH . '/ajax/' . $ajaxFile;

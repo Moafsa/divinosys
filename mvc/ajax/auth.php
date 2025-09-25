@@ -413,6 +413,8 @@ try {
         case 'criar_usuario':
             $nome = $_POST['nome'] ?? '';
             $email = $_POST['email'] ?? '';
+            $telefone = $_POST['telefone'] ?? '';
+            $tipoUsuario = $_POST['tipo_usuario'] ?? 'cliente';
             $cpf = $_POST['cpf'] ?? '';
             $cnpj = $_POST['cnpj'] ?? '';
             $endereco = $_POST['endereco'] ?? '';
@@ -426,6 +428,8 @@ try {
             $usuarioId = $db->insert('usuarios_globais', [
                 'nome' => $nome,
                 'email' => $email,
+                'telefone' => $telefone,
+                'tipo_usuario' => $tipoUsuario,
                 'cpf' => $cpf,
                 'cnpj' => $cnpj,
                 'endereco_completo' => $endereco,
@@ -452,6 +456,83 @@ try {
                 'success' => true,
                 'usuarios' => $usuarios
             ]);
+            break;
+            
+        case 'editar_usuario':
+            $id = $_POST['id'] ?? '';
+            $nome = $_POST['nome'] ?? '';
+            $email = $_POST['email'] ?? '';
+            $telefone = $_POST['telefone'] ?? '';
+            $tipoUsuario = $_POST['tipo_usuario'] ?? 'cliente';
+            $cpf = $_POST['cpf'] ?? '';
+            $cnpj = $_POST['cnpj'] ?? '';
+            $endereco = $_POST['endereco'] ?? '';
+            
+            if (empty($id) || empty($nome)) {
+                throw new Exception('ID e nome são obrigatórios');
+            }
+            
+            $db = Database::getInstance();
+            $db->update('usuarios_globais', [
+                'nome' => $nome,
+                'email' => $email,
+                'telefone' => $telefone,
+                'tipo_usuario' => $tipoUsuario,
+                'cpf' => $cpf,
+                'cnpj' => $cnpj,
+                'endereco_completo' => $endereco,
+                'updated_at' => date('Y-m-d H:i:s')
+            ], ['id' => $id]);
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Usuário atualizado com sucesso!'
+            ]);
+            break;
+            
+        case 'deletar_usuario':
+            $id = $_POST['id'] ?? '';
+            
+            if (empty($id)) {
+                throw new Exception('ID é obrigatório');
+            }
+            
+            $db = Database::getInstance();
+            $db->update('usuarios_globais', [
+                'ativo' => false,
+                'updated_at' => date('Y-m-d H:i:s')
+            ], ['id' => $id]);
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Usuário removido com sucesso!'
+            ]);
+            break;
+            
+        case 'buscar_usuario':
+            $id = $_POST['id'] ?? '';
+            
+            if (empty($id)) {
+                throw new Exception('ID é obrigatório');
+            }
+            
+            $db = Database::getInstance();
+            $usuario = $db->fetch(
+                "SELECT * FROM usuarios_globais WHERE id = ? AND ativo = true",
+                [$id]
+            );
+            
+            if ($usuario) {
+                echo json_encode([
+                    'success' => true,
+                    'usuario' => $usuario
+                ]);
+            } else {
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Usuário não encontrado'
+                ]);
+            }
             break;
             
         default:
