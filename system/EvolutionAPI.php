@@ -192,17 +192,25 @@ class EvolutionAPI
      */
     public static function getInstances($tenantId, $filialId = null)
     {
-        $sql = "SELECT * FROM evolution_instancias WHERE tenant_id = ?";
-        $params = [$tenantId];
+        // Verificar se a tabela evolution_instancias existe
+        $tableExists = self::$db->fetch("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'evolution_instancias')");
+        
+        if ($tableExists && $tableExists['exists']) {
+            $sql = "SELECT * FROM evolution_instancias WHERE tenant_id = ?";
+            $params = [$tenantId];
 
-        if ($filialId) {
-            $sql .= " AND filial_id = ?";
-            $params[] = $filialId;
+            if ($filialId) {
+                $sql .= " AND filial_id = ?";
+                $params[] = $filialId;
+            }
+
+            $sql .= " ORDER BY created_at DESC";
+
+            return self::$db->fetchAll($sql, $params);
+        } else {
+            // Retornar array vazio se tabela não existir
+            return [];
         }
-
-        $sql .= " ORDER BY created_at DESC";
-
-        return self::$db->fetchAll($sql, $params);
     }
 
     /**

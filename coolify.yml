@@ -85,7 +85,7 @@ services:
   evolution:
     image: atendai/evolution-api:latest
     environment:
-      - SERVER_URL=https://evodiv.conext.click
+      - SERVER_URL=${APP_URL}/evolution
       - AUTHENTICATION_TYPE=apikey
       - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
       - AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
