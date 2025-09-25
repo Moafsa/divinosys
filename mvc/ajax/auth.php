@@ -449,7 +449,7 @@ try {
         case 'listar_usuarios':
             $db = Database::getInstance();
             $usuarios = $db->fetchAll(
-                "SELECT * FROM usuarios_globais WHERE ativo = true ORDER BY created_at DESC"
+                "SELECT * FROM usuarios_globais WHERE ativo = true AND tipo_usuario != 'cliente' ORDER BY created_at DESC"
             );
             
             echo json_encode([
@@ -473,16 +473,10 @@ try {
             }
             
             $db = Database::getInstance();
-            $db->update('usuarios_globais', [
-                'nome' => $nome,
-                'email' => $email,
-                'telefone' => $telefone,
-                'tipo_usuario' => $tipoUsuario,
-                'cpf' => $cpf,
-                'cnpj' => $cnpj,
-                'endereco_completo' => $endereco,
-                'updated_at' => date('Y-m-d H:i:s')
-            ], ['id' => $id]);
+            $db->query(
+                "UPDATE usuarios_globais SET nome = ?, email = ?, telefone = ?, tipo_usuario = ?, cpf = ?, cnpj = ?, endereco_completo = ?, updated_at = ? WHERE id = ?",
+                [$nome, $email, $telefone, $tipoUsuario, $cpf, $cnpj, $endereco, date('Y-m-d H:i:s'), $id]
+            );
             
             echo json_encode([
                 'success' => true,
@@ -498,10 +492,10 @@ try {
             }
             
             $db = Database::getInstance();
-            $db->update('usuarios_globais', [
-                'ativo' => false,
-                'updated_at' => date('Y-m-d H:i:s')
-            ], ['id' => $id]);
+            $db->query(
+                "UPDATE usuarios_globais SET ativo = false, updated_at = ? WHERE id = ?",
+                [date('Y-m-d H:i:s'), $id]
+            );
             
             echo json_encode([
                 'success' => true,

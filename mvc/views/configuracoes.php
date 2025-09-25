@@ -557,7 +557,7 @@ if ($tenant && $filial) {
                         break;
                     default:
                         tipoClass = 'secondary';
-                        tipoUsuario = 'Cliente';
+                        tipoUsuario = 'Funcionário';
                 }
                 
                 html += `
@@ -613,7 +613,6 @@ if ($tenant && $filial) {
                     <div class="mb-3">
                         <label class="form-label">Tipo de Usuário</label>
                         <select class="form-control" id="tipoUsuario">
-                            <option value="cliente">Cliente</option>
                             <option value="admin">Administrador</option>
                             <option value="cozinha">Cozinha</option>
                             <option value="garcom">Garçom</option>
@@ -784,7 +783,6 @@ if ($tenant && $filial) {
                             <div class="mb-3">
                                 <label class="form-label">Tipo de Usuário</label>
                                 <select class="form-control" id="editTipoUsuario">
-                                    <option value="cliente" ${usuario.tipo_usuario === 'cliente' ? 'selected' : ''}>Cliente</option>
                                     <option value="admin" ${usuario.tipo_usuario === 'admin' ? 'selected' : ''}>Administrador</option>
                                     <option value="cozinha" ${usuario.tipo_usuario === 'cozinha' ? 'selected' : ''}>Cozinha</option>
                                     <option value="garcom" ${usuario.tipo_usuario === 'garcom' ? 'selected' : ''}>Garçom</option>
