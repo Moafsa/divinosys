@@ -59,7 +59,7 @@ services:
   evolution:
     image: atendai/evolution-api:latest
     environment:
-      - DATABASE_CONNECTION_URI=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - DATABASE_CONNECTION_URI=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/evolution_db
       - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
       - SERVER_URL=${APP_URL}
       - SERVER_TYPE=http

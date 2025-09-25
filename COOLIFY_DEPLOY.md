@@ -86,6 +86,10 @@ Após o deploy:
 - `EVOLUTION_API_KEY`: Chave da Evolution API
 - `N8N_WEBHOOK_URL`: URL do webhook n8n
 
+### Separação de Bancos
+- **App Database**: `divino_lanches` (configurado via `POSTGRES_DB`)
+- **Evolution Database**: `evolution_db` (criado automaticamente pela Evolution API)
+
 ### Volumes
 - Todos os dados são persistidos em volumes
 - Backup automático via Coolify
