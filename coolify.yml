@@ -21,7 +21,7 @@ services:
       - MULTI_TENANT_ENABLED=true
       - UPLOAD_MAX_SIZE=10M
       - ALLOWED_EXTENSIONS=jpg,jpeg,png,gif,pdf,doc,docx
-        - EVOLUTION_BASE_URL=https://evodiv.conext.click
+      - EVOLUTION_BASE_URL=https://evodiv.conext.click
       - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
       - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL}
     depends_on:
