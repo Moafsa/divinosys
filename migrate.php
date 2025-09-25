@@ -239,6 +239,39 @@ try {
             echo "Mesa pedidos file not found: $mesaPedidosFile\n";
         }
         
+        // Run usuarios_globais creation
+        echo "Running usuarios_globais creation...\n";
+        $usuariosGlobaisFile = '/var/www/html/database/init/05_create_usuarios_globais.sql';
+        if (file_exists($usuariosGlobaisFile)) {
+            echo "Found usuarios_globais file: $usuariosGlobaisFile\n";
+            try {
+                $usuariosGlobais = file_get_contents($usuariosGlobaisFile);
+                
+                // Split by semicolon and execute each statement
+                $statements = explode(';', $usuariosGlobais);
+                $executed = 0;
+                
+                foreach ($statements as $statement) {
+                    $statement = trim($statement);
+                    if (!empty($statement)) {
+                        try {
+                            $db->query($statement);
+                            $executed++;
+                        } catch (Exception $e) {
+                            echo "Warning: Error executing usuarios_globais statement: " . $e->getMessage() . "\n";
+                            echo "Statement: " . substr($statement, 0, 100) . "...\n";
+                        }
+                    }
+                }
+                
+                echo "Usuarios_globais creation completed! Executed $executed statements\n";
+            } catch (Exception $e) {
+                echo "Usuarios_globais creation failed: " . $e->getMessage() . "\n";
+            }
+        } else {
+            echo "Usuarios_globais file not found: $usuariosGlobaisFile\n";
+        }
+        
         // Test login credentials
         echo "Testing login credentials...\n";
         try {
