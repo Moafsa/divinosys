@@ -64,16 +64,16 @@ INSERT INTO categorias (nome, descricao, parent_id, tenant_id, filial_id, ativo,
 ('Águas', 'Água Mineral e Saborizada', 2, 1, 1, true, 3)
 ON CONFLICT DO NOTHING;
 
--- Insert default ingredients
+-- Insert default ingredients (using valid tipo values from constraint)
 INSERT INTO ingredientes (nome, descricao, preco_adicional, tenant_id, filial_id, ativo, tipo) VALUES
-('Bacon', 'Bacon crocante', 3.00, 1, 1, true, 'ingrediente'),
-('Queijo Extra', 'Porção adicional de queijo', 2.50, 1, 1, true, 'ingrediente'),
-('Ovo', 'Ovo frito', 2.00, 1, 1, true, 'ingrediente'),
-('Cebola', 'Cebola roxa', 1.50, 1, 1, true, 'ingrediente'),
-('Tomate', 'Tomate fresco', 1.50, 1, 1, true, 'ingrediente'),
-('Alface', 'Alface americana', 1.00, 1, 1, true, 'ingrediente'),
-('Picles', 'Picles de pepino', 1.00, 1, 1, true, 'ingrediente'),
-('Maionese', 'Maionese caseira', 1.00, 1, 1, true, 'ingrediente'),
-('Ketchup', 'Ketchup Heinz', 1.00, 1, 1, true, 'ingrediente'),
-('Mostarda', 'Mostarda Dijon', 1.00, 1, 1, true, 'ingrediente')
+('Bacon', 'Bacon crocante', 3.00, 1, 1, true, 'proteina'),
+('Queijo Extra', 'Porção adicional de queijo', 2.50, 1, 1, true, 'queijo'),
+('Ovo', 'Ovo frito', 2.00, 1, 1, true, 'proteina'),
+('Cebola', 'Cebola roxa', 1.50, 1, 1, true, 'salada'),
+('Tomate', 'Tomate fresco', 1.50, 1, 1, true, 'salada'),
+('Alface', 'Alface americana', 1.00, 1, 1, true, 'salada'),
+('Picles', 'Picles de pepino', 1.00, 1, 1, true, 'complemento'),
+('Maionese', 'Maionese caseira', 1.00, 1, 1, true, 'molho'),
+('Ketchup', 'Ketchup Heinz', 1.00, 1, 1, true, 'molho'),
+('Mostarda', 'Mostarda Dijon', 1.00, 1, 1, true, 'molho')
 ON CONFLICT DO NOTHING;
