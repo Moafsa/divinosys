@@ -61,15 +61,9 @@ services:
     environment:
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
-    command: >
-      sh -c "
-      until pg_isready -h postgres -p 5432 -U $${POSTGRES_USER}; do
-        echo 'Waiting for PostgreSQL...'
-        sleep 2
-      done
-      PGPASSWORD=$${POSTGRES_PASSWORD} psql -h postgres -U $${POSTGRES_USER} -d postgres -c 'CREATE DATABASE evolution_db;' || echo 'Database already exists'
-      echo 'Evolution database setup complete'
-      "
+    volumes:
+      - ./scripts:/scripts
+    command: ["sh", "/scripts/create-evolution-db.sh"]
     networks:
       - divino_network
     depends_on:
