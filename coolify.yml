@@ -57,32 +57,6 @@ services:
     restart: unless-stopped
 
 
-  evolution-db-cleanup:
-    image: postgres:15-alpine
-    environment:
-      - POSTGRES_USER=${DB_USER}
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-    command: ["sh", "-c", "echo 'Cleaning evolution_db for fresh start...' && sleep 10 && PGPASSWORD=$${POSTGRES_PASSWORD} psql -h postgres -U $${POSTGRES_USER} -d postgres -c 'DROP DATABASE IF EXISTS evolution_db;' && PGPASSWORD=$${POSTGRES_PASSWORD} psql -h postgres -U $${POSTGRES_USER} -d postgres -c 'CREATE DATABASE evolution_db;' && echo 'Evolution database cleaned and recreated!'"]
-    networks:
-      - divino_network
-    depends_on:
-      - postgres
-    restart: "no"
-
-  evolution-migrate:
-    image: atendai/evolution-api:latest
-    environment:
-      - DATABASE_ENABLED=true
-      - DATABASE_PROVIDER=postgresql
-      - DATABASE_CONNECTION_URI=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/evolution_db
-      - CACHE_REDIS_ENABLED=false
-    command: ["sh", "-c", "echo 'Running Evolution API migrations...' && sleep 15 && npx prisma db push --force-reset --schema ./prisma/postgresql-schema.prisma && echo 'Migrations completed!'"]
-    networks:
-      - divino_network
-    depends_on:
-      - evolution-db-cleanup
-    restart: "no"
-
   evolution:
     image: atendai/evolution-api:latest
     environment:
@@ -137,7 +111,7 @@ services:
     networks:
       - divino_network
     depends_on:
-      - evolution-migrate
+      - postgres
       - redis
     restart: unless-stopped
     healthcheck:
