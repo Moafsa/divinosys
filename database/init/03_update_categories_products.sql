@@ -15,20 +15,9 @@ ALTER TABLE produtos ADD COLUMN IF NOT EXISTS estoque_atual INTEGER DEFAULT 0;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS estoque_minimo INTEGER DEFAULT 0;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS preco_custo DECIMAL(10,2) DEFAULT 0.00;
 
--- Create ingredientes table if not exists
-CREATE TABLE IF NOT EXISTS ingredientes (
-    id SERIAL PRIMARY KEY,
-    nome VARCHAR(255) NOT NULL,
-    descricao TEXT,
-    preco_adicional DECIMAL(10,2) DEFAULT 0.00,
-    ativo BOOLEAN DEFAULT true,
-    tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    filial_id INTEGER NOT NULL REFERENCES filiais(id) ON DELETE CASCADE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Add tipo column to existing ingredientes table if it doesn't exist
+-- Update ingredientes table to add missing columns
+ALTER TABLE ingredientes ADD COLUMN IF NOT EXISTS descricao TEXT;
+ALTER TABLE ingredientes ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT true;
 ALTER TABLE ingredientes ADD COLUMN IF NOT EXISTS tipo VARCHAR(50) DEFAULT 'ingrediente';
 
 -- Create produto_ingredientes table (many-to-many)
