@@ -1,0 +1,10 @@
+[33m5b4b842[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m fix: Correção de erros críticos no sistema de pedidos
+[33mbf6336c[m feat: Implementação completa do sistema de delivery e correções gerais
+[33m3573d6e[m fix: Corrigir múltiplos problemas no sistema de pedidos
+[33mefa185a[m Add: Complete category and ingredient management with tabs and CRUD operations
+[33m32f1ec9[m Fix: Integrate categories and ingredients into single products page with modals
+[33m2d5ac7e[m Implement multiple orders per table system with individual payment and division features
+[33m181246d[m Add complete categories and ingredients management system with image uploads
+[33mee48dd9[m Add automatic fix for missing filial_id column in pedido_itens table
+[33mc853ef7[m Fix database migration: add filial_id to pedido_itens table and improve SQL parsing for PostgreSQL functions
+[33m407951c[m Fix dashboard popup actions by properly detecting action parameters in pedidos.php

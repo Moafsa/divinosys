@@ -21,9 +21,13 @@ services:
       - MULTI_TENANT_ENABLED=true
       - UPLOAD_MAX_SIZE=10M
       - ALLOWED_EXTENSIONS=jpg,jpeg,png,gif,pdf,doc,docx
+      - EVOLUTION_BASE_URL=http://evolution
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
+      - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL}
     depends_on:
       - postgres
       - redis
+      - evolution
     volumes:
       - ./uploads:/var/www/html/uploads
       - ./logs:/var/www/html/logs
@@ -52,6 +56,57 @@ services:
       - divino_network
     restart: unless-stopped
 
+  evolution:
+    image: evolutionapi/evolution-api:latest
+    environment:
+      - DATABASE_CONNECTION_URI=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/evolution_db
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
+      - SERVER_URL=${APP_URL}
+      - SERVER_TYPE=http
+      - WEBHOOK_GLOBAL_URL=${APP_URL}/webhook/evolution
+      - WEBHOOK_GLOBAL_ENABLED=true
+      - WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS=true
+      - LOG_LEVEL=ERROR
+      - LOG_COLOR=true
+      - LOG_BAILEYS=error
+      - QRCODE_LIMIT=30
+      - QRCODE_COLOR=#198754
+      - DELAY_SEND_MESSAGE=1000
+      - DELAY_READ_MESSAGE=1000
+      - REJECT_CALLS=false
+      - MSG_RETRY_COUNT_CALL=3
+      - MSG_RETRY_COUNT_CHAT=3
+      - WEBHOOK_EVENTS_CONNECTION_UPDATE=true
+      - WEBHOOK_EVENTS_QRCODE_UPDATED=true
+      - WEBHOOK_EVENTS_MESSAGES_UPSERT=true
+      - WEBHOOK_EVENTS_MESSAGES_UPDATE=true
+      - WEBHOOK_EVENTS_SEND_MESSAGE=true
+      - WEBHOOK_EVENTS_CONTACTS_SET=true
+      - WEBHOOK_EVENTS_CONTACTS_UPSERT=true
+      - WEBHOOK_EVENTS_CONTACTS_UPDATE=true
+      - WEBHOOK_EVENTS_PRESENCE_UPDATE=true
+      - WEBHOOK_EVENTS_CHATS_SET=true
+      - WEBHOOK_EVENTS_CHATS_UPSERT=true
+      - WEBHOOK_EVENTS_CHATS_UPDATE=true
+      - WEBHOOK_EVENTS_CHATS_DELETE=true
+      - WEBHOOK_EVENTS_GROUPS_UPSERT=true
+      - WEBHOOK_EVENTS_GROUP_UPDATE=true
+      - WEBHOOK_EVENTS_GROUP_PARTICIPANTS_UPDATE=true
+      - WEBHOOK_EVENTS_NEW_JWT_TOKEN=true
+      - WEBHOOK_EVENTS_TYPEBOT_START=true
+      - WEBHOOK_EVENTS_TYPEBOT_CHANGE_STATUS=true
+      - WEBHOOK_EVENTS_CHAMA_AI_ACTION=true
+    volumes:
+      - divino_evolution_data:/evolution/instances
+      - divino_evolution_logs:/evolution/logs
+    networks:
+      - divino_network
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
 volumes:
   divino_postgres_data:
   divino_redis_data:
+  divino_evolution_data:
+  divino_evolution_logs:

@@ -294,6 +294,52 @@ if ($tenant && $filial) {
                     </div>
                 </div>
 
+                <!-- Configurações de Usuários -->
+                <div class="config-card">
+                    <h5 class="mb-3">
+                        <i class="fas fa-users me-2"></i>
+                        Gerenciar Usuários
+                    </h5>
+                    <p class="text-muted mb-3">Gerencie usuários internos e clientes do sistema</p>
+                    
+                    <!-- Lista de Usuários -->
+                    <div id="usuariosList" class="mb-3">
+                        <!-- Usuários serão carregados aqui via AJAX -->
+                    </div>
+                    
+                    <!-- Botões de Ação -->
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-primary" onclick="abrirModalNovoUsuario()">
+                            <i class="fas fa-plus me-2"></i>
+                            Novo Usuário
+                        </button>
+                        <button class="btn btn-outline-info" onclick="abrirModalBuscarCliente()">
+                            <i class="fas fa-search me-2"></i>
+                            Buscar Cliente
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Configurações Evolution API -->
+                <div class="config-card">
+                    <h5 class="mb-3">
+                        <i class="fab fa-whatsapp me-2"></i>
+                        Evolution API - WhatsApp
+                    </h5>
+                    <p class="text-muted mb-3">Configure instâncias do WhatsApp para envio de mensagens automáticas</p>
+                    
+                    <!-- Lista de Instâncias -->
+                    <div id="instanciasList" class="mb-3">
+                        <!-- Instâncias serão carregadas aqui via AJAX -->
+                    </div>
+                    
+                    <!-- Botão Nova Instância -->
+                    <button class="btn btn-success" onclick="abrirModalNovaInstancia()">
+                        <i class="fas fa-plus me-2"></i>
+                        Nova Instância
+                    </button>
+                </div>
+
                 <!-- Configurações de Sistema -->
                 <div class="config-card">
                     <h5 class="mb-3">
@@ -442,6 +488,422 @@ if ($tenant && $filial) {
 
         function restaurarBackup() {
             Swal.fire('Info', 'Funcionalidade de restauração será implementada', 'info');
+        }
+
+        // ===== USUÁRIOS FUNCTIONS =====
+        
+        // Carregar dados ao carregar a página
+        document.addEventListener('DOMContentLoaded', function() {
+            carregarUsuarios();
+            carregarInstancias();
+        });
+
+        function carregarUsuarios() {
+            fetch('index.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: 'action=listar_usuarios'
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        exibirUsuarios(data.usuarios);
+                    } else {
+                        console.error('Erro ao carregar usuários:', data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Erro:', error);
+                });
+        }
+
+        function exibirUsuarios(usuarios) {
+            const container = document.getElementById('usuariosList');
+            
+            if (usuarios.length === 0) {
+                container.innerHTML = '<p class="text-muted">Nenhum usuário encontrado</p>';
+                return;
+            }
+
+            let html = '';
+            usuarios.forEach(usuario => {
+                const tipoClass = usuario.tipo_usuario === 'admin' ? 'danger' : 
+                                 usuario.tipo_usuario === 'caixa' ? 'success' : 
+                                 usuario.tipo_usuario === 'garcom' ? 'info' : 'secondary';
+                
+                html += `
+                    <div class="card mb-2">
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col-md-3">
+                                    <h6 class="mb-1">${usuario.nome || 'Sem nome'}</h6>
+                                    <small class="text-muted">${usuario.telefone}</small>
+                                </div>
+                                <div class="col-md-2">
+                                    <span class="badge bg-${tipoClass}">${usuario.tipo_usuario}</span>
+                                </div>
+                                <div class="col-md-3">
+                                    <small class="text-muted">${usuario.cargo || 'Sem cargo'}</small>
+                                </div>
+                                <div class="col-md-4 text-end">
+                                    <button class="btn btn-sm btn-outline-primary me-1" onclick="editarUsuario(${usuario.id})">
+                                        <i class="fas fa-edit"></i> Editar
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deletarUsuario(${usuario.id})">
+                                        <i class="fas fa-trash"></i> Deletar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+
+        function abrirModalNovoUsuario() {
+            Swal.fire({
+                title: 'Novo Usuário',
+                html: `
+                    <div class="mb-3">
+                        <label class="form-label">Nome</label>
+                        <input type="text" class="form-control" id="nomeUsuario" placeholder="Nome completo">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Telefone</label>
+                        <input type="text" class="form-control" id="telefoneUsuario" placeholder="11999999999">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Tipo de Usuário</label>
+                        <select class="form-control" id="tipoUsuario">
+                            <option value="admin">Administrador</option>
+                            <option value="caixa">Caixa</option>
+                            <option value="garcom">Garçom</option>
+                            <option value="cozinha">Cozinha</option>
+                            <option value="entregador">Entregador</option>
+                            <option value="cliente">Cliente</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Cargo</label>
+                        <input type="text" class="form-control" id="cargoUsuario" placeholder="Cargo do funcionário">
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Criar Usuário',
+                cancelButtonText: 'Cancelar',
+                preConfirm: () => {
+                    const nome = document.getElementById('nomeUsuario').value;
+                    const telefone = document.getElementById('telefoneUsuario').value;
+                    const tipo = document.getElementById('tipoUsuario').value;
+                    const cargo = document.getElementById('cargoUsuario').value;
+                    
+                    if (!nome || !telefone || !tipo) {
+                        Swal.showValidationMessage('Nome, telefone e tipo são obrigatórios');
+                        return false;
+                    }
+                    
+                    return { nome, telefone, tipo, cargo };
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    criarUsuario(result.value);
+                }
+            });
+        }
+
+        function criarUsuario(dados) {
+            const formData = new FormData();
+            formData.append('nome', dados.nome);
+            formData.append('telefone', dados.telefone);
+            formData.append('tipo_usuario', dados.tipo);
+            formData.append('cargo', dados.cargo);
+
+            fetch('index.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: `action=criar_usuario&${new URLSearchParams(formData).toString()}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire('Sucesso', 'Usuário criado com sucesso!', 'success');
+                    carregarUsuarios();
+                } else {
+                    Swal.fire('Erro', data.message, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire('Erro', 'Erro ao criar usuário', 'error');
+            });
+        }
+
+        function abrirModalBuscarCliente() {
+            Swal.fire({
+                title: 'Buscar Cliente',
+                html: `
+                    <div class="mb-3">
+                        <label class="form-label">Telefone do Cliente</label>
+                        <input type="text" class="form-control" id="telefoneCliente" placeholder="11999999999">
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Buscar',
+                cancelButtonText: 'Cancelar',
+                preConfirm: () => {
+                    const telefone = document.getElementById('telefoneCliente').value;
+                    
+                    if (!telefone) {
+                        Swal.showValidationMessage('Telefone é obrigatório');
+                        return false;
+                    }
+                    
+                    return { telefone };
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    buscarCliente(result.value.telefone);
+                }
+            });
+        }
+
+        function buscarCliente(telefone) {
+            fetch(`mvc/ajax/auth.php?action=buscar_cliente&telefone=${telefone}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        Swal.fire({
+                            title: 'Cliente Encontrado',
+                            html: `
+                                <div class="text-start">
+                                    <p><strong>Nome:</strong> ${data.cliente.nome || 'Não informado'}</p>
+                                    <p><strong>Telefone:</strong> ${data.cliente.telefone}</p>
+                                    <p><strong>Email:</strong> ${data.cliente.email || 'Não informado'}</p>
+                                    <p><strong>CPF:</strong> ${data.cliente.cpf || 'Não informado'}</p>
+                                    <p><strong>Endereços:</strong> ${data.cliente.enderecos || 'Nenhum'}</p>
+                                </div>
+                            `,
+                            showConfirmButton: true,
+                            confirmButtonText: 'Fechar'
+                        });
+                    } else {
+                        Swal.fire('Cliente não encontrado', 'Este telefone não está cadastrado no sistema', 'info');
+                    }
+                })
+                .catch(error => {
+                    console.error('Erro:', error);
+                    Swal.fire('Erro', 'Erro ao buscar cliente', 'error');
+                });
+        }
+
+        function editarUsuario(id) {
+            Swal.fire('Info', 'Funcionalidade de edição será implementada', 'info');
+        }
+
+        function deletarUsuario(id) {
+            Swal.fire({
+                title: 'Confirmar Exclusão',
+                text: 'Tem certeza que deseja deletar este usuário?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sim, deletar',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire('Info', 'Funcionalidade de exclusão será implementada', 'info');
+                }
+            });
+        }
+
+        // ===== EVOLUTION API FUNCTIONS =====
+
+        function carregarInstancias() {
+            fetch('index.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: 'action=listar_instancias'
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        exibirInstancias(data.instancias);
+                    } else {
+                        console.error('Erro ao carregar instâncias:', data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Erro:', error);
+                });
+        }
+
+        function exibirInstancias(instancias) {
+            const container = document.getElementById('instanciasList');
+            
+            if (instancias.length === 0) {
+                container.innerHTML = '<p class="text-muted">Nenhuma instância configurada</p>';
+                return;
+            }
+
+            let html = '';
+            instancias.forEach(instancia => {
+                const statusClass = instancia.status === 'open' ? 'success' : 'danger';
+                const statusText = instancia.status === 'open' ? 'Conectado' : 'Desconectado';
+                
+                html += `
+                    <div class="card mb-2">
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col-md-4">
+                                    <h6 class="mb-1">${instancia.nome_instancia}</h6>
+                                    <small class="text-muted">${instancia.numero_telefone}</small>
+                                </div>
+                                <div class="col-md-3">
+                                    <span class="badge bg-${statusClass}">${statusText}</span>
+                                </div>
+                                <div class="col-md-5 text-end">
+                                    <button class="btn btn-sm btn-outline-primary me-1" onclick="obterQRCode('${instancia.nome_instancia}')">
+                                        <i class="fas fa-qrcode"></i> QR Code
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deletarInstancia('${instancia.nome_instancia}')">
+                                        <i class="fas fa-trash"></i> Deletar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+
+        function abrirModalNovaInstancia() {
+            Swal.fire({
+                title: 'Nova Instância Evolution',
+                html: `
+                    <div class="mb-3">
+                        <label class="form-label">Nome da Instância</label>
+                        <input type="text" class="form-control" id="nomeInstancia" placeholder="ex: atendimento_loja1">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Número do WhatsApp</label>
+                        <input type="text" class="form-control" id="numeroWhatsApp" placeholder="5511999999999">
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Criar Instância',
+                cancelButtonText: 'Cancelar',
+                preConfirm: () => {
+                    const nome = document.getElementById('nomeInstancia').value;
+                    const numero = document.getElementById('numeroWhatsApp').value;
+                    
+                    if (!nome || !numero) {
+                        Swal.showValidationMessage('Todos os campos são obrigatórios');
+                        return false;
+                    }
+                    
+                    return { nome, numero };
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    criarInstancia(result.value.nome, result.value.numero);
+                }
+            });
+        }
+
+        function criarInstancia(nome, numero) {
+            const formData = new FormData();
+            formData.append('nome_instancia', nome);
+            formData.append('numero_telefone', numero);
+
+            fetch('mvc/ajax/evolution.php?action=criar_instancia', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire('Sucesso', 'Instância criada com sucesso!', 'success');
+                    carregarInstancias();
+                } else {
+                    Swal.fire('Erro', data.message, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire('Erro', 'Erro ao criar instância', 'error');
+            });
+        }
+
+        function obterQRCode(nomeInstancia) {
+            fetch(`mvc/ajax/evolution.php?action=obter_qrcode&nome_instancia=${nomeInstancia}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.qr_code) {
+                        Swal.fire({
+                            title: 'QR Code para Conectar',
+                            html: `
+                                <div class="text-center">
+                                    <img src="data:image/png;base64,${data.qr_code}" class="img-fluid" style="max-width: 300px;">
+                                    <p class="mt-3">Escaneie este QR Code com seu WhatsApp</p>
+                                </div>
+                            `,
+                            showConfirmButton: true,
+                            confirmButtonText: 'Fechar'
+                        });
+                    } else {
+                        Swal.fire('Erro', data.message || 'Erro ao obter QR Code', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Erro:', error);
+                    Swal.fire('Erro', 'Erro ao obter QR Code', 'error');
+                });
+        }
+
+        function deletarInstancia(nomeInstancia) {
+            Swal.fire({
+                title: 'Confirmar Exclusão',
+                text: `Tem certeza que deseja deletar a instância "${nomeInstancia}"?`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sim, deletar',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const formData = new FormData();
+                    formData.append('nome_instancia', nomeInstancia);
+
+                    fetch('mvc/ajax/evolution.php?action=deletar_instancia', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Sucesso', 'Instância deletada com sucesso!', 'success');
+                            carregarInstancias();
+                        } else {
+                            Swal.fire('Erro', data.message, 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro:', error);
+                        Swal.fire('Erro', 'Erro ao deletar instância', 'error');
+                    });
+                }
+            });
         }
     </script>
     

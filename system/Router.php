@@ -28,6 +28,7 @@ class Router
         $this->routes = [
             'home' => 'home.php',
             'login' => 'login.php',
+            'login_admin' => 'login_admin.php',
             'logout' => 'logout.php',
             'dashboard' => 'Dashboard1.php',
             'gerar_pedido' => 'gerar_pedido.php',
@@ -76,7 +77,7 @@ class Router
 
     private function isProtectedRoute($view)
     {
-        $publicRoutes = ['home', 'login'];
+        $publicRoutes = ['home', 'login', 'login_admin'];
         return !in_array($view, $publicRoutes);
     }
 

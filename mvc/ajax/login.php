@@ -1,4 +1,8 @@
 <?php
+// Incluir classes necessárias
+require_once __DIR__ . '/../../system/Database.php';
+require_once __DIR__ . '/../../system/Config.php';
+
 header('Content-Type: application/json');
 
 try {
@@ -22,13 +26,10 @@ try {
                 throw new \Exception('Usuário e senha são obrigatórios');
             }
             
-            // Find tenant by user
+            // Find user in usuarios table
             $db = \System\Database::getInstance();
             $user = $db->fetch(
-                "SELECT u.*, t.subdomain 
-                 FROM usuarios u 
-                 JOIN tenants t ON u.tenant_id = t.id 
-                 WHERE u.login = ? AND t.status = 'ativo'",
+                "SELECT * FROM usuarios WHERE login = ?",
                 [$login]
             );
             
@@ -36,11 +37,29 @@ try {
                 throw new \Exception('Usuário não encontrado');
             }
             
-            // Use AuthService for login with subdomain
-            $authService = new \App\Auth\AuthService();
-            $result = $authService->login($login, $senha, $user['subdomain']);
+            // Verify password
+            if (!password_verify($senha, $user['senha'])) {
+                throw new \Exception('Senha incorreta');
+            }
             
-            echo json_encode($result);
+            // Start session and set user data
+            $session = \System\Session::getInstance();
+            $session->setUser($user);
+            
+            // Definir tenant_id na sessão se não estiver definido
+            if (!$session->getTenantId()) {
+                $session->set('tenant_id', $user['tenant_id'] ?? '1');
+            }
+            
+            echo json_encode([
+                'success' => true, 
+                'message' => 'Login realizado com sucesso!',
+                'user' => [
+                    'id' => $user['id'],
+                    'login' => $user['login'],
+                    'nivel' => $user['nivel']
+                ]
+            ]);
             break;
             
         default:

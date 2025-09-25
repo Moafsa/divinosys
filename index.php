@@ -66,10 +66,26 @@ try {
         
         // Try to load AJAX handler
         $action = $_GET['action'] ?? $_POST['action'] ?? '';
-        $ajaxFile = MVC_PATH . '/ajax/' . $action . '.php';
         
-        if (file_exists($ajaxFile)) {
-            include $ajaxFile;
+        // Mapear ações para arquivos AJAX
+        $ajaxMap = [
+            'login' => 'login.php',
+            'criar_usuario' => 'auth.php',
+            'listar_usuarios' => 'auth.php',
+            'buscar_cliente' => 'auth.php',
+            'criar_instancia' => 'evolution.php',
+            'listar_instancias' => 'evolution.php',
+            'deletar_instancia' => 'evolution.php',
+            'conectar_instancia' => 'evolution.php',
+            'desconectar_instancia' => 'evolution.php',
+            'enviar_mensagem_lgpd' => 'evolution.php'
+        ];
+        
+        $ajaxFile = $ajaxMap[$action] ?? $action . '.php';
+        $fullPath = MVC_PATH . '/ajax/' . $ajaxFile;
+        
+        if (file_exists($fullPath)) {
+            include $fullPath;
         } else {
             header('Content-Type: application/json');
             echo json_encode(['success' => false, 'message' => 'Ação não encontrada: ' . $action]);
