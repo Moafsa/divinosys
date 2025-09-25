@@ -75,7 +75,8 @@ services:
       - DATABASE_ENABLED=true
       - DATABASE_PROVIDER=postgresql
       - DATABASE_CONNECTION_URI=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/evolution_db
-    command: ["sh", "-c", "echo 'Running Evolution API migrations...' && sleep 15 && npm run db:push --force-reset && echo 'Migrations completed!'"]
+      - CACHE_REDIS_ENABLED=false
+    command: ["sh", "-c", "echo 'Running Evolution API migrations...' && sleep 15 && npx prisma db push --force-reset --schema ./prisma/postgresql-schema.prisma && echo 'Migrations completed!'"]
     networks:
       - divino_network
     depends_on:
