@@ -448,9 +448,21 @@ try {
             
         case 'listar_usuarios':
             $db = Database::getInstance();
-            $usuarios = $db->fetchAll(
-                "SELECT * FROM usuarios_globais WHERE ativo = true AND tipo_usuario != 'cliente' ORDER BY created_at DESC"
-            );
+            
+            // Verificar se a tabela usuarios_globais existe, senão usar usuarios
+            $tableExists = $db->fetch("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'usuarios_globais')");
+            
+            if ($tableExists && $tableExists['exists']) {
+                // Usar nova estrutura
+                $usuarios = $db->fetchAll(
+                    "SELECT * FROM usuarios_globais WHERE ativo = true AND tipo_usuario != 'cliente' ORDER BY created_at DESC"
+                );
+            } else {
+                // Usar estrutura antiga
+                $usuarios = $db->fetchAll(
+                    "SELECT id, login as nome, login as email, '' as telefone, 'admin' as tipo_usuario, '' as cpf, '' as cnpj, '' as endereco_completo, created_at FROM usuarios WHERE nivel = 1 ORDER BY id DESC"
+                );
+            }
             
             echo json_encode([
                 'success' => true,
