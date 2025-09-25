@@ -412,28 +412,27 @@ try {
             
         case 'criar_usuario':
             $nome = $_POST['nome'] ?? '';
-            $telefone = $_POST['telefone'] ?? '';
-            $tipoUsuario = $_POST['tipo_usuario'] ?? '';
-            $cargo = $_POST['cargo'] ?? '';
+            $email = $_POST['email'] ?? '';
+            $cpf = $_POST['cpf'] ?? '';
+            $cnpj = $_POST['cnpj'] ?? '';
+            $endereco = $_POST['endereco'] ?? '';
             
-            if (empty($nome) || empty($telefone) || empty($tipoUsuario)) {
-                throw new Exception('Dados obrigatórios não fornecidos');
+            if (empty($nome)) {
+                throw new Exception('Nome é obrigatório');
             }
-            
-            // Obter tenant_id da sessão do usuário logado
-            session_start();
-            $tenantId = $_SESSION['tenant_id'] ?? '1';
             
             // Criar usuário na tabela usuarios_globais
             $db = Database::getInstance();
             $usuarioId = $db->insert('usuarios_globais', [
                 'nome' => $nome,
-                'telefone' => $telefone,
-                'tipo_usuario' => $tipoUsuario,
-                'cargo' => $cargo,
-                'tenant_id' => $tenantId,
-                'status' => 'ativo',
-                'created_at' => date('Y-m-d H:i:s')
+                'email' => $email,
+                'cpf' => $cpf,
+                'cnpj' => $cnpj,
+                'endereco_completo' => $endereco,
+                'ativo' => true,
+                'data_cadastro' => date('Y-m-d H:i:s'),
+                'created_at' => date('Y-m-d H:i:s'),
+                'updated_at' => date('Y-m-d H:i:s')
             ]);
             
             echo json_encode([
@@ -444,14 +443,9 @@ try {
             break;
             
         case 'listar_usuarios':
-            // Obter tenant_id da sessão do usuário logado
-            session_start();
-            $tenantId = $_SESSION['tenant_id'] ?? '1';
-            
             $db = Database::getInstance();
             $usuarios = $db->fetchAll(
-                "SELECT * FROM usuarios_globais WHERE tenant_id = ? ORDER BY created_at DESC",
-                [$tenantId]
+                "SELECT * FROM usuarios_globais WHERE ativo = true ORDER BY created_at DESC"
             );
             
             echo json_encode([

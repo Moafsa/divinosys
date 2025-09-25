@@ -530,9 +530,10 @@ if ($tenant && $filial) {
 
             let html = '';
             usuarios.forEach(usuario => {
-                const tipoClass = usuario.tipo_usuario === 'admin' ? 'danger' : 
-                                 usuario.tipo_usuario === 'caixa' ? 'success' : 
-                                 usuario.tipo_usuario === 'garcom' ? 'info' : 'secondary';
+                // Determinar tipo baseado no email (admin tem email específico)
+                const isAdmin = usuario.email && usuario.email.includes('admin');
+                const tipoClass = isAdmin ? 'danger' : 'secondary';
+                const tipoUsuario = isAdmin ? 'Admin' : 'Cliente';
                 
                 html += `
                     <div class="card mb-2">
@@ -540,13 +541,13 @@ if ($tenant && $filial) {
                             <div class="row align-items-center">
                                 <div class="col-md-3">
                                     <h6 class="mb-1">${usuario.nome || 'Sem nome'}</h6>
-                                    <small class="text-muted">${usuario.telefone}</small>
+                                    <small class="text-muted">${usuario.email || 'Sem email'}</small>
                                 </div>
                                 <div class="col-md-2">
-                                    <span class="badge bg-${tipoClass}">${usuario.tipo_usuario}</span>
+                                    <span class="badge bg-${tipoClass}">${tipoUsuario}</span>
                                 </div>
                                 <div class="col-md-3">
-                                    <small class="text-muted">${usuario.cargo || 'Sem cargo'}</small>
+                                    <small class="text-muted">${usuario.cpf || usuario.cnpj || 'Sem documento'}</small>
                                 </div>
                                 <div class="col-md-4 text-end">
                                     <button class="btn btn-sm btn-outline-primary me-1" onclick="editarUsuario(${usuario.id})">
@@ -570,27 +571,24 @@ if ($tenant && $filial) {
                 title: 'Novo Usuário',
                 html: `
                     <div class="mb-3">
-                        <label class="form-label">Nome</label>
+                        <label class="form-label">Nome *</label>
                         <input type="text" class="form-control" id="nomeUsuario" placeholder="Nome completo">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Telefone</label>
-                        <input type="text" class="form-control" id="telefoneUsuario" placeholder="11999999999">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" id="emailUsuario" placeholder="email@exemplo.com">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Tipo de Usuário</label>
-                        <select class="form-control" id="tipoUsuario">
-                            <option value="admin">Administrador</option>
-                            <option value="caixa">Caixa</option>
-                            <option value="garcom">Garçom</option>
-                            <option value="cozinha">Cozinha</option>
-                            <option value="entregador">Entregador</option>
-                            <option value="cliente">Cliente</option>
-                        </select>
+                        <label class="form-label">CPF</label>
+                        <input type="text" class="form-control" id="cpfUsuario" placeholder="000.000.000-00">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Cargo</label>
-                        <input type="text" class="form-control" id="cargoUsuario" placeholder="Cargo do funcionário">
+                        <label class="form-label">CNPJ</label>
+                        <input type="text" class="form-control" id="cnpjUsuario" placeholder="00.000.000/0000-00">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Endereço</label>
+                        <textarea class="form-control" id="enderecoUsuario" placeholder="Endereço completo"></textarea>
                     </div>
                 `,
                 showCancelButton: true,
@@ -598,16 +596,17 @@ if ($tenant && $filial) {
                 cancelButtonText: 'Cancelar',
                 preConfirm: () => {
                     const nome = document.getElementById('nomeUsuario').value;
-                    const telefone = document.getElementById('telefoneUsuario').value;
-                    const tipo = document.getElementById('tipoUsuario').value;
-                    const cargo = document.getElementById('cargoUsuario').value;
+                    const email = document.getElementById('emailUsuario').value;
+                    const cpf = document.getElementById('cpfUsuario').value;
+                    const cnpj = document.getElementById('cnpjUsuario').value;
+                    const endereco = document.getElementById('enderecoUsuario').value;
                     
-                    if (!nome || !telefone || !tipo) {
-                        Swal.showValidationMessage('Nome, telefone e tipo são obrigatórios');
+                    if (!nome) {
+                        Swal.showValidationMessage('Nome é obrigatório');
                         return false;
                     }
                     
-                    return { nome, telefone, tipo, cargo };
+                    return { nome, email, cpf, cnpj, endereco };
                 }
             }).then((result) => {
                 if (result.isConfirmed) {
@@ -619,9 +618,10 @@ if ($tenant && $filial) {
         function criarUsuario(dados) {
             const formData = new FormData();
             formData.append('nome', dados.nome);
-            formData.append('telefone', dados.telefone);
-            formData.append('tipo_usuario', dados.tipo);
-            formData.append('cargo', dados.cargo);
+            formData.append('email', dados.email);
+            formData.append('cpf', dados.cpf);
+            formData.append('cnpj', dados.cnpj);
+            formData.append('endereco', dados.endereco);
 
             fetch('index.php', {
                 method: 'POST',

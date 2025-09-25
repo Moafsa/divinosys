@@ -57,7 +57,7 @@ services:
     restart: unless-stopped
 
   evolution:
-    image: evolutionapi/evolution-api:latest
+    image: atendai/evolution-api:latest
     environment:
       - DATABASE_CONNECTION_URI=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/evolution_db
       - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
