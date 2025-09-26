@@ -46,6 +46,11 @@ async function initBaileysServer() {
         throw new Error('Crypto module not available - check Node runtime');
       }
       console.log(`🔐 Crypto module available: ${!!crypto}`);
+      
+      // Additional validation required for complex crypto functions
+      if (!crypto.randomBytes) {
+        throw new Error('Crypto randomBytes not available - openssl incomate!');
+      }
 
       // Ensure sessions directory exists
       const sessionPath = `./sessions/${instanceId}`;

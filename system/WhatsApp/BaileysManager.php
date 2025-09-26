@@ -121,11 +121,12 @@ class BaileysManager {
             }
 
             $phoneNumber = $instance['phone_number'];
-            error_log("📱 Generate QR chama issued for $phoneNumber) inst. $instanceId");
+            $instanceName = $instance['instance_name'];  // CRITICO: usar nome da instância
+            error_log("📱 Generate QR chama issued for $phoneNumber) inst. $instanceName (ID: $instanceId)");
             
-            // 🎯 PRINCIPAL FOCUS -. Use REMOTE BAILYrs HTTP Dᵉ REA!!
+            // 🎯 PRINCIPAL FOCUS -. Use REMOTE BAILYrs HTTP delegíreal!!
             try {  
-                return $this->generateBaileysProtocolQR($instanceId, $phoneNumber);
+                return $this->generateBaileysProtocolQR($instanceName, $phoneNumber);  // usar instance_name em vez de ID
             } catch (Exception $e) {
                 error_log('Real Baileys HTTP failed: ' . $e->getMessage());
                 return $this->generateBasicQR($phoneNumber);  
