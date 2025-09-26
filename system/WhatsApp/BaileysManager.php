@@ -203,10 +203,11 @@ class BaileysManager {
     }
     
     /**
-     * Enviar via Baileys (Node.js)
+     * Enviar via Baileys (Node.js via Docker)
      */
     private function sendViaBaileys($instanceId, $to, $message, $messageType) {
-        $command = "node " . __DIR__ . "/baileys-sender.js " . 
+        // Usar Docker para executar o script
+        $command = "docker exec baileys node /app/system/WhatsApp/baileys-sender.js " . 
                    escapeshellarg($instanceId) . " " . 
                    escapeshellarg($to) . " " . 
                    escapeshellarg($message) . " " . 
@@ -223,10 +224,10 @@ class BaileysManager {
     }
     
     /**
-     * Gerar QR Code via Node.js
+     * Gerar QR Code via Node.js (Docker)
      */
     private function generateQRCode($instanceId) {
-        $command = "node " . __DIR__ . "/baileys-qr.js " . escapeshellarg($instanceId);
+        $command = "docker exec baileys node /app/system/WhatsApp/baileys-qr.js " . escapeshellarg($instanceId);
         
         $output = shell_exec($command);
         $result = json_decode($output, true);

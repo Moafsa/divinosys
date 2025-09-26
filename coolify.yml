@@ -53,8 +53,24 @@ services:
       - divino_network
     restart: unless-stopped
 
-
+  baileys:
+    build:
+      context: .
+      dockerfile: Dockerfile.baileys
+    environment:
+      - NODE_ENV=production
+      - BAILEYS_SERVICE_URL=http://baileys:3000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - divino_baileys_sessions:/app/sessions
+    depends_on:
+      - redis
+    networks:
+      - divino_network
+    restart: unless-stopped
 
 volumes:
   divino_postgres_data:
   divino_redis_data:
+  divino_baileys_sessions:

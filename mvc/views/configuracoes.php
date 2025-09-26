@@ -1009,13 +1009,13 @@ if ($tenant && $filial) {
         }
 
         function criarInstancia(nome, numero) {
-            const formData = new FormData();
-            formData.append('nome_instancia', nome);
-            formData.append('numero_telefone', numero);
-
-            fetch('mvc/ajax/evolution.php?action=criar_instancia', {
+            fetch('index.php', {
                 method: 'POST',
-                body: formData
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: `action=criar_instancia&instance_name=${encodeURIComponent(nome)}&phone_number=${encodeURIComponent(numero)}`
             })
             .then(response => response.json())
             .then(data => {
@@ -1033,7 +1033,14 @@ if ($tenant && $filial) {
         }
 
         function obterQRCode(nomeInstancia) {
-            fetch(`mvc/ajax/evolution.php?action=obter_qrcode&nome_instancia=${nomeInstancia}`)
+            fetch('index.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: `action=conectar_instancia&instance_name=${encodeURIComponent(nomeInstancia)}`
+            })
                 .then(response => response.json())
                 .then(data => {
                     if (data.success && data.qr_code) {
@@ -1068,12 +1075,13 @@ if ($tenant && $filial) {
                 cancelButtonText: 'Cancelar'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    const formData = new FormData();
-                    formData.append('nome_instancia', nomeInstancia);
-
-                    fetch('mvc/ajax/evolution.php?action=deletar_instancia', {
+                    fetch('index.php', {
                         method: 'POST',
-                        body: formData
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        body: `action=deletar_instancia&instance_name=${encodeURIComponent(nomeInstancia)}`
                     })
                     .then(response => response.json())
                     .then(data => {
