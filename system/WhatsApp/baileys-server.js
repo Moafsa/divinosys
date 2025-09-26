@@ -149,39 +149,35 @@ async function initBaileysServer() {
                 console.log('🔐 Global crypto set for Baileys compatibility');
             }
             
-            // Additional UA & HTTP header setup for 405 prevention
+            // Set environment variables for optimal Baileys performance
             if (typeof process !== 'undefined') {
-                process.env["MINET_DISABLE_RETRY"] = "1";
-                process.env["WD_BASE_URL"] = process.env.WD_BASE_URL || "https://web.whatsapp.com";
-                // Force APP state instead of WEB state to avoid HTTP issues
-                process.env["BAILEYS_QRSET_TYPE"] = "read"; // Prevent "/connect" method issues
+                process.env["NODE_OPTIONS"] = "--max-old-space-size=4096";
             }
             
             // WRAPPER IN try/catch to ENSURE crypto propagates
             let sock;
             try {
                 // Force WebSocket handling for protocol compatibility  
-                // Try legacy mode first to avoid 405 errors
+                // Create Baileys socket with latest best practices
                 sock = makeWASocket({
                     auth: state,
                     printQRInTerminal: false,
-                    browser: ['WhatsApp','2.23.24.84','Chrome','1.0'], // Legacy WhatsApp Web signature
-                    // Remove fetchAgent to use default HTTP handling
+                    browser: ['Chrome', '119.0.0.0', 'Windows'], // Modern Chrome signature
+                    // Connection settings optimized for stability
                     keepAliveIntervalMs: 30000,
-                    connectTimeoutMs: 30_000,
+                    connectTimeoutMs: 60_000, // Increased for better stability
                     defaultQueryTimeoutMs: 60_000,
-                    retryRequestDelayMs: 3000,
-                    maxRestartAfter: 30000,
-                    connectCooldownMs: 10000,
+                    retryRequestDelayMs: 2000,
+                    maxRestartAfter: 60000,
+                    connectCooldownMs: 5000,
+                    // Simplified retry delays - let Baileys handle optimally
                     retryRequestDelayMsMap: {
-                        403: 5000,
-                        405: 15000, // Still handle 405 but with shorter delay
-                        408: 3000,
-                        429: 10000,
-                        503: 20000,
-                        disconnect: 15000,
-                        end: 15000
+                        403: 3000,
+                        408: 2000,
+                        429: 5000,
+                        503: 10000
                     },
+                    // Basic settings for better compatibility
                     syncFullHistory: false,
                     markOnlineOnConnect: false,
                     generateHighQualityLinkPreview: false,
@@ -218,15 +214,6 @@ async function initBaileysServer() {
             let qrData = null;
             let connectionStatus = 'disconnected';
             let responseSent = false;
-            let firstConnectionAttempt = true; // To avoid multiple /connect calls 
-            
-            // 405 mitigation: Wait longer before establishing connection again
-            if (firstConnectionAttempt) {
-                console.log(`⏳ Waiting before initial connection for stability...`);
-                setTimeout(async () => {
-                    firstConnectionAttempt = false;
-                }, 2000);
-            }
             
             // Handle genuine WhatsApp Web QR generation  
             sock.ev.on('connection.update', async (update) => {
@@ -323,41 +310,12 @@ async function initBaileysServer() {
                     const isMethodNotAllowed = lastDisconnect?.error?.message?.includes('Method Not Allowed');
                     
                     if (is405Error || isMethodNotAllowed) {
-                        console.log(`⚠️ HTTP 405 error detected! - implementing fallback strategy`);
-                        // Special 405 Handling: Try alternative approach
-                        setTimeout(async () => {
+                        console.log(`❌ HTTP 405 error detected! This indicates incompatible Baileys version or WhatsApp protocol changes`);
+                        console.log(`🔧 Cleaning session and will retry with updated configuration`);
+                        // Clean session for potential retry
+                        setTimeout(() => {
                             delete activeSessions[instanceId];
-                            console.log(`🔧 Session cleared - will try alternative connection method for instance ${instanceId}`);
-                            
-                            // Try to generate a basic QR as fallback
-                            if (!responseSent) {
-                                responseSent = true;
-                                try {
-                                    // Generate a simple QR code as fallback
-                                    const fallbackQR = await qrcode.toDataURL(`https://wa.me/${phoneNumber}`, {
-                                        errorCorrectionLevel: 'M',
-                                        type: 'image/png',
-                                        width: 300,
-                                        margin: 2
-                                    });
-                                    
-                                    const qrCodeBase64 = fallbackQR.split(',')[1];
-                                    
-                                    res.json({
-                                        success: true,
-                                        qr_code: qrCodeBase64,
-                                        status: 'qrcode_fallback',
-                                        instance_id: instanceId,
-                                        phone: phoneNumber,
-                                        message: 'Fallback QR - Scan with WhatsApp',
-                                        fallback: true
-                                    });
-                                    return;
-                                } catch (qrError) {
-                                    console.error('❌ Fallback QR generation failed:', qrError);
-                                }
-                            }
-                        }, 5000); // Shorter delay for fallback
+                        }, 3000);
                     } else {
                         const needsReconnect = statusCode !== DisconnectReason.loggedOut && 
                                               statusCode !== DisconnectReason.forbidden;
