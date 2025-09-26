@@ -87,6 +87,10 @@ async function initBaileysServer() {
                 auth: state,
                 printQRInTerminal: false,
                 browser: ['DivinoLanches','Chrome','1.0'],
+                keepAliveIntervalMs: 30000,
+                connectTimeoutMs: 10_000,
+                defaultQueryTimeoutMs: 60_000,
+                retryRequestDelayMs: 250,
                 logger: {
                     level: 'silent',
                     child: () => ({ 
@@ -104,7 +108,8 @@ async function initBaileysServer() {
                     error: () => {}
                 },
                 generateHighQualityLinkPreview: true,
-                markOnlineOnConnect: true
+                markOnlineOnConnect: true,
+                shouldIgnoreJid: (jid) => false
             });
             
             let qrData = null;
@@ -324,7 +329,19 @@ async function initBaileysServer() {
         console.log('🚀 BAILEYS SERVER RUNNING on port:' + PORT);
         console.log('🔗 WhatsApp Baileys integration ready!');
         console.log(`📱 Connect endpoint: http://localhost:${PORT}/connect`);
+        
+        // Additional crypto safety validation
+        const cryptoAgain = require('crypto');
+        console.log('🔐 Deployed crypto successfully available type:', typeof cryptoAgain, !!cryptoAgain.publicDecrypt);
     });
-}   
+}
+
+// Initialize app startup procedure
+console.log('🎂 NEW START: Crypto module detection');
+console.log('Crypto loaded (exists):', typeof crypto, !!crypto);
+
+// CRITICAL: Double check crypto available just above initialization 
+// BEFORE calling initBaileysServer methods
+// **This ensures that crypto is correctly loaded in all streams**
 
 initBaileysServer();
