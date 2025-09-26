@@ -305,6 +305,39 @@ try {
             echo "WhatsApp tables file not found: $whatsappTablesFile\n";
         }
         
+        // Run Chatwoot tables creation
+        echo "Running Chatwoot tables creation...\n";
+        $chatwootTablesFile = '/var/www/html/database/init/07_create_chatwoot_tables.sql';
+        if (file_exists($chatwootTablesFile)) {
+            echo "Found Chatwoot tables file: $chatwootTablesFile\n";
+            try {
+                $chatwootTables = file_get_contents($chatwootTablesFile);
+                
+                // Split by semicolon and execute each statement
+                $statements = explode(';', $chatwootTables);
+                $executed = 0;
+                
+                foreach ($statements as $statement) {
+                    $statement = trim($statement);
+                    if (!empty($statement)) {
+                        try {
+                            $db->query($statement);
+                            $executed++;
+                        } catch (Exception $e) {
+                            echo "Warning: Error executing Chatwoot table statement: " . $e->getMessage() . "\n";
+                            echo "Statement: " . substr($statement, 0, 100) . "...\n";
+                        }
+                    }
+                }
+                
+                echo "Chatwoot tables creation completed! Executed $executed statements\n";
+            } catch (Exception $e) {
+                echo "Chatwoot tables creation failed: " . $e->getMessage() . "\n";
+            }
+        } else {
+            echo "Chatwoot tables file not found: $chatwootTablesFile\n";
+        }
+        
         // Test login credentials
         echo "Testing login credentials...\n";
         try {

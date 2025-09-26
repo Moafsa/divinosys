@@ -8,10 +8,11 @@ use Exception;
 
 class BaileysManager {
     private $db;
-    private $instances = [];
+    private $chatwootManager;
 
     public function __construct() {
         $this->db = Database::getInstance();
+        $this->chatwootManager = new ChatwootManager();
     }
 
     /**
@@ -104,7 +105,7 @@ class BaileysManager {
     }
 
     /**
-     * Conectar instância (gerar QR)
+     * Conectar instância via Chatwoot
      */
     public function generateQRCode($instanceId) {
         error_log('BaileysManager::generateQRCode - Iniciando para ID: ' . $instanceId);
@@ -112,7 +113,7 @@ class BaileysManager {
         try {
             // Obtém instância
             $instance = $this->db->fetch(
-                "SELECT instance_name, phone_number, status FROM whatsapp_instances WHERE id = ?",
+                "SELECT instance_name, phone_number, status, filial_id FROM whatsapp_instances WHERE id = ?",
                 [$instanceId]
             );
             
@@ -121,177 +122,144 @@ class BaileysManager {
             }
 
             $phoneNumber = $instance['phone_number'];
-            $instanceName = $instance['instance_name'];  // CRITICO: usar nome da instância
-            error_log("📱 Generate QR chama issued for $phoneNumber) inst. $instanceName (ID: $instanceId)");
+            $instanceName = $instance['instance_name'];
+            $filialId = $instance['filial_id'];
             
-            // 🎯 PRINCIPAL FOCUS -. Use REMOTE BAILYrs HTTP delegíreal!!
-            try {  
-                return $this->generateBaileysProtocolQR($instanceName, $phoneNumber);  // usar instance_name em vez de ID
-            } catch (Exception $e) {
-                error_log('Real Baileys HTTP failed: ' . $e->getMessage());
-                return $this->generateBasicQR($phoneNumber);  
+            error_log("📱 Generate QR via Chatwoot for $phoneNumber) inst. $instanceName (ID: $instanceId)");
+            
+            // Criar usuário no Chatwoot se não existir
+            $chatwootUser = $this->chatwootManager->createChatwootUser(
+                $filialId,
+                $instanceName,
+                "whatsapp_{$instanceName}@divinolanches.com",
+                $phoneNumber
+            );
+            
+            if (!$chatwootUser) {
+                throw new Exception('Falha ao criar usuário no Chatwoot');
             }
+            
+            // Criar inbox do WhatsApp
+            $inbox = $this->chatwootManager->createWhatsAppInbox($filialId, $instanceName);
+            
+            if (!$inbox) {
+                throw new Exception('Falha ao criar inbox no Chatwoot');
+            }
+            
+            // Atualizar status da instância
+            $this->db->query(
+                "UPDATE whatsapp_instances SET status = 'connected', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                [$instanceId]
+            );
+            
+            // Retornar URL do Chatwoot para o estabelecimento
+            $chatwootUrl = $_ENV['CHATWOOT_URL'] ?? 'https://your-chatwoot-instance.com';
+            return [
+                'success' => true,
+                'chatwoot_url' => $chatwootUrl,
+                'user_id' => $chatwootUser['id'],
+                'inbox_id' => $inbox['id'],
+                'message' => 'WhatsApp conectado via Chatwoot'
+            ];
             
         } catch (Exception $e) {
             error_log('BaileysManager::generateQRCode - ERRO: ' . $e->getMessage());
-            return $this->generateBasicQR($phoneNumber);
-        }
-    }
-
-    /**
-     * Generate REAL Baileys QR using HTTP API  
-     */
-    private function generateBaileysProtocolQR($instanceId, $phoneNumber) {
-        error_log("🚀 BaileysManager::generateBaileysProtocolQR - Connecting to REAL Baileys server for $instanceId");
-        
-        try {
-            // Determine Baileys URL based on environment
-            $baileysUrl = $this->getBaileysServiceUrl();
-            error_log("🔗 Using Baileys URL: $baileysUrl");
-            
-            // Debug environment detection
-            error_log("🔍 Docker Environment Check: " . ($this->isDockerEnvironment() ? 'YES' : 'NO'));
-            error_log("🔍 ENV BAILEYS_SERVICE_URL: " . ($_ENV['BAILEYS_SERVICE_URL'] ?? 'NOT SET'));
-            
-            $curl = curl_init();
-            curl_setopt_array($curl, [
-                CURLOPT_URL => $baileysUrl . '/connect',
-                CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => json_encode([
-                    'instanceId' => (string)$instanceId,
-                    'phoneNumber' => $phoneNumber
-                ]),
-                CURLOPT_HTTPHEADER => [
-                    'Content-Type: application/json',
-                    'Accept: application/json'
-                ],
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT => 90, // Increased timeout for compatibility mode
-                CURLOPT_CONNECTTIMEOUT => 20, // Increased connection timeout for compatibility mode
-                CURLOPT_SSL_VERIFYPEER => false,
-                CURLOPT_SSL_VERIFYHOST => false,
-                CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_MAXREDIRS => 3,
-                CURLOPT_VERBOSE => false
-            ]);
-            
-            $response = curl_exec($curl);
-            $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-            $curlError = curl_error($curl);
-            curl_close($curl);
-            
-            error_log("🔥 Baileys API response [$httpCode]: " . $response);
-            
-            if ($curlError) {
-                throw new Exception("CURL Error: " . $curlError);
-            }
-            
-            if ($httpCode === 200 && $response) {
-                $data = json_decode($response, true);
-                if (isset($data['success']) && $data['success'] && isset($data['qr_code'])) {
-                    error_log('✅ Successfully received QR from Baileys real server!');
-                    
-                    $this->db->query(
-                        "UPDATE whatsapp_instances SET status = 'qrcode', qr_code = ?, session_data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                        [$data['qr_code'], json_encode($data), $instanceId]
-                    );
-                    return $data['qr_code'];
-                }
-            }
-            
-            throw new Exception("Baileys API returned [$httpCode]: " . $response);
-            
-        } catch (Exception $e) {
-            error_log('❌ REAL Baileys HTTP failed: ' . $e->getMessage());
-            error_log('📱 Falling back to basic QR generation');
-            return $this->generateBasicQR($phoneNumber);
-        }
-    }
-    
-    /**
-     * Get Baileys service URL
-     */
-    private function getBaileysServiceUrl() {
-        // Check environment variable first
-        if (isset($_ENV['BAILEYS_SERVICE_URL'])) {
-            error_log("Using BAILEYS_SERVICE_URL from ENV: " . $_ENV['BAILEYS_SERVICE_URL']);
-            return $_ENV['BAILEYS_SERVICE_URL'];
-        }
-        
-        // Check if running in Docker environment
-        if ($this->isDockerEnvironment()) {
-            return 'http://baileys:3000'; // Internal port still 3000
-        }
-        
-        // Development/fallback - updated to 3010 external port
-        $configUrl = 'http://localhost:3010';
-        return $configUrl;
-    }
-    
-    /**
-     * Check if running in Docker environment  
-     */
-    private function isDockerEnvironment() {
-        return (file_exists('/.dockerenv') || 
-                isset($_ENV['DOCKEREnvironment']) || 
-                isset($_SERVER['DOCKER_CONTAINER']) ||
-                ($_ENV['APP_ENV'] ?? '') === 'production' ||
-                ($_ENV['APP_ENV'] ?? '') === 'docker' ||
-                isset($_ENV['BAILEYS_SERVICE_URL']) ||
-                strpos($_ENV['BAILEYS_SERVICE_URL'] ?? '', 'baileys:') !== false);
-    }
-
-    /**
-     * Generate basic QR fallback 
-     */
-    private function generateBasicQR($phoneNumber) {
-        error_log("🔴 QR fallback desabilitado - QRs inválidos detectados");
-        
-        // NUNCA mais gerar QRs que redirecionam para conversa
-        // Se chegou aqui, é porque há um problema no server Baileys
-        
-        // Gerar apenas imagem de erro explicativa
-        $img = imagecreate(300, 300);
-        $bg = imagecolorallocate($img, 255, 255, 255);
-        $red = imagecolorallocate($img, 255, 0, 0);
-        $black = imagecolorallocate($img, 0, 0, 0);
-        
-        imagefill($img, 0, 0, $bg);
-        
-        // Desenhar texto explicativo
-        imagestring($img, 2, 10, 50, 'ERRO: Baileys server', $red);
-        imagestring($img, 2, 10, 80, 'nao conectou', $black);
-        imagestring($img, 2, 10, 110, 'Check server logs', $black);
-        
-        ob_start();
-        imagepng($img);
-        $png = ob_get_clean();
-        imagedestroy($img);
-        
-        return base64_encode($png);
-    }
-
-    /**
-     * Enviar mensagem direto Baileys
-     */
-    public function sendDirectMessage($phoneNumber, $message) {
-        try {
-            // Log sent message without full infrastructure
-            $this->db->query(
-                "INSERT INTO whatsapp_messages (from_number, to_number, message_text, status, source) VALUES (?, ?, ?, 'sent', 'system')",
-                ['system', $phoneNumber, $message]
-            );
-
-            return [
-                'success' => true,
-                'message_id' => 'test_' . time(),
-                'status' => 'sent'
-            ];
-        } catch (Exception $e) {
             throw $e;
         }
     }
+
+    /**
+     * Enviar mensagem via Chatwoot
+     */
+    public function sendMessage($instanceId, $to, $message, $messageType = 'text') {
+        try {
+            // Obter dados da instância
+            $instance = $this->db->fetch(
+                "SELECT filial_id FROM whatsapp_instances WHERE id = ?",
+                [$instanceId]
+            );
+            
+            if (!$instance) {
+                throw new Exception('Instância não encontrada');
+            }
+            
+            $filialId = $instance['filial_id'];
+            
+            // Obter conversa ativa para este estabelecimento
+            $conversations = $this->chatwootManager->getConversations($filialId);
+            
+            if (empty($conversations)) {
+                throw new Exception('Nenhuma conversa ativa encontrada');
+            }
+            
+            $conversationId = $conversations[0]['id'];
+            
+            // Enviar mensagem via Chatwoot
+            $result = $this->chatwootManager->sendMessage($conversationId, $message, 'outgoing');
+            
+            if ($result) {
+                // Log da mensagem no banco
+                $this->db->query(
+                    "INSERT INTO whatsapp_messages (instance_id, tenant_id, filial_id, from_number, to_number, message_text, message_type, status, source) VALUES (?, ?, ?, ?, ?, ?, ?, 'sent', 'chatwoot')",
+                    [$instanceId, $this->getTenantId(), $filialId, 'system', $to, $message, $messageType]
+                );
+                
+                return [
+                    'success' => true,
+                    'message_id' => $result['id'] ?? 'chatwoot_' . time(),
+                    'status' => 'sent'
+                ];
+            }
+            
+            throw new Exception('Falha ao enviar mensagem via Chatwoot');
+            
+        } catch (Exception $e) {
+            error_log('❌ Chatwoot send message failed: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
     
+    /**
+     * Obter status da instância via Chatwoot
+     */
+    public function checkInstanceStatus($instanceId) {
+        try {
+            $instance = $this->db->fetch(
+                "SELECT filial_id FROM whatsapp_instances WHERE id = ?",
+                [$instanceId]
+            );
+            
+            if (!$instance) {
+                return [
+                    'success' => false,
+                    'error' => 'Instância não encontrada',
+                    'status' => 'unavailable'
+                ];
+            }
+            
+            $filialId = $instance['filial_id'];
+            $conversations = $this->chatwootManager->getConversations($filialId);
+            
+            return [
+                'success' => true,
+                'status' => 'connected',
+                'conversations_count' => count($conversations),
+                'chatwoot_integration' => true
+            ];
+            
+        } catch (Exception $e) {
+            error_log('❌ Chatwoot status check failed: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'status' => 'unavailable'
+            ];
+        }
+    }
+
     /**
      * Enviar para n8n webhook
      */
@@ -315,115 +283,6 @@ class BaileysManager {
         }
         
         return json_decode($response, true);
-    }
-    
-    /**
-     * Obter instância do banco
-     */
-    private function getInstance($instanceId) {
-        return $this->db->fetch(
-            "SELECT * FROM whatsapp_instances WHERE id = ?",
-            [$instanceId]
-        );
-    }
-
-    /**
-     * Verificar status de conexão da instância no Baileys
-     */
-    public function checkInstanceStatus($instanceId) {
-        try {
-            $baileysUrl = $this->getBaileysServiceUrl();
-            
-            $curl = curl_init();
-            curl_setopt_array($curl, [
-                CURLOPT_URL => $baileysUrl . '/status',
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT => 10,
-                CURLOPT_CONNECTTIMEOUT => 5
-            ]);
-            
-            $response = curl_exec($curl);
-            $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-            $curlError = curl_error($curl);
-            curl_close($curl);
-            
-            if ($curlError) {
-                throw new Exception("CURL Error: " . $curlError);
-            }
-            
-            if ($httpCode === 200 && $response) {
-                $data = json_decode($response, true);
-                return $data;
-            }
-            
-            throw new Exception("Baileys status check failed with code [$httpCode]: " . $response);
-            
-        } catch (Exception $e) {
-            error_log('❌ Baileys status check failed: ' . $e->getMessage());
-            return [
-                'success' => false,
-                'error' => $e->getMessage(),
-                'status' => 'unavailable'
-            ];
-        }
-    }
-    
-    /**
-     * Send message via Baileys directly
-     */
-    public function sendBaileysMessage($instanceId, $to, $message, $messageType = 'text') {
-        try {
-            $baileysUrl = $this->getBaileysServiceUrl();
-            
-            $curl = curl_init();
-            curl_setopt_array($curl, [
-                CURLOPT_URL => $baileysUrl . '/send-message',
-                CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => json_encode([
-                    'instanceId' => (string)$instanceId,
-                    'to' => $to,
-                    'message' => $message,
-                    'messageType' => $messageType
-                ]),
-                CURLOPT_HTTPHEADER => [
-                    'Content-Type: application/json',
-                    'Accept: application/json'
-                ],
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT => 30
-            ]);
-            
-            $response = curl_exec($curl);
-            $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-            $curlError = curl_error($curl);
-            curl_close($curl);
-            
-            if ($curlError) {
-                throw new Exception("CURL Error: " . $curlError);
-            }
-            
-            if ($httpCode === 200 && $response) {
-                $data = json_decode($response, true);
-                if (isset($data['success']) && $data['success']) {
-                    // Log message in database
-                    $this->db->query(
-                        "INSERT INTO whatsapp_messages (instance_id, tenant_id, filial_id, message_id, from_number, to_number, message_text, message_type, status, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'sent', 'system')",
-                        [$instanceId, $this->getTenantId(), $this->getFilialId(), $data['message_id'] ?? '', 'system', $to, $message, $messageType]
-                    );
-                    
-                    return $data;
-                }
-            }
-            
-            throw new Exception("Baileys send message failed with code [$httpCode]: " . $response);
-            
-        } catch (Exception $e) {
-            error_log('❌ Baileys send message failed: ' . $e->getMessage());
-            return [
-                'success' => false,
-                'error' => $e->getMessage()
-            ];
-        }
     }
     
     private function getTenantId() {
