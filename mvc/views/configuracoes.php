@@ -497,6 +497,7 @@ if ($tenant && $filial) {
         
         // Carregar dados ao carregar a página
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('Carregando página configurações - versão 2.0');
             carregarUsuarios();
             carregarInstancias();
         });
@@ -912,6 +913,7 @@ if ($tenant && $filial) {
         // ===== EVOLUTION API FUNCTIONS =====
 
         function carregarInstancias() {
+            console.log('Carregando instâncias...');
             fetch('index.php', {
                 method: 'POST',
                 headers: {
@@ -920,23 +922,28 @@ if ($tenant && $filial) {
                 },
                 body: 'action=listar_instancias'
             })
-                .then(response => response.json())
+                .then(response => {
+                    console.log('Response status:', response.status);
+                    return response.json();
+                })
                 .then(data => {
+                    console.log('Response data:', data);
                     if (data.success) {
                         exibirInstancias(data.instancias);
                     } else {
-                        console.error('Erro ao carregar instâncias:', data.message);
+                        console.error('Erro ao carregar instâncias:', data.error || data.message);
                     }
                 })
                 .catch(error => {
-                    console.error('Erro:', error);
+                    console.error('Erro na requisição:', error);
                 });
         }
 
         function exibirInstancias(instancias) {
+            console.log('Exibindo instâncias:', instancias);
             const container = document.getElementById('instanciasList');
             
-            if (instancias.length === 0) {
+            if (!instancias || !Array.isArray(instancias) || instancias.length === 0) {
                 container.innerHTML = '<p class="text-muted">Nenhuma instância configurada</p>';
                 return;
             }

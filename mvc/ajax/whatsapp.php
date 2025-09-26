@@ -17,6 +17,10 @@ try {
     $db = Database::getInstance();
     $session = Session::getInstance();
     
+    // Debug temporário
+    error_log('WhatsApp Debug - Session: ' . json_encode($_SESSION));
+    error_log('WhatsApp Debug - IsLoggedIn: ' . ($session->isLoggedIn() ? 'true' : 'false'));
+    
     // Verificar autenticação
     if (!$session->isLoggedIn()) {
         throw new Exception('Usuário não autenticado');
