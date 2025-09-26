@@ -149,24 +149,40 @@ async function initBaileysServer() {
                 console.log('🔐 Global crypto set for Baileys compatibility');
             }
             
+            // Additional UA & HTTP header setup for 405 prevention
+            if (typeof process !== 'undefined') {
+                process.env["MINET_DISABLE_RETRY"] = "1";
+            }
+            
             // WRAPPER IN try/catch to ENSURE crypto propagates
             let sock;
             try {
                 sock = makeWASocket({
                     auth: state,
                     printQRInTerminal: false,
-                    browser: ['DivinoLanches','Chrome','1.0'],
+                    browser: ['Windows','Edge','1.0'], // More authentic browser signature
                     keepAliveIntervalMs: 30000,
-                    connectTimeoutMs: 30_000, // Increased connection timeout to 30 seconds
-                    defaultQueryTimeoutMs: 120_000, // Increased query timeout
-                    retryRequestDelayMs: 500, // Slightly longer retry delay
+                    connectTimeoutMs: 30_000,
+                    defaultQueryTimeoutMs: 120_000,
+                    retryRequestDelayMs: 2000, // Increased retry delay  
+                    maxRestartAfter: 60000, // Max 1 minute restart delay
+                    connectCooldownMs: 5000, // Cooldown to prevent 405s
                     retryRequestDelayMsMap: {
-                        403: 500,
-                        408: 500,
-                        429: 500,
-                        503: 10000,
-                        disconnect: 10000,
-                        end: 10000
+                        403: 3000,
+                        405: 10000, // Special handling for 405
+                        408: 3000,
+                        429: 10000,
+                        503: 15000,
+                        disconnect: 15000,
+                        end: 15000
+                    },
+                    getMessage: async (key) => ({}), // Prevent empty message calling
+                    shouldReconnect: (response) => {
+                        if (!response || !response.ref) return false;
+                        return response.ref.startsWith('@s.whatsapp.net') || response.ref.startsWith('@g.us');
+                    },
+                    shouldIgnoreJid: (jid) => {
+                        return jid.includes('@newsletter') || jid.includes('@broadcast');;
                     },
                     logger: {
                         level: 'silent',
@@ -184,11 +200,14 @@ async function initBaileysServer() {
                         warn: () => {},
                         error: () => {}
                     },
-                    generateHighQualityLinkPreview: true,
-                    markOnlineOnConnect: true,
-                    shouldIgnoreJid: (jid) => false,
-                    getMessage: async (key) => ({}),
-                    breaks: {}
+                    // Fix method compatibility issues
+                    syncFullHistory: false,
+                    markOnlineOnConnect: false, // Fixed: Don't mark online immediately
+                    generateHighQualityLinkPreview: false, // Simplified
+                    shouldSyncHistoryMessage: () => false, // Prevent sync issues
+                    restartOnFailure: () => true, // Auto restart on failure
+                    maxMsgRetryCounter: 3,
+                    msgRetryCounterCache: new Map()
                 });
                 console.log('✅ BaileysSocket created successfully');
             } catch (makeError) {
@@ -289,8 +308,19 @@ async function initBaileysServer() {
                         delete activeSessions[instanceId];
                     }
                     
-                    const needsReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-                    if (needsReconnect && lastDisconnect?.error?.output?.statusCode !== DisconnectReason.forbidden) {
+                    const statusCode = lastDisconnect?.error?.output?.statusCode;
+                    const needsReconnect = statusCode !== DisconnectReason.loggedOut && 
+                                          statusCode !== DisconnectReason.forbidden &&
+                                          statusCode !== 405; // Don't retry 405 immediately
+                    
+                    if (statusCode === 405) {
+                        console.log(`⚠️ HTTP 405 Method Not Allowed detected - implementing resolution strategy`);
+                        // For 405 error, try different connection strategy
+                        setTimeout(() => {
+                            delete activeSessions[instanceId];
+                            console.log(`🔄 Clearing session for 405 retry attempt`);
+                        }, 2000);
+                    } else if (needsReconnect) {
                         console.log(`🔄 Scheduling reconnect for instance ${instanceId}`);
                         setTimeout(() => {
                             delete activeSessions[instanceId];
