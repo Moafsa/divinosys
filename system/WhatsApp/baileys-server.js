@@ -203,7 +203,19 @@ async function initBaileysServer() {
                     shouldSyncHistoryMessage: () => false,
                     logger: {
                         level: 'silent',
-                        child: () => ({ level: 'silent' }),
+                        child: () => ({ 
+                            level: 'silent',
+                            trace: () => {},
+                            debug: () => {},
+                            info: () => {},
+                            warn: () => {},
+                            error: () => {} // Fix: Add error function for Baileys 6.7.5
+                        }),
+                        trace: () => {},
+                        debug: () => {},
+                        info: () => {},
+                        warn: () => {},
+                        error: () => {} // Fix: Add error function for Baileys 6.7.5
                     },
                 });
                 console.log('✅ BaileysSocket created successfully');
@@ -471,6 +483,18 @@ async function initBaileysServer() {
         console.log('🔐 Deployed crypto successfully available type:', typeof cryptoAgain, !!cryptoAgain.publicDecrypt);
     });
 }
+
+// Global error handlers to prevent crashes
+process.on('uncaughtException', (error) => {
+    console.error('🚨 Uncaught Exception:', error.message);
+    console.error('Stack:', error.stack);
+    // Don't exit - keep server running
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('🚨 Unhandled Rejection at:', promise, 'reason:', reason);
+    // Don't exit - keep server running
+});
 
 // Initialize app startup procedure
 console.log('🎂 NEW START: Crypto module detection');
