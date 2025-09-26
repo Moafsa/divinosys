@@ -1,12 +1,14 @@
-# Dockerfile para serviço Baileys (Node.js)
+# Dockerfile para serviço Baileys (Node.js)  
 FROM node:18-alpine
 
-# Instalar dependências do sistema incluindo Git
+# Instalar dependências do sistema para produção
 RUN apk add --no-cache \
     python3 \
     make \
     g++ \
     git \
+    openssl \
+    openssl-dev \
     cairo-dev \
     jpeg-dev \
     pango-dev \
@@ -15,7 +17,8 @@ RUN apk add --no-cache \
     pixman-dev \
     pangomm-dev \
     libjpeg-turbo-dev \
-    freetype-dev
+    freetype-dev \
+    libc-dev
 
 WORKDIR /app
 
@@ -32,5 +35,5 @@ RUN mkdir -p sessions
 # Expor porta
 EXPOSE 3000
 
-# Comando para manter o container vivo e executar scripts quando necessário
-CMD ["node", "-e", "console.log('Baileys service ready'); setInterval(() => {}, 1000);"]
+# Execute REAL Baileys HTTP server  
+CMD ["node", "system/WhatsApp/baileys-server.js"]

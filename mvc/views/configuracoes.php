@@ -923,7 +923,13 @@ if ($tenant && $filial) {
                 .then(data => {
                     console.log('Response data:', data);
                     if (data.success) {
-                        exibirInstancias(data.instancias || []);
+                        console.log('Data.instances:', data.instances);
+                        console.log('Data.instancias:', data.instancias);
+                        // O servidor retorna 'instances', não 'instancias'
+                        const instancesToShow = data.instances || [];
+                        console.log('Instâncias para exibir:', instancesToShow);
+                        console.log('Quantidade:', instancesToShow.length);
+                        exibirInstancias(instancesToShow);
                     } else {
                         console.error('Erro ao carregar instâncias:', data.error || data.message);
                     }
@@ -944,25 +950,26 @@ if ($tenant && $filial) {
 
             let html = '';
             instancias.forEach(instancia => {
-                const statusClass = instancia.status === 'open' ? 'success' : 'danger';
-                const statusText = instancia.status === 'open' ? 'Conectado' : 'Desconectado';
+                console.log('Processando instância:', instancia);
+                const statusClass = instancia.status === 'connected' ? 'success' : 'danger';
+                const statusText = instancia.status === 'connected' ? 'Conectado' : 'Desconectado';
                 
                 html += `
                     <div class="card mb-2">
                         <div class="card-body">
                             <div class="row align-items-center">
                                 <div class="col-md-4">
-                                    <h6 class="mb-1">${instancia.nome_instancia}</h6>
-                                    <small class="text-muted">${instancia.numero_telefone}</small>
+                                    <h6 class="mb-1">${instancia.instance_name}</h6>
+                                    <small class="text-muted">${instancia.phone_number}</small>
                                 </div>
                                 <div class="col-md-3">
                                     <span class="badge bg-${statusClass}">${statusText}</span>
                                 </div>
                                 <div class="col-md-5 text-end">
-                                    <button class="btn btn-sm btn-outline-primary me-1" onclick="obterQRCode('${instancia.nome_instancia}')">
+                                    <button class="btn btn-sm btn-outline-primary me-1" onclick="obterQRCode('${instancia.instance_name}', ${instancia.id})">
                                         <i class="fas fa-qrcode"></i> QR Code
                                     </button>
-                                    <button class="btn btn-sm btn-outline-danger" onclick="deletarInstancia('${instancia.nome_instancia}')">
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deletarInstancia('${instancia.instance_name}', ${instancia.id})">
                                         <i class="fas fa-trash"></i> Deletar
                                     </button>
                                 </div>
@@ -1039,23 +1046,29 @@ if ($tenant && $filial) {
             });
         }
 
-        function obterQRCode(nomeInstancia) {
+        function obterQRCode(nomeInstancia, instanceId) {
             fetch('index.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                     'X-Requested-With': 'XMLHttpRequest',
                 },
-                body: `action=conectar_instancia&instance_name=${encodeURIComponent(nomeInstancia)}`
+                body: `action=conectar_instancia&instance_id=${instanceId}`
             })
-                .then(response => response.json())
-                .then(data => {
+            .then(response => response.json())
+            .then(data => {
                     if (data.success && data.qr_code) {
+                        // Verificar se qr_code já inclui o prefixo data:
+                        let qrImageSrc = data.qr_code;
+                        if (!qrImageSrc.startsWith('data:')) {
+                            qrImageSrc = `data:image/png;base64,${qrImageSrc}`;
+                        }
+                        
                         Swal.fire({
                             title: 'QR Code para Conectar',
                             html: `
                                 <div class="text-center">
-                                    <img src="data:image/png;base64,${data.qr_code}" class="img-fluid" style="max-width: 300px;">
+                                    <img src="${qrImageSrc}" class="img-fluid" style="max-width: 300px;">
                                     <p class="mt-3">Escaneie este QR Code com seu WhatsApp</p>
                                 </div>
                             `,
@@ -1072,7 +1085,7 @@ if ($tenant && $filial) {
                 });
         }
 
-        function deletarInstancia(nomeInstancia) {
+        function deletarInstancia(nomeInstancia, instanceId) {
             Swal.fire({
                 title: 'Confirmar Exclusão',
                 text: `Tem certeza que deseja deletar a instância "${nomeInstancia}"?`,
@@ -1088,7 +1101,7 @@ if ($tenant && $filial) {
                             'Content-Type': 'application/x-www-form-urlencoded',
                             'X-Requested-With': 'XMLHttpRequest',
                         },
-                        body: `action=deletar_instancia&instance_name=${encodeURIComponent(nomeInstancia)}`
+                        body: `action=deletar_instancia&instance_id=${instanceId}`
                     })
                     .then(response => response.json())
                     .then(data => {

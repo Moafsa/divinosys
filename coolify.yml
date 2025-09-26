@@ -22,9 +22,12 @@ services:
       - UPLOAD_MAX_SIZE=10M
       - ALLOWED_EXTENSIONS=jpg,jpeg,png,gif,pdf,doc,docx
       - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL}
+      - WHATSAPP_ENABLED=true
+      - BAILEYS_SERVICE_URL=http://baileys:3000
     depends_on:
       - postgres
       - redis
+      - baileys
     volumes:
       - ./uploads:/var/www/html/uploads
       - ./logs:/var/www/html/logs
@@ -57,6 +60,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.baileys
+    ports:
+      - "3010:3000"
     environment:
       - NODE_ENV=production
       - BAILEYS_SERVICE_URL=http://baileys:3000
