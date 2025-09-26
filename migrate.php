@@ -272,6 +272,39 @@ try {
             echo "Usuarios_globais file not found: $usuariosGlobaisFile\n";
         }
         
+        // Run WhatsApp tables creation
+        echo "Running WhatsApp tables creation...\n";
+        $whatsappTablesFile = '/var/www/html/database/init/06_create_whatsapp_tables.sql';
+        if (file_exists($whatsappTablesFile)) {
+            echo "Found WhatsApp tables file: $whatsappTablesFile\n";
+            try {
+                $whatsappTables = file_get_contents($whatsappTablesFile);
+                
+                // Split by semicolon and execute each statement
+                $statements = explode(';', $whatsappTables);
+                $executed = 0;
+                
+                foreach ($statements as $statement) {
+                    $statement = trim($statement);
+                    if (!empty($statement)) {
+                        try {
+                            $db->query($statement);
+                            $executed++;
+                        } catch (Exception $e) {
+                            echo "Warning: Error executing WhatsApp table statement: " . $e->getMessage() . "\n";
+                            echo "Statement: " . substr($statement, 0, 100) . "...\n";
+                        }
+                    }
+                }
+                
+                echo "WhatsApp tables creation completed! Executed $executed statements\n";
+            } catch (Exception $e) {
+                echo "WhatsApp tables creation failed: " . $e->getMessage() . "\n";
+            }
+        } else {
+            echo "WhatsApp tables file not found: $whatsappTablesFile\n";
+        }
+        
         // Test login credentials
         echo "Testing login credentials...\n";
         try {
