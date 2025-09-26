@@ -162,9 +162,11 @@ class BaileysManager {
                     'Accept: application/json'
                 ],
                 CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT => 30,
-                CURLOPT_CONNECTTIMEOUT => 10,
-                CURLOPT_SSL_VERIFYPEER => false
+                CURLOPT_TIMEOUT => 60, // Increased timeout for Baileys connection
+                CURLOPT_CONNECTTIMEOUT => 15, // Increased connection timeout
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS => 3
             ]);
             
             $response = curl_exec($curl);
@@ -204,13 +206,19 @@ class BaileysManager {
      * Get Baileys service URL
      */
     private function getBaileysServiceUrl() {
-        // Check if running in Docker
+        // Check environment variable first
+        if (isset($_ENV['BAILEYS_SERVICE_URL'])) {
+            error_log("Using BAILEYS_SERVICE_URL from ENV: " . $_ENV['BAILEYS_SERVICE_URL']);
+            return $_ENV['BAILEYS_SERVICE_URL'];
+        }
+        
+        // Check if running in Docker environment
         if ($this->isDockerEnvironment()) {
             return 'http://baileys:3000'; // Internal port still 3000
         }
         
         // Development/fallback - updated to 3010 external port
-        $configUrl = $_ENV['BAILEYS_SERVICE_URL'] ?? 'http://localhost:3010';
+        $configUrl = 'http://localhost:3010';
         return $configUrl;
     }
     
@@ -219,11 +227,12 @@ class BaileysManager {
      */
     private function isDockerEnvironment() {
         return (file_exists('/.dockerenv') || 
-                isset($_ENV['DOCKER_CONTAINER']) || 
+                isset($_ENV['DOCKEREnvironment']) || 
                 isset($_SERVER['DOCKER_CONTAINER']) ||
                 ($_ENV['APP_ENV'] ?? '') === 'production' ||
                 ($_ENV['APP_ENV'] ?? '') === 'docker' ||
-                isset($_ENV['BAILEYS_SERVICE_URL']));
+                isset($_ENV['BAILEYS_SERVICE_URL']) ||
+                strpos($_ENV['BAILEYS_SERVICE_URL'] ?? '', 'baileys:') !== false);
     }
 
     /**

@@ -19,16 +19,40 @@ const app = express();
 app.use(express.json());
 const PORT = 3000;
 
-// Redis connection for session management
-const redis = new Redis({
+// Redis connection pool for session management
+const RedisConnPoolOptions = {
     host: process.env.REDIS_HOST || 'redis',
     port: process.env.REDIS_PORT || 6379,
     retryDelayOnFailover: 100,
-    maxRetriesPerRequest: 3
-});
+    maxRetriesPerRequest: 3,
+    connectTimeout: 10000,
+    commandTimeout: 10000,
+    lazyConnect: true,
+    family: 4, // Force IPv4
+    keepAlive: 30000
+};
+
+// Create Redis connection pool
+const redis = new Redis(RedisConnPoolOptions);
+const backupRedis = new Redis(RedisConnPoolOptions); // Backup connection for redundancy
 
 // Store active sessions by instanceId
 let activeSessions = {};
+
+// Redis connection status monitoring
+redis.on('connect', () => {
+    console.log('🔗 Primary Redis connected');
+});
+redis.on('error', (err) => {
+    console.warn('⚠️ Primary Redis error:', err.message);
+});
+
+backupRedis.on('connect', () => {
+    console.log('🔗 Backup Redis connected');
+});
+backupRedis.on('error', (err) => {
+    console.warn('⚠️ Backup Redis error:', err.message);
+});
 
 // Initialize Baileys server real
 async function initBaileysServer() {
@@ -66,21 +90,42 @@ async function initBaileysServer() {
       let sessionData;
       
       try {
+        // Try primary Redis connection first
         sessionData = await redis.hgetall(redisKey);
         if (Object.keys(sessionData).length > 0) {
           console.log(`🔄 Redis session found for ${instanceId}`);
         }
       } catch (redisError) {
-        console.warn(`⚠️ Redis unavailable, using file sessions`);
+        console.warn(`⚠️ Primary Redis unavailable, trying backup connection`);
+        try {
+          sessionData = await backupRedis.hgetall(redisKey);
+          if (Object.keys(sessionData).length > 0) {
+            console.log(`🔄 Backup Redis session found for ${instanceId}`);
+          }
+        } catch (backupError) {
+          console.warn(`⚠️ Both Redis connections unavailable, using file sessions`);
+        }
       }
       
       // Use file-based sessions with Redis backup  
       const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
             
-            // Store session in Redis for persistence
-            if (state?.creds && sessionData) {
-                await redis.hset(redisKey, 'creds', JSON.stringify(state.creds));
-                await redis.hset(redisKey, 'lastSeen', new Date().toISOString());
+            // Store session in Redis for persistence with pool failover
+            if (state?.creds) {
+                try {
+                    await redis.hset(redisKey, 'creds', JSON.stringify(state.creds));
+                    await redis.hset(redisKey, 'lastSeen', new Date().toISOString());
+                    console.log(`💾 Session stored in primary Redis for ${instanceId}`);
+                } catch (primaryError) {
+                    console.warn(`⚠️ Primary Redis write failed, trying backup`);
+                    try {
+                        await backupRedis.hset(redisKey, 'creds', JSON.stringify(state.creds));
+                        await backupRedis.hset(redisKey, 'lastSeen', new Date().toISOString());
+                        console.log(`💾 Session stored in backup Redis for ${instanceId}`);
+                    } catch (backupError) {
+                        console.warn(`⚠️ Both Redis writes failed - using file storage only`);
+                    }
+                }
             }
             
             // CRITICAL: Set crypto global explicitly before makeWASocket call
@@ -97,9 +142,17 @@ async function initBaileysServer() {
                     printQRInTerminal: false,
                     browser: ['DivinoLanches','Chrome','1.0'],
                     keepAliveIntervalMs: 30000,
-                    connectTimeoutMs: 10_000,
-                    defaultQueryTimeoutMs: 60_000,
-                    retryRequestDelayMs: 250,
+                    connectTimeoutMs: 30_000, // Increased connection timeout to 30 seconds
+                    defaultQueryTimeoutMs: 120_000, // Increased query timeout
+                    retryRequestDelayMs: 500, // Slightly longer retry delay
+                    retryRequestDelayMsMap: {
+                        403: 500,
+                        408: 500,
+                        429: 500,
+                        503: 10000,
+                        disconnect: 10000,
+                        end: 10000
+                    },
                     logger: {
                         level: 'silent',
                         child: () => ({ 
@@ -118,7 +171,9 @@ async function initBaileysServer() {
                     },
                     generateHighQualityLinkPreview: true,
                     markOnlineOnConnect: true,
-                    shouldIgnoreJid: (jid) => false
+                    shouldIgnoreJid: (jid) => false,
+                    getMessage: async (key) => ({}),
+                    breaks: {}
                 });
                 console.log('✅ BaileysSocket created successfully');
             } catch (makeError) {
@@ -207,6 +262,9 @@ async function initBaileysServer() {
                 
                 if (connection === 'close') {
                     console.log(`❌ Connection closed for instance ${instanceId}`);
+                    console.log('🔍 Disconnect reason code:', lastDisconnect?.error?.output?.statusCode);
+                    console.log('🔍 Error details:', lastDisconnect?.error?.message || 'Unknown error');
+                    
                     connectionStatus = 'disconnected';
                     
                     // Clean up session reference
@@ -215,7 +273,7 @@ async function initBaileysServer() {
                     }
                     
                     const needsReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-                    if (needsReconnect) {
+                    if (needsReconnect && lastDisconnect?.error?.output?.statusCode !== DisconnectReason.forbidden) {
                         console.log(`🔄 Scheduling reconnect for instance ${instanceId}`);
                         setTimeout(() => {
                             delete activeSessions[instanceId];
@@ -224,11 +282,16 @@ async function initBaileysServer() {
                     
                     if (!responseSent) {
                         responseSent = true;
+                        const reasonDetail = lastDisconnect?.error?.message || 'Connection lost';
+                        const statusCode = lastDisconnect?.error?.output?.statusCode;
+                        console.log(`📱 Sending disconnect response with reason: ${reasonDetail} (${statusCode})`);
+                        
                         res.json({
                             success: false,
                             status: 'disconnected',
                             instance_id: instanceId,
-                            reason: lastDisconnect?.error?.message || 'Connection lost'
+                            reason: reasonDetail,
+                            disconnect_code: statusCode || 'unknown'
                         });
                     }
                     return;
