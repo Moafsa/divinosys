@@ -83,34 +83,48 @@ async function initBaileysServer() {
                 await redis.hset(redisKey, 'lastSeen', new Date().toISOString());
             }
             
-            const sock = makeWASocket({
-                auth: state,
-                printQRInTerminal: false,
-                browser: ['DivinoLanches','Chrome','1.0'],
-                keepAliveIntervalMs: 30000,
-                connectTimeoutMs: 10_000,
-                defaultQueryTimeoutMs: 60_000,
-                retryRequestDelayMs: 250,
-                logger: {
-                    level: 'silent',
-                    child: () => ({ 
+            // CRITICAL: Set crypto global explicitly before makeWASocket call
+            if (typeof global !== 'undefined' && !global.crypto) {
+                global.crypto = crypto;
+                console.log('🔐 Global crypto set for Baileys compatibility');
+            }
+            
+            // WRAPPER IN try/catch to ENSURE crypto propagates
+            let sock;
+            try {
+                sock = makeWASocket({
+                    auth: state,
+                    printQRInTerminal: false,
+                    browser: ['DivinoLanches','Chrome','1.0'],
+                    keepAliveIntervalMs: 30000,
+                    connectTimeoutMs: 10_000,
+                    defaultQueryTimeoutMs: 60_000,
+                    retryRequestDelayMs: 250,
+                    logger: {
                         level: 'silent',
+                        child: () => ({ 
+                            level: 'silent',
+                            trace: () => {},
+                            debug: () => {},
+                            info: () => {},
+                            warn: () => {},
+                            error: () => {}
+                        }),
                         trace: () => {},
                         debug: () => {},
                         info: () => {},
                         warn: () => {},
                         error: () => {}
-                    }),
-                    trace: () => {},
-                    debug: () => {},
-                    info: () => {},
-                    warn: () => {},
-                    error: () => {}
-                },
-                generateHighQualityLinkPreview: true,
-                markOnlineOnConnect: true,
-                shouldIgnoreJid: (jid) => false
-            });
+                    },
+                    generateHighQualityLinkPreview: true,
+                    markOnlineOnConnect: true,
+                    shouldIgnoreJid: (jid) => false
+                });
+                console.log('✅ BaileysSocket created successfully');
+            } catch (makeError) {
+                console.error('❌ BaileysSocket creation failed:', makeError.message);
+                throw new Error(`Crypto/internal socket error: ${makeError.message}`);
+            }
             
             let qrData = null;
             let connectionStatus = 'disconnected';
@@ -246,7 +260,7 @@ async function initBaileysServer() {
                     success: false,
                     status: 'error',
                     instance_id: instanceId,
-                    reason: error.message === 'crypto is not defined' ? 'Crypto module not loaded - internal server error' : error.message,
+                    reason: error.message === 'crypto is not defined' ? 'Crypto dependency not found - retry again' : error.message,
                     detail: error.code || 'unknown'
                 });
             }
@@ -343,5 +357,14 @@ console.log('Crypto loaded (exists):', typeof crypto, !!crypto);
 // CRITICAL: Double check crypto available just above initialization 
 // BEFORE calling initBaileysServer methods
 // **This ensures that crypto is correctly loaded in all streams**
+
+// ADDITIONAL GLOBAL EXPORT FOR BAILES DEPENDENCIES
+if (typeof crypto === 'undefined') {
+    const cryptoFallback = require('crypto');
+    global.crypto = cryptoFallback;
+    console.log('🔐 Set crypto fallback for Baileys dependencies');
+}
+
+console.log('🔐 Final pre-init check:', typeof crypto, crypto.randomBytes && 'working'); 
 
 initBaileysServer();
