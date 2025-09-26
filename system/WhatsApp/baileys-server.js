@@ -348,7 +348,7 @@ async function initBaileysServer() {
             // Preserve credentials 
             sock.ev.on('creds.update', saveCreds);
             
-            // Timeout handling (3 minutes like Evolution API)
+            // Timeout handling (30 seconds to prevent gateway timeout)
             setTimeout(() => {
                 if (connectionStatus === 'disconnected' && !responseSent) {
                     console.log(`⏱️ Connection timeout for instance ${instanceId}`);
@@ -360,7 +360,7 @@ async function initBaileysServer() {
                         message: 'Connection timeout. Please try again.'
                     });
                 }
-            }, 180000);
+            }, 30000);
             
         } catch (error) {
             console.error('❌ Failed session:', error.message);

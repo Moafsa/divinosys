@@ -166,11 +166,13 @@ class BaileysManager {
                     'Accept: application/json'
                 ],
                 CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT => 60, // Increased timeout for Baileys connection
-                CURLOPT_CONNECTTIMEOUT => 15, // Increased connection timeout
+                CURLOPT_TIMEOUT => 30, // Reduced timeout to prevent gateway timeout
+                CURLOPT_CONNECTTIMEOUT => 10, // Reduced connection timeout
                 CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => false,
                 CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_MAXREDIRS => 3
+                CURLOPT_MAXREDIRS => 3,
+                CURLOPT_VERBOSE => false
             ]);
             
             $response = curl_exec($curl);
