@@ -166,8 +166,8 @@ class BaileysManager {
                     'Accept: application/json'
                 ],
                 CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT => 30, // Reduced timeout to prevent gateway timeout
-                CURLOPT_CONNECTTIMEOUT => 10, // Reduced connection timeout
+                CURLOPT_TIMEOUT => 90, // Increased timeout for compatibility mode
+                CURLOPT_CONNECTTIMEOUT => 20, // Increased connection timeout for compatibility mode
                 CURLOPT_SSL_VERIFYPEER => false,
                 CURLOPT_SSL_VERIFYHOST => false,
                 CURLOPT_FOLLOWLOCATION => true,

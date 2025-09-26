@@ -24,10 +24,10 @@ WORKDIR /app
 
 # Copiar package.json e instalar dependências
 COPY package*.json ./
-# Clear npm cache and install latest Baileys
+# Clear npm cache and install latest Baileys with bypass cache
 RUN npm cache clean --force && \
-    npm install && \
-    npm install @whiskeysockets/baileys@^6.7.8 ioredis@^5.3.0 --save
+    npm install --no-cache && \
+    npm install @whiskeysockets/baileys@^6.7.9 ioredis@^5.3.0 --save --no-cache
 
 # Copiar scripts do Baileys
 COPY system/WhatsApp/ ./system/WhatsApp/

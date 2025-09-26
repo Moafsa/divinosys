@@ -158,30 +158,27 @@ async function initBaileysServer() {
             let sock;
             try {
                 // Force WebSocket handling for protocol compatibility  
-                // Create Baileys socket with latest best practices
+                // Create Baileys socket with compatibility mode to avoid 405 errors
                 sock = makeWASocket({
                     auth: state,
                     printQRInTerminal: false,
-                    browser: ['Chrome', '119.0.0.0', 'Windows'], // Modern Chrome signature
-                    // Connection settings optimized for stability
-                    keepAliveIntervalMs: 30000,
-                    connectTimeoutMs: 60_000, // Increased for better stability
-                    defaultQueryTimeoutMs: 60_000,
-                    retryRequestDelayMs: 2000,
-                    maxRestartAfter: 60000,
-                    connectCooldownMs: 5000,
-                    // Simplified retry delays - let Baileys handle optimally
-                    retryRequestDelayMsMap: {
-                        403: 3000,
-                        408: 2000,
-                        429: 5000,
-                        503: 10000
-                    },
-                    // Basic settings for better compatibility
+                    browser: ['Ubuntu', 'Chrome', '20.0.04'], // Different browser signature to avoid 405
+                    // Ultra-conservative connection settings
+                    keepAliveIntervalMs: 60000, // Longer intervals
+                    connectTimeoutMs: 120_000, // Very long timeout for problematic connections
+                    defaultQueryTimeoutMs: 120_000,
+                    retryRequestDelayMs: 5000, // Longer delays
+                    maxRestartAfter: 120000,
+                    connectCooldownMs: 15000, // Longer cooldown
+                    // Remove retry map to use defaults
+                    // Basic compatibility settings
                     syncFullHistory: false,
                     markOnlineOnConnect: false,
                     generateHighQualityLinkPreview: false,
                     shouldSyncHistoryMessage: () => false,
+                    // Disable features that might cause 405
+                    emitOwnEvents: false,
+                    fireInitQueries: false,
                     // Use minimal logger to avoid conflicts
                     logger: {
                         level: 'silent',
@@ -348,7 +345,7 @@ async function initBaileysServer() {
             // Preserve credentials 
             sock.ev.on('creds.update', saveCreds);
             
-            // Timeout handling (30 seconds to prevent gateway timeout)
+            // Timeout handling (60 seconds for compatibility mode)
             setTimeout(() => {
                 if (connectionStatus === 'disconnected' && !responseSent) {
                     console.log(`⏱️ Connection timeout for instance ${instanceId}`);
@@ -360,7 +357,7 @@ async function initBaileysServer() {
                         message: 'Connection timeout. Please try again.'
                     });
                 }
-            }, 30000);
+            }, 60000); // Longer timeout for compatibility mode
             
         } catch (error) {
             console.error('❌ Failed session:', error.message);
