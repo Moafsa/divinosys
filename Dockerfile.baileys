@@ -24,7 +24,8 @@ WORKDIR /app
 
 # Copiar package.json e instalar dependências
 COPY package*.json ./
-RUN npm install
+RUN npm install && \
+    npm install ioredis@^5.3.0 --save
 
 # Copiar scripts do Baileys
 COPY system/WhatsApp/ ./system/WhatsApp/

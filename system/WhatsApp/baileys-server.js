@@ -9,11 +9,20 @@ const qrcode = require('qrcode');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const Redis = require('ioredis');
 const { Buffer } = require('buffer');
 
 const app = express();
 app.use(express.json());
 const PORT = 3000;
+
+// Redis connection for session management
+const redis = new Redis({
+    host: process.env.REDIS_HOST || 'redis',
+    port: process.env.REDIS_PORT || 6379,
+    retryDelayOnFailover: 100,
+    maxRetriesPerRequest: 3
+});
 
 // Store active sessions by instanceId
 let activeSessions = {};
@@ -38,8 +47,27 @@ async function initBaileysServer() {
                 fs.mkdirSync(sessionPath, { recursive: true });
             }
             
-            // Create Baileys instance with proper state management
+            // Enhanced session management like fazer.ai (Redis + File fallback)  
+            const redisKey = `@baileys:${instanceId}`;
+            let sessionData;
+            
+            try {
+                sessionData = await redis.hgetall(redisKey);
+                if (Object.keys(sessionData).length > 0) {
+                    console.log(`🔄 Redis session found for ${instanceId}`);
+                }
+            } catch (redisError) {
+                console.warn(`⚠️ Redis unavailable, using file sessions`);
+            }
+            
+            // Use file-based sessions with Redis backup  
             const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+            
+            // Store session in Redis for persistence
+            if (state?.creds && sessionData) {
+                await redis.hset(redisKey, 'creds', JSON.stringify(state.creds));
+                await redis.hset(redisKey, 'lastSeen', new Date().toISOString());
+            }
             
             const sock = makeWASocket({
                 auth: state,
@@ -77,9 +105,10 @@ async function initBaileysServer() {
                     console.log('🔗 QR Token length:', qr.length);
                     
                     try {
-                        // Generate QR code PNG image for WhatsApp authentication
-                        const qrImagePng = await qrcode.toBuffer(qr, {
-                            type: 'png',
+                        // Generate QR code DataURL using qrcode library like fazer.ai implementation
+                        const qrDataUrl = await qrcode.toDataURL(qr, {
+                            errorCorrectionLevel: 'M',
+                            type: 'image/png',
                             width: 300,
                             margin: 2,
                             color: {
@@ -88,7 +117,8 @@ async function initBaileysServer() {
                             }
                         });
                         
-                        const qrCodeBase64 = qrImagePng.toString('base64');
+                        // Extract base64 string without data:image/png;base64, prefix
+                        const qrCodeBase64 = qrDataUrl.split(',')[1];
                         qrData = qrCodeBase64;
                         responseSent = true;
                         
@@ -98,8 +128,9 @@ async function initBaileysServer() {
                             status: 'qrcode',
                             instance_id: instanceId,
                             phone: phoneNumber,
-                            message: 'Scan this QR with WhatsApp',
-                            qr_raw: qr
+                            message: 'Scan this QR with WhatsApp', 
+                            qr_raw: qr,
+                            qrDataUrl: qrDataUrl
                         };
                         
                         res.json(response);
