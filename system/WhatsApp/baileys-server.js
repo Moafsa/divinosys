@@ -3,6 +3,9 @@
  * Detalhes: Criar o verdadeiro Baileys server que outros sistemas usam
  */
 
+// CRITICAL: crypto module must be required FIRST
+const crypto = require('crypto');
+
 const { default: makeWASocket, DisconnectReason, useMultiFileAuthState } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const qrcode = require('qrcode');
@@ -30,38 +33,44 @@ let activeSessions = {};
 // Initialize Baileys server real
 async function initBaileysServer() {
     
-    app.post('/connect', async (req, res) => {
-        const { instanceId, phoneNumber } = req.body;
-        
-        console.log(`\n=== CONNECT REQUEST ==`);
-        console.log(`Instance ID: ${instanceId}`);
-        console.log(`Phone: ${phoneNumber}`);
-        
-        try {
-            // Ensure sessions directory exists
-            const sessionPath = `./sessions/${instanceId}`;
-            if (!fs.existsSync('./sessions')) {
-                fs.mkdirSync('./sessions', { recursive: true });
-            }
-            if (!fs.existsSync(sessionPath)) {
-                fs.mkdirSync(sessionPath, { recursive: true });
-            }
-            
-            // Enhanced session management like fazer.ai (Redis + File fallback)  
-            const redisKey = `@baileys:${instanceId}`;
-            let sessionData;
-            
-            try {
-                sessionData = await redis.hgetall(redisKey);
-                if (Object.keys(sessionData).length > 0) {
-                    console.log(`🔄 Redis session found for ${instanceId}`);
-                }
-            } catch (redisError) {
-                console.warn(`⚠️ Redis unavailable, using file sessions`);
-            }
-            
-            // Use file-based sessions with Redis backup  
-            const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+  app.post('/connect', async (req, res) => {
+    const { instanceId, phoneNumber } = req.body;
+    
+    console.log(`\n=== CONNECT REQUEST ==`);
+    console.log(`Instance ID: ${instanceId}`);
+    console.log(`Phone: ${phoneNumber}`);
+    
+    try {
+      // CRITICAL: Ensure crypto module exists before anything else
+      if (typeof crypto === 'undefined') {
+        throw new Error('Crypto module not available - check Node runtime');
+      }
+      console.log(`🔐 Crypto module available: ${!!crypto}`);
+
+      // Ensure sessions directory exists
+      const sessionPath = `./sessions/${instanceId}`;
+      if (!fs.existsSync('./sessions')) {
+        fs.mkdirSync('./sessions', { recursive: true });
+      }
+      if (!fs.existsSync(sessionPath)) {
+        fs.mkdirSync(sessionPath, { recursive: true });
+      }
+      
+      // Enhanced session management like fazer.ai (Redis + File fallback)  
+      const redisKey = `@baileys:${instanceId}`;
+      let sessionData;
+      
+      try {
+        sessionData = await redis.hgetall(redisKey);
+        if (Object.keys(sessionData).length > 0) {
+          console.log(`🔄 Redis session found for ${instanceId}`);
+        }
+      } catch (redisError) {
+        console.warn(`⚠️ Redis unavailable, using file sessions`);
+      }
+      
+      // Use file-based sessions with Redis backup  
+      const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
             
             // Store session in Redis for persistence
             if (state?.creds && sessionData) {
@@ -72,6 +81,7 @@ async function initBaileysServer() {
             const sock = makeWASocket({
                 auth: state,
                 printQRInTerminal: false,
+                browser: ['DivinoLanches','Chrome','1.0'],
                 logger: {
                     level: 'silent',
                     child: () => ({ 
@@ -87,7 +97,9 @@ async function initBaileysServer() {
                     info: () => {},
                     warn: () => {},
                     error: () => {}
-                }
+                },
+                generateHighQualityLinkPreview: true,
+                markOnlineOnConnect: true
             });
             
             let qrData = null;
@@ -218,11 +230,16 @@ async function initBaileysServer() {
             
         } catch (error) {
             console.error('❌ Failed session:', error.message);
-            res.status(500).json({
-                success: false,
-                error: error.message,
-                instance_id: instanceId
-            });
+            if (!responseSent) {
+                responseSent = true;
+                res.status(500).json({
+                    success: false,
+                    status: 'error',
+                    instance_id: instanceId,
+                    reason: error.message === 'crypto is not defined' ? 'Crypto module not loaded - internal server error' : error.message,
+                    detail: error.code || 'unknown'
+                });
+            }
         }
     });
     
