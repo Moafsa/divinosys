@@ -320,7 +320,7 @@ if ($tenant && $filial) {
                     </div>
                 </div>
 
-                <!-- Configurações Evolution API -->
+                <!-- Configurações WhatsApp -->
                 <div class="config-card">
                     <h5 class="mb-3">
                         <i class="fab fa-whatsapp me-2"></i>
@@ -332,15 +332,9 @@ if ($tenant && $filial) {
                     </button>
                     
                     <!-- Lista de Instâncias -->
-                    <div id="instanciasList" class="mb-3">
+                    <div id="instanciasList" class="mt-3">
                         <!-- Instâncias serão carregadas aqui via AJAX -->
                     </div>
-                    
-                    <!-- Botão Nova Instância -->
-                    <button class="btn btn-success" onclick="abrirModalNovaInstancia()">
-                        <i class="fas fa-plus me-2"></i>
-                        Nova Instância
-                    </button>
                 </div>
 
                 <!-- Configurações de Sistema -->
