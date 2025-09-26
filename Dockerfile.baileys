@@ -24,7 +24,9 @@ WORKDIR /app
 
 # Copiar package.json e instalar dependências
 COPY package*.json ./
-RUN npm install && \
+# Clear npm cache to avoid corrupted versions causing HTTP 405
+RUN npm cache clean --force && \
+    npm install && \
     npm install ioredis@^5.3.0 --save
 
 # Copiar scripts do Baileys

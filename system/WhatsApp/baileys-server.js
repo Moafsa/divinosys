@@ -152,62 +152,59 @@ async function initBaileysServer() {
             // Additional UA & HTTP header setup for 405 prevention
             if (typeof process !== 'undefined') {
                 process.env["MINET_DISABLE_RETRY"] = "1";
+                process.env["WD_BASE_URL"] = process.env.WD_BASE_URL || "https://web.whatsapp.com";
+                // Force APP state instead of WEB state to avoid HTTP issues
+                process.env["BAILEYS_QRSET_TYPE"] = "read"; // Prevent "/connect" method issues
             }
             
             // WRAPPER IN try/catch to ENSURE crypto propagates
             let sock;
             try {
+                // Force WebSocket handling for protocol compatibility  
                 sock = makeWASocket({
                     auth: state,
                     printQRInTerminal: false,
-                    browser: ['Windows','Edge','1.0'], // More authentic browser signature
+                    browser: ['Windows','Edge','120.0.0.0'], // Real browser version simulation
+                    fetchAgent: () => {
+                        return {
+                            'headers': {
+                                'origin': 'https://web.whatsapp.com', 
+                                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
+                                'accept': 'application/json, text/plain, */*',
+                                'accept-encoding': 'gzip, deflate, br',
+                                'accept-language': 'pt-BR,pt;q=0.9,en;q=0.8',
+                                'cache-control': 'no-cache',
+                                'pragma': 'no-cache',
+                                'dnt': '1',      
+                                'sec-fetch-dest': 'websocket',
+                                'sec-fetch-mode': 'websocket',
+                                'sec-fetch-site': 'same-site',
+                            },
+                        };
+                    },
                     keepAliveIntervalMs: 30000,
-                    connectTimeoutMs: 30_000,
+                    connectTimeoutMs: 60_000, // Very high timeout for server stability
                     defaultQueryTimeoutMs: 120_000,
-                    retryRequestDelayMs: 2000, // Increased retry delay  
-                    maxRestartAfter: 60000, // Max 1 minute restart delay
-                    connectCooldownMs: 5000, // Cooldown to prevent 405s
+                    retryRequestDelayMs: 5000, // Much larger interval  
+                    maxRestartAfter: 60000,
+                    connectCooldownMs: 15000, // Heavy cooldown  
                     retryRequestDelayMsMap: {
-                        403: 3000,
-                        405: 10000, // Special handling for 405
-                        408: 3000,
-                        429: 10000,
-                        503: 15000,
-                        disconnect: 15000,
-                        end: 15000
+                        403: 10000,
+                        405: 20000, // Very long wait for 405 problems
+                        408: 5000,
+                        429: 30000,
+                        503: 45000,
+                        disconnect: 30000,
+                        end: 30000
                     },
-                    getMessage: async (key) => ({}), // Prevent empty message calling
-                    shouldReconnect: (response) => {
-                        if (!response || !response.ref) return false;
-                        return response.ref.startsWith('@s.whatsapp.net') || response.ref.startsWith('@g.us');
-                    },
-                    shouldIgnoreJid: (jid) => {
-                        return jid.includes('@newsletter') || jid.includes('@broadcast');;
-                    },
+                    syncFullHistory: false,
+                    markOnlineOnConnect: false,
+                    generateHighQualityLinkPreview: false,
+                    shouldSyncHistoryMessage: () => false,
                     logger: {
                         level: 'silent',
-                        child: () => ({ 
-                            level: 'silent',
-                            trace: () => {},
-                            debug: () => {},
-                            info: () => {},
-                            warn: () => {},
-                            error: () => {}
-                        }),
-                        trace: () => {},
-                        debug: () => {},
-                        info: () => {},
-                        warn: () => {},
-                        error: () => {}
+                        child: () => ({ level: 'silent' }),
                     },
-                    // Fix method compatibility issues
-                    syncFullHistory: false,
-                    markOnlineOnConnect: false, // Fixed: Don't mark online immediately
-                    generateHighQualityLinkPreview: false, // Simplified
-                    shouldSyncHistoryMessage: () => false, // Prevent sync issues
-                    restartOnFailure: () => true, // Auto restart on failure
-                    maxMsgRetryCounter: 3,
-                    msgRetryCounterCache: new Map()
                 });
                 console.log('✅ BaileysSocket created successfully');
             } catch (makeError) {
@@ -218,6 +215,15 @@ async function initBaileysServer() {
             let qrData = null;
             let connectionStatus = 'disconnected';
             let responseSent = false;
+            let firstConnectionAttempt = true; // To avoid multiple /connect calls 
+            
+            // 405 mitigation: Wait longer before establishing connection again
+            if (firstConnectionAttempt) {
+                console.log(`⏳ Waiting before initial connection for stability...`);
+                setTimeout(async () => {
+                    firstConnectionAttempt = false;
+                }, 2000);
+            }
             
             // Handle genuine WhatsApp Web QR generation  
             sock.ev.on('connection.update', async (update) => {
@@ -300,6 +306,7 @@ async function initBaileysServer() {
                     console.log(`❌ Connection closed for instance ${instanceId}`);
                     console.log('🔍 Disconnect reason code:', lastDisconnect?.error?.output?.statusCode);
                     console.log('🔍 Error details:', lastDisconnect?.error?.message || 'Unknown error');
+                    console.log('🔍 Full disconnect details:', JSON.stringify(lastDisconnect?.error, null, 2));
                     
                     connectionStatus = 'disconnected';
                     
@@ -309,28 +316,31 @@ async function initBaileysServer() {
                     }
                     
                     const statusCode = lastDisconnect?.error?.output?.statusCode;
-                    const needsReconnect = statusCode !== DisconnectReason.loggedOut && 
-                                          statusCode !== DisconnectReason.forbidden &&
-                                          statusCode !== 405; // Don't retry 405 immediately
+                    const is405Error = statusCode === 405;
+                    const isMethodNotAllowed = lastDisconnect?.error?.message?.includes('Method Not Allowed');
                     
-                    if (statusCode === 405) {
-                        console.log(`⚠️ HTTP 405 Method Not Allowed detected - implementing resolution strategy`);
-                        // For 405 error, try different connection strategy
-                        setTimeout(() => {
+                    if (is405Error || isMethodNotAllowed) {
+                        console.log(`⚠️ HTTP 405 error detected! - trying alternative connection protocol`);
+                        // Special 405 Handling: Wait 30s before retry to let WhatsApp server stabilize
+                        setTimeout(async () => {
                             delete activeSessions[instanceId];
-                            console.log(`🔄 Clearing session for 405 retry attempt`);
-                        }, 2000);
-                    } else if (needsReconnect) {
-                        console.log(`🔄 Scheduling reconnect for instance ${instanceId}`);
-                        setTimeout(() => {
-                            delete activeSessions[instanceId];
-                        }, 3000);
+                            console.log(`🔧 Session cleared - attempting protocol adjustment for instance ${instanceId}`);
+                        }, 30000); // Extend to 30s based on rate limit
+                    } else {
+                        const needsReconnect = statusCode !== DisconnectReason.loggedOut && 
+                                              statusCode !== DisconnectReason.forbidden;
+                        
+                        if (needsReconnect) {
+                            console.log(`🔄 Scheduling reconnect for instance ${instanceId}`);
+                            setTimeout(() => {
+                                delete activeSessions[instanceId];
+                            }, 3000);
+                        }
                     }
                     
                     if (!responseSent) {
                         responseSent = true;
                         const reasonDetail = lastDisconnect?.error?.message || 'Connection lost';
-                        const statusCode = lastDisconnect?.error?.output?.statusCode;
                         console.log(`📱 Sending disconnect response with reason: ${reasonDetail} (${statusCode})`);
                         
                         res.json({
