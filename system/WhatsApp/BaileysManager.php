@@ -149,6 +149,10 @@ class BaileysManager {
             $baileysUrl = $this->getBaileysServiceUrl();
             error_log("🔗 Using Baileys URL: $baileysUrl");
             
+            // Debug environment detection
+            error_log("🔍 Docker Environment Check: " . ($this->isDockerEnvironment() ? 'YES' : 'NO'));
+            error_log("🔍 ENV BAILEYS_SERVICE_URL: " . ($_ENV['BAILEYS_SERVICE_URL'] ?? 'NOT SET'));
+            
             $curl = curl_init();
             curl_setopt_array($curl, [
                 CURLOPT_URL => $baileysUrl . '/connect',

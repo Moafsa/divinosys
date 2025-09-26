@@ -17,6 +17,17 @@ const { Buffer } = require('buffer');
 
 const app = express();
 app.use(express.json());
+
+// Global request middleware for debugging
+app.use((req, res, next) => {
+    console.log(`\n🌐 NEW REQUEST: ${req.method} ${req.path}`);
+    console.log('📡 Headers:', req.headers);
+    if (req.body) {
+        console.log('📄 Body:', JSON.stringify(req.body, null, 2));
+    }
+    next();
+});
+
 const PORT = 3000;
 
 // Redis connection pool for session management
@@ -63,6 +74,10 @@ async function initBaileysServer() {
     console.log(`\n=== CONNECT REQUEST ==`);
     console.log(`Instance ID: ${instanceId}`);
     console.log(`Phone: ${phoneNumber}`);
+    console.log('📡 Incoming request body:', JSON.stringify(req.body, null, 2));
+    
+    // Set response headers right away
+    res.setHeader('Content-Type', 'application/json');
     
     try {
       // CRITICAL: Ensure crypto module exists before anything else
@@ -190,6 +205,7 @@ async function initBaileysServer() {
                 const { connection, lastDisconnect, qr } = update;
                 
                 console.log(`🔍 Connection update: ${connection}, QR: ${!!qr}`);
+                console.log('🔍 Full update:', JSON.stringify(update, null, 2));
                 
                 if (qr && !responseSent) {
                     console.log(`✅ QR Code generated for instance ${instanceId}`);
@@ -224,6 +240,7 @@ async function initBaileysServer() {
                             qrDataUrl: qrDataUrl
                         };
                         
+                        console.log('📤 Sending successful QR response');
                         res.json(response);
                         return;
                     } catch (qrError) {
@@ -317,6 +334,7 @@ async function initBaileysServer() {
             
         } catch (error) {
             console.error('❌ Failed session:', error.message);
+            console.error('🔍 Full error stack:', error.stack);
             if (!responseSent) {
                 responseSent = true;
                 res.status(500).json({
@@ -324,7 +342,8 @@ async function initBaileysServer() {
                     status: 'error',
                     instance_id: instanceId,
                     reason: error.message === 'crypto is not defined' ? 'Crypto dependency not found - retry again' : error.message,
-                    detail: error.code || 'unknown'
+                    detail: error.code || 'unknown',
+                    stack: error.stack
                 });
             }
         }
