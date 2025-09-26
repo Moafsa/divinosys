@@ -923,7 +923,7 @@ if ($tenant && $filial) {
                 .then(data => {
                     console.log('Response data:', data);
                     if (data.success) {
-                        exibirInstancias(data.instancias);
+                        exibirInstancias(data.instancias || []);
                     } else {
                         console.error('Erro ao carregar instâncias:', data.error || data.message);
                     }
@@ -977,7 +977,7 @@ if ($tenant && $filial) {
 
         function abrirModalNovaInstancia() {
             Swal.fire({
-                title: 'Nova Instância Evolution',
+                title: 'Nova Instância WhatsApp',
                 html: `
                     <div class="mb-3">
                         <label class="form-label">Nome da Instância</label>
@@ -987,6 +987,11 @@ if ($tenant && $filial) {
                         <label class="form-label">Número do WhatsApp</label>
                         <input type="text" class="form-control" id="numeroWhatsApp" placeholder="5511999999999">
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label">Webhook n8n (Opcional)</label>
+                        <input type="text" class="form-control" id="webhookN8n" placeholder="https://whook.conext.click/webhook/divinosyslgpd">
+                        <small class="form-text text-muted">Configure apenas se quiser usar assistente IA</small>
+                    </div>
                 `,
                 showCancelButton: true,
                 confirmButtonText: 'Criar Instância',
@@ -994,29 +999,30 @@ if ($tenant && $filial) {
                 preConfirm: () => {
                     const nome = document.getElementById('nomeInstancia').value;
                     const numero = document.getElementById('numeroWhatsApp').value;
+                    const webhook = document.getElementById('webhookN8n').value;
                     
                     if (!nome || !numero) {
-                        Swal.showValidationMessage('Todos os campos são obrigatórios');
+                        Swal.showValidationMessage('Nome e número são obrigatórios');
                         return false;
                     }
                     
-                    return { nome, numero };
+                    return { nome, numero, webhook };
                 }
             }).then((result) => {
                 if (result.isConfirmed) {
-                    criarInstancia(result.value.nome, result.value.numero);
+                    criarInstancia(result.value.nome, result.value.numero, result.value.webhook);
                 }
             });
         }
 
-        function criarInstancia(nome, numero) {
+        function criarInstancia(nome, numero, webhook = '') {
             fetch('index.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                     'X-Requested-With': 'XMLHttpRequest',
                 },
-                body: `action=criar_instancia&instance_name=${encodeURIComponent(nome)}&phone_number=${encodeURIComponent(numero)}`
+                body: `action=criar_instancia&instance_name=${encodeURIComponent(nome)}&phone_number=${encodeURIComponent(numero)}&webhook_url=${encodeURIComponent(webhook)}`
             })
             .then(response => response.json())
             .then(data => {
