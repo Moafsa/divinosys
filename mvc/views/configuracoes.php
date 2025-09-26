@@ -327,9 +327,9 @@ if ($tenant && $filial) {
                         WhatsApp - Baileys
                     </h5>
                     <p class="text-muted mb-3">Configure instâncias do WhatsApp para envio de mensagens automáticas</p>
-                    <a href="index.php?view=whatsapp_config" class="btn btn-primary">
-                        <i class="fas fa-cog me-2"></i>Configurar WhatsApp
-                    </a>
+                    <button class="btn btn-primary" onclick="abrirModalNovaInstancia()">
+                        <i class="fas fa-plus me-2"></i>Nova Instância
+                    </button>
                     
                     <!-- Lista de Instâncias -->
                     <div id="instanciasList" class="mb-3">
