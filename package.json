@@ -1,0 +1,21 @@
+{
+  "name": "divino-lanches-whatsapp",
+  "version": "1.0.0",
+  "description": "WhatsApp integration using Baileys for Divino Lanches",
+  "main": "system/WhatsApp/baileys-sender.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.6.0",
+    "@hapi/boom": "^10.0.1",
+    "qrcode": "^1.5.3"
+  },
+  "keywords": [
+    "whatsapp",
+    "baileys",
+    "nodejs"
+  ],
+  "author": "Divino Lanches",
+  "license": "MIT"
+}

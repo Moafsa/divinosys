@@ -76,12 +76,17 @@ try {
         'deletar_usuario' => 'auth.php',
         'buscar_usuario' => 'auth.php',
         'buscar_cliente' => 'auth.php',
-        'criar_instancia' => 'evolution.php',
-        'listar_instancias' => 'evolution.php',
-        'deletar_instancia' => 'evolution.php',
-        'conectar_instancia' => 'evolution.php',
-        'desconectar_instancia' => 'evolution.php',
-        'enviar_mensagem_lgpd' => 'evolution.php'
+        // WhatsApp/Baileys actions
+        'criar_instancia' => 'whatsapp.php',
+        'listar_instancias' => 'whatsapp.php',
+        'deletar_instancia' => 'whatsapp.php',
+        'conectar_instancia' => 'whatsapp.php',
+        'desconectar_instancia' => 'whatsapp.php',
+        'enviar_mensagem' => 'whatsapp.php',
+        'status_instancia' => 'whatsapp.php',
+        'send_message' => 'whatsapp_n8n.php',
+        'get_instance_status' => 'whatsapp_n8n.php',
+        'webhook_received' => 'whatsapp_n8n.php'
     ];
         
         $ajaxFile = $ajaxMap[$action] ?? $action . '.php';

@@ -45,6 +45,7 @@ class Router
             'entregadores' => 'entregadores.php',
             'usuarios' => 'usuarios.php',
             'configuracoes' => 'configuracoes.php',
+            'whatsapp_config' => 'whatsapp_config.php',
             'salvar_configuracoes' => 'salvar_configuracoes.php',
             'dashboard_ajax' => 'dashboard.php',
         ];
@@ -87,7 +88,7 @@ class Router
             'dashboard', 'gerar_pedido', 'pedidos', 'mesas', 'delivery',
             'gerenciar_produtos', 'gerenciar_categorias', 'estoque',
             'financeiro', 'relatorios', 'agenda', 'clientes', 'entregadores',
-            'usuarios', 'configuracoes'
+            'usuarios', 'configuracoes', 'whatsapp_config'
         ];
         return in_array($view, $multiTenantRoutes);
     }
@@ -218,6 +219,7 @@ class Router
             'entregadores' => 'Entregadores',
             'usuarios' => 'Usuários',
             'configuracoes' => 'Configurações',
+            'whatsapp_config' => 'WhatsApp',
         ];
         
         return $names[$view] ?? ucfirst($view);
