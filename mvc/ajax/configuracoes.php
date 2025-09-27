@@ -83,7 +83,7 @@ try {
             // Adicionar informações do Chatwoot
             $caixasEntrada = [];
             foreach ($instancias as $instancia) {
-                $instancia['chatwoot_url'] = $_ENV['CHATWOOT_URL'] ?? 'https://services.conext.click';
+                $instancia['chatwoot_url'] = $_ENV['CHATWOOT_URL'] ?? '';
                 $caixasEntrada[] = $instancia;
             }
             

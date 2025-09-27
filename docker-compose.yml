@@ -16,8 +16,8 @@ services:
       - DB_PASSWORD=divino_password
       - APP_ENV=production
       - APP_URL=http://localhost:8080
-      - CHATWOOT_URL=https://services.conext.click/
-      - CHATWOOT_API_KEY=WyDnNvfhwHEhvGpQ4cGzvaQM
+      - CHATWOOT_URL=${CHATWOOT_URL:-https://services.conext.click/}
+      - CHATWOOT_API_KEY=${CHATWOOT_API_KEY:-fDz34rE7yXpWxLKx4DQ7x8yL}
     depends_on:
       - postgres
       - redis
