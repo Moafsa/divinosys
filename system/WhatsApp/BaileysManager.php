@@ -6,6 +6,8 @@ use System\Database;
 use System\Config;
 use Exception;
 
+require_once __DIR__ . '/ChatwootManager.php';
+
 class BaileysManager {
     private $db;
     private $chatwootManager;
@@ -22,6 +24,11 @@ class BaileysManager {
         error_log("BaileysManager::createInstance - Criando $instanceName / $phoneNumber");
         
         try {
+            // Garantir valores padrão válidos
+            $tenantId = $tenantId ?: 1;
+            $filialId = $filialId ?: 1;
+            
+            error_log("BaileysManager::createInstance - Tenant: $tenantId, Filial: $filialId, Webhook: $webhookUrl");
             // Formatar telefone com + se necessário
             if (!str_starts_with($phoneNumber, '+')) {
                 $phoneNumber = '+' . $phoneNumber;
@@ -73,7 +80,7 @@ class BaileysManager {
                          webhook_url = ?
                          WHERE id = ?",
                         [
-                            $chatwootSetup['account']['id'],
+                            $chatwootSetup['account_id'],
                             $chatwootSetup['user']['id'],
                             $chatwootSetup['inbox']['id'],
                             $chatwootSetup['webhook']['webhook_url'] ?? '',
