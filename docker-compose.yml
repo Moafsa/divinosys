@@ -16,8 +16,11 @@ services:
       - DB_PASSWORD=divino_password
       - APP_ENV=production
       - APP_URL=http://localhost:8080
+      - CHATWOOT_URL=https://services.conext.click/
+      - CHATWOOT_API_KEY=WyDnNvfhwHEhvGpQ4cGzvaQM
     depends_on:
       - postgres
+      - redis
     volumes:
       - ./uploads:/var/www/html/uploads
       - ./logs:/var/www/html/logs
@@ -49,29 +52,9 @@ services:
     networks:
       - divino-network
 
-  baileys:
-    build:
-      context: .
-      dockerfile: Dockerfile.baileys
-    container_name: baileys-whatsapp
-    ports:
-      - "3010:3000"
-    environment:
-      - NODE_ENV=production
-      - DB_HOST=postgres
-    depends_on:
-      - redis
-    volumes:
-      - baileys_sessions:/app/sessions
-      - ./system/WhatsApp:/app/system/WhatsApp
-    networks:
-      - divino-network
-    restart: unless-stopped
-
 volumes:
   postgres_data:
   redis_data:
-  baileys_sessions:
 
 networks:
   divino-network:

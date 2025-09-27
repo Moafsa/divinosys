@@ -5,6 +5,7 @@ header('Content-Type: application/json');
 require_once __DIR__ . '/../../system/Config.php';
 require_once __DIR__ . '/../../system/Database.php';
 require_once __DIR__ . '/../../system/Session.php';
+require_once __DIR__ . '/../../system/WhatsApp/BaileysManager.php';
 
 try {
     $action = $_POST['action'] ?? '';
@@ -68,6 +69,71 @@ try {
             }
             
             echo json_encode(['success' => true, 'message' => 'Configurações de mesas salvas com sucesso!']);
+            break;
+            
+        // ===== CHATWOOT FUNCTIONS =====
+        
+        case 'listar_caixas_entrada':
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId();
+            
+            $baileysManager = new \System\WhatsApp\BaileysManager();
+            $instancias = $baileysManager->getInstances($tenantId);
+            
+            // Adicionar informações do Chatwoot
+            $caixasEntrada = [];
+            foreach ($instancias as $instancia) {
+                $instancia['chatwoot_url'] = $_ENV['CHATWOOT_URL'] ?? 'https://services.conext.click';
+                $caixasEntrada[] = $instancia;
+            }
+            
+            echo json_encode(['success' => true, 'caixas_entrada' => $caixasEntrada]);
+            break;
+            
+        case 'criar_caixa_entrada':
+            $instanceName = $_POST['instance_name'] ?? '';
+            $phoneNumber = $_POST['phone_number'] ?? '';
+            $email = $_POST['email'] ?? '';
+            $webhookUrl = $_POST['webhook_url'] ?? '';
+            
+            if (empty($instanceName) || empty($phoneNumber) || empty($email)) {
+                throw new \Exception('Nome, número e email são obrigatórios');
+            }
+            
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId();
+            $filialId = $session->getFilialId();
+            
+            $baileysManager = new \System\WhatsApp\BaileysManager();
+            $result = $baileysManager->createInstance($instanceName, $phoneNumber, $tenantId, $filialId, $webhookUrl);
+            
+            echo json_encode($result);
+            break;
+            
+        case 'conectar_caixa_entrada':
+            $instanceId = (int) ($_POST['instance_id'] ?? 0);
+            
+            if ($instanceId <= 0) {
+                throw new \Exception('ID da instância inválido');
+            }
+            
+            $baileysManager = new \System\WhatsApp\BaileysManager();
+            $result = $baileysManager->generateQRCode($instanceId);
+            
+            echo json_encode($result);
+            break;
+            
+        case 'deletar_caixa_entrada':
+            $instanceId = (int) ($_POST['instance_id'] ?? 0);
+            
+            if ($instanceId <= 0) {
+                throw new \Exception('ID da instância inválido');
+            }
+            
+            $baileysManager = new \System\WhatsApp\BaileysManager();
+            $result = $baileysManager->deleteInstance($instanceId);
+            
+            echo json_encode($result);
             break;
             
         default:
