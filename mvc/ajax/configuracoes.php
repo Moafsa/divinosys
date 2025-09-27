@@ -94,7 +94,6 @@ try {
             $instanceName = $_POST['instance_name'] ?? '';
             $phoneNumber = $_POST['phone_number'] ?? '';
             $email = $_POST['email'] ?? '';
-            $webhookUrl = $_POST['webhook_url'] ?? '';
             
             if (empty($instanceName) || empty($phoneNumber) || empty($email)) {
                 throw new \Exception('Nome, número e email são obrigatórios');
@@ -104,8 +103,11 @@ try {
             $tenantId = $session->getTenantId();
             $filialId = $session->getFilialId();
             
+            // Usar webhook do n8n do .env
+            $webhookUrl = $_ENV['N8N_WEBHOOK_URL'] ?? '';
+            
             $baileysManager = new \System\WhatsApp\BaileysManager();
-            $result = $baileysManager->createInstance($instanceName, $phoneNumber, $tenantId, $filialId, $webhookUrl);
+            $result = $baileysManager->createInstance($instanceName, $phoneNumber, $tenantId, $filialId, $webhookUrl, $email);
             
             echo json_encode($result);
             break;

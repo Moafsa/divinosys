@@ -18,10 +18,15 @@ class BaileysManager {
     /**
      * Criar nova instância WhatsApp
      */
-    public function createInstance($instanceName, $phoneNumber, $tenantId, $filialId = 1, $webhookUrl = '') {
+    public function createInstance($instanceName, $phoneNumber, $tenantId, $filialId = 1, $webhookUrl = '', $email = '') {
         error_log("BaileysManager::createInstance - Criando $instanceName / $phoneNumber");
         
         try {
+            // Formatar telefone com + se necessário
+            if (!str_starts_with($phoneNumber, '+')) {
+                $phoneNumber = '+' . $phoneNumber;
+            }
+            
             // Verificar se nome já existe
             $existing = $this->db->fetch(
                 "SELECT id FROM whatsapp_instances WHERE instance_name = ? AND ativo = true",
@@ -40,15 +45,55 @@ class BaileysManager {
                 throw new Exception("Número de telefone já registrado");
             }
 
-            // Criar instância
+            // Criar instância no banco primeiro
             $this->db->query(
                 "INSERT INTO whatsapp_instances (tenant_id, filial_id, instance_name, phone_number, status, webhook_url, ativo) VALUES (?, ?, ?, ?, 'disconnected', ?, true)",
                 [$tenantId, $filialId, $instanceName, $phoneNumber, $webhookUrl]
             );
+            
+            $instanceId = $this->db->lastInsertId();
+            
+            // Criar setup completo no Chatwoot se email fornecido
+            if (!empty($email)) {
+                $chatwootSetup = $this->chatwootManager->createCompleteChatwootSetup(
+                    $filialId,
+                    $instanceName,
+                    $email,
+                    $phoneNumber
+                );
+                
+                if ($chatwootSetup && $chatwootSetup['success']) {
+                    // Salvar referências do Chatwoot no banco
+                    $this->db->query(
+                        "UPDATE whatsapp_instances SET 
+                         status = 'connected',
+                         chatwoot_account_id = ?,
+                         chatwoot_user_id = ?,
+                         chatwoot_inbox_id = ?,
+                         webhook_url = ?
+                         WHERE id = ?",
+                        [
+                            $chatwootSetup['account']['id'],
+                            $chatwootSetup['user']['id'],
+                            $chatwootSetup['inbox']['id'],
+                            $chatwootSetup['webhook']['webhook_url'] ?? '',
+                            $instanceId
+                        ]
+                    );
+                    
+                    return [
+                        'success' => true,
+                        'message' => 'Caixa de entrada criada com sucesso no Chatwoot',
+                        'instance_id' => $instanceId,
+                        'chatwoot_setup' => $chatwootSetup
+                    ];
+                }
+            }
 
             return [
                 'success' => true,
-                'message' => 'Instância criada com sucesso'
+                'message' => 'Instância criada com sucesso',
+                'instance_id' => $instanceId
             ];
 
         } catch (Exception $e) {

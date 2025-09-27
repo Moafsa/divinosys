@@ -1000,11 +1000,6 @@ if ($tenant && $filial) {
                         <input type="email" class="form-control" id="emailUsuario" placeholder="whatsapp@divinolanches.com">
                         <small class="form-text text-muted">Email para criar usuário no Chatwoot</small>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Webhook n8n (Opcional)</label>
-                        <input type="text" class="form-control" id="webhookN8n" placeholder="https://whook.conext.click/webhook/divinosyslgpd">
-                        <small class="form-text text-muted">Configure apenas se quiser usar assistente IA</small>
-                    </div>
                 `,
                 showCancelButton: true,
                 confirmButtonText: 'Criar Caixa de Entrada',
@@ -1013,30 +1008,29 @@ if ($tenant && $filial) {
                     const nome = document.getElementById('nomeCaixaEntrada').value;
                     const numero = document.getElementById('numeroWhatsApp').value;
                     const email = document.getElementById('emailUsuario').value;
-                    const webhook = document.getElementById('webhookN8n').value;
                     
                     if (!nome || !numero || !email) {
                         Swal.showValidationMessage('Nome, número e email são obrigatórios');
                         return false;
                     }
                     
-                    return { nome, numero, email, webhook };
+                    return { nome, numero, email };
                 }
             }).then((result) => {
                 if (result.isConfirmed) {
-                    criarCaixaEntrada(result.value.nome, result.value.numero, result.value.email, result.value.webhook);
+                    criarCaixaEntrada(result.value.nome, result.value.numero, result.value.email);
                 }
             });
         }
 
-        function criarCaixaEntrada(nome, numero, email, webhook = '') {
+        function criarCaixaEntrada(nome, numero, email) {
             fetch('index.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                     'X-Requested-With': 'XMLHttpRequest',
                 },
-                body: `action=criar_caixa_entrada&instance_name=${encodeURIComponent(nome)}&phone_number=${encodeURIComponent(numero)}&email=${encodeURIComponent(email)}&webhook_url=${encodeURIComponent(webhook)}`
+                body: `action=criar_caixa_entrada&instance_name=${encodeURIComponent(nome)}&phone_number=${encodeURIComponent(numero)}&email=${encodeURIComponent(email)}`
             })
             .then(response => response.json())
             .then(data => {

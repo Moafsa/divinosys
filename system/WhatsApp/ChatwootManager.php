@@ -12,25 +12,60 @@ class ChatwootManager {
     }
     
     /**
-     * Criar usuário no Chatwoot para um estabelecimento
+     * Criar conta completa no Chatwoot (conta + usuário + inbox + webhook)
      */
-    public function createChatwootUser($estabelecimentoId, $nome, $email, $telefone) {
-        $userData = [
-            'name' => $nome,
-            'email' => $email,
-            'password' => $this->generatePassword(),
-            'role' => 'agent', // ou 'admin' se necessário
-            'custom_attributes' => [
-                'estabelecimento_id' => $estabelecimentoId,
-                'telefone' => $telefone
-            ]
+    public function createCompleteChatwootSetup($estabelecimentoId, $nomeEstabelecimento, $email, $telefone) {
+        try {
+            // 1. Criar conta no Chatwoot
+            $account = $this->createChatwootAccount($nomeEstabelecimento);
+            if (!$account) {
+                throw new Exception('Falha ao criar conta no Chatwoot');
+            }
+            
+            $accountId = $account['id'];
+            
+            // 2. Criar usuário na conta
+            $user = $this->createChatwootUser($accountId, $nomeEstabelecimento, $email, $telefone);
+            if (!$user) {
+                throw new Exception('Falha ao criar usuário no Chatwoot');
+            }
+            
+            // 3. Criar inbox do WhatsApp
+            $inbox = $this->createWhatsAppInbox($accountId, $nomeEstabelecimento, $telefone);
+            if (!$inbox) {
+                throw new Exception('Falha ao criar inbox no Chatwoot');
+            }
+            
+            // 4. Configurar webhook
+            $webhook = $this->configureWebhook($accountId, $inbox['id'], $estabelecimentoId);
+            
+            return [
+                'success' => true,
+                'account' => $account,
+                'user' => $user,
+                'inbox' => $inbox,
+                'webhook' => $webhook
+            ];
+            
+        } catch (Exception $e) {
+            error_log("ChatwootManager::createCompleteChatwootSetup - Error: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Criar conta no Chatwoot
+     */
+    private function createChatwootAccount($nomeEstabelecimento) {
+        $accountData = [
+            'name' => $nomeEstabelecimento,
+            'status' => 'active',
+            'domain' => strtolower(str_replace(' ', '-', $nomeEstabelecimento)) . '-' . uniqid()
         ];
         
-        $response = $this->makeApiCall('POST', '/api/v1/accounts/1/agents', $userData);
+        $response = $this->makeApiCall('POST', '/api/v1/accounts', $accountData);
         
         if ($response && isset($response['id'])) {
-            // Salvar dados do usuário no banco
-            $this->saveChatwootUser($estabelecimentoId, $response['id'], $email);
             return $response;
         }
         
@@ -38,25 +73,47 @@ class ChatwootManager {
     }
     
     /**
-     * Criar inbox do WhatsApp para um estabelecimento
+     * Criar usuário no Chatwoot para uma conta específica
      */
-    public function createWhatsAppInbox($estabelecimentoId, $nomeEstabelecimento) {
+    public function createChatwootUser($accountId, $nome, $email, $telefone) {
+        $userData = [
+            'name' => $nome,
+            'email' => $email,
+            'password' => $this->generatePassword(),
+            'role' => 'agent',
+            'custom_attributes' => [
+                'telefone' => $telefone
+            ]
+        ];
+        
+        $response = $this->makeApiCall('POST', "/api/v1/accounts/{$accountId}/agents", $userData);
+        
+        if ($response && isset($response['id'])) {
+            return $response;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Criar inbox do WhatsApp para uma conta específica
+     */
+    public function createWhatsAppInbox($accountId, $nomeEstabelecimento, $telefone) {
         $inboxData = [
             'name' => "WhatsApp - {$nomeEstabelecimento}",
             'channel' => [
                 'type' => 'whatsapp',
-                'phone_number' => $this->getEstabelecimentoPhone($estabelecimentoId),
-                'provider' => 'whatsapp_cloud', // ou 'baileys' se usar
+                'phone_number' => $telefone,
+                'provider' => 'whatsapp_cloud',
                 'provider_config' => [
-                    'webhook_url' => $this->getWebhookUrl($estabelecimentoId)
+                    'webhook_url' => $this->getWebhookUrl($accountId)
                 ]
             ]
         ];
         
-        $response = $this->makeApiCall('POST', '/api/v1/accounts/1/inboxes', $inboxData);
+        $response = $this->makeApiCall('POST', "/api/v1/accounts/{$accountId}/inboxes", $inboxData);
         
         if ($response && isset($response['id'])) {
-            $this->saveChatwootInbox($estabelecimentoId, $response['id']);
             return $response;
         }
         
@@ -212,11 +269,34 @@ class ChatwootManager {
     }
     
     /**
+     * Configurar webhook para o inbox
+     */
+    private function configureWebhook($accountId, $inboxId, $estabelecimentoId) {
+        $webhookUrl = $this->getWebhookUrl($accountId);
+        
+        $webhookData = [
+            'webhook_url' => $webhookUrl,
+            'subscriptions' => ['message_created', 'message_updated', 'conversation_created', 'conversation_updated']
+        ];
+        
+        $response = $this->makeApiCall('POST', "/api/v1/accounts/{$accountId}/inboxes/{$inboxId}/webhooks", $webhookData);
+        
+        return $response;
+    }
+    
+    /**
      * Gerar URL do webhook
      */
-    private function getWebhookUrl($estabelecimentoId) {
+    private function getWebhookUrl($accountId) {
+        // Usar webhook do n8n do .env para IA, senão usar webhook interno
+        $n8nWebhook = $_ENV['N8N_WEBHOOK_URL'] ?? '';
+        if (!empty($n8nWebhook)) {
+            return $n8nWebhook;
+        }
+        
+        // Fallback para webhook interno
         $baseUrl = $_ENV['APP_URL'] ?? 'https://your-domain.com';
-        return "{$baseUrl}/webhook/chatwoot/{$estabelecimentoId}";
+        return "{$baseUrl}/webhook/chatwoot/{$accountId}";
     }
     
     /**

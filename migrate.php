@@ -338,6 +338,30 @@ try {
             echo "Chatwoot tables file not found: $chatwootTablesFile\n";
         }
         
+        // Run Chatwoot columns addition
+        echo "Running Chatwoot columns addition...\n";
+        $chatwootColumnsFile = '/var/www/html/database/init/08_add_chatwoot_columns.sql';
+        if (file_exists($chatwootColumnsFile)) {
+            echo "Found Chatwoot columns file: $chatwootColumnsFile\n";
+            try {
+                $chatwootColumns = file_get_contents($chatwootColumnsFile);
+                $statements = array_filter(array_map('trim', explode(';', $chatwootColumns)));
+                $executed = 0;
+                foreach ($statements as $statement) {
+                    if (!empty($statement)) {
+                        $db->query($statement);
+                        $executed++;
+                    }
+                }
+                echo "Chatwoot columns addition completed! Executed $executed statements\n";
+            } catch (Exception $e) {
+                echo "Chatwoot columns addition failed: " . $e->getMessage() . "\n";
+                // Don't throw - this might be a re-run
+            }
+        } else {
+            echo "Chatwoot columns file not found: $chatwootColumnsFile\n";
+        }
+        
         // Test login credentials
         echo "Testing login credentials...\n";
         try {
