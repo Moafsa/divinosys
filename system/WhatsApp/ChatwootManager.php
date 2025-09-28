@@ -326,20 +326,39 @@ class ChatwootManager {
     }
     
     /**
-     * Gerar QR code via Chatwoot (interface isolada)
+     * Gerar QR code via Chatwoot (baseado na implementação fazer-ai)
      */
     public function generateQRCodeForInbox($accountId, $inboxId) {
         try {
-            // 1. Primeiro, tentar ativar a conexão Baileys
-            $connectResponse = $this->makeApiCall('POST', "/api/v1/accounts/{$accountId}/inboxes/{$inboxId}/reauthorize");
-            
-            // 2. Buscar configuração do inbox para obter QR code
+            // Buscar configuração do inbox
             $inboxResponse = $this->makeApiCall('GET', "/api/v1/accounts/{$accountId}/inboxes/{$inboxId}");
             
             if ($inboxResponse && isset($inboxResponse['provider_connection'])) {
                 $connection = $inboxResponse['provider_connection'];
                 
-                // 3. Se tem QR code, buscar via webhook interno
+                // Se já está conectado
+                if ($connection['connection']) {
+                    return [
+                        'success' => true,
+                        'qr_code' => null,
+                        'status' => 'connected',
+                        'connection' => true,
+                        'message' => 'WhatsApp já está conectado'
+                    ];
+                }
+                
+                // Se tem erro, mostrar erro
+                if ($connection['error']) {
+                    return [
+                        'success' => false,
+                        'qr_code' => null,
+                        'status' => 'error',
+                        'connection' => false,
+                        'message' => 'Erro na conexão: ' . $connection['error']
+                    ];
+                }
+                
+                // Se não conectado e sem erro, tentar obter QR code
                 if (isset($connection['qr_data_url']) && $connection['qr_data_url']) {
                     // Fazer requisição interna para obter QR code
                     $qrResponse = $this->makeInternalQRRequest($connection['qr_data_url']);
@@ -349,37 +368,35 @@ class ChatwootManager {
                             'success' => true,
                             'qr_code' => $qrResponse['qr_code'],
                             'status' => 'connecting',
-                            'connection' => false
+                            'connection' => false,
+                            'message' => 'QR code gerado com sucesso'
                         ];
                     }
                 }
                 
-                // 4. Se não tem QR code, tentar gerar via endpoint interno
-                $qrGenerateResponse = $this->makeApiCall('POST', "/api/v1/accounts/{$accountId}/inboxes/{$inboxId}/qr");
-                
-                if ($qrGenerateResponse && isset($qrGenerateResponse['qr_code'])) {
-                    return [
-                        'success' => true,
-                        'qr_code' => $qrGenerateResponse['qr_code'],
-                        'status' => 'connecting',
-                        'connection' => false
-                    ];
-                }
-                
-                // 5. Fallback: retornar status
+                // Se chegou aqui, inbox existe mas não tem QR code ainda
+                // No fazer-ai/chatwoot, o QR code é gerado automaticamente
                 return [
                     'success' => true,
                     'qr_code' => null,
-                    'status' => $connection['connection'] ? 'connected' : 'disconnected',
-                    'connection' => $connection['connection'],
-                    'message' => 'QR code será gerado automaticamente quando necessário'
+                    'status' => 'disconnected',
+                    'connection' => false,
+                    'message' => 'Aguarde alguns segundos e tente novamente. O QR code está sendo gerado automaticamente.',
+                    'retry_after' => 5
                 ];
             }
             
-            return false;
+            return [
+                'success' => false,
+                'message' => 'Inbox não encontrado ou configuração inválida'
+            ];
+            
         } catch (Exception $e) {
             error_log("ChatwootManager::generateQRCodeForInbox - Error: " . $e->getMessage());
-            return false;
+            return [
+                'success' => false,
+                'message' => 'Erro ao gerar QR code: ' . $e->getMessage()
+            ];
         }
     }
     

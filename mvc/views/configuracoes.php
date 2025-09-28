@@ -1108,7 +1108,34 @@ if ($tenant && $filial) {
                             }
                         });
                     } else {
-                        Swal.fire('Sucesso', 'Caixa de entrada conectada com sucesso!', 'success');
+                        // Sem QR code e sem URL - mostrar mensagem informativa
+                        const retryAfter = data.retry_after || 5;
+                        Swal.fire({
+                            title: 'Gerando QR Code...',
+                            html: `
+                                <div class="text-center">
+                                    <i class="fas fa-spinner fa-spin text-info mb-3" style="font-size: 4rem;"></i>
+                                    <p class="mb-3">${data.message || 'Aguarde o QR code ser gerado automaticamente'}</p>
+                                    <p class="text-muted">Status: ${data.status || 'desconhecido'}</p>
+                                    <div class="alert alert-info mt-3">
+                                        <i class="fas fa-clock"></i>
+                                        <strong>Dica:</strong> O QR code é gerado automaticamente pelo Chatwoot. 
+                                        Tente novamente em alguns segundos.
+                                    </div>
+                                </div>
+                            `,
+                            showCancelButton: true,
+                            confirmButtonText: 'Tentar Novamente',
+                            cancelButtonText: 'Fechar',
+                            width: 500,
+                            timer: retryAfter * 1000,
+                            timerProgressBar: true
+                        }).then((result) => {
+                            if (result.isConfirmed || result.dismiss === Swal.DismissReason.timer) {
+                                // Tentar novamente
+                                conectarCaixaEntrada(nomeCaixa, instanceId);
+                            }
+                        });
                     }
                 } else {
                     Swal.fire('Erro', data.message || 'Erro ao conectar caixa de entrada', 'error');
