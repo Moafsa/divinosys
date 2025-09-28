@@ -39,7 +39,10 @@ class ChatwootManager {
                 throw new Exception('Falha ao criar inbox WhatsApp no Chatwoot');
             }
             
-            // 3. Salvar dados no banco local
+            // 3. Adicionar agente como colaborador do inbox
+            $this->addAgentToInbox($accountId, $inbox['id'], $user['id']);
+            
+            // 4. Salvar dados no banco local
             $this->saveChatwootUser($estabelecimentoId, $user['id'], $email);
             $this->saveChatwootInbox($estabelecimentoId, $inbox['id'], $telefone);
             
@@ -84,7 +87,9 @@ class ChatwootManager {
             'name' => $nome,
             'email' => $email,
             'password' => $this->generatePassword(),
-            'role' => 'agent'
+            'role' => 'agent',
+            'confirmed' => true,
+            'verified' => true
         ];
         
         $response = $this->makeApiCall('POST', "/api/v1/accounts/{$accountId}/agents", $userData);
@@ -297,6 +302,47 @@ class ChatwootManager {
             return $response !== false;
         } catch (Exception $e) {
             error_log("ChatwootManager::deleteInbox - Error: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Adicionar agente como colaborador do inbox
+     */
+    public function addAgentToInbox($accountId, $inboxId, $agentId) {
+        try {
+            $data = ['user_id' => $agentId];
+            $response = $this->makeApiCall('POST', "/api/v1/accounts/{$accountId}/inboxes/{$inboxId}/members", $data);
+            return $response !== false;
+        } catch (Exception $e) {
+            error_log("ChatwootManager::addAgentToInbox - Error: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Obter QR code do inbox Baileys
+     */
+    public function getInboxQRCode($accountId, $inboxId) {
+        try {
+            // Buscar configuração do inbox para obter QR code
+            $response = $this->makeApiCall('GET', "/api/v1/accounts/{$accountId}/inboxes/{$inboxId}");
+            
+            if ($response && isset($response['provider_config'])) {
+                $providerConfig = $response['provider_config'];
+                
+                // Se for inbox Baileys, buscar QR code
+                if (isset($providerConfig['qr_code'])) {
+                    return [
+                        'qr_code' => $providerConfig['qr_code'],
+                        'status' => $providerConfig['status'] ?? 'disconnected'
+                    ];
+                }
+            }
+            
+            return false;
+        } catch (Exception $e) {
+            error_log("ChatwootManager::getInboxQRCode - Error: " . $e->getMessage());
             return false;
         }
     }

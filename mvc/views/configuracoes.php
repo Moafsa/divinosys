@@ -1059,14 +1059,36 @@ if ($tenant && $filial) {
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    if (data.chatwoot_url) {
+                    if (data.qr_code) {
+                        // QR code disponível - exibir para conectar
                         Swal.fire({
-                            title: 'Caixa de Entrada Conectada!',
+                            title: 'Conectar WhatsApp',
                             html: `
                                 <div class="text-center">
-                                    <i class="fas fa-check-circle text-success mb-3" style="font-size: 4rem;"></i>
-                                    <p class="mb-3">Sua caixa de entrada foi criada no Chatwoot com sucesso!</p>
-                                    <p class="text-muted">Acesse o Chatwoot para configurar o WhatsApp e obter o QR Code</p>
+                                    <p class="mb-3">Escaneie o QR code com seu WhatsApp para conectar:</p>
+                                    <img src="data:image/png;base64,${data.qr_code}" alt="QR Code" style="max-width: 300px; height: auto;">
+                                    <p class="text-muted mt-3">Use o WhatsApp no seu celular para escanear este código</p>
+                                </div>
+                            `,
+                            showCancelButton: true,
+                            confirmButtonText: 'Atualizar Status',
+                            cancelButtonText: 'Fechar',
+                            width: 400
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                // Recarregar a lista para atualizar status
+                                carregarCaixasEntrada();
+                            }
+                        });
+                    } else if (data.chatwoot_url) {
+                        // Redirecionar para Chatwoot
+                        Swal.fire({
+                            title: 'Configurar no Chatwoot',
+                            html: `
+                                <div class="text-center">
+                                    <i class="fas fa-external-link-alt text-info mb-3" style="font-size: 4rem;"></i>
+                                    <p class="mb-3">Acesse o Chatwoot para configurar o WhatsApp</p>
+                                    <p class="text-muted">Lá você poderá obter o QR code para conectar seu celular</p>
                                 </div>
                             `,
                             showCancelButton: true,

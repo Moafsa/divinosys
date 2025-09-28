@@ -191,60 +191,55 @@ class BaileysManager {
         error_log('BaileysManager::generateQRCode - Iniciando para ID: ' . $instanceId);
         
         try {
-            // Obtém instância
-            $instance = $this->db->fetch(
-                "SELECT instance_name, phone_number, status, filial_id FROM whatsapp_instances WHERE id = ?",
-                [$instanceId]
-            );
+            // Obtém instância completa
+            $instance = $this->db->query("SELECT * FROM whatsapp_instances WHERE id = ?", [$instanceId])->fetch();
             
             if (!$instance) {
                 throw new Exception('Instância não encontrada');
             }
-
-            $phoneNumber = $instance['phone_number'];
-            $instanceName = $instance['instance_name'];
-            $filialId = $instance['filial_id'];
             
-            error_log("📱 Generate QR via Chatwoot for $phoneNumber) inst. $instanceName (ID: $instanceId)");
-            
-            // Criar usuário no Chatwoot se não existir
-            $chatwootUser = $this->chatwootManager->createChatwootUser(
-                $filialId,
-                $instanceName,
-                "whatsapp_{$instanceName}@divinolanches.com",
-                $phoneNumber
-            );
-            
-            if (!$chatwootUser) {
-                throw new Exception('Falha ao criar usuário no Chatwoot');
+            // Verificar se tem integração Chatwoot
+            if (empty($instance['chatwoot_inbox_id'])) {
+                throw new Exception('Instância não tem integração Chatwoot configurada');
             }
             
-            // Criar inbox do WhatsApp
-            $inbox = $this->chatwootManager->createWhatsAppInbox($filialId, $instanceName);
+            // Buscar QR code do Chatwoot via API
+            $qrData = $this->chatwootManager->getInboxQRCode($instance['chatwoot_account_id'], $instance['chatwoot_inbox_id']);
             
-            if (!$inbox) {
-                throw new Exception('Falha ao criar inbox no Chatwoot');
+            if ($qrData && isset($qrData['qr_code'])) {
+                // QR code encontrado - instância conectada
+                $this->db->query(
+                    "UPDATE whatsapp_instances SET status = 'connected', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    [$instanceId]
+                );
+                
+                return [
+                    'success' => true,
+                    'qr_code' => $qrData['qr_code'],
+                    'status' => 'connected',
+                    'message' => 'QR code gerado com sucesso',
+                    'instance_id' => $instanceId
+                ];
+            } else {
+                // QR code não disponível - redirecionar para Chatwoot
+                $chatwootUrl = $_ENV['CHATWOOT_URL'] ?? 'https://services.conext.click/';
+                $connectUrl = $chatwootUrl . "app/accounts/{$instance['chatwoot_account_id']}/settings/inboxes/{$instance['chatwoot_inbox_id']}";
+                
+                return [
+                    'success' => true,
+                    'qr_code' => null,
+                    'chatwoot_url' => $connectUrl,
+                    'message' => 'Acesse o Chatwoot para conectar via QR code',
+                    'instance_id' => $instanceId
+                ];
             }
-            
-            // Atualizar status da instância
-            $this->db->query(
-                "UPDATE whatsapp_instances SET status = 'connected', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                [$instanceId]
-            );
-            
-            // Retornar URL do Chatwoot para o estabelecimento
-            $chatwootUrl = $_ENV['CHATWOOT_URL'] ?? 'https://your-chatwoot-instance.com';
-            return [
-                'success' => true,
-                'chatwoot_url' => $chatwootUrl,
-                'user_id' => $chatwootUser['id'],
-                'inbox_id' => $inbox['id'],
-                'message' => 'WhatsApp conectado via Chatwoot'
-            ];
             
         } catch (Exception $e) {
             error_log('BaileysManager::generateQRCode - ERRO: ' . $e->getMessage());
-            throw $e;
+            return [
+                'success' => false,
+                'message' => $e->getMessage()
+            ];
         }
     }
 
