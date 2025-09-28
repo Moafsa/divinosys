@@ -203,11 +203,11 @@ class BaileysManager {
                 throw new Exception('Instância não tem integração Chatwoot configurada');
             }
             
-            // Buscar QR code do Chatwoot via API
-            $qrData = $this->chatwootManager->getInboxQRCode($instance['chatwoot_account_id'], $instance['chatwoot_inbox_id']);
+            // Buscar status de conexão do Chatwoot via API
+            $connectionData = $this->chatwootManager->getInboxQRCode($instance['chatwoot_account_id'], $instance['chatwoot_inbox_id']);
             
-            if ($qrData && isset($qrData['qr_code'])) {
-                // QR code encontrado - instância conectada
+            if ($connectionData && $connectionData['connection']) {
+                // Instância conectada
                 $this->db->query(
                     "UPDATE whatsapp_instances SET status = 'connected', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                     [$instanceId]
@@ -215,15 +215,16 @@ class BaileysManager {
                 
                 return [
                     'success' => true,
-                    'qr_code' => $qrData['qr_code'],
+                    'qr_code' => null,
                     'status' => 'connected',
-                    'message' => 'QR code gerado com sucesso',
+                    'message' => 'WhatsApp já está conectado',
                     'instance_id' => $instanceId
                 ];
             } else {
-                // QR code não disponível - redirecionar para Chatwoot
-                $chatwootUrl = $_ENV['CHATWOOT_URL'] ?? 'https://services.conext.click/';
-                $connectUrl = $chatwootUrl . "app/accounts/{$instance['chatwoot_account_id']}/settings/inboxes/{$instance['chatwoot_inbox_id']}";
+                // Instância não conectada - redirecionar para Chatwoot
+                $chatwootUrl = $_ENV['CHATWOOT_URL'] ?? 'https://services.conext.click';
+                // URL correta para configuração do inbox Baileys com QR code
+                $connectUrl = $chatwootUrl . "/app/accounts/{$instance['chatwoot_account_id']}/settings/inboxes/{$instance['chatwoot_inbox_id']}";
                 
                 return [
                     'success' => true,

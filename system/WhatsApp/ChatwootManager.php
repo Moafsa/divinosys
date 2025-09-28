@@ -174,7 +174,12 @@ class ChatwootManager {
      * Fazer chamada para API do Chatwoot
      */
     private function makeApiCall($method, $endpoint, $data = null) {
-        $url = rtrim($this->chatwootUrl, '/') . $endpoint;
+        // Se for URL absoluta, usar diretamente
+        if (strpos($endpoint, 'http') === 0) {
+            $url = $endpoint;
+        } else {
+            $url = rtrim($this->chatwootUrl, '/') . $endpoint;
+        }
         
         $headers = [
             'Content-Type: application/json',
@@ -321,23 +326,23 @@ class ChatwootManager {
     }
     
     /**
-     * Obter QR code do inbox Baileys
+     * Obter status de conexão do inbox Baileys (baseado na implementação fazer-ai)
      */
     public function getInboxQRCode($accountId, $inboxId) {
         try {
-            // Buscar configuração do inbox para obter QR code
-            $response = $this->makeApiCall('GET', "/api/v1/accounts/{$accountId}/inboxes/{$inboxId}");
+            // Buscar configuração do inbox
+            $inboxResponse = $this->makeApiCall('GET', "/api/v1/accounts/{$accountId}/inboxes/{$inboxId}");
             
-            if ($response && isset($response['provider_config'])) {
-                $providerConfig = $response['provider_config'];
+            if ($inboxResponse && isset($inboxResponse['provider_connection'])) {
+                $connection = $inboxResponse['provider_connection'];
                 
-                // Se for inbox Baileys, buscar QR code
-                if (isset($providerConfig['qr_code'])) {
-                    return [
-                        'qr_code' => $providerConfig['qr_code'],
-                        'status' => $providerConfig['status'] ?? 'disconnected'
-                    ];
-                }
+                // Retornar status da conexão
+                return [
+                    'qr_code' => null, // QR code só é gerado no frontend do Chatwoot
+                    'status' => $connection['connection'] ? 'connected' : 'disconnected',
+                    'connection' => $connection['connection'],
+                    'error' => $connection['error']
+                ];
             }
             
             return false;

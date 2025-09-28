@@ -1083,17 +1083,25 @@ if ($tenant && $filial) {
                     } else if (data.chatwoot_url) {
                         // Redirecionar para Chatwoot
                         Swal.fire({
-                            title: 'Configurar no Chatwoot',
+                            title: 'Conectar WhatsApp',
                             html: `
                                 <div class="text-center">
-                                    <i class="fas fa-external-link-alt text-info mb-3" style="font-size: 4rem;"></i>
-                                    <p class="mb-3">Acesse o Chatwoot para configurar o WhatsApp</p>
-                                    <p class="text-muted">Lá você poderá obter o QR code para conectar seu celular</p>
+                                    <i class="fas fa-qrcode text-success mb-3" style="font-size: 4rem;"></i>
+                                    <p class="mb-3">Acesse o Chatwoot para conectar seu WhatsApp</p>
+                                    <p class="text-muted">Lá você encontrará o QR code para escanear com seu celular</p>
+                                    <div class="alert alert-info mt-3">
+                                        <i class="fas fa-info-circle"></i>
+                                        <strong>Como conectar:</strong><br>
+                                        1. Clique em "Abrir Chatwoot"<br>
+                                        2. Escaneie o QR code com seu WhatsApp<br>
+                                        3. Aguarde a conexão ser estabelecida
+                                    </div>
                                 </div>
                             `,
                             showCancelButton: true,
                             confirmButtonText: 'Abrir Chatwoot',
-                            cancelButtonText: 'Fechar'
+                            cancelButtonText: 'Fechar',
+                            width: 500
                         }).then((result) => {
                             if (result.isConfirmed) {
                                 window.open(data.chatwoot_url, '_blank');
