@@ -326,7 +326,7 @@ if ($tenant && $filial) {
                         <i class="fab fa-whatsapp me-2"></i>
                         WhatsApp - Chatwoot
                     </h5>
-                    <p class="text-muted mb-3">Configure caixas de entrada do WhatsApp via Chatwoot para envio de mensagens automáticas</p>
+                    <p class="text-muted mb-3">Configure caixas de entrada do WhatsApp via Chatwoot com Baileys para gerenciar mensagens do sistema</p>
                     <button class="btn btn-primary" onclick="abrirModalNovaCaixaEntrada()">
                         <i class="fas fa-plus me-2"></i>Nova Caixa de Entrada
                     </button>

@@ -11,9 +11,17 @@ class ChatwootManager {
     private $db;
     
     public function __construct() {
-        $this->chatwootUrl = $_ENV['CHATWOOT_URL'] ?? 'https://your-chatwoot-instance.com';
+        $this->chatwootUrl = $_ENV['CHATWOOT_URL'] ?? 'https://services.conext.click/';
         $this->apiKey = $_ENV['CHATWOOT_API_KEY'] ?? '';
         $this->db = Database::getInstance();
+        
+        // Validar configurações
+        if (empty($this->apiKey)) {
+            throw new Exception('CHATWOOT_API_KEY não configurado');
+        }
+        if (empty($this->chatwootUrl)) {
+            throw new Exception('CHATWOOT_URL não configurado');
+        }
     }
     
     /**
@@ -21,34 +29,35 @@ class ChatwootManager {
      */
     public function createCompleteChatwootSetup($estabelecimentoId, $nomeEstabelecimento, $email, $telefone) {
         try {
-            // Usar conta existente #11 DIVINOSYS
-            $accountId = 11;
+            // Usar conta configurada no .env
+            $accountId = $_ENV['CHATWOOT_ACCOUNT_ID'] ?? 11;
             
-            // 2. Criar usuário na conta
+            // 1. Criar usuário na conta
             $user = $this->createChatwootUser($accountId, $nomeEstabelecimento, $email, $telefone);
             if (!$user) {
                 throw new Exception('Falha ao criar usuário no Chatwoot');
             }
             
-            // 3. Criar inbox do WhatsApp
+            // 2. Criar inbox do WhatsApp com Baileys
             $inbox = $this->createWhatsAppInbox($accountId, $nomeEstabelecimento, $telefone);
             if (!$inbox) {
-                throw new Exception('Falha ao criar inbox no Chatwoot');
+                throw new Exception('Falha ao criar inbox WhatsApp no Chatwoot');
             }
             
-            // 4. Configurar webhook
-            $webhook = $this->configureWebhook($accountId, $inbox['id'], $estabelecimentoId);
+            // 3. Salvar dados no banco local
+            $this->saveChatwootUser($estabelecimentoId, $user['id'], $email);
+            $this->saveChatwootInbox($estabelecimentoId, $inbox['id'], $telefone);
             
             return [
                 'success' => true,
                 'account_id' => $accountId,
                 'user' => $user,
-                'inbox' => $inbox,
-                'webhook' => $webhook
+                'inbox' => $inbox
             ];
             
         } catch (Exception $e) {
             error_log("ChatwootManager::createCompleteChatwootSetup - Error: " . $e->getMessage());
+            error_log("ChatwootManager::createCompleteChatwootSetup - Stack trace: " . $e->getTraceAsString());
             return false;
         }
     }
@@ -80,18 +89,14 @@ class ChatwootManager {
             'name' => $nome,
             'email' => $email,
             'password' => $this->generatePassword(),
-            'role' => 'agent',
-            'custom_attributes' => [
-                'telefone' => $telefone
-            ]
+            'role' => 'agent'
         ];
         
         $response = $this->makeApiCall('POST', "/api/v1/accounts/{$accountId}/agents", $userData);
         
-        if ($response && isset($response['id'])) {
+        if ($response && isset($response['id']) && !isset($response['error'])) {
             return $response;
         }
-        
         return false;
     }
     
@@ -104,10 +109,7 @@ class ChatwootManager {
             'channel' => [
                 'type' => 'whatsapp',
                 'phone_number' => $telefone,
-                'provider' => 'whatsapp_cloud',
-                'provider_config' => [
-                    'webhook_url' => $this->getWebhookUrl($accountId)
-                ]
+                'provider' => 'baileys'
             ]
         ];
         
@@ -176,7 +178,7 @@ class ChatwootManager {
         
         $headers = [
             'Content-Type: application/json',
-            'Authorization: Bearer ' . $this->apiKey
+            'api_access_token: ' . $this->apiKey
         ];
         
         $curl = curl_init();
@@ -207,7 +209,7 @@ class ChatwootManager {
         
         if ($error) {
             error_log("Chatwoot API Error: {$error}");
-            return $this->createMockResponse($method, $endpoint, $data);
+            return false;
         }
         
         if ($httpCode >= 200 && $httpCode < 300) {
@@ -220,12 +222,6 @@ class ChatwootManager {
         
         error_log("Chatwoot API HTTP Error: {$httpCode} - {$errorMessage}");
         
-        // Se for erro de autenticação, usar modo mock
-        if ($httpCode === 401 || strpos($errorMessage, 'entrar ou se cadastrar') !== false) {
-            error_log("Chatwoot API Authentication failed - using mock mode");
-            return $this->createMockResponse($method, $endpoint, $data);
-        }
-        
         // Return error details for debugging
         return [
             'error' => true,
@@ -235,52 +231,45 @@ class ChatwootManager {
         ];
     }
     
-    /**
-     * Criar resposta mock quando API não está disponível
-     */
-    private function createMockResponse($method, $endpoint, $data = null) {
-        // Gerar IDs únicos para simulação
-        $mockId = rand(1000, 9999);
-        
-        if (strpos($endpoint, '/accounts') !== false && $method === 'POST') {
-            // Mock: Criar conta
-            return [
-                'id' => $mockId,
-                'name' => $data['name'] ?? 'Mock Account',
-                'domain' => $data['domain'] ?? 'mock-domain',
-                'status' => 'active',
-                'mock' => true
-            ];
-        } elseif (strpos($endpoint, '/agents') !== false && $method === 'POST') {
-            // Mock: Criar usuário
-            return [
-                'id' => $mockId,
-                'name' => $data['name'] ?? 'Mock User',
-                'email' => $data['email'] ?? 'mock@example.com',
-                'role' => $data['role'] ?? 'agent',
-                'mock' => true
-            ];
-        } elseif (strpos($endpoint, '/inboxes') !== false && $method === 'POST') {
-            // Mock: Criar inbox
-            return [
-                'id' => $mockId,
-                'name' => $data['name'] ?? 'Mock Inbox',
-                'channel' => $data['channel'] ?? ['type' => 'whatsapp'],
-                'mock' => true
-            ];
-        }
-        
-        return [
-            'id' => $mockId,
-            'mock' => true,
-            'message' => 'Mock response - API not available'
-        ];
-    }
     
     /**
      * Salvar dados do usuário Chatwoot no banco
      */
     private function saveChatwootUser($estabelecimentoId, $chatwootUserId, $email) {
+        try {
+            $sql = "INSERT INTO chatwoot_users (estabelecimento_id, chatwoot_user_id, email, created_at) 
+                    VALUES (?, ?, ?, NOW()) 
+                    ON DUPLICATE KEY UPDATE chatwoot_user_id = VALUES(chatwoot_user_id), updated_at = NOW()";
+            
+            $this->db->query($sql, [$estabelecimentoId, $chatwootUserId, $email]);
+            return true;
+        } catch (Exception $e) {
+            error_log("Erro ao salvar usuário Chatwoot: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Salvar dados do inbox Chatwoot no banco
+     */
+    private function saveChatwootInbox($estabelecimentoId, $chatwootInboxId, $telefone) {
+        try {
+            $sql = "INSERT INTO chatwoot_inboxes (estabelecimento_id, chatwoot_inbox_id, telefone, created_at) 
+                    VALUES (?, ?, ?, NOW()) 
+                    ON DUPLICATE KEY UPDATE chatwoot_inbox_id = VALUES(chatwoot_inbox_id), updated_at = NOW()";
+            
+            $this->db->query($sql, [$estabelecimentoId, $chatwootInboxId, $telefone]);
+            return true;
+        } catch (Exception $e) {
+            error_log("Erro ao salvar inbox Chatwoot: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Método antigo mantido para compatibilidade
+     */
+    private function saveChatwootUserOld($estabelecimentoId, $chatwootUserId, $email) {
         $sql = "INSERT INTO chatwoot_users (estabelecimento_id, chatwoot_user_id, email, created_at) 
                 VALUES (?, ?, ?, NOW()) 
                 ON CONFLICT (estabelecimento_id) 
@@ -290,18 +279,6 @@ class ChatwootManager {
         return $stmt->execute([$estabelecimentoId, $chatwootUserId, $email, $chatwootUserId, $email]);
     }
     
-    /**
-     * Salvar dados do inbox Chatwoot no banco
-     */
-    private function saveChatwootInbox($estabelecimentoId, $inboxId) {
-        $sql = "INSERT INTO chatwoot_inboxes (estabelecimento_id, inbox_id, created_at) 
-                VALUES (?, ?, NOW()) 
-                ON CONFLICT (estabelecimento_id) 
-                DO UPDATE SET inbox_id = ?, updated_at = NOW()";
-        
-        $stmt = $this->db->prepare($sql);
-        return $stmt->execute([$estabelecimentoId, $inboxId, $inboxId]);
-    }
     
     /**
      * Obter ID do usuário Chatwoot para um estabelecimento

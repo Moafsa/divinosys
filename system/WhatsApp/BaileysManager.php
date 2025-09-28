@@ -61,6 +61,7 @@ class BaileysManager {
             $instanceId = $this->db->lastInsertId();
             
             // Criar setup completo no Chatwoot se email fornecido
+            error_log("BaileysManager::createInstance - Email recebido: '$email'");
             if (!empty($email)) {
                 $chatwootSetup = $this->chatwootManager->createCompleteChatwootSetup(
                     $filialId,
@@ -83,7 +84,7 @@ class BaileysManager {
                             $chatwootSetup['account_id'],
                             $chatwootSetup['user']['id'],
                             $chatwootSetup['inbox']['id'],
-                            $chatwootSetup['webhook']['webhook_url'] ?? '',
+                            '', // Webhook será configurado automaticamente pelo Chatwoot
                             $instanceId
                         ]
                     );
