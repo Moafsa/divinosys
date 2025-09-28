@@ -198,39 +198,48 @@ class BaileysManager {
                 throw new Exception('Instância não encontrada');
             }
             
-            // Verificar se tem integração Chatwoot
-            if (empty($instance['chatwoot_inbox_id'])) {
-                throw new Exception('Instância não tem integração Chatwoot configurada');
-            }
+            // Gerar QR code via Chatwoot (interface isolada)
+            $qrData = $this->chatwootManager->generateQRCodeForInbox($instance['chatwoot_account_id'], $instance['chatwoot_inbox_id']);
             
-            // Buscar status de conexão do Chatwoot via API
-            $connectionData = $this->chatwootManager->getInboxQRCode($instance['chatwoot_account_id'], $instance['chatwoot_inbox_id']);
-            
-            if ($connectionData && $connectionData['connection']) {
-                // Instância conectada
-                $this->db->query(
-                    "UPDATE whatsapp_instances SET status = 'connected', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                    [$instanceId]
-                );
-                
-                return [
-                    'success' => true,
-                    'qr_code' => null,
-                    'status' => 'connected',
-                    'message' => 'WhatsApp já está conectado',
-                    'instance_id' => $instanceId
-                ];
+            if ($qrData && $qrData['success']) {
+                if ($qrData['qr_code']) {
+                    // QR code gerado com sucesso
+                    return [
+                        'success' => true,
+                        'qr_code' => $qrData['qr_code'],
+                        'status' => $qrData['status'],
+                        'message' => 'QR code gerado com sucesso. Escaneie com seu WhatsApp.',
+                        'instance_id' => $instanceId
+                    ];
+                } else if ($qrData['connection']) {
+                    // Já conectado
+                    $this->db->query(
+                        "UPDATE whatsapp_instances SET status = 'connected', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        [$instanceId]
+                    );
+                    
+                    return [
+                        'success' => true,
+                        'qr_code' => null,
+                        'status' => 'connected',
+                        'message' => 'WhatsApp já está conectado',
+                        'instance_id' => $instanceId
+                    ];
+                } else {
+                    // Não conectado e sem QR code - mostrar mensagem
+                    return [
+                        'success' => true,
+                        'qr_code' => null,
+                        'status' => 'disconnected',
+                        'message' => $qrData['message'] ?? 'Aguarde o QR code ser gerado automaticamente',
+                        'instance_id' => $instanceId
+                    ];
+                }
             } else {
-                // Instância não conectada - redirecionar para Chatwoot
-                $chatwootUrl = $_ENV['CHATWOOT_URL'] ?? 'https://services.conext.click';
-                // URL correta para configuração do inbox Baileys com QR code
-                $connectUrl = $chatwootUrl . "/app/accounts/{$instance['chatwoot_account_id']}/settings/inboxes/{$instance['chatwoot_inbox_id']}";
-                
+                // Erro ao gerar QR code
                 return [
-                    'success' => true,
-                    'qr_code' => null,
-                    'chatwoot_url' => $connectUrl,
-                    'message' => 'Acesse o Chatwoot para conectar via QR code',
+                    'success' => false,
+                    'message' => 'Erro ao gerar QR code. Tente novamente.',
                     'instance_id' => $instanceId
                 ];
             }
