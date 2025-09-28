@@ -908,7 +908,7 @@ if ($tenant && $filial) {
 
         function carregarCaixasEntrada() {
             console.log('Carregando caixas de entrada...');
-            fetch('index.php', {
+            fetch('mvc/ajax/configuracoes.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -1024,7 +1024,7 @@ if ($tenant && $filial) {
         }
 
         function criarCaixaEntrada(nome, numero, email) {
-            fetch('index.php', {
+            fetch('mvc/ajax/configuracoes.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
