@@ -71,10 +71,10 @@ class BaileysManager {
                 );
                 
                 if ($chatwootSetup && $chatwootSetup['success']) {
-                    // Salvar referências do Chatwoot no banco
+                    // Salvar referências do Chatwoot no banco (mas manter como disconnected até conectar)
                     $this->db->query(
                         "UPDATE whatsapp_instances SET 
-                         status = 'connected',
+                         status = 'disconnected',
                          chatwoot_account_id = ?,
                          chatwoot_user_id = ?,
                          chatwoot_inbox_id = ?,
@@ -142,14 +142,41 @@ class BaileysManager {
      */
     public function deleteInstance($instanceId) {
         try {
-            // Delete related records first
+            // 1. Buscar dados da instância antes de deletar
+            $instance = $this->db->query("SELECT * FROM whatsapp_instances WHERE id = ?", [$instanceId])->fetch();
+            
+            if (!$instance) {
+                throw new Exception('Instância não encontrada');
+            }
+            
+            // 2. Deletar no Chatwoot se tiver IDs
+            if (!empty($instance['chatwoot_user_id']) || !empty($instance['chatwoot_inbox_id'])) {
+                try {
+                    $chatwootManager = new ChatwootManager();
+                    
+                    // Deletar inbox no Chatwoot
+                    if (!empty($instance['chatwoot_inbox_id'])) {
+                        $chatwootManager->deleteInbox($instance['chatwoot_inbox_id']);
+                    }
+                    
+                    // Deletar usuário no Chatwoot
+                    if (!empty($instance['chatwoot_user_id'])) {
+                        $chatwootManager->deleteUser($instance['chatwoot_user_id']);
+                    }
+                } catch (Exception $e) {
+                    error_log("Erro ao deletar no Chatwoot: " . $e->getMessage());
+                    // Continue mesmo se falhar no Chatwoot
+                }
+            }
+            
+            // 3. Deletar registros locais
             $this->db->query("DELETE FROM whatsapp_messages WHERE instance_id = ?", [$instanceId]);
             $this->db->query("DELETE FROM whatsapp_webhooks WHERE instance_id = ?", [$instanceId]);
             $this->db->query("DELETE FROM whatsapp_instances WHERE id = ?", [$instanceId]);
 
             return [
                 'success' => true,
-                'message' => 'Instância deletada com sucesso'
+                'message' => 'Instância e dados do Chatwoot deletados com sucesso'
             ];
         } catch (Exception $e) {
             error_log("BaileysManager::deleteInstance - Error: " . $e->getMessage());

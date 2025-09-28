@@ -276,6 +276,32 @@ class ChatwootManager {
     
     
     /**
+     * Deletar usuário no Chatwoot
+     */
+    public function deleteUser($userId) {
+        try {
+            $response = $this->makeApiCall('DELETE', "/api/v1/accounts/11/agents/{$userId}");
+            return $response !== false;
+        } catch (Exception $e) {
+            error_log("ChatwootManager::deleteUser - Error: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Deletar inbox no Chatwoot
+     */
+    public function deleteInbox($inboxId) {
+        try {
+            $response = $this->makeApiCall('DELETE', "/api/v1/accounts/11/inboxes/{$inboxId}");
+            return $response !== false;
+        } catch (Exception $e) {
+            error_log("ChatwootManager::deleteInbox - Error: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
      * Obter ID do usuário Chatwoot para um estabelecimento
      */
     private function getChatwootUserId($estabelecimentoId) {

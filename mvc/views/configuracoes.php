@@ -497,7 +497,7 @@ if ($tenant && $filial) {
         });
 
         function carregarUsuarios() {
-            fetch('index.php', {
+            fetch('mvc/ajax/configuracoes.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -667,7 +667,7 @@ if ($tenant && $filial) {
             formData.append('cnpj', dados.cnpj);
             formData.append('endereco', dados.endereco);
 
-            fetch('index.php', {
+            fetch('mvc/ajax/configuracoes.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -750,7 +750,7 @@ if ($tenant && $filial) {
 
         function editarUsuario(id) {
             // Buscar dados do usuário
-            fetch('index.php', {
+            fetch('mvc/ajax/configuracoes.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -846,7 +846,7 @@ if ($tenant && $filial) {
             formData.append('cnpj', dados.cnpj);
             formData.append('endereco', dados.endereco);
 
-            fetch('index.php', {
+            fetch('mvc/ajax/configuracoes.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -879,7 +879,7 @@ if ($tenant && $filial) {
                 cancelButtonText: 'Cancelar'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    fetch('index.php', {
+                    fetch('mvc/ajax/configuracoes.php', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
@@ -1048,7 +1048,7 @@ if ($tenant && $filial) {
         }
 
         function conectarCaixaEntrada(nomeCaixa, instanceId) {
-            fetch('index.php', {
+            fetch('mvc/ajax/configuracoes.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -1108,7 +1108,7 @@ if ($tenant && $filial) {
                 cancelButtonText: 'Cancelar'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    fetch('index.php', {
+                    fetch('mvc/ajax/configuracoes.php', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
