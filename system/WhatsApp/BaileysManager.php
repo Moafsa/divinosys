@@ -7,6 +7,7 @@ use System\Config;
 use Exception;
 
 require_once __DIR__ . '/ChatwootManager.php';
+require_once __DIR__ . '/QRCodeGenerator.php';
 
 class BaileysManager {
     private $db;

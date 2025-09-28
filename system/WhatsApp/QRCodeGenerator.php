@@ -156,15 +156,29 @@ class QRCodeGenerator
             $qrData = "https://wa.me/{$phoneNumber}?text=Conectar%20sistema";
             $apiUrl = "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" . urlencode($qrData);
             
-            $imageData = file_get_contents($apiUrl);
+            // Usar cURL para maior controle
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => $apiUrl,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 10,
+                CURLOPT_CONNECTTIMEOUT => 5,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            ]);
             
-            if ($imageData) {
+            $imageData = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            
+            if ($httpCode === 200 && $imageData) {
                 return base64_encode($imageData);
             }
             
             return null;
             
         } catch (Exception $e) {
+            error_log("QRCodeGenerator::generateQRWithExternalAPI - Error: " . $e->getMessage());
             return null;
         }
     }
@@ -175,6 +189,32 @@ class QRCodeGenerator
     private function generateSimpleQR($phoneNumber, $instanceName) 
     {
         try {
+            // Verificar se GD está disponível
+            if (!extension_loaded('gd') || !function_exists('imagecreate')) {
+                // Fallback: retornar QR code via API externa com dados simples
+                $simpleData = "WhatsApp: {$phoneNumber}\nInstancia: {$instanceName}\nConectar sistema";
+                $apiUrl = "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" . urlencode($simpleData);
+                
+                $ch = curl_init();
+                curl_setopt_array($ch, [
+                    CURLOPT_URL => $apiUrl,
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_TIMEOUT => 10,
+                    CURLOPT_CONNECTTIMEOUT => 5,
+                    CURLOPT_SSL_VERIFYPEER => false
+                ]);
+                
+                $imageData = curl_exec($ch);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                
+                if ($httpCode === 200 && $imageData) {
+                    return base64_encode($imageData);
+                }
+                
+                return null;
+            }
+            
             $width = 300;
             $height = 300;
             
@@ -218,6 +258,7 @@ class QRCodeGenerator
             return base64_encode($imageData);
             
         } catch (Exception $e) {
+            error_log("QRCodeGenerator::generateSimpleQR - Error: " . $e->getMessage());
             return null;
         }
     }
