@@ -27,29 +27,19 @@ class QRCodeGenerator
     public function generateQRCode($instanceId, $phoneNumber, $instanceName) 
     {
         try {
-            // 1. Criar sessão simulada no Chatwoot
-            $sessionData = $this->createSimulatedSession($instanceId, $phoneNumber);
-            
-            if (!$sessionData['success']) {
-                throw new Exception($sessionData['message']);
-            }
-            
-            // 2. Gerar QR code usando método alternativo
+            // Gerar QR code diretamente - sem depender do Chatwoot
             $qrCode = $this->generateWhatsAppQR($phoneNumber, $instanceName);
             
             if (!$qrCode) {
                 throw new Exception('Falha ao gerar QR code');
             }
             
-            // 3. Simular status conectado no Chatwoot
-            $this->simulateChatwootConnection($sessionData['inbox_id']);
-            
             return [
                 'success' => true,
                 'qr_code' => $qrCode,
                 'status' => 'connecting',
                 'instance_id' => $instanceId,
-                'session_data' => $sessionData
+                'message' => 'QR code gerado com sucesso. Escaneie com seu WhatsApp.'
             ];
             
         } catch (Exception $e) {
@@ -113,11 +103,21 @@ class QRCodeGenerator
             // Método 1: Usar API externa (mais confiável)
             $qrCode = $this->generateQRWithExternalAPI($phoneNumber);
             if ($qrCode) {
+                error_log("QRCodeGenerator::generateWhatsAppQR - QR gerado via API externa");
                 return $qrCode;
             }
             
+            error_log("QRCodeGenerator::generateWhatsAppQR - API externa falhou, tentando fallback");
+            
             // Método 2: Gerar QR simples com instruções
-            return $this->generateSimpleQR($phoneNumber, $instanceName);
+            $qrCode = $this->generateSimpleQR($phoneNumber, $instanceName);
+            if ($qrCode) {
+                error_log("QRCodeGenerator::generateWhatsAppQR - QR gerado via fallback");
+                return $qrCode;
+            }
+            
+            error_log("QRCodeGenerator::generateWhatsAppQR - Todos os métodos falharam");
+            return null;
             
         } catch (Exception $e) {
             error_log("QRCodeGenerator::generateWhatsAppQR - Error: " . $e->getMessage());

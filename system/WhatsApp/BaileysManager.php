@@ -8,6 +8,7 @@ use Exception;
 
 require_once __DIR__ . '/ChatwootManager.php';
 require_once __DIR__ . '/QRCodeGenerator.php';
+require_once __DIR__ . '/SimpleQRGenerator.php';
 
 class BaileysManager {
     private $db;
@@ -199,8 +200,8 @@ class BaileysManager {
                 throw new Exception('Instância não encontrada');
             }
             
-            // Gerar QR code usando gerador híbrido
-            $qrGenerator = new \System\WhatsApp\QRCodeGenerator();
+            // Gerar QR code usando gerador simples
+            $qrGenerator = new \System\WhatsApp\SimpleQRGenerator();
             $qrData = $qrGenerator->generateQRCode($instanceId, $instance['phone_number'], $instance['instance_name']);
             
             if ($qrData && $qrData['success']) {
