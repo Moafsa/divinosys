@@ -11,17 +11,12 @@ class ChatwootManager {
     private $db;
     
     public function __construct() {
-        $this->chatwootUrl = $_ENV['CHATWOOT_URL'] ?? 'https://services.conext.click/';
-        $this->apiKey = $_ENV['CHATWOOT_API_KEY'] ?? '';
+        // Valores hardcoded temporariamente para debug
+        $this->chatwootUrl = 'https://services.conext.click/';
+        $this->apiKey = 'WyDnNvfhwHEhvGpQ4cGzvaQM';
         $this->db = Database::getInstance();
         
-        // Validar configurações
-        if (empty($this->apiKey)) {
-            throw new Exception('CHATWOOT_API_KEY não configurado');
-        }
-        if (empty($this->chatwootUrl)) {
-            throw new Exception('CHATWOOT_URL não configurado');
-        }
+        error_log("ChatwootManager::__construct - URL: $this->chatwootUrl, API Key: " . substr($this->apiKey, 0, 10) . "...");
     }
     
     /**
@@ -29,8 +24,8 @@ class ChatwootManager {
      */
     public function createCompleteChatwootSetup($estabelecimentoId, $nomeEstabelecimento, $email, $telefone) {
         try {
-            // Usar conta configurada no .env
-            $accountId = $_ENV['CHATWOOT_ACCOUNT_ID'] ?? 11;
+            // Usar conta hardcoded temporariamente
+            $accountId = 11;
             
             // 1. Criar usuário na conta
             $user = $this->createChatwootUser($accountId, $nomeEstabelecimento, $email, $telefone);
