@@ -879,7 +879,7 @@ if ($tenant && $filial) {
                 cancelButtonText: 'Cancelar'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    fetch('mvc/ajax/configuracoes.php', {
+                    fetch('mvc/ajax/configuracoes.php?v=' + Date.now(), {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
@@ -1108,7 +1108,7 @@ if ($tenant && $filial) {
                 cancelButtonText: 'Cancelar'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    fetch('mvc/ajax/configuracoes.php', {
+                    fetch('mvc/ajax/configuracoes.php?v=' + Date.now(), {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
