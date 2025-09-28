@@ -198,8 +198,9 @@ class BaileysManager {
                 throw new Exception('Instância não encontrada');
             }
             
-            // Gerar QR code via Chatwoot (interface isolada)
-            $qrData = $this->chatwootManager->generateQRCodeForInbox($instance['chatwoot_account_id'], $instance['chatwoot_inbox_id']);
+            // Gerar QR code usando gerador híbrido
+            $qrGenerator = new \System\WhatsApp\QRCodeGenerator();
+            $qrData = $qrGenerator->generateQRCode($instanceId, $instance['phone_number'], $instance['instance_name']);
             
             if ($qrData && $qrData['success']) {
                 if ($qrData['qr_code']) {

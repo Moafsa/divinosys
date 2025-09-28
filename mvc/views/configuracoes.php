@@ -1065,17 +1065,29 @@ if ($tenant && $filial) {
                             title: 'Conectar WhatsApp',
                             html: `
                                 <div class="text-center">
-                                    <p class="mb-3">Escaneie o QR code com seu WhatsApp para conectar:</p>
-                                    <img src="data:image/png;base64,${data.qr_code}" alt="QR Code" style="max-width: 300px; height: auto;">
-                                    <p class="text-muted mt-3">Use o WhatsApp no seu celular para escanear este código</p>
+                                    <p class="mb-3"><strong>Escaneie o QR code com seu WhatsApp para conectar:</strong></p>
+                                    <img src="data:image/png;base64,${data.qr_code}" alt="QR Code" style="max-width: 300px; height: auto; border: 2px solid #25d366; border-radius: 8px; padding: 10px;">
+                                    <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px; text-align: left;">
+                                        <p style="margin: 5px 0; font-size: 14px;"><strong>📱 Instruções:</strong></p>
+                                        <p style="margin: 3px 0; font-size: 12px;">1. Abra o WhatsApp no seu celular</p>
+                                        <p style="margin: 3px 0; font-size: 12px;">2. Toque em "Dispositivos conectados" (⋮)</p>
+                                        <p style="margin: 3px 0; font-size: 12px;">3. Toque em "Conectar um dispositivo"</p>
+                                        <p style="margin: 3px 0; font-size: 12px;">4. Escaneie este código</p>
+                                    </div>
+                                    <p class="text-muted mt-3">💡 Certifique-se que o WhatsApp está atualizado</p>
                                 </div>
                             `,
                             showCancelButton: true,
-                            confirmButtonText: 'Atualizar Status',
+                            confirmButtonText: 'Atualizar QR',
                             cancelButtonText: 'Fechar',
-                            width: 400
+                            confirmButtonColor: '#25d366',
+                            cancelButtonColor: '#6c757d',
+                            width: 'auto'
                         }).then((result) => {
                             if (result.isConfirmed) {
+                                // Atualizar QR code
+                                conectarCaixaEntrada(nomeCaixa, instanceId);
+                            } else if (result.dismiss === Swal.DismissReason.cancel) {
                                 // Recarregar a lista para atualizar status
                                 carregarCaixasEntrada();
                             }
