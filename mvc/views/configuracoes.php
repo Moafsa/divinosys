@@ -324,16 +324,16 @@ if ($tenant && $filial) {
                 <div class="config-card">
                     <h5 class="mb-3">
                         <i class="fab fa-whatsapp me-2"></i>
-                        WhatsApp - Chatwoot
+                        WhatsApp - WuzAPI
                     </h5>
-                    <p class="text-muted mb-3">Configure caixas de entrada do WhatsApp via Chatwoot com Baileys para gerenciar mensagens do sistema</p>
+                    <p class="text-muted mb-3">Configure instâncias do WhatsApp via WuzAPI para gerenciar mensagens do sistema</p>
                     <button class="btn btn-primary" onclick="abrirModalNovaCaixaEntrada()">
-                        <i class="fas fa-plus me-2"></i>Nova Caixa de Entrada
+                        <i class="fas fa-plus me-2"></i>Nova Instância
                     </button>
                     
-                    <!-- Lista de Caixas de Entrada -->
+                    <!-- Lista de Instâncias -->
                     <div id="caixasEntradaList" class="mt-3">
-                        <!-- Caixas de entrada serão carregadas aqui via AJAX -->
+                        <!-- Instâncias serão carregadas aqui via AJAX -->
                     </div>
                 </div>
 
@@ -904,10 +904,10 @@ if ($tenant && $filial) {
             });
         }
 
-        // ===== CHATWOOT FUNCTIONS =====
+        // ===== WUZAPI FUNCTIONS =====
 
         function carregarCaixasEntrada() {
-            console.log('Carregando caixas de entrada...');
+            console.log('Carregando instâncias...');
             fetch('mvc/ajax/configuracoes.php', {
                 method: 'POST',
                 headers: {
@@ -923,13 +923,13 @@ if ($tenant && $filial) {
                 .then(data => {
                     console.log('Response data:', data);
                     if (data.success) {
-                        console.log('Data.caixas_entrada:', data.caixas_entrada);
-                        const caixasToShow = data.caixas_entrada || [];
-                        console.log('Caixas de entrada para exibir:', caixasToShow);
-                        console.log('Quantidade:', caixasToShow.length);
-                        exibirCaixasEntrada(caixasToShow);
+                        console.log('Data.instances:', data.instances);
+                        const instancesToShow = data.instances || [];
+                        console.log('Instâncias para exibir:', instancesToShow);
+                        console.log('Quantidade:', instancesToShow.length);
+                        exibirCaixasEntrada(instancesToShow);
                     } else {
-                        console.error('Erro ao carregar caixas de entrada:', data.error || data.message);
+                        console.error('Erro ao carregar instâncias:', data.error || data.message);
                     }
                 })
                 .catch(error => {
@@ -937,20 +937,20 @@ if ($tenant && $filial) {
                 });
         }
 
-        function exibirCaixasEntrada(caixas) {
-            console.log('Exibindo caixas de entrada:', caixas);
+        function exibirCaixasEntrada(instances) {
+            console.log('Exibindo instâncias:', instances);
             const container = document.getElementById('caixasEntradaList');
             
-            if (!caixas || !Array.isArray(caixas) || caixas.length === 0) {
-                container.innerHTML = '<p class="text-muted">Nenhuma caixa de entrada configurada</p>';
+            if (!instances || !Array.isArray(instances) || instances.length === 0) {
+                container.innerHTML = '<p class="text-muted">Nenhuma instância configurada</p>';
                 return;
             }
 
             let html = '';
-            caixas.forEach(caixa => {
-                console.log('Processando caixa:', caixa);
-                const statusClass = caixa.status === 'connected' ? 'success' : 'danger';
-                const statusText = caixa.status === 'connected' ? 'Conectado' : 'Desconectado';
+            instances.forEach(instance => {
+                console.log('Processando instância:', instance);
+                const statusClass = instance.status === 'connected' ? 'success' : 'danger';
+                const statusText = instance.status === 'connected' ? 'Conectado' : 'Desconectado';
                 
                 html += `
                     <div class="card mb-2">
@@ -985,57 +985,52 @@ if ($tenant && $filial) {
 
         function abrirModalNovaCaixaEntrada() {
             Swal.fire({
-                title: 'Nova Caixa de Entrada WhatsApp',
+                title: 'Nova Instância WhatsApp',
                 html: `
                     <div class="mb-3">
-                        <label class="form-label">Nome da Caixa de Entrada</label>
+                        <label class="form-label">Nome da Instância</label>
                         <input type="text" class="form-control" id="nomeCaixaEntrada" placeholder="ex: atendimento_loja1">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Número do WhatsApp</label>
                         <input type="text" class="form-control" id="numeroWhatsApp" placeholder="5511999999999">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Email do Usuário</label>
-                        <input type="email" class="form-control" id="emailUsuario" placeholder="whatsapp@divinolanches.com">
-                        <small class="form-text text-muted">Email para criar usuário no Chatwoot</small>
+                        <small class="form-text text-muted">Inclua o código do país (ex: 5511999999999)</small>
                     </div>
                 `,
                 showCancelButton: true,
-                confirmButtonText: 'Criar Caixa de Entrada',
+                confirmButtonText: 'Criar Instância',
                 cancelButtonText: 'Cancelar',
                 preConfirm: () => {
                     const nome = document.getElementById('nomeCaixaEntrada').value;
                     const numero = document.getElementById('numeroWhatsApp').value;
-                    const email = document.getElementById('emailUsuario').value;
                     
-                    if (!nome || !numero || !email) {
-                        Swal.showValidationMessage('Nome, número e email são obrigatórios');
+                    if (!nome || !numero) {
+                        Swal.showValidationMessage('Nome e número são obrigatórios');
                         return false;
                     }
                     
-                    return { nome, numero, email };
+                    return { nome, numero };
                 }
             }).then((result) => {
                 if (result.isConfirmed) {
-                    criarCaixaEntrada(result.value.nome, result.value.numero, result.value.email);
+                    criarCaixaEntrada(result.value.nome, result.value.numero);
                 }
             });
         }
 
-        function criarCaixaEntrada(nome, numero, email) {
+        function criarCaixaEntrada(nome, numero) {
             fetch('mvc/ajax/configuracoes.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                     'X-Requested-With': 'XMLHttpRequest',
                 },
-                body: `action=criar_caixa_entrada&instance_name=${encodeURIComponent(nome)}&phone_number=${encodeURIComponent(numero)}&email=${encodeURIComponent(email)}`
+                body: `action=criar_caixa_entrada&instance_name=${encodeURIComponent(nome)}&phone_number=${encodeURIComponent(numero)}`
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    Swal.fire('Sucesso', 'Caixa de entrada criada com sucesso!', 'success');
+                    Swal.fire('Sucesso', 'Instância criada com sucesso!', 'success');
                     carregarCaixasEntrada();
                 } else {
                     Swal.fire('Erro', data.message, 'error');
@@ -1043,7 +1038,7 @@ if ($tenant && $filial) {
             })
             .catch(error => {
                 console.error('Erro:', error);
-                Swal.fire('Erro', 'Erro ao criar caixa de entrada', 'error');
+                Swal.fire('Erro', 'Erro ao criar instância', 'error');
             });
         }
 
