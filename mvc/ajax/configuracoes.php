@@ -93,10 +93,9 @@ try {
         case 'criar_caixa_entrada':
             $instanceName = $_POST['instance_name'] ?? '';
             $phoneNumber = $_POST['phone_number'] ?? '';
-            $email = $_POST['email'] ?? '';
             
-            if (empty($instanceName) || empty($phoneNumber) || empty($email)) {
-                throw new \Exception('Nome, número e email são obrigatórios');
+            if (empty($instanceName) || empty($phoneNumber)) {
+                throw new \Exception('Nome e número são obrigatórios');
             }
             
             $session = \System\Session::getInstance();
@@ -107,7 +106,7 @@ try {
             $webhookUrl = $_ENV['N8N_WEBHOOK_URL'] ?? '';
             
             $baileysManager = new \System\WhatsApp\BaileysManager();
-            $result = $baileysManager->createInstance($instanceName, $phoneNumber, $tenantId, $filialId, $webhookUrl, $email);
+            $result = $baileysManager->createInstance($instanceName, $phoneNumber, $tenantId, $filialId, $webhookUrl);
             
             echo json_encode($result);
             break;

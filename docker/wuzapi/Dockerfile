@@ -16,8 +16,9 @@ FROM alpine:latest
 # Instalar dependências runtime
 RUN apk add --no-cache ca-certificates tzdata
 
-# Copiar binário
+# Copiar binário e migrações
 COPY --from=builder /app/wuzapi /usr/local/bin/wuzapi
+COPY --from=builder /app/migrations /usr/local/bin/migrations
 
 # Criar usuário não-root
 RUN adduser -D -s /bin/sh wuzapi
