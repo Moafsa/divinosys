@@ -106,8 +106,8 @@ POST /api/instance/{instance_id}/send
 
 ### Variáveis de Ambiente
 ```env
-# WuzAPI
-WUZAPI_URL=http://wuzapi:8080
+# WuzAPI - Comunicação interna entre containers
+WUZAPI_URL=http://wuzapi:8080  # Interno: wuzapi:8080
 WUZAPI_API_KEY=your_api_key_here
 
 # Banco
@@ -119,6 +119,15 @@ DB_PASSWORD=wuzapi
 
 # Webhook
 WEBHOOK_URL=http://app:80/webhook/wuzapi.php
+```
+
+### Mapeamento de Portas
+```
+Docker Interno          Docker Externo (Coolify)
+├── app:80              → 8080 (sistema)
+├── wuzapi:8080         → 8081 (WuzAPI)
+├── postgres:5432       → 5432 (banco)
+└── redis:6379          → 6379 (cache)
 ```
 
 ### Docker Compose

@@ -16,7 +16,9 @@ class WuzAPIManager
     
     public function __construct() 
     {
-        $this->wuzapiUrl = $_ENV['WUZAPI_URL'] ?? 'http://localhost:8080';
+        // URL interna do Docker: wuzapi:8080 (comunicação entre containers)
+        // URL externa para testes: localhost:8081 (mapeamento externo)
+        $this->wuzapiUrl = $_ENV['WUZAPI_URL'] ?? 'http://wuzapi:8080';
         $this->apiKey = $_ENV['WUZAPI_API_KEY'] ?? '';
         $this->webhookUrl = $_ENV['N8N_WEBHOOK_URL'] ?? '';
     }

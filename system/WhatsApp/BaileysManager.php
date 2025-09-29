@@ -9,14 +9,17 @@ use Exception;
 require_once __DIR__ . '/ChatwootManager.php';
 require_once __DIR__ . '/QRCodeGenerator.php';
 require_once __DIR__ . '/SimpleQRGenerator.php';
+require_once __DIR__ . '/WuzAPIManager.php';
 
 class BaileysManager {
     private $db;
     private $chatwootManager;
+    private $wuzapiManager;
 
     public function __construct() {
         $this->db = Database::getInstance();
         $this->chatwootManager = new ChatwootManager();
+        $this->wuzapiManager = new WuzAPIManager();
     }
 
     /**
@@ -200,9 +203,14 @@ class BaileysManager {
                 throw new Exception('Instância não encontrada');
             }
             
-            // Gerar QR code usando gerador simples
-            $qrGenerator = new \System\WhatsApp\SimpleQRGenerator();
-            $qrData = $qrGenerator->generateQRCode($instanceId, $instance['phone_number'], $instance['instance_name']);
+            // Tentar WuzAPI primeiro, depois fallback para SimpleQRGenerator
+            $qrData = $this->generateQRWithWuzAPI($instanceId, $instance);
+            
+            if (!$qrData || !$qrData['success']) {
+                // Fallback para SimpleQRGenerator
+                $qrGenerator = new \System\WhatsApp\SimpleQRGenerator();
+                $qrData = $qrGenerator->generateQRCode($instanceId, $instance['phone_number'], $instance['instance_name']);
+            }
             
             if ($qrData && $qrData['success']) {
                 if ($qrData['qr_code']) {
@@ -381,5 +389,37 @@ class BaileysManager {
     private function getFilialId() {
         // Get from session or config
         return 1; // fallback
+    }
+    
+    /**
+     * Gerar QR code usando WuzAPI
+     */
+    private function generateQRWithWuzAPI($instanceId, $instance) 
+    {
+        try {
+            error_log("BaileysManager::generateQRWithWuzAPI - Tentando WuzAPI para instância {$instanceId}");
+            
+            // Verificar se WuzAPI está disponível
+            $status = $this->wuzapiManager->getInstanceStatus($instanceId);
+            if (!$status['success']) {
+                error_log("BaileysManager::generateQRWithWuzAPI - WuzAPI não disponível, usando fallback");
+                return null;
+            }
+            
+            // Gerar QR code via WuzAPI
+            $qrData = $this->wuzapiManager->generateQRCode($instanceId);
+            
+            if ($qrData && $qrData['success']) {
+                error_log("BaileysManager::generateQRWithWuzAPI - QR gerado via WuzAPI");
+                return $qrData;
+            }
+            
+            error_log("BaileysManager::generateQRWithWuzAPI - Falha ao gerar QR via WuzAPI");
+            return null;
+            
+        } catch (Exception $e) {
+            error_log("BaileysManager::generateQRWithWuzAPI - Error: " . $e->getMessage());
+            return null;
+        }
     }
 }
