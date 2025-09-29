@@ -52,9 +52,34 @@ services:
     networks:
       - divino-network
 
+  wuzapi:
+    build:
+      context: ./docker/wuzapi
+      dockerfile: Dockerfile
+    container_name: divino-lanches-wuzapi
+    ports:
+      - "8081:8080"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=wuzapi
+      - DB_USER=wuzapi
+      - DB_PASSWORD=wuzapi
+      - WUZAPI_URL=http://wuzapi:8080
+      - WEBHOOK_URL=http://app:80/webhook/wuzapi.php
+    volumes:
+      - wuzapi_sessions:/app/sessions
+      - wuzapi_logs:/app/logs
+    depends_on:
+      - postgres
+    networks:
+      - divino-network
+
 volumes:
   postgres_data:
   redis_data:
+  wuzapi_sessions:
+  wuzapi_logs:
 
 networks:
   divino-network:

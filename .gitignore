@@ -1,49 +1,40 @@
-# Environment files
-.env
-.env.local
-.env.production
+# Sistema operacional
+AppData/
+*.log
+*.tmp
+
+# Arquivos de teste
+test_*.php
+*_test.php
+
+# Arquivos temporários
+*.tmp
+*.temp
 
 # Logs
-logs/*.log
+logs/
 *.log
 
-# Uploads
+# Sessões
+sessions/
+
+# Uploads (manter estrutura mas não os arquivos)
 uploads/*
 !uploads/.gitkeep
 
-# Composer
-vendor/
-composer.lock
+# Arquivos de configuração local
+.env.local
+.env.development
 
-# IDE
+# Arquivos de IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Docker
-.docker/
-
-# Cache
-cache/
-tmp/
-
-# Database
-*.db
-# Allow migration files
-!database/init/*.sql
-
-# Backup files
-*.bak
-*.backup
-
-# Node modules (if using npm)
+# Node modules (se houver)
 node_modules/
 
-# Build files
-build/
-dist/
+# Arquivos de backup
+*.bak
+*.backup
