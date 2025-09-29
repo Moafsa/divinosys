@@ -70,6 +70,7 @@ services:
     volumes:
       - wuzapi_sessions:/app/sessions
       - wuzapi_logs:/app/logs
+      - ./wuzapi/.env:/app/.env  # Montar arquivo .env
     depends_on:
       - postgres
     networks:
