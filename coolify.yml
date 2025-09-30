@@ -17,7 +17,7 @@ services:
       - WUZAPI_API_KEY=1234ABCD
       - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL:-}
     depends_on:
-      - postgres
+      - postgres-init
       - redis
       - wuzapi
     volumes:
@@ -37,6 +37,11 @@ services:
       - ./database/init:/docker-entrypoint-initdb.d
     networks:
       - divino-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d divino_lanches"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
@@ -44,6 +49,22 @@ services:
       - redis_data:/data
     networks:
       - divino-network
+
+  postgres-init:
+    image: postgres:15-alpine
+    environment:
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGUSER=postgres
+      - PGPASSWORD=divino_password
+    volumes:
+      - ./docker/postgres/create-users.sh:/create-users.sh
+    command: ["sh", "-c", "chmod +x /create-users.sh && /create-users.sh"]
+    networks:
+      - divino-network
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   wuzapi:
     build:
@@ -62,7 +83,7 @@ services:
       - wuzapi_sessions:/app/sessions
       - wuzapi_logs:/app/logs
     depends_on:
-      - postgres
+      - postgres-init
     networks:
       - divino-network
 

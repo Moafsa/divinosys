@@ -36,19 +36,18 @@ WUZAPI_ADMIN_TOKEN=admin123456
 
 ## 🗄️ Inicialização do Banco de Dados
 
-O sistema inclui scripts de inicialização automática que:
+O sistema usa um **serviço separado** (`postgres-init`) que executa **após** o PostgreSQL estar rodando para criar os usuários necessários:
 
-1. **Criam o usuário `wuzapi`** com senha `wuzapi`
-2. **Criam o banco `wuzapi`** para o serviço WuzAPI
-3. **Concedem privilégios** necessários para o usuário wuzapi
+1. **Cria o usuário `wuzapi`** com senha `wuzapi`
+2. **Cria o banco `wuzapi`** para o serviço WuzAPI
+3. **Concede privilégios** necessários para o usuário wuzapi
 
-**⚠️ CRÍTICO:** Se você já tem um volume de dados persistente para o PostgreSQL no Coolify, ele **não** executará os scripts de inicialização. Para garantir que os usuários e bancos sejam criados, você deve:
+**✅ VANTAGEM:** Esta abordagem funciona mesmo com volumes persistentes existentes, pois executa após o PostgreSQL estar pronto.
 
-1. **Ir no Coolify → Storage → Persistent Volumes**
-2. **Excluir o volume** `divino_postgres_data` (ou similar)
-3. **Fazer um novo deploy**. Isso forçará o PostgreSQL a iniciar com um volume vazio e executar os scripts de inicialização.
-
-**Se não remover o volume persistente, o PostgreSQL não criará o usuário `wuzapi` e o banco `wuzapi`, causando os erros de autenticação.**
+**📋 Ordem de execução:**
+1. `postgres` → inicia o PostgreSQL
+2. `postgres-init` → cria usuários e bancos (aguarda postgres estar healthy)
+3. `wuzapi` e `app` → iniciam após postgres-init terminar
 
 ## 📋 Ordem de Execução dos Scripts
 
