@@ -4,13 +4,25 @@
 \echo '=== FORÇANDO CRIAÇÃO DE USUÁRIOS POSTGRESQL ==='
 
 -- Atualizar senha do usuário postgres se necessário
-ALTER ROLE postgres WITH PASSWORD 'divino_password';
-RAISE NOTICE 'Usuário postgres configurado com sucesso';
+DO $$
+BEGIN
+    ALTER ROLE postgres WITH PASSWORD 'divino_password';
+    RAISE NOTICE 'Usuário postgres configurado com sucesso';
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Erro ao configurar usuário postgres: %', SQLERRM;
+END $$;
 
 -- Criar usuário wuzapi (sempre recriar para garantir configuração correta)
-DROP ROLE IF EXISTS wuzapi;
-CREATE ROLE wuzapi WITH LOGIN CREATEDB PASSWORD 'wuzapi';
-RAISE NOTICE 'Usuário wuzapi criado/recriado com sucesso';
+DO $$
+BEGIN
+    DROP ROLE IF EXISTS wuzapi;
+    CREATE ROLE wuzapi WITH LOGIN CREATEDB PASSWORD 'wuzapi';
+    RAISE NOTICE 'Usuário wuzapi criado/recriado com sucesso';
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Erro ao criar usuário wuzapi: %', SQLERRM;
+END $$;
 
 -- Criar banco wuzapi se não existir
 DO $$
@@ -21,18 +33,28 @@ BEGIN
     ELSE
         RAISE NOTICE 'Banco wuzapi já existe';
     END IF;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Erro ao criar banco wuzapi: %', SQLERRM;
 END $$;
 
 -- Conectar ao banco wuzapi e conceder privilégios
 \c wuzapi;
 
 -- Conceder privilégios ao usuário wuzapi no banco wuzapi
-GRANT USAGE ON SCHEMA public TO wuzapi;
-GRANT CREATE ON SCHEMA public TO wuzapi;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO wuzapi;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO wuzapi;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO wuzapi;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO wuzapi;
+DO $$
+BEGIN
+    GRANT USAGE ON SCHEMA public TO wuzapi;
+    GRANT CREATE ON SCHEMA public TO wuzapi;
+    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO wuzapi;
+    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO wuzapi;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO wuzapi;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO wuzapi;
+    RAISE NOTICE 'Privilégios concedidos ao usuário wuzapi com sucesso';
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Erro ao conceder privilégios: %', SQLERRM;
+END $$;
 
 \echo '✅ Usuários e banco criados/recriados com sucesso!'
 \echo '📊 Usuários: postgres, wuzapi'
