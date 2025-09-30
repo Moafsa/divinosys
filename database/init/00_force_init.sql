@@ -38,24 +38,6 @@ EXCEPTION
         RAISE NOTICE 'Erro ao criar banco wuzapi: %', SQLERRM;
 END $$;
 
--- Conectar ao banco wuzapi e conceder privilégios
-\c wuzapi;
-
--- Conceder privilégios ao usuário wuzapi no banco wuzapi
-DO $$
-BEGIN
-    GRANT USAGE ON SCHEMA public TO wuzapi;
-    GRANT CREATE ON SCHEMA public TO wuzapi;
-    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO wuzapi;
-    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO wuzapi;
-    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO wuzapi;
-    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO wuzapi;
-    RAISE NOTICE 'Privilégios concedidos ao usuário wuzapi com sucesso';
-EXCEPTION
-    WHEN OTHERS THEN
-        RAISE NOTICE 'Erro ao conceder privilégios: %', SQLERRM;
-END $$;
-
 \echo '✅ Usuários e banco criados/recriados com sucesso!'
 \echo '📊 Usuários: postgres, wuzapi'
 \echo '🗄️ Bancos: divino_lanches, wuzapi'
