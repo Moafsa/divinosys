@@ -32,11 +32,22 @@ services:
       - POSTGRES_DB=${DB_NAME:-divino_lanches}
       - POSTGRES_USER=${DB_USER:-postgres}
       - POSTGRES_PASSWORD=${DB_PASSWORD:-divino_password}
+      - POSTGRES_FORCE_INITDB=1
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init:/docker-entrypoint-initdb.d
     networks:
       - divino-network
+    command: >
+      bash -c "
+      echo '=== FORCING POSTGRESQL INITIALIZATION ==='
+      if [ -d /var/lib/postgresql/data ]; then
+        echo 'Removing existing data directory...'
+        rm -rf /var/lib/postgresql/data/*
+      fi
+      echo 'Starting PostgreSQL with forced initialization...'
+      docker-entrypoint.sh postgres
+      "
 
 
   redis:
