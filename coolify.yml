@@ -44,6 +44,20 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    command: >
+      bash -c "
+      if [ ! -f /var/lib/postgresql/data/PG_VERSION ]; then
+        echo 'Database not initialized, running init scripts...'
+        docker-entrypoint.sh postgres &
+        sleep 10
+        psql -U postgres -d postgres -c \"CREATE ROLE wuzapi WITH LOGIN CREATEDB PASSWORD 'wuzapi';\"
+        psql -U postgres -d postgres -c \"CREATE DATABASE wuzapi OWNER wuzapi;\"
+        wait
+      else
+        echo 'Database already initialized, starting PostgreSQL...'
+        docker-entrypoint.sh postgres
+      fi
+      "
 
 
   redis:
