@@ -14,7 +14,9 @@ class BaileysManager {
 
     public function __construct() {
         $this->db = Database::getInstance();
+        error_log("BaileysManager::__construct - Carregando WuzAPIManager");
         $this->wuzapiManager = new WuzAPIManager();
+        error_log("BaileysManager::__construct - WuzAPIManager carregado");
     }
 
     /**
@@ -53,25 +55,31 @@ class BaileysManager {
                 throw new Exception("Número de telefone já registrado");
             }
 
-            // Criar instância no banco
+            // Criar instância na WuzAPI primeiro
+            error_log("BaileysManager::createInstance - Chamando WuzAPIManager::createInstance");
+            $wuzapiResult = $this->wuzapiManager->createInstance($instanceName, $phoneNumber, $webhookUrl);
+            error_log("BaileysManager::createInstance - Resultado WuzAPI: " . json_encode($wuzapiResult));
+            
+            if (!$wuzapiResult || !$wuzapiResult['success']) {
+                throw new Exception('Falha ao criar instância na WuzAPI: ' . ($wuzapiResult['message'] ?? 'Erro desconhecido'));
+            }
+            
+            // Criar instância no banco com dados da WuzAPI
             $this->db->query(
-                "INSERT INTO whatsapp_instances (tenant_id, filial_id, instance_name, phone_number, status, webhook_url, ativo) VALUES (?, ?, ?, ?, 'disconnected', ?, true)",
-                [$tenantId, $filialId, $instanceName, $phoneNumber, $webhookUrl]
+                "INSERT INTO whatsapp_instances (tenant_id, filial_id, instance_name, phone_number, status, webhook_url, wuzapi_instance_id, wuzapi_token, ativo) VALUES (?, ?, ?, ?, 'disconnected', ?, ?, ?, true)",
+                [$tenantId, $filialId, $instanceName, $phoneNumber, $webhookUrl, $wuzapiResult['instance_id'], $wuzapiResult['token']]
             );
             
             $instanceId = $this->db->lastInsertId();
             
-            // Criar instância na WuzAPI
-            $wuzapiResult = $this->wuzapiManager->createInstance($instanceName, $phoneNumber, $webhookUrl);
-            
-            if ($wuzapiResult && $wuzapiResult['success']) {
-                error_log("BaileysManager::createInstance - Instância criada na WuzAPI");
-            }
+            error_log("BaileysManager::createInstance - Instância criada na WuzAPI com ID: " . $wuzapiResult['instance_id']);
 
             return [
                 'success' => true,
                 'message' => 'Instância criada com sucesso',
-                'instance_id' => $instanceId
+                'instance_id' => $instanceId,
+                'wuzapi_instance_id' => $wuzapiResult['instance_id'],
+                'wuzapi_token' => $wuzapiResult['token']
             ];
 
         } catch (Exception $e) {
@@ -85,10 +93,14 @@ class BaileysManager {
      */
     public function getInstances($tenantId) {
         try {
+            error_log("BaileysManager::getInstances - Tenant ID: " . $tenantId);
+            
             $instances = $this->db->fetchAll(
                 "SELECT * FROM whatsapp_instances WHERE tenant_id = ? AND ativo = true ORDER BY created_at DESC",
                 [$tenantId]
             );
+            
+            error_log("BaileysManager::getInstances - Instâncias encontradas no DB: " . count($instances));
 
             return array_map(function($instance) {
                 return [
@@ -119,10 +131,12 @@ class BaileysManager {
                 throw new Exception('Instância não encontrada');
             }
             
-            // Deletar na WuzAPI
+            // Deletar na WuzAPI usando o wuzapi_instance_id
             try {
-                $this->wuzapiManager->deleteInstance($instanceId);
-                error_log("BaileysManager::deleteInstance - Instância deletada na WuzAPI");
+                if (!empty($instance['wuzapi_instance_id'])) {
+                    $this->wuzapiManager->deleteInstance($instance['wuzapi_instance_id']);
+                    error_log("BaileysManager::deleteInstance - Instância deletada na WuzAPI");
+                }
             } catch (Exception $e) {
                 error_log("Erro ao deletar na WuzAPI: " . $e->getMessage());
             }
@@ -155,7 +169,7 @@ class BaileysManager {
             if (!$instance) {
                 throw new Exception('Instância não encontrada');
             }
-            
+
             // Gerar QR code via WuzAPI
             $qrData = $this->wuzapiManager->generateQRCode($instanceId);
             
@@ -187,40 +201,6 @@ class BaileysManager {
         }
     }
 
-    /**
-     * Enviar mensagem via WuzAPI
-     */
-    public function sendMessage($instanceId, $to, $message, $messageType = 'text') {
-        try {
-            // Verificar se instância existe
-            $instance = $this->db->fetch(
-                "SELECT * FROM whatsapp_instances WHERE id = ?",
-                [$instanceId]
-            );
-            
-            if (!$instance) {
-                throw new Exception('Instância não encontrada');
-            }
-            
-            // Enviar via WuzAPI (implementar quando necessário)
-            // Por enquanto, apenas log
-            error_log("BaileysManager::sendMessage - Enviando mensagem via WuzAPI para $to: $message");
-            
-            return [
-                'success' => true,
-                'message_id' => 'wuzapi_' . time(),
-                'status' => 'sent'
-            ];
-            
-        } catch (Exception $e) {
-            error_log('BaileysManager::sendMessage - Error: ' . $e->getMessage());
-            return [
-                'success' => false,
-                'error' => $e->getMessage()
-            ];
-        }
-    }
-    
     /**
      * Verificar status da instância via WuzAPI
      */
@@ -257,13 +237,13 @@ class BaileysManager {
             ];
         }
     }
-
+    
     /**
      * Atualizar status da instância
      */
     private function updateInstanceStatus($instanceId, $status) {
         try {
-            $this->db->query(
+                    $this->db->query(
                 "UPDATE whatsapp_instances SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 [$status, $instanceId]
             );
@@ -284,6 +264,34 @@ class BaileysManager {
         } catch (Exception $e) {
             error_log("BaileysManager::getInstance - Error: " . $e->getMessage());
             return null;
+        }
+    }
+    
+    /**
+     * Sincronizar status da instância
+     */
+    public function syncInstanceStatus($instanceId) {
+        try {
+            error_log("BaileysManager::syncInstanceStatus - Sincronizando status para ID: $instanceId");
+            
+            return $this->wuzapiManager->syncInstanceStatus($instanceId);
+        } catch (Exception $e) {
+            error_log("BaileysManager::syncInstanceStatus - Error: " . $e->getMessage());
+            throw $e;
+        }
+    }
+    
+    /**
+     * Enviar mensagem via WuzAPI
+     */
+    public function sendMessage($instanceId, $phoneNumber, $message) {
+        try {
+            error_log("BaileysManager::sendMessage - Enviando mensagem para $phoneNumber via instância $instanceId");
+            
+            return $this->wuzapiManager->sendMessage($instanceId, $phoneNumber, $message);
+        } catch (Exception $e) {
+            error_log("BaileysManager::sendMessage - Error: " . $e->getMessage());
+            throw $e;
         }
     }
 }

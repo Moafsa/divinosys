@@ -16,8 +16,9 @@ services:
       - DB_PASSWORD=divino_password
       - APP_ENV=production
       - APP_URL=http://localhost:8080
-      - CHATWOOT_URL=${CHATWOOT_URL:-https://services.conext.click/}
-      - CHATWOOT_API_KEY=${CHATWOOT_API_KEY:-fDz34rE7yXpWxLKx4DQ7x8yL}
+      - WUZAPI_URL=http://wuzapi:8080
+      - WUZAPI_API_KEY=1234ABCD
+      - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL:-}
     depends_on:
       - postgres
       - redis
@@ -58,7 +59,8 @@ services:
       dockerfile: Dockerfile
     container_name: divino-lanches-wuzapi
     ports:
-      - "8081:8080"  # Externo:8081 → Interno:8080
+      - "8081:8080"  # Backend Go - Externo:8081 → Interno:8080
+      - "3001:3000"  # Frontend React - Externo:3001 → Interno:3000
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432
@@ -67,6 +69,7 @@ services:
       - DB_PASSWORD=wuzapi
       - WUZAPI_URL=http://wuzapi:8080  # Comunicação interna entre containers
       - WEBHOOK_URL=http://app:80/webhook/wuzapi.php
+      - WUZAPI_ADMIN_TOKEN=admin123456  # Token para acesso administrativo
     volumes:
       - wuzapi_sessions:/app/sessions
       - wuzapi_logs:/app/logs

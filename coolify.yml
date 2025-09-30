@@ -1,40 +1,30 @@
 version: '3.8'
 
-networks:
-  divino_network:
-    driver: bridge
-
 services:
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=${DB_NAME}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - APP_NAME=Divino Lanches
+      - APP_ENV=production
       - APP_URL=${APP_URL}
-      - APP_DEBUG=false
-      - MULTI_TENANT_ENABLED=true
-      - UPLOAD_MAX_SIZE=10M
-      - ALLOWED_EXTENSIONS=jpg,jpeg,png,gif,pdf,doc,docx
-      - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL}
-      - WHATSAPP_ENABLED=true
-      - CHATWOOT_URL=${CHATWOOT_URL}
-      - CHATWOOT_API_KEY=${CHATWOOT_API_KEY}
-      - CHATWOOT_ACCOUNT_ID=${CHATWOOT_ACCOUNT_ID}
+      - WUZAPI_URL=http://wuzapi:8080
+      - WUZAPI_API_KEY=1234ABCD
+      - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL:-}
     depends_on:
       - postgres
       - redis
+      - wuzapi
     volumes:
       - ./uploads:/var/www/html/uploads
       - ./logs:/var/www/html/logs
     networks:
-      - divino_network
-    restart: unless-stopped
+      - divino-network
 
   postgres:
     image: postgres:15-alpine
@@ -43,21 +33,45 @@ services:
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
     volumes:
-      - divino_postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
       - ./database/init:/docker-entrypoint-initdb.d
     networks:
-      - divino_network
-    restart: unless-stopped
+      - divino-network
 
   redis:
     image: redis:7-alpine
     volumes:
-      - divino_redis_data:/data
+      - redis_data:/data
     networks:
-      - divino_network
-    restart: unless-stopped
+      - divino-network
 
+  wuzapi:
+    build:
+      context: ./docker/wuzapi
+      dockerfile: Dockerfile
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=wuzapi
+      - DB_USER=wuzapi
+      - DB_PASSWORD=wuzapi
+      - WUZAPI_URL=http://wuzapi:8080
+      - WEBHOOK_URL=http://app:80/webhook/wuzapi.php
+      - WUZAPI_ADMIN_TOKEN=admin123456
+    volumes:
+      - wuzapi_sessions:/app/sessions
+      - wuzapi_logs:/app/logs
+    depends_on:
+      - postgres
+    networks:
+      - divino-network
 
 volumes:
-  divino_postgres_data:
-  divino_redis_data:
+  postgres_data:
+  redis_data:
+  wuzapi_sessions:
+  wuzapi_logs:
+
+networks:
+  divino-network:
+    driver: bridge

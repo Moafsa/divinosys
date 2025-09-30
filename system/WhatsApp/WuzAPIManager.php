@@ -16,46 +16,84 @@ class WuzAPIManager
     
     public function __construct() 
     {
+        error_log("WuzAPIManager::__construct - Iniciando construtor");
         // URL interna do Docker: wuzapi:8080 (comunicação entre containers)
         // URL externa para testes: localhost:8081 (mapeamento externo)
         $this->wuzapiUrl = $_ENV['WUZAPI_URL'] ?? 'http://wuzapi:8080';
-        $this->apiKey = $_ENV['WUZAPI_API_KEY'] ?? '';
-        $this->webhookUrl = $_ENV['N8N_WEBHOOK_URL'] ?? '';
+        $this->apiKey = $_ENV['WUZAPI_API_KEY'] ?? '1234ABCD'; // Token padrão da WuzAPI
+        $this->webhookUrl = ''; // Webhook será definido apenas quando necessário
+        error_log("WuzAPIManager::__construct - Construtor finalizado");
     }
     
     /**
-     * Criar instância WhatsApp via WuzAPI
+     * Conectar sessão WhatsApp via WuzAPI
      */
     public function createInstance($instanceName, $phoneNumber, $webhookUrl = null) 
     {
         try {
-            $webhook = $webhookUrl ?? $this->webhookUrl;
+            error_log("WuzAPIManager::createInstance - Iniciando criação de instância: $instanceName");
             
-            $data = [
-                'instance_name' => $instanceName,
-                'phone_number' => $phoneNumber,
-                'webhook_url' => $webhook,
-                'qrcode' => true,
-                'status' => 'disconnected'
-            ];
+            // Criar usuário diretamente no banco da WuzAPI
+            $token = $this->generateRandomToken();
+            error_log("WuzAPIManager::createInstance - Token gerado: $token");
             
-            $response = $this->makeApiCall('POST', '/api/instance/create', $data);
+            // Conectar ao banco da WuzAPI
+            $pdo = new \PDO(
+                "pgsql:host=postgres;port=5432;dbname=wuzapi",
+                "wuzapi",
+                "wuzapi"
+            );
+            error_log("WuzAPIManager::createInstance - Conexão PDO estabelecida");
             
-            if ($response && isset($response['success']) && $response['success']) {
+            // Testar conexão
+            $testStmt = $pdo->query("SELECT COUNT(*) FROM users");
+            $userCount = $testStmt->fetchColumn();
+            error_log("WuzAPIManager::createInstance - Usuários existentes na WuzAPI: $userCount");
+            
+            $stmt = $pdo->prepare("
+                INSERT INTO users (name, token, webhook, events) 
+                VALUES (?, ?, ?, ?) 
+                RETURNING id, name, token
+            ");
+            
+            $events = 'Message,Connected,Disconnected';
+            error_log("WuzAPIManager::createInstance - Executando INSERT com: $instanceName, $token, " . ($webhookUrl ?? '') . ", $events");
+            
+            $stmt->execute([$instanceName, $token, $webhookUrl ?? '', $events]);
+            $result = $stmt->fetch(\PDO::FETCH_ASSOC);
+            
+            error_log("WuzAPIManager::createInstance - Resultado: " . json_encode($result));
+            
+            if ($result) {
+                // Tentar iniciar a sessão para ativar a instância
+                try {
+                    error_log("WuzAPIManager::createInstance - Tentando iniciar sessão para instância {$result['id']} com token {$result['token']}");
+                    $sessionStarted = $this->startSession($result['token']);
+                    if ($sessionStarted) {
+                        error_log("WuzAPIManager::createInstance - Sessão iniciada com sucesso para instância {$result['id']}");
+                    } else {
+                        error_log("WuzAPIManager::createInstance - Falha ao iniciar sessão para instância {$result['id']}");
+                    }
+                } catch (Exception $e) {
+                    error_log("WuzAPIManager::createInstance - Erro ao iniciar sessão: " . $e->getMessage());
+                }
+                
                 return [
                     'success' => true,
-                    'instance_id' => $response['instance_id'],
-                    'message' => 'Instância criada com sucesso'
+                    'instance_id' => $result['id'],
+                    'token' => $result['token'],
+                    'message' => 'Instância criada na WuzAPI com sucesso'
                 ];
             }
             
             return [
                 'success' => false,
-                'message' => 'Falha ao criar instância: ' . ($response['message'] ?? 'Erro desconhecido')
+                'message' => 'Falha ao criar instância na WuzAPI'
             ];
             
         } catch (Exception $e) {
             error_log("WuzAPIManager::createInstance - Error: " . $e->getMessage());
+            error_log("WuzAPIManager::createInstance - Stack trace: " . $e->getTraceAsString());
             return [
                 'success' => false,
                 'message' => 'Erro ao criar instância: ' . $e->getMessage()
@@ -63,26 +101,77 @@ class WuzAPIManager
         }
     }
     
+    private function generateRandomToken() {
+        return strtoupper(substr(md5(uniqid()), 0, 8));
+    }
+    
     /**
-     * Gerar QR code para instância
+     * Gerar QR code para sessão
      */
     public function generateQRCode($instanceId) 
     {
         try {
-            $response = $this->makeApiCall('GET', "/api/instance/{$instanceId}/qrcode");
+            error_log("WuzAPIManager::generateQRCode - Gerando QR para instância: $instanceId");
             
-            if ($response && isset($response['qrcode'])) {
+            // Buscar dados da instância no banco local usando Database class
+            $db = \System\Database::getInstance();
+            $instance = $db->query("SELECT wuzapi_instance_id, wuzapi_token FROM whatsapp_instances WHERE id = ?", [$instanceId])->fetch();
+            
+            if (!$instance || !$instance['wuzapi_instance_id']) {
+                error_log("WuzAPIManager::generateQRCode - Instância não encontrada ou sem WuzAPI ID");
+                return [
+                    'success' => false,
+                    'message' => 'Instância não encontrada na WuzAPI'
+                ];
+            }
+            
+            $wuzapiInstanceId = $instance['wuzapi_instance_id'];
+            $token = $instance['wuzapi_token'];
+            
+            error_log("WuzAPIManager::generateQRCode - Usando WuzAPI ID: $wuzapiInstanceId, Token: $token");
+            
+            // Primeiro, tentar conectar a sessão se ela não estiver ativa
+            try {
+                $connectResponse = $this->makeApiCall('POST', "/session/connect", '{}', $token);
+                if ($connectResponse && $connectResponse['success']) {
+                    error_log("WuzAPIManager::generateQRCode - Sessão conectada com sucesso");
+                }
+            } catch (Exception $e) {
+                error_log("WuzAPIManager::generateQRCode - Erro ao conectar sessão: " . $e->getMessage());
+            }
+            
+            // Verificar status da sessão específica
+            $statusResponse = $this->makeApiCall('GET', "/session/status", null, $token);
+            
+            if ($statusResponse && isset($statusResponse['data'])) {
+                $connected = $statusResponse['data']['Connected'] ?? false;
+                $loggedIn = $statusResponse['data']['LoggedIn'] ?? false;
+                
+                if ($loggedIn) {
+                    return [
+                        'success' => true,
+                        'qr_code' => null,
+                        'status' => 'connected',
+                        'message' => 'WhatsApp já está conectado'
+                    ];
+                }
+            }
+            
+            // Gerar QR code para a instância específica
+            $response = $this->makeApiCall('GET', "/session/qr", null, $token);
+            
+            if ($response && isset($response['data']['QRCode'])) {
                 return [
                     'success' => true,
-                    'qr_code' => $response['qrcode'],
+                    'qr_code' => $response['data']['QRCode'],
                     'status' => 'connecting',
-                    'message' => 'QR code gerado com sucesso'
+                    'message' => 'QR code gerado com sucesso. Escaneie com seu WhatsApp.'
                 ];
             }
             
             return [
                 'success' => false,
-                'message' => 'Falha ao gerar QR code'
+                'message' => 'Falha ao gerar QR code: ' . ($response['error'] ?? 'Erro desconhecido')
             ];
             
         } catch (Exception $e) {
@@ -100,14 +189,36 @@ class WuzAPIManager
     public function getInstanceStatus($instanceId) 
     {
         try {
-            $response = $this->makeApiCall('GET', "/api/instance/{$instanceId}/status");
+            // Buscar token da instância
+            $db = \System\Database::getInstance();
+            $instance = $db->query("SELECT wuzapi_token FROM whatsapp_instances WHERE id = ?", [$instanceId])->fetch();
             
-            if ($response) {
+            if (!$instance || !$instance['wuzapi_token']) {
+                return [
+                    'success' => false,
+                    'message' => 'Token da instância não encontrado'
+                ];
+            }
+            
+            $response = $this->makeApiCall('GET', "/session/status", null, $instance['wuzapi_token']);
+            
+            if ($response && isset($response['data'])) {
+                $connected = $response['data']['Connected'] ?? false;
+                $loggedIn = $response['data']['LoggedIn'] ?? false;
+                
+                $status = 'disconnected';
+                if ($loggedIn) {
+                    $status = 'connected';
+                } elseif ($connected) {
+                    $status = 'connecting';
+                }
+                
                 return [
                     'success' => true,
-                    'status' => $response['status'] ?? 'unknown',
-                    'connected' => $response['connected'] ?? false,
-                    'message' => $response['message'] ?? ''
+                    'status' => $status,
+                    'connected' => $connected,
+                    'logged_in' => $loggedIn,
+                    'message' => $response['data']['details'] ?? ''
                 ];
             }
             
@@ -126,30 +237,81 @@ class WuzAPIManager
     }
     
     /**
-     * Enviar mensagem via WuzAPI
+     * Sincronizar status da instância no banco local
      */
-    public function sendMessage($instanceId, $phoneNumber, $message) 
+    public function syncInstanceStatus($instanceId) 
     {
         try {
-            $data = [
-                'number' => $phoneNumber,
-                'message' => $message,
-                'type' => 'text'
-            ];
+            $statusResponse = $this->getInstanceStatus($instanceId);
             
-            $response = $this->makeApiCall('POST', "/api/instance/{$instanceId}/send", $data);
-            
-            if ($response && isset($response['success']) && $response['success']) {
+            if ($statusResponse['success']) {
+                $db = \System\Database::getInstance();
+                $db->query(
+                    "UPDATE whatsapp_instances SET status = ? WHERE id = ?",
+                    [$statusResponse['status'], $instanceId]
+                );
+                
+                error_log("WuzAPIManager::syncInstanceStatus - Status sincronizado: {$statusResponse['status']} para instância $instanceId");
+                
                 return [
                     'success' => true,
-                    'message_id' => $response['message_id'] ?? null,
-                    'message' => 'Mensagem enviada com sucesso'
+                    'status' => $statusResponse['status'],
+                    'message' => 'Status sincronizado com sucesso'
                 ];
             }
             
             return [
                 'success' => false,
-                'message' => 'Falha ao enviar mensagem: ' . ($response['message'] ?? 'Erro desconhecido')
+                'message' => 'Falha ao sincronizar status'
+            ];
+            
+        } catch (Exception $e) {
+            error_log("WuzAPIManager::syncInstanceStatus - Error: " . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'Erro ao sincronizar status: ' . $e->getMessage()
+            ];
+        }
+    }
+    
+    /**
+     * Enviar mensagem via WuzAPI
+     */
+    public function sendMessage($instanceId, $phoneNumber, $message) 
+    {
+        try {
+            // Buscar token da instância
+            $db = \System\Database::getInstance();
+            $instance = $db->query("SELECT wuzapi_token FROM whatsapp_instances WHERE id = ?", [$instanceId])->fetch();
+            
+            if (!$instance || !$instance['wuzapi_token']) {
+                return [
+                    'success' => false,
+                    'message' => 'Token da instância não encontrado'
+                ];
+            }
+            
+            // Formato correto para WuzAPI: Phone e Body (com maiúsculas)
+            $data = [
+                'Phone' => $phoneNumber,
+                'Body' => $message
+            ];
+            
+            $response = $this->makeApiCall('POST', "/chat/send/text", json_encode($data), $instance['wuzapi_token']);
+            
+            if ($response && isset($response['success']) && $response['success']) {
+                error_log("WuzAPIManager::sendMessage - Mensagem enviada com sucesso para $phoneNumber");
+                return [
+                    'success' => true,
+                    'message' => 'Mensagem enviada com sucesso',
+                    'message_id' => $response['data']['Id'] ?? null,
+                    'response' => $response
+                ];
+            }
+            
+            return [
+                'success' => false,
+                'message' => 'Falha ao enviar mensagem: ' . ($response['error'] ?? 'Erro desconhecido')
             ];
             
         } catch (Exception $e) {
@@ -162,14 +324,50 @@ class WuzAPIManager
     }
     
     /**
+     * Iniciar sessão para ativar instância
+     */
+    public function startSession($token) 
+    {
+        try {
+            error_log("WuzAPIManager::startSession - Iniciando sessão com token: $token");
+            
+            // Tentar conectar a sessão via API com payload vazio
+            $response = $this->makeApiCall('POST', "/session/connect", '{}', $token);
+            
+            error_log("WuzAPIManager::startSession - Resposta da API /session/connect: " . json_encode($response));
+            
+            if ($response && isset($response['success']) && $response['success']) {
+                error_log("WuzAPIManager::startSession - Sessão iniciada com sucesso");
+                return true;
+            }
+            
+            error_log("WuzAPIManager::startSession - Falha ao iniciar sessão: " . json_encode($response));
+            return false;
+            
+        } catch (Exception $e) {
+            error_log("WuzAPIManager::startSession - Error: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
      * Deletar instância
      */
     public function deleteInstance($instanceId) 
     {
         try {
-            $response = $this->makeApiCall('DELETE', "/api/instance/{$instanceId}");
+            // Deletar diretamente do banco da WuzAPI
+            $pdo = new \PDO(
+                "pgsql:host=postgres;port=5432;dbname=wuzapi",
+                "wuzapi",
+                "wuzapi"
+            );
             
-            if ($response && isset($response['success']) && $response['success']) {
+            $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
+            $result = $stmt->execute([$instanceId]);
+            
+            if ($result) {
+                error_log("WuzAPIManager::deleteInstance - Instância {$instanceId} deletada do banco WuzAPI");
                 return [
                     'success' => true,
                     'message' => 'Instância deletada com sucesso'
@@ -178,7 +376,7 @@ class WuzAPIManager
             
             return [
                 'success' => false,
-                'message' => 'Falha ao deletar instância: ' . ($response['message'] ?? 'Erro desconhecido')
+                'message' => 'Falha ao deletar instância do banco WuzAPI'
             ];
             
         } catch (Exception $e) {
@@ -193,7 +391,7 @@ class WuzAPIManager
     /**
      * Fazer chamada para API WuzAPI
      */
-    private function makeApiCall($method, $endpoint, $data = null) 
+    private function makeApiCall($method, $endpoint, $data = null, $customToken = null) 
     {
         try {
             $url = rtrim($this->wuzapiUrl, '/') . $endpoint;
@@ -203,15 +401,16 @@ class WuzAPIManager
                 'Accept: application/json'
             ];
             
-            if ($this->apiKey) {
-                $headers[] = 'Authorization: Bearer ' . $this->apiKey;
+            $token = $customToken ?? $this->apiKey;
+            if ($token) {
+                $headers[] = 'token: ' . $token;
             }
             
             $ch = curl_init();
             curl_setopt_array($ch, [
                 CURLOPT_URL => $url,
                 CURLOPT_CUSTOMREQUEST => $method,
-                CURLOPT_POSTFIELDS => $data ? json_encode($data) : null,
+                CURLOPT_POSTFIELDS => $data,
                 CURLOPT_HTTPHEADER => $headers,
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_TIMEOUT => 30,

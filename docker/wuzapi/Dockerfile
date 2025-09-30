@@ -1,31 +1,41 @@
-# Dockerfile para WuzAPI
+# Dockerfile para WuzAPI (Backend + Frontend)
 FROM golang:1.24-alpine AS builder
 
 # Instalar dependências
 RUN apk add --no-cache git
 
-# Clonar e compilar WuzAPI
+# Clonar repositório
 WORKDIR /app
 RUN git clone https://github.com/pedroherpeto/wuzapi.git .
+
+# Compilar backend Go
 RUN go mod download
 RUN go build -o wuzapi .
 
 # Imagem final
 FROM alpine:latest
 
-# Instalar dependências runtime
-RUN apk add --no-cache ca-certificates tzdata
+# Instalar dependências runtime (incluindo Node.js para frontend)
+RUN apk add --no-cache ca-certificates tzdata nodejs npm
 
 # Copiar binário e migrações
 COPY --from=builder /app/wuzapi /usr/local/bin/wuzapi
 COPY --from=builder /app/migrations /usr/local/bin/migrations
 
-# Criar usuário não-root
+# Copiar frontend
+COPY --from=builder /app/frontend /app/frontend
+COPY --from=builder /app/static /app/static
+
+# Copiar arquivo de configuração do frontend
+COPY frontend.env /app/frontend/.env
+
+# Criar usuário não-root e dar permissões
 RUN adduser -D -s /bin/sh wuzapi
+RUN chown -R wuzapi:wuzapi /app/frontend /app/static
 USER wuzapi
 
 # Expor porta
 EXPOSE 8080
 
-# Comando de inicialização
-CMD ["wuzapi"]
+# Comando de inicialização (backend + frontend)
+CMD ["sh", "-c", "wuzapi & cd /app/frontend && npm install && npm start"]

@@ -491,8 +491,7 @@ if ($tenant && $filial) {
         
         // Carregar dados ao carregar a página
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('Carregando página configurações - versão 3.0 (Chatwoot)');
-            carregarUsuarios();
+            console.log('Carregando página configurações - versão 4.0 (WuzAPI)');
             carregarCaixasEntrada();
         });
 
@@ -679,7 +678,6 @@ if ($tenant && $filial) {
             .then(data => {
                 if (data.success) {
                     Swal.fire('Sucesso', 'Usuário criado com sucesso!', 'success');
-                    carregarUsuarios();
                 } else {
                     Swal.fire('Erro', data.message, 'error');
                 }
@@ -858,7 +856,6 @@ if ($tenant && $filial) {
             .then(data => {
                 if (data.success) {
                     Swal.fire('Sucesso', 'Usuário atualizado com sucesso!', 'success');
-                    carregarUsuarios();
                 } else {
                     Swal.fire('Erro', data.message || 'Erro ao atualizar usuário', 'error');
                 }
@@ -891,7 +888,6 @@ if ($tenant && $filial) {
                     .then(data => {
                         if (data.success) {
                             Swal.fire('Sucesso', 'Usuário removido com sucesso!', 'success');
-                            carregarUsuarios();
                         } else {
                             Swal.fire('Erro', data.message || 'Erro ao remover usuário', 'error');
                         }
@@ -957,20 +953,26 @@ if ($tenant && $filial) {
                         <div class="card-body">
                             <div class="row align-items-center">
                                 <div class="col-md-4">
-                                    <h6 class="mb-1">${caixa.instance_name}</h6>
-                                    <small class="text-muted">${caixa.phone_number}</small>
+                                    <h6 class="mb-1">${instance.instance_name}</h6>
+                                    <small class="text-muted">${instance.phone_number}</small>
                                 </div>
                                 <div class="col-md-3">
                                     <span class="badge bg-${statusClass}">${statusText}</span>
                                 </div>
                                 <div class="col-md-5 text-end">
-                                    <button class="btn btn-sm btn-outline-primary me-1" onclick="conectarCaixaEntrada('${caixa.instance_name}', ${caixa.id})">
+                                    <button class="btn btn-sm btn-outline-primary me-1" onclick="conectarCaixaEntrada('${instance.instance_name}', ${instance.id})">
                                         <i class="fas fa-qrcode"></i> Conectar
                                     </button>
-                                    <button class="btn btn-sm btn-outline-info me-1" onclick="abrirChatwoot('${caixa.chatwoot_url}')">
-                                        <i class="fas fa-external-link-alt"></i> Chatwoot
+                                    <button class="btn btn-sm btn-outline-info me-1" onclick="sincronizarStatus('${instance.instance_name}', ${instance.id})">
+                                        <i class="fas fa-sync"></i> Sync
                                     </button>
-                                    <button class="btn btn-sm btn-outline-danger" onclick="deletarCaixaEntrada('${caixa.instance_name}', ${caixa.id})">
+                                    <button class="btn btn-sm btn-outline-success me-1" onclick="enviarMensagem('${instance.instance_name}', ${instance.id})">
+                                        <i class="fas fa-paper-plane"></i> Enviar
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="verStatusInstancia('${instance.instance_name}', ${instance.id})">
+                                        <i class="fas fa-info-circle"></i> Status
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deletarCaixaEntrada('${instance.instance_name}', ${instance.id})">
                                         <i class="fas fa-trash"></i> Deletar
                                     </button>
                                 </div>
@@ -1009,23 +1011,23 @@ if ($tenant && $filial) {
                         return false;
                     }
                     
-                    return { nome, numero };
+                    return { instance_name: nome, phone_number: numero };
                 }
             }).then((result) => {
                 if (result.isConfirmed) {
-                    criarCaixaEntrada(result.value.nome, result.value.numero);
+                    criarCaixaEntrada(result.value.instance_name, result.value.phone_number);
                 }
             });
         }
 
-        function criarCaixaEntrada(nome, numero) {
+        function criarCaixaEntrada(instanceName, phoneNumber) {
             fetch('mvc/ajax/configuracoes.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                     'X-Requested-With': 'XMLHttpRequest',
                 },
-                body: `action=criar_caixa_entrada&instance_name=${encodeURIComponent(nome)}&phone_number=${encodeURIComponent(numero)}`
+                body: `action=criar_caixa_entrada&instance_name=${encodeURIComponent(instanceName)}&phone_number=${encodeURIComponent(phoneNumber)}`
             })
             .then(response => response.json())
             .then(data => {
@@ -1061,7 +1063,7 @@ if ($tenant && $filial) {
                             html: `
                                 <div class="text-center">
                                     <p class="mb-3"><strong>Escaneie o QR code com seu WhatsApp para conectar:</strong></p>
-                                    <img src="data:image/png;base64,${data.qr_code}" alt="QR Code" style="max-width: 300px; height: auto; border: 2px solid #25d366; border-radius: 8px; padding: 10px;">
+                                    <img src="${data.qr_code}" alt="QR Code" style="max-width: 300px; height: auto; border: 2px solid #25d366; border-radius: 8px; padding: 10px;">
                                     <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px; text-align: left;">
                                         <p style="margin: 5px 0; font-size: 14px;"><strong>📱 Instruções:</strong></p>
                                         <p style="margin: 3px 0; font-size: 12px;">1. Abra o WhatsApp no seu celular</p>
@@ -1087,32 +1089,24 @@ if ($tenant && $filial) {
                                 carregarCaixasEntrada();
                             }
                         });
-                    } else if (data.chatwoot_url) {
-                        // Redirecionar para Chatwoot
+                    } else if (data.status === 'connected') {
+                        // Já conectado
                         Swal.fire({
-                            title: 'Conectar WhatsApp',
+                            title: 'WhatsApp Conectado!',
                             html: `
                                 <div class="text-center">
-                                    <i class="fas fa-qrcode text-success mb-3" style="font-size: 4rem;"></i>
-                                    <p class="mb-3">Acesse o Chatwoot para conectar seu WhatsApp</p>
-                                    <p class="text-muted">Lá você encontrará o QR code para escanear com seu celular</p>
-                                    <div class="alert alert-info mt-3">
+                                    <i class="fas fa-check-circle text-success mb-3" style="font-size: 4rem;"></i>
+                                    <p class="mb-3">Seu WhatsApp já está conectado e pronto para uso!</p>
+                                    <div class="alert alert-success mt-3">
                                         <i class="fas fa-info-circle"></i>
-                                        <strong>Como conectar:</strong><br>
-                                        1. Clique em "Abrir Chatwoot"<br>
-                                        2. Escaneie o QR code com seu WhatsApp<br>
-                                        3. Aguarde a conexão ser estabelecida
+                                        <strong>Status:</strong> Conectado<br>
+                                        <strong>Pronto para:</strong> Enviar e receber mensagens
                                     </div>
                                 </div>
                             `,
-                            showCancelButton: true,
-                            confirmButtonText: 'Abrir Chatwoot',
-                            cancelButtonText: 'Fechar',
-                            width: 500
-                        }).then((result) => {
-                            if (result.isConfirmed) {
-                                window.open(data.chatwoot_url, '_blank');
-                            }
+                            confirmButtonText: 'Ótimo!',
+                            confirmButtonColor: '#25d366',
+                            width: 400
                         });
                     } else {
                         // Sem QR code e sem URL - mostrar mensagem informativa
@@ -1126,7 +1120,7 @@ if ($tenant && $filial) {
                                     <p class="text-muted">Status: ${data.status || 'desconhecido'}</p>
                                     <div class="alert alert-info mt-3">
                                         <i class="fas fa-clock"></i>
-                                        <strong>Dica:</strong> O QR code é gerado automaticamente pelo Chatwoot. 
+                                        <strong>Dica:</strong> O QR code é gerado automaticamente pela WuzAPI. 
                                         Tente novamente em alguns segundos.
                                     </div>
                                 </div>
@@ -1154,12 +1148,23 @@ if ($tenant && $filial) {
             });
         }
 
-        function abrirChatwoot(chatwootUrl) {
-            if (chatwootUrl) {
-                window.open(chatwootUrl, '_blank');
-            } else {
-                Swal.fire('Erro', 'URL do Chatwoot não encontrada', 'error');
-            }
+        function verStatusInstancia(instanceName, instanceId) {
+            Swal.fire({
+                title: `Status da Instância: ${instanceName}`,
+                html: `
+                    <div class="text-center">
+                        <i class="fas fa-info-circle text-info mb-3" style="font-size: 3rem;"></i>
+                        <p class="mb-3">Verificando status da instância...</p>
+                        <div class="alert alert-info">
+                            <strong>ID:</strong> ${instanceId}<br>
+                            <strong>Nome:</strong> ${instanceName}<br>
+                            <strong>Status:</strong> Verificando...
+                        </div>
+                    </div>
+                `,
+                confirmButtonText: 'OK',
+                confirmButtonColor: '#25d366'
+            });
         }
 
         function deletarCaixaEntrada(nomeCaixa, instanceId) {
@@ -1192,6 +1197,113 @@ if ($tenant && $filial) {
                     .catch(error => {
                         console.error('Erro:', error);
                         Swal.fire('Erro', 'Erro ao deletar caixa de entrada', 'error');
+                    });
+                }
+            });
+        }
+        
+        function sincronizarStatus(instanceName, instanceId) {
+            Swal.fire({
+                title: 'Sincronizando Status',
+                text: `Sincronizando status da instância "${instanceName}"...`,
+                icon: 'info',
+                showConfirmButton: false,
+                allowOutsideClick: false
+            });
+            
+            fetch('mvc/ajax/configuracoes.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: `action=sincronizar_status&instance_id=${instanceId}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire({
+                        title: 'Status Sincronizado!',
+                        text: `Status atualizado para: ${data.status}`,
+                        icon: 'success',
+                        confirmButtonText: 'OK'
+                    }).then(() => {
+                        carregarCaixasEntrada();
+                    });
+                } else {
+                    Swal.fire('Erro', data.message || 'Erro ao sincronizar status', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire('Erro', 'Erro ao sincronizar status', 'error');
+            });
+        }
+        
+        function enviarMensagem(instanceName, instanceId) {
+            Swal.fire({
+                title: `Enviar Mensagem - ${instanceName}`,
+                html: `
+                    <div class="mb-3">
+                        <label for="phone_number" class="form-label">Número do WhatsApp</label>
+                        <input type="text" id="phone_number" class="form-control" placeholder="Ex: 5554999999999" value="5554997092223">
+                        <small class="form-text text-muted">Digite o número com código do país (ex: 5554999999999)</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="message_text" class="form-label">Mensagem</label>
+                        <textarea id="message_text" class="form-control" rows="4" placeholder="Digite sua mensagem aqui...">Olá! Esta é uma mensagem de teste do sistema Divino Lanches via WuzAPI.</textarea>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Enviar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#25d366',
+                preConfirm: () => {
+                    const phoneNumber = document.getElementById('phone_number').value;
+                    const message = document.getElementById('message_text').value;
+                    
+                    if (!phoneNumber || !message) {
+                        Swal.showValidationMessage('Preencha todos os campos');
+                        return false;
+                    }
+                    
+                    return { phoneNumber, message };
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Enviar mensagem
+                    Swal.fire({
+                        title: 'Enviando Mensagem',
+                        text: 'Enviando mensagem via WhatsApp...',
+                        icon: 'info',
+                        showConfirmButton: false,
+                        allowOutsideClick: false
+                    });
+                    
+                    fetch('mvc/ajax/configuracoes.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        body: `action=enviar_mensagem&instance_id=${instanceId}&phone_number=${encodeURIComponent(result.value.phoneNumber)}&message=${encodeURIComponent(result.value.message)}`
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire({
+                                title: 'Mensagem Enviada!',
+                                text: 'Sua mensagem foi enviada com sucesso via WhatsApp.',
+                                icon: 'success',
+                                confirmButtonText: 'OK'
+                            });
+                        } else {
+                            Swal.fire('Erro', data.message || 'Erro ao enviar mensagem', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro:', error);
+                        Swal.fire('Erro', 'Erro ao enviar mensagem', 'error');
                     });
                 }
             });

@@ -10,6 +10,8 @@ require_once __DIR__ . '/../../system/WhatsApp/BaileysManager.php';
 try {
     $action = $_POST['action'] ?? '';
     
+    error_log("AJAX configuracoes.php - Ação recebida: " . $action);
+    
     switch ($action) {
         case 'salvar_aparencia':
             $corPrimaria = $_POST['cor_primaria'] ?? '';
@@ -71,23 +73,22 @@ try {
             echo json_encode(['success' => true, 'message' => 'Configurações de mesas salvas com sucesso!']);
             break;
             
-        // ===== CHATWOOT FUNCTIONS =====
+        // ===== WUZAPI FUNCTIONS =====
         
         case 'listar_caixas_entrada':
-            $session = \System\Session::getInstance();
-            $tenantId = $session->getTenantId();
+            error_log("AJAX listar_caixas_entrada - Iniciando");
+            
+            // Usar tenant_id fixo para teste (mesmo usado na criação)
+            $tenantId = 1;
+            
+            error_log("AJAX listar_caixas_entrada - Tenant ID: " . $tenantId);
             
             $baileysManager = new \System\WhatsApp\BaileysManager();
             $instancias = $baileysManager->getInstances($tenantId);
             
-            // Adicionar informações do Chatwoot
-            $caixasEntrada = [];
-            foreach ($instancias as $instancia) {
-                $instancia['chatwoot_url'] = $_ENV['CHATWOOT_URL'] ?? '';
-                $caixasEntrada[] = $instancia;
-            }
+            error_log("AJAX listar_caixas_entrada - Instâncias encontradas: " . count($instancias));
             
-            echo json_encode(['success' => true, 'caixas_entrada' => $caixasEntrada]);
+            echo json_encode(['success' => true, 'instances' => $instancias]);
             break;
             
         case 'criar_caixa_entrada':
@@ -133,6 +134,34 @@ try {
             
             $baileysManager = new \System\WhatsApp\BaileysManager();
             $result = $baileysManager->deleteInstance($instanceId);
+            
+            echo json_encode($result);
+            break;
+            
+        case 'sincronizar_status':
+            $instanceId = (int) ($_POST['instance_id'] ?? 0);
+            
+            if ($instanceId <= 0) {
+                throw new \Exception('ID da instância inválido');
+            }
+            
+            $baileysManager = new \System\WhatsApp\BaileysManager();
+            $result = $baileysManager->syncInstanceStatus($instanceId);
+            
+            echo json_encode($result);
+            break;
+            
+        case 'enviar_mensagem':
+            $instanceId = (int) ($_POST['instance_id'] ?? 0);
+            $phoneNumber = $_POST['phone_number'] ?? '';
+            $message = $_POST['message'] ?? '';
+            
+            if ($instanceId <= 0 || empty($phoneNumber) || empty($message)) {
+                throw new \Exception('Todos os campos são obrigatórios');
+            }
+            
+            $baileysManager = new \System\WhatsApp\BaileysManager();
+            $result = $baileysManager->sendMessage($instanceId, $phoneNumber, $message);
             
             echo json_encode($result);
             break;
