@@ -1,0 +1,15 @@
+-- Criar usuário wuzapi
+CREATE USER wuzapi WITH PASSWORD 'wuzapi' CREATEDB;
+
+-- Criar banco de dados wuzapi
+CREATE DATABASE wuzapi OWNER wuzapi;
+
+-- Conceder privilégios
+\c wuzapi;
+GRANT ALL PRIVILEGES ON DATABASE wuzapi TO wuzapi;
+GRANT ALL PRIVILEGES ON SCHEMA public TO wuzapi;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO wuzapi;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO wuzapi;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO wuzapi;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO wuzapi;
+
