@@ -27,7 +27,9 @@ services:
       - divino-network
 
   postgres:
-    image: postgres:15-alpine
+    build:
+      context: ./docker/postgres
+      dockerfile: Dockerfile
     environment:
       - POSTGRES_DB=${DB_NAME:-divino_lanches}
       - POSTGRES_USER=${DB_USER:-postgres}
