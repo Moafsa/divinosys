@@ -3,10 +3,9 @@
 
 \echo '=== FORÇANDO CRIAÇÃO DE USUÁRIOS POSTGRESQL ==='
 
--- Criar usuário postgres (sempre recriar para garantir configuração correta)
-DROP ROLE IF EXISTS postgres;
-CREATE ROLE postgres WITH LOGIN SUPERUSER CREATEDB CREATEROLE PASSWORD 'divino_password';
-RAISE NOTICE 'Usuário postgres criado/recriado com sucesso';
+-- Atualizar senha do usuário postgres se necessário
+ALTER ROLE postgres WITH PASSWORD 'divino_password';
+RAISE NOTICE 'Usuário postgres configurado com sucesso';
 
 -- Criar usuário wuzapi (sempre recriar para garantir configuração correta)
 DROP ROLE IF EXISTS wuzapi;
