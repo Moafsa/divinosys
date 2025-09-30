@@ -3,9 +3,9 @@ set -e
 
 echo "=== FORÇANDO INICIALIZAÇÃO POSTGRESQL ==="
 
-# Se existe um banco antigo, vamos forçar a reinicialização
+# Se existe um banco antigo, vamos forçar a reinicialização completa
 if [ -d "/var/lib/postgresql/data" ] && [ "$(ls -A /var/lib/postgresql/data)" ]; then
-    echo "Banco existente detectado. Forçando reinicialização..."
+    echo "Banco existente detectado. Forçando reinicialização completa..."
     
     # Backup dos dados importantes se existirem
     if [ -d "/var/lib/postgresql/data/base" ]; then
@@ -13,17 +13,12 @@ if [ -d "/var/lib/postgresql/data" ] && [ "$(ls -A /var/lib/postgresql/data)" ];
         cp -r /var/lib/postgresql/data /var/lib/postgresql/data.backup 2>/dev/null || true
     fi
     
-    # Remover configurações antigas que estão causando problemas
-    echo "Removendo configurações antigas..."
-    rm -f /var/lib/postgresql/data/pg_hba.conf
-    rm -f /var/lib/postgresql/data/pg_ident.conf
-    rm -f /var/lib/postgresql/data/postgresql.conf
-    rm -f /var/lib/postgresql/data/postgresql.conf.bak
+    # Remover todo o diretório de dados para forçar reinicialização completa
+    echo "Removendo diretório de dados antigo..."
+    rm -rf /var/lib/postgresql/data/*
+    rm -rf /var/lib/postgresql/data/.* 2>/dev/null || true
     
-    # Forçar criação de novos usuários
-    echo "Forçando criação de usuários..."
-    # Executar script SQL diretamente após inicialização
-    echo "Configurando para executar scripts de inicialização..."
+    echo "Diretório limpo. PostgreSQL será inicializado do zero."
 fi
 
 echo "Inicializando PostgreSQL..."
