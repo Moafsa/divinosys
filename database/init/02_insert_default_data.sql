@@ -4,9 +4,10 @@ INSERT INTO planos (nome, max_mesas, max_usuarios, max_produtos, max_pedidos_mes
 ('Professional', 15, 5, 200, 2000, '{"relatorios_avancados": true, "integracao_ifood": true, "suporte_prioritario": true, "backup_automatico": true}', 79.90),
 ('Enterprise', -1, -1, -1, -1, '{"relatorios_customizados": true, "api_acesso": true, "suporte_dedicado": true, "white_label": true, "integracoes_avancadas": true}', 199.90);
 
--- Insert default tenant
+-- Insert default tenant (with error handling)
 INSERT INTO tenants (id, nome, subdomain, domain, cnpj, telefone, email, endereco, cor_primaria, status, plano_id) VALUES
-(1, 'Divino Lanches', 'divino', 'divinolanches.com', '12345678000199', '(11) 99999-9999', 'contato@divinolanches.com', 'Rua das Flores, 123', '#28a745', 'ativo', 2);
+(1, 'Divino Lanches', 'divino', 'divinolanches.com', '12345678000199', '(11) 99999-9999', 'contato@divinolanches.com', 'Rua das Flores, 123', '#28a745', 'ativo', 2)
+ON CONFLICT (id) DO NOTHING;
 
 -- Insert default filial
 INSERT INTO filiais (tenant_id, nome, endereco, telefone, email, cnpj, status) VALUES
