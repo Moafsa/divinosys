@@ -32,32 +32,11 @@ services:
       - POSTGRES_DB=${DB_NAME:-divino_lanches}
       - POSTGRES_USER=${DB_USER:-postgres}
       - POSTGRES_PASSWORD=${DB_PASSWORD:-divino_password}
-      - POSTGRES_HOST_AUTH_METHOD=trust
-      - POSTGRES_INITDB_ARGS=--auth-host=trust --auth-local=trust
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init:/docker-entrypoint-initdb.d
     networks:
       - divino-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-divino_lanches}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    command: >
-      bash -c "
-      if [ ! -f /var/lib/postgresql/data/PG_VERSION ]; then
-        echo 'Database not initialized, running init scripts...'
-        docker-entrypoint.sh postgres &
-        sleep 10
-        psql -U postgres -d postgres -c \"CREATE ROLE wuzapi WITH LOGIN CREATEDB PASSWORD 'wuzapi';\"
-        psql -U postgres -d postgres -c \"CREATE DATABASE wuzapi OWNER wuzapi;\"
-        wait
-      else
-        echo 'Database already initialized, starting PostgreSQL...'
-        docker-entrypoint.sh postgres
-      fi
-      "
 
 
   redis:
