@@ -17,7 +17,7 @@ services:
       - WUZAPI_API_KEY=1234ABCD
       - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL:-}
     depends_on:
-      - postgres
+      - postgres-init
       - redis
       - wuzapi
     volumes:
@@ -32,8 +32,7 @@ services:
       - POSTGRES_DB=divino_lanches
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=divino_password
-      - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 --auth-local=trust
-      - POSTGRES_HOST_AUTH_METHOD=trust
+      - POSTGRES_INITDB_ARGS=--auth-host=trust --auth-local=trust
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init:/docker-entrypoint-initdb.d
@@ -44,6 +43,34 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  postgres-init:
+    image: postgres:15-alpine
+    command: |
+      sh -c "
+        echo '=== INICIALIZAÇÃO POSTGRESQL ==='
+        echo 'Aguardando PostgreSQL estar pronto...'
+        until pg_isready -h postgres -p 5432; do
+          echo 'PostgreSQL não está pronto ainda, aguardando...'
+          sleep 2
+        done
+        echo 'PostgreSQL está pronto!'
+        echo 'Executando script de criação de usuários...'
+        
+        # Executar script SQL para criar usuários
+        psql -h postgres -p 5432 -U postgres -d postgres -f /docker-entrypoint-initdb.d/00_create_users.sql
+        
+        echo '✅ Inicialização concluída!'
+        echo '📊 Usuários: postgres, wuzapi'
+        echo '🗄️ Bancos: divino_lanches, wuzapi'
+      "
+    volumes:
+      - ./database/init:/docker-entrypoint-initdb.d
+    networks:
+      - divino-network
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   redis:
     image: redis:7-alpine
@@ -69,7 +96,7 @@ services:
       - wuzapi_sessions:/app/sessions
       - wuzapi_logs:/app/logs
     depends_on:
-      - postgres
+      - postgres-init
     networks:
       - divino-network
 

@@ -1,5 +1,7 @@
 -- Script para criar usuários PostgreSQL
--- Este script executa sempre que o PostgreSQL inicia
+-- Este script executa após PostgreSQL estar pronto
+
+\echo '=== CRIANDO USUÁRIOS POSTGRESQL ==='
 
 -- Criar usuário postgres se não existir
 DO $$
@@ -34,11 +36,17 @@ BEGIN
     END IF;
 END $$;
 
--- Conceder privilégios ao usuário wuzapi no banco wuzapi
+-- Conectar ao banco wuzapi e conceder privilégios
 \c wuzapi;
+
+-- Conceder privilégios ao usuário wuzapi no banco wuzapi
 GRANT USAGE ON SCHEMA public TO wuzapi;
 GRANT CREATE ON SCHEMA public TO wuzapi;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO wuzapi;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO wuzapi;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO wuzapi;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO wuzapi;
+
+\echo '✅ Usuários e banco criados com sucesso!'
+\echo '📊 Usuários: postgres, wuzapi'
+\echo '🗄️ Bancos: divino_lanches, wuzapi'
