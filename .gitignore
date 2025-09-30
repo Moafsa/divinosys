@@ -29,6 +29,7 @@ uploads/*
 # Arquivos de IDE
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
 
