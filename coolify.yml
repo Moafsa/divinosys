@@ -40,13 +40,13 @@ services:
       - divino-network
     command: >
       bash -c "
-      echo '=== FORCING POSTGRESQL INITIALIZATION ==='
+      echo '=== FORCING POSTGRESQL INITIALIZATION ===';
       if [ -d /var/lib/postgresql/data ]; then
-        echo 'Removing existing data directory...'
-        rm -rf /var/lib/postgresql/data/*
-      fi
-      echo 'Starting PostgreSQL with forced initialization...'
-      docker-entrypoint.sh postgres
+        echo 'Removing existing data directory...';
+        rm -rf /var/lib/postgresql/data/*;
+      fi;
+      echo 'Starting PostgreSQL with forced initialization...';
+      docker-entrypoint.sh postgres;
       "
 
 
