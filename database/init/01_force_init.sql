@@ -1,7 +1,8 @@
--- Script para criar usuários PostgreSQL
--- Este script executa após PostgreSQL estar pronto
+-- Script para forçar inicialização do PostgreSQL
+-- Este script executa sempre, mesmo com volumes persistentes
 
-\echo '=== CRIANDO USUÁRIOS POSTGRESQL ==='
+-- Configurar pg_hba.conf para trust
+-- Isso é feito via variáveis de ambiente, mas vamos garantir
 
 -- Criar usuário postgres se não existir
 DO $$
@@ -11,6 +12,8 @@ BEGIN
         RAISE NOTICE 'Usuário postgres criado com sucesso';
     ELSE
         RAISE NOTICE 'Usuário postgres já existe';
+        -- Atualizar senha se necessário
+        ALTER ROLE postgres WITH PASSWORD 'divino_password';
     END IF;
 END $$;
 
@@ -22,6 +25,8 @@ BEGIN
         RAISE NOTICE 'Usuário wuzapi criado com sucesso';
     ELSE
         RAISE NOTICE 'Usuário wuzapi já existe';
+        -- Atualizar senha se necessário
+        ALTER ROLE wuzapi WITH PASSWORD 'wuzapi';
     END IF;
 END $$;
 
@@ -47,6 +52,6 @@ GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO wuzapi;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO wuzapi;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO wuzapi;
 
-\echo '✅ Usuários e banco criados com sucesso!'
+\echo '✅ Usuários e banco criados/atualizados com sucesso!'
 \echo '📊 Usuários: postgres, wuzapi'
 \echo '🗄️ Bancos: divino_lanches, wuzapi'
