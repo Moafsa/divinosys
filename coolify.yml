@@ -45,11 +45,17 @@ services:
         echo 'Removing existing data directory...';
         rm -rf /var/lib/postgresql/data/*;
       fi;
-      echo 'Setting environment variables...';
-      export POSTGRES_FORCE_INITDB=1;
-      export POSTGRES_INITDB_ARGS='--auth-host=trust --auth-local=trust';
-      echo 'Starting PostgreSQL with forced initialization...';
-      docker-entrypoint.sh postgres;
+      echo 'Starting PostgreSQL in background...';
+      docker-entrypoint.sh postgres &
+      echo 'Waiting for PostgreSQL to be ready...';
+      while ! pg_isready -h localhost -p 5432 -U postgres; do
+        echo 'PostgreSQL not ready yet, waiting...';
+        sleep 2;
+      done;
+      echo 'PostgreSQL is ready! Executing WuzAPI setup script...';
+      psql -h localhost -U postgres -d divino_lanches -f /docker-entrypoint-initdb.d/00_force_wuzapi_setup.sql;
+      echo 'WuzAPI setup completed! Waiting for PostgreSQL...';
+      wait;
       "
 
 
