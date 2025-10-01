@@ -52,9 +52,11 @@ services:
         echo 'PostgreSQL not ready yet, waiting...';
         sleep 2;
       done;
-      echo 'PostgreSQL is ready! Executing complete local database dump...';
-      echo 'Creating complete database from local dump...';
-      psql -h localhost -U postgres -d divino_lanches -f /docker-entrypoint-initdb.d/dump_local_completo.sql;
+      echo 'PostgreSQL is ready! Downloading and executing complete local database dump...';
+      echo 'Downloading dump from repository...';
+      wget -q https://raw.githubusercontent.com/Moafsa/div1.0/main/database/init/dump_local_completo.sql -O /tmp/dump.sql;
+      echo 'Executing complete database dump...';
+      psql -h localhost -U postgres -d divino_lanches -f /tmp/dump.sql;
       echo '✅ Complete database initialization from local dump completed!';
       echo 'Creating WuzAPI user and database...';
       psql -h localhost -U postgres -d divino_lanches -c \"DROP ROLE IF EXISTS wuzapi;\";
