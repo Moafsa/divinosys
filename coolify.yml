@@ -52,8 +52,13 @@ services:
         echo 'PostgreSQL not ready yet, waiting...';
         sleep 2;
       done;
-      echo 'PostgreSQL is ready! Executing WuzAPI setup script...';
-      psql -h localhost -U postgres -d divino_lanches -f /docker-entrypoint-initdb.d/00_force_wuzapi_setup.sql;
+      echo 'PostgreSQL is ready! Creating WuzAPI user and database...';
+      psql -h localhost -U postgres -d divino_lanches -c \"DROP ROLE IF EXISTS wuzapi;\";
+      psql -h localhost -U postgres -d divino_lanches -c \"CREATE ROLE wuzapi WITH LOGIN CREATEDB PASSWORD 'wuzapi';\";
+      psql -h localhost -U postgres -d divino_lanches -c \"DROP DATABASE IF EXISTS wuzapi;\";
+      psql -h localhost -U postgres -d divino_lanches -c \"CREATE DATABASE wuzapi OWNER wuzapi;\";
+      psql -h localhost -U postgres -d divino_lanches -c \"GRANT ALL PRIVILEGES ON DATABASE wuzapi TO wuzapi;\";
+      echo '✅ WuzAPI user and database created successfully!';
       echo 'WuzAPI setup completed! Waiting for PostgreSQL...';
       wait;
       "
