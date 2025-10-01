@@ -12,11 +12,10 @@ Usuário: admin
 Senha: admin123
 ```
 
-*Nota: Se admin123 não funcionar, tente:*
-```
-Usuário: admin  
-Senha: password
-```
+*Nota: A senha está criptografada com bcrypt. Se não funcionar, o problema pode ser:*
+1. **Tabela não criada**: Script de inicialização não executou
+2. **Dados não inseridos**: Falha na inserção dos dados padrão
+3. **Banco inconsistente**: Volumes persistentes com dados antigos
 
 ---
 
@@ -66,6 +65,7 @@ Port: 6379
 ✅ **App PHP**: Funcionando - Apache iniciado
 ✅ **WuzAPI Backend**: Funcionando - Porta 8081
 ✅ **WuzAPI Frontend**: Funcionando - Porta 3001
+❌ **Sistema Login**: Erro "Usuário não encontrado" - Tabela usuarios não criada
 
 ---
 
@@ -73,18 +73,33 @@ Port: 6379
 
 - **PostgreSQL**: Inicialização forçada funcionando
 - **WuzAPI**: Migrações executadas com sucesso
-- **Sistema**: Dados padrão inseridos (produtos, mesas, categorias)
+- **Sistema**: ❌ Falha na inserção de dados padrão
+- **Erro Principal**: `ERROR: relation "users" does not exist` (confusão entre bancos)
 - **Timeouts**: Configurados para 600s (10 minutos)
+
+## 🚨 Problema Identificado
+
+**Erro**: `ERROR: relation "users" does not exist at character 22`
+**Causa**: Script `00_force_wuzapi_setup.sql` estava interferindo na inicialização do banco principal
+**Solução**: Script removido - WuzAPI setup agora é feito via comando direto no coolify.yml
 
 ---
 
 ## 🚀 Próximos Passos
 
-1. **Testar Login**: Acesse o sistema com as credenciais acima
-2. **Conectar WhatsApp**: Use o QR Code da WuzAPI
-3. **Configurar Produtos**: Verificar se os produtos padrão foram criados
-4. **Testar Pedidos**: Fazer um pedido de teste
+1. **Aguardar Deploy**: O fix foi aplicado - aguarde o redeploy automático
+2. **Verificar Logs**: Monitorar se as tabelas são criadas corretamente
+3. **Testar Login**: Tentar novamente com admin/admin123 após o deploy
+4. **Conectar WhatsApp**: Use o QR Code da WuzAPI
+5. **Configurar Produtos**: Verificar se os produtos padrão foram criados
+
+## 🔄 Solução Aplicada
+
+1. ✅ **Removido script conflitante**: `00_force_wuzapi_setup.sql`
+2. ✅ **WuzAPI setup isolado**: Agora feito apenas via coolify.yml
+3. ✅ **Ordem de execução corrigida**: Schema → Dados → WuzAPI
+4. ✅ **Deploy enviado**: Aguardando aplicação automática
 
 ---
 
-*Última atualização: 01/10/2025 - 01:58*
+*Última atualização: 01/10/2025 - 15:20*
