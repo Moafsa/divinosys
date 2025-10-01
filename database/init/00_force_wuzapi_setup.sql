@@ -3,21 +3,14 @@
 
 \echo '=== FORCING WUZAPI SETUP ==='
 
--- Create wuzapi user if not exists
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'wuzapi') THEN
-        CREATE ROLE wuzapi WITH LOGIN CREATEDB PASSWORD 'wuzapi';
-        RAISE NOTICE 'WuzAPI user created successfully';
-    ELSE
-        RAISE NOTICE 'WuzAPI user already exists';
-    END IF;
-END
-$$;
+-- Drop and recreate wuzapi user (force recreation)
+DROP ROLE IF EXISTS wuzapi;
+CREATE ROLE wuzapi WITH LOGIN CREATEDB PASSWORD 'wuzapi';
+\echo 'WuzAPI user created/recreated successfully';
 
--- Create wuzapi database if not exists
-SELECT 'CREATE DATABASE wuzapi OWNER wuzapi'
-WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'wuzapi')\gexec
+-- Drop and recreate wuzapi database (force recreation)
+DROP DATABASE IF EXISTS wuzapi;
+CREATE DATABASE wuzapi OWNER wuzapi;
 
 -- Grant privileges
 GRANT ALL PRIVILEGES ON DATABASE wuzapi TO wuzapi;

@@ -46,7 +46,7 @@ services:
         rm -rf /var/lib/postgresql/data/*;
       fi;
       echo 'Starting PostgreSQL with forced initialization...';
-      docker-entrypoint.sh postgres;
+      POSTGRES_FORCE_INITDB=1 docker-entrypoint.sh postgres;
       "
 
 
