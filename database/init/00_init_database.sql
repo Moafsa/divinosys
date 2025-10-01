@@ -1,15 +1,8 @@
--- Database initialization script
--- This script ensures proper database setup
-
-\echo '=== STARTING DATABASE INITIALIZATION ==='
-
--- Create database if not exists (handled by Docker)
-\echo 'Database: divino_lanches'
+-- Simple database initialization script
+-- Minimal setup to avoid timeouts
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
-\echo 'UUID extension enabled'
 
 -- Create tenants table
 CREATE TABLE IF NOT EXISTS tenants (
@@ -29,8 +22,6 @@ CREATE TABLE IF NOT EXISTS tenants (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-\echo 'Table tenants created'
-
 -- Create plans table
 CREATE TABLE IF NOT EXISTS planos (
     id SERIAL PRIMARY KEY,
@@ -43,8 +34,6 @@ CREATE TABLE IF NOT EXISTS planos (
     preco_mensal DECIMAL(10,2),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
-\echo 'Table planos created'
 
 -- Create filiais table
 CREATE TABLE IF NOT EXISTS filiais (
@@ -60,8 +49,6 @@ CREATE TABLE IF NOT EXISTS filiais (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-\echo 'Table filiais created'
-
 -- Create usuarios table (multi-tenant)
 CREATE TABLE IF NOT EXISTS usuarios (
     id SERIAL PRIMARY KEY,
@@ -76,7 +63,3 @@ CREATE TABLE IF NOT EXISTS usuarios (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(login, tenant_id)
 );
-
-\echo 'Table usuarios created'
-
-\echo '=== BASIC SCHEMA CREATED SUCCESSFULLY ==='
