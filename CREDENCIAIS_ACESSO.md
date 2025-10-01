@@ -79,9 +79,9 @@ Port: 6379
 
 ## 🚨 Problema Identificado
 
-**Erro**: `ERROR: relation "users" does not exist` + `Data insertion failed: Database query failed`
-**Causa**: Scripts de inicialização com ordem incorreta e definições duplicadas de tabelas
-**Solução**: Reorganização completa dos scripts de inicialização do banco de dados
+**Erro**: `504 Gateway Timeout` + `ERROR: relation "users" does not exist`
+**Causa**: Scripts de inicialização muito pesados causando timeout + scripts Chatwoot obsoletos
+**Solução**: Setup minimal do banco de dados com apenas dados essenciais
 
 ---
 
@@ -97,14 +97,13 @@ Port: 6379
 
 1. ✅ **Removido script conflitante**: `00_force_wuzapi_setup.sql`
 2. ✅ **WuzAPI setup isolado**: Agora feito apenas via coolify.yml
-3. ✅ **Scripts reorganizados**:
-   - `00_init_database.sql`: Tabelas básicas (tenants, planos, filiais, usuarios)
-   - `01_insert_essential_data.sql`: Dados essenciais (admin user para login)
-   - `02_create_full_schema.sql`: Tabelas adicionais
-   - `03_insert_default_data.sql`: Dados completos
-4. ✅ **Definições duplicadas removidas**: Evita conflitos de criação
-5. ✅ **Deploy enviado**: Aguardando aplicação automática
+3. ✅ **Setup minimal implementado**:
+   - `00_init_database.sql`: Apenas tabelas essenciais (tenants, planos, filiais, usuarios)
+   - `01_insert_essential_data.sql`: Apenas dados essenciais (admin user para login)
+4. ✅ **Scripts pesados desabilitados**: Evita timeouts durante inicialização
+5. ✅ **Scripts Chatwoot removidos**: Sistema não usa mais Chatwoot
+6. ✅ **Deploy enviado**: Aguardando aplicação automática
 
 ---
 
-*Última atualização: 01/10/2025 - 15:45*
+*Última atualização: 01/10/2025 - 17:05*
