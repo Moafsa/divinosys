@@ -45,8 +45,11 @@ services:
         echo 'Removing existing data directory...';
         rm -rf /var/lib/postgresql/data/*;
       fi;
+      echo 'Setting environment variables...';
+      export POSTGRES_FORCE_INITDB=1;
+      export POSTGRES_INITDB_ARGS='--auth-host=trust --auth-local=trust';
       echo 'Starting PostgreSQL with forced initialization...';
-      POSTGRES_FORCE_INITDB=1 docker-entrypoint.sh postgres;
+      docker-entrypoint.sh postgres;
       "
 
 
