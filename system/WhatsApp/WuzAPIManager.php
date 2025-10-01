@@ -41,7 +41,11 @@ class WuzAPIManager
             $pdo = new \PDO(
                 "pgsql:host=postgres;port=5432;dbname=wuzapi",
                 "wuzapi",
-                "wuzapi"
+                "wuzapi",
+                [
+                    PDO::ATTR_TIMEOUT => 120,
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
+                ]
             );
             error_log("WuzAPIManager::createInstance - Conexão PDO estabelecida");
             
@@ -360,7 +364,11 @@ class WuzAPIManager
             $pdo = new \PDO(
                 "pgsql:host=postgres;port=5432;dbname=wuzapi",
                 "wuzapi",
-                "wuzapi"
+                "wuzapi",
+                [
+                    PDO::ATTR_TIMEOUT => 120,
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
+                ]
             );
             
             $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
@@ -413,8 +421,8 @@ class WuzAPIManager
                 CURLOPT_POSTFIELDS => $data,
                 CURLOPT_HTTPHEADER => $headers,
                 CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT => 30,
-                CURLOPT_CONNECTTIMEOUT => 10,
+                CURLOPT_TIMEOUT => 120,
+                CURLOPT_CONNECTTIMEOUT => 30,
                 CURLOPT_SSL_VERIFYPEER => false
             ]);
             
