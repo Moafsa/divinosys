@@ -53,10 +53,20 @@ services:
         sleep 2;
       done;
       echo 'PostgreSQL is ready! Executing database initialization scripts...';
+      echo 'Checking if scripts exist...';
+      ls -la /docker-entrypoint-initdb.d/ || echo 'Scripts directory not found';
       echo 'Executing 00_init_database.sql...';
-      psql -h localhost -U postgres -d divino_lanches -f /docker-entrypoint-initdb.d/00_init_database.sql;
+      if [ -f /docker-entrypoint-initdb.d/00_init_database.sql ]; then
+        psql -h localhost -U postgres -d divino_lanches -f /docker-entrypoint-initdb.d/00_init_database.sql;
+      else
+        echo 'ERROR: 00_init_database.sql not found!';
+      fi;
       echo 'Executing 01_insert_essential_data.sql...';
-      psql -h localhost -U postgres -d divino_lanches -f /docker-entrypoint-initdb.d/01_insert_essential_data.sql;
+      if [ -f /docker-entrypoint-initdb.d/01_insert_essential_data.sql ]; then
+        psql -h localhost -U postgres -d divino_lanches -f /docker-entrypoint-initdb.d/01_insert_essential_data.sql;
+      else
+        echo 'ERROR: 01_insert_essential_data.sql not found!';
+      fi;
       echo '✅ Main database initialization completed!';
       echo 'Creating WuzAPI user and database...';
       psql -h localhost -U postgres -d divino_lanches -c \"DROP ROLE IF EXISTS wuzapi;\";
