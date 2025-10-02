@@ -33,8 +33,7 @@ services:
       - POSTGRES_USER=${DB_USER:-postgres}
       - POSTGRES_PASSWORD=${DB_PASSWORD:-divino_password}
     volumes:
-      - postgres_data_fresh:/var/lib/postgresql/data
-      - ./database/init:/docker-entrypoint-initdb.d
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - divino-network
 
@@ -72,7 +71,7 @@ services:
       - divino-network
 
 volumes:
-  postgres_data_fresh:
+  postgres_data:
   redis_data:
   wuzapi_sessions:
   wuzapi_logs:
