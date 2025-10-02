@@ -71,8 +71,8 @@ services:
       psql -h localhost -U postgres -d divino_lanches -c \"INSERT INTO planos (id, nome, max_mesas, max_usuarios, max_produtos, max_pedidos_mes, recursos, preco_mensal) VALUES (1, 'Starter', 5, 2, 50, 500, '{\\\"relatorios_basicos\\\": true}', 29.90), (2, 'Professional', 15, 5, 200, 2000, '{\\\"relatorios_avancados\\\": true}', 79.90), (3, 'Enterprise', -1, -1, -1, -1, '{\\\"relatorios_customizados\\\": true}', 199.90) ON CONFLICT (id) DO NOTHING;\";
       psql -h localhost -U postgres -d divino_lanches -c \"INSERT INTO tenants (id, nome, subdomain, domain, cnpj, telefone, email, endereco, cor_primaria, status, plano_id) VALUES (1, 'Divino Lanches', 'divino', 'divinolanches.com', '12345678000199', '(11) 99999-9999', 'contato@divinolanches.com', 'Rua das Flores, 123', '#28a745', 'ativo', 2) ON CONFLICT (id) DO NOTHING;\";
       psql -h localhost -U postgres -d divino_lanches -c \"INSERT INTO filiais (id, tenant_id, nome, endereco, telefone, email, cnpj, status) VALUES (1, 1, 'Matriz', 'Rua das Flores, 123', '(11) 99999-9999', 'contato@divinolanches.com', '12345678000199', 'ativo') ON CONFLICT (id) DO NOTHING;\";
-      echo 'Creating admin user with known working password hash...';
-      psql -h localhost -U postgres -d divino_lanches -c \"INSERT INTO usuarios (id, login, senha, nivel, pergunta, resposta, tenant_id, filial_id) VALUES (1, 'admin', '\\\$2y\\\$10\\\$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 1, 'admin', 'admin', 1, 1) ON CONFLICT (id) DO UPDATE SET senha = EXCLUDED.senha;\";
+      echo 'Creating admin user with password hash for admin123...';
+      psql -h localhost -U postgres -d divino_lanches -c \"INSERT INTO usuarios (id, login, senha, nivel, pergunta, resposta, tenant_id, filial_id) VALUES (1, 'admin', '\\\$2y\\\$10\\\$TKh8H1.PfQx37YgCzwiKb.KjNyWgaHb9cbcoQgdIVFlYg7B77UdFm', 1, 'admin', 'admin', 1, 1) ON CONFLICT (id) DO UPDATE SET senha = EXCLUDED.senha;\";
       echo '✅ Complete database initialization from local dump completed!';
       echo 'Creating WuzAPI user and database...';
       psql -h localhost -U postgres -d divino_lanches -c \"DROP ROLE IF EXISTS wuzapi;\";
