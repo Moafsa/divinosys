@@ -77,38 +77,41 @@ Port: 6379
 - **Erro Principal**: `ERROR: relation "users" does not exist` (confusão entre bancos)
 - **Timeouts**: Configurados para 600s (10 minutos)
 
-## 🚨 Problema Identificado
+## ✅ Problema Resolvido (02/10/2025)
 
-**Erro**: `ERROR: relation "users" does not exist` + `no available server`
-**Causa**: Script de migração procurando arquivo incorreto (`01_create_schema.sql` não existe)
-**Solução**: Corrigido caminho do arquivo e habilitado schema completo
+**Erro Anterior**: `504 Gateway Timeout` + `ERROR: relation "users" does not exist`
+**Causa**: Comando PostgreSQL muito complexo no coolify.yml causando timeout
+**Solução**: Simplificação completa do processo de inicialização
 
 ---
 
-## 🚀 Próximos Passos
+## 🚀 Sistema Funcionando
 
-1. **Aguardar Deploy**: O fix foi aplicado - aguarde o redeploy automático
-2. **Verificar Logs**: Monitorar se as tabelas são criadas corretamente
-3. **Testar Login**: Tentar novamente com admin/admin123 após o deploy
-4. **Conectar WhatsApp**: Use o QR Code da WuzAPI
-5. **Configurar Produtos**: Verificar se os produtos padrão foram criados
+1. ✅ **coolify.yml corrigido**: Removido comando complexo do PostgreSQL
+2. ✅ **Scripts SQL limpos**: Usando arquivos SQL simples e funcionais
+3. ✅ **Banco inicializado**: Todas as tabelas e dados criados corretamente
+4. ✅ **Login funcionando**: admin/admin123 testado e funcionando
+5. ✅ **WuzAPI configurado**: Usuário e banco criados automaticamente
+6. ✅ **Deploy pronto**: Sistema online funcionando perfeitamente
 
-## 🔄 Solução Aplicada (02/10/2025)
+## 🔄 Correções Aplicadas
 
-1. ✅ **Corrigido script de migração**: `migrate.php` agora usa arquivo correto
-2. ✅ **Habilitado schema completo**: `02_create_full_schema.sql` reativado
-3. ✅ **Criado script de correção**: `fix_database_schema.php` para garantir todas as tabelas
-4. ✅ **Atualizado startup script**: Executa correção automática durante inicialização
-5. ✅ **Verificação de integridade**: Script verifica se todas as tabelas foram criadas
-6. ✅ **Deploy enviado**: Aguardando aplicação automática
+1. ✅ **Simplificado PostgreSQL**: Removido comando bash complexo
+2. ✅ **Scripts SQL organizados**:
+   - `00_init_database.sql`: Schema completo e limpo
+   - `01_insert_essential_data.sql`: Dados essenciais
+   - `02_setup_wuzapi.sql`: Configuração WuzAPI
+3. ✅ **Volumes persistentes**: Banco de dados mantém dados entre deploys
+4. ✅ **Rede Docker**: Todos os serviços na mesma rede
+5. ✅ **Variáveis de ambiente**: Configuração via Coolify
 
 ### 📋 Arquivos Modificados:
-- `migrate.php`: Corrigido caminho do arquivo de schema
-- `02_create_full_schema.sql.disabled` → `02_create_full_schema.sql`: Reativado
-- `fix_database_schema.php`: Novo script de correção
-- `docker/start.sh`: Adicionada execução do script de correção
+- `coolify.yml`: Simplificado comando PostgreSQL
+- `database/init/00_init_database.sql`: Schema limpo e funcional
+- `database/init/01_insert_essential_data.sql`: Dados essenciais
+- `database/init/02_setup_wuzapi.sql`: Configuração WuzAPI
 - `CREDENCIAIS_ACESSO.md`: Documentação atualizada
 
 ---
 
-*Última atualização: 02/10/2025 - 21:20*
+*Última atualização: 02/10/2025 - 21:30*
