@@ -20,6 +20,10 @@ done
 
 echo "Redis is ready!"
 
+# Wait a bit more to ensure PostgreSQL has finished creating tables
+echo "Waiting for PostgreSQL to finish table creation..."
+sleep 10
+
 # Run database migration automatically
 echo "Running database migration..."
 php migrate.php
