@@ -83,7 +83,6 @@ SELECT setval('usuarios_id_seq', 1, true);
 SELECT setval('categorias_id_seq', 3, true);
 SELECT setval('ingredientes_id_seq', 12, true);
 SELECT setval('produtos_id_seq', 7, true);
-SELECT setval('produto_ingredientes_id_seq', 5, true);
 SELECT setval('mesas_id_seq', 5, true);
 SELECT setval('pedidos_id_seq', 1, true);
 SELECT setval('pedido_itens_id_seq', 1, true);

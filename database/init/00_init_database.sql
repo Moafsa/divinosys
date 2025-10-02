@@ -6,12 +6,12 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Create function for updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER AS $func$
 BEGIN
     NEW.updated_at = CURRENT_TIMESTAMP;
     RETURN NEW;
 END;
-$$ language 'plpgsql';
+$func$ LANGUAGE plpgsql;
 
 -- Create tenants table
 CREATE TABLE tenants (
