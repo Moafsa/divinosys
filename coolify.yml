@@ -38,7 +38,7 @@ services:
       - ./database/init:/docker-entrypoint-initdb.d
     networks:
       - divino-network
-         command: >
+    command: >
            bash -c "
            echo '=== STARTING POSTGRESQL WITH CUSTOM INITIALIZATION ===';
            echo 'Starting PostgreSQL in background...';
