@@ -81,8 +81,8 @@ services:
       psql -h localhost -U postgres -d divino_lanches -c \"CREATE DATABASE wuzapi OWNER wuzapi;\";
       psql -h localhost -U postgres -d divino_lanches -c \"GRANT ALL PRIVILEGES ON DATABASE wuzapi TO wuzapi;\";
       echo '✅ WuzAPI user and database created successfully!';
-      echo 'Database initialization completed! Waiting for PostgreSQL...';
-      wait;
+           echo 'Database initialization completed! Starting PostgreSQL in foreground...';
+           exec docker-entrypoint.sh postgres
       "
 
 
