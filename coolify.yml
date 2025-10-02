@@ -93,7 +93,9 @@ services:
       - divino-network
 
   wuzapi:
-    image: edw4rd/wuzapi:latest
+    build:
+      context: ./docker/wuzapi
+      dockerfile: Dockerfile
     ports:
       - "8081:8080"  # Backend Go - Externo:8081 → Interno:8080
       - "3001:3000"  # Frontend React - Externo:3001 → Interno:3000
