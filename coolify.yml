@@ -38,20 +38,16 @@ services:
       - ./database/init:/docker-entrypoint-initdb.d
     networks:
       - divino-network
-    command: >
-      bash -c "
-      echo '=== FORCING POSTGRESQL INITIALIZATION ===';
-      if [ -d /var/lib/postgresql/data ]; then
-        echo 'Removing existing data directory...';
-        rm -rf /var/lib/postgresql/data/*;
-      fi;
-      echo 'Starting PostgreSQL in background...';
-      docker-entrypoint.sh postgres &
-      echo 'Waiting for PostgreSQL to be ready...';
-      while ! pg_isready -h localhost -p 5432 -U postgres; do
-        echo 'PostgreSQL not ready yet, waiting...';
-        sleep 2;
-      done;
+         command: >
+           bash -c "
+           echo '=== STARTING POSTGRESQL WITH CUSTOM INITIALIZATION ===';
+           echo 'Starting PostgreSQL in background...';
+           docker-entrypoint.sh postgres &
+           echo 'Waiting for PostgreSQL to be ready...';
+           while ! pg_isready -h localhost -p 5432 -U postgres; do
+             echo 'PostgreSQL not ready yet, waiting...';
+             sleep 2;
+           done;
       echo 'PostgreSQL is ready! Creating complete database schema inline...';
       echo 'Creating all tables and data from local working database...';
       psql -h localhost -U postgres -d divino_lanches -c \"CREATE EXTENSION IF NOT EXISTS \\\"uuid-ossp\\\";\";
