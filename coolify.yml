@@ -79,7 +79,7 @@ services:
       echo '✅ WuzAPI user and database created successfully!';
            echo 'Database initialization completed! Starting PostgreSQL in foreground...';
            exec docker-entrypoint.sh postgres
-      "
+           "
 
 
   redis:
