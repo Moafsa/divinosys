@@ -305,62 +305,6 @@ try {
             echo "WhatsApp tables file not found: $whatsappTablesFile\n";
         }
         
-        // Run Chatwoot tables creation
-        echo "Running Chatwoot tables creation...\n";
-        $chatwootTablesFile = '/var/www/html/database/init/07_create_chatwoot_tables.sql';
-        if (file_exists($chatwootTablesFile)) {
-            echo "Found Chatwoot tables file: $chatwootTablesFile\n";
-            try {
-                $chatwootTables = file_get_contents($chatwootTablesFile);
-                
-                // Split by semicolon and execute each statement
-                $statements = explode(';', $chatwootTables);
-                $executed = 0;
-                
-                foreach ($statements as $statement) {
-                    $statement = trim($statement);
-                    if (!empty($statement)) {
-                        try {
-                            $db->query($statement);
-                            $executed++;
-                        } catch (Exception $e) {
-                            echo "Warning: Error executing Chatwoot table statement: " . $e->getMessage() . "\n";
-                            echo "Statement: " . substr($statement, 0, 100) . "...\n";
-                        }
-                    }
-                }
-                
-                echo "Chatwoot tables creation completed! Executed $executed statements\n";
-            } catch (Exception $e) {
-                echo "Chatwoot tables creation failed: " . $e->getMessage() . "\n";
-            }
-        } else {
-            echo "Chatwoot tables file not found: $chatwootTablesFile\n";
-        }
-        
-        // Run Chatwoot columns addition
-        echo "Running Chatwoot columns addition...\n";
-        $chatwootColumnsFile = '/var/www/html/database/init/08_add_chatwoot_columns.sql';
-        if (file_exists($chatwootColumnsFile)) {
-            echo "Found Chatwoot columns file: $chatwootColumnsFile\n";
-            try {
-                $chatwootColumns = file_get_contents($chatwootColumnsFile);
-                $statements = array_filter(array_map('trim', explode(';', $chatwootColumns)));
-                $executed = 0;
-                foreach ($statements as $statement) {
-                    if (!empty($statement)) {
-                        $db->query($statement);
-                        $executed++;
-                    }
-                }
-                echo "Chatwoot columns addition completed! Executed $executed statements\n";
-            } catch (Exception $e) {
-                echo "Chatwoot columns addition failed: " . $e->getMessage() . "\n";
-                // Don't throw - this might be a re-run
-            }
-        } else {
-            echo "Chatwoot columns file not found: $chatwootColumnsFile\n";
-        }
         
         // Test login credentials
         echo "Testing login credentials...\n";
