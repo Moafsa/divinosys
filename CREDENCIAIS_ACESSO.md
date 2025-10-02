@@ -79,9 +79,9 @@ Port: 6379
 
 ## 🚨 Problema Identificado
 
-**Erro**: `504 Gateway Timeout` + `ERROR: relation "users" does not exist`
-**Causa**: Scripts de inicialização muito pesados causando timeout + scripts Chatwoot obsoletos
-**Solução**: Setup minimal do banco de dados com apenas dados essenciais
+**Erro**: `ERROR: relation "users" does not exist` + `no available server`
+**Causa**: Script de migração procurando arquivo incorreto (`01_create_schema.sql` não existe)
+**Solução**: Corrigido caminho do arquivo e habilitado schema completo
 
 ---
 
@@ -93,17 +93,22 @@ Port: 6379
 4. **Conectar WhatsApp**: Use o QR Code da WuzAPI
 5. **Configurar Produtos**: Verificar se os produtos padrão foram criados
 
-## 🔄 Solução Aplicada
+## 🔄 Solução Aplicada (02/10/2025)
 
-1. ✅ **Removido script conflitante**: `00_force_wuzapi_setup.sql`
-2. ✅ **WuzAPI setup isolado**: Agora feito apenas via coolify.yml
-3. ✅ **Setup minimal implementado**:
-   - `00_init_database.sql`: Apenas tabelas essenciais (tenants, planos, filiais, usuarios)
-   - `01_insert_essential_data.sql`: Apenas dados essenciais (admin user para login)
-4. ✅ **Scripts pesados desabilitados**: Evita timeouts durante inicialização
-5. ✅ **Scripts Chatwoot removidos**: Sistema não usa mais Chatwoot
+1. ✅ **Corrigido script de migração**: `migrate.php` agora usa arquivo correto
+2. ✅ **Habilitado schema completo**: `02_create_full_schema.sql` reativado
+3. ✅ **Criado script de correção**: `fix_database_schema.php` para garantir todas as tabelas
+4. ✅ **Atualizado startup script**: Executa correção automática durante inicialização
+5. ✅ **Verificação de integridade**: Script verifica se todas as tabelas foram criadas
 6. ✅ **Deploy enviado**: Aguardando aplicação automática
+
+### 📋 Arquivos Modificados:
+- `migrate.php`: Corrigido caminho do arquivo de schema
+- `02_create_full_schema.sql.disabled` → `02_create_full_schema.sql`: Reativado
+- `fix_database_schema.php`: Novo script de correção
+- `docker/start.sh`: Adicionada execução do script de correção
+- `CREDENCIAIS_ACESSO.md`: Documentação atualizada
 
 ---
 
-*Última atualização: 01/10/2025 - 17:05*
+*Última atualização: 02/10/2025 - 21:20*

@@ -28,6 +28,10 @@ sleep 10
 echo "Running database migration..."
 php migrate.php
 
+# Run database schema fix
+echo "Running database schema fix..."
+php fix_database_schema.php
+
 # Start Apache
 echo "Starting Apache..."
 exec apache2-foreground

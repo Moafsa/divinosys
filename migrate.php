@@ -38,7 +38,7 @@ try {
         echo "No tables found. Running initial migration...\n";
         
             // Read and execute schema file
-            $schemaFile = '/var/www/html/database/init/01_create_schema.sql';
+            $schemaFile = '/var/www/html/database/init/02_create_full_schema.sql';
             if (file_exists($schemaFile)) {
                 echo "Found schema file: $schemaFile\n";
                 try {
