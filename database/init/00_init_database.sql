@@ -1,17 +1,5 @@
--- Local working database schema for Coolify deployment
--- This replaces the complex inline commands with a clean SQL file
-
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- Create function for updated_at
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $func$
-BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
-    RETURN NEW;
-END;
-$func$ LANGUAGE plpgsql;
 
 -- Create tenants table
 CREATE TABLE tenants (
@@ -167,13 +155,3 @@ CREATE TABLE pedido_itens (
     observacoes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
--- Create triggers for updated_at
-CREATE TRIGGER update_tenants_updated_at BEFORE UPDATE ON tenants FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_filiais_updated_at BEFORE UPDATE ON filiais FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_usuarios_updated_at BEFORE UPDATE ON usuarios FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_categorias_updated_at BEFORE UPDATE ON categorias FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_ingredientes_updated_at BEFORE UPDATE ON ingredientes FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_produtos_updated_at BEFORE UPDATE ON produtos FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_mesas_updated_at BEFORE UPDATE ON mesas FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_pedidos_updated_at BEFORE UPDATE ON pedidos FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
