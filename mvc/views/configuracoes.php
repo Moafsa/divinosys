@@ -16,7 +16,7 @@ $capacidadeMesaAtual = 4; // default
 if ($tenant && $filial) {
     // Count existing mesas
     $mesasExistentes = $db->fetchAll(
-        "SELECT * FROM mesas WHERE tenant_id = ? AND filial_id = ? ORDER BY id_mesa::integer",
+        "SELECT * FROM mesas WHERE tenant_id = ? AND filial_id = ? ORDER BY numero::integer",
         [$tenant['id'], $filial['id']]
     );
     

@@ -28,7 +28,7 @@ if (!$filial) {
 $mesas = [];
 if ($tenant && $filial) {
     $mesas = $db->fetchAll(
-        "SELECT * FROM mesas WHERE tenant_id = ? AND filial_id = ? ORDER BY id_mesa::integer",
+        "SELECT * FROM mesas WHERE tenant_id = ? AND filial_id = ? ORDER BY numero::integer",
         [$tenant['id'], $filial['id']]
     );
 }
@@ -37,10 +37,10 @@ if ($tenant && $filial) {
 $pedidos = [];
 if ($tenant && $filial) {
     $pedidos = $db->fetchAll(
-        "SELECT p.*, m.id_mesa, m.nome as mesa_nome,
+        "SELECT p.*, m.numero as mesa_numero, m.id as mesa_id,
                 COUNT(p.idpedido) OVER (PARTITION BY p.idmesa) as total_pedidos_mesa
          FROM pedido p 
-         LEFT JOIN mesas m ON p.idmesa::varchar = m.id_mesa AND m.tenant_id = p.tenant_id AND m.filial_id = p.filial_id
+         LEFT JOIN mesas m ON p.idmesa::varchar = m.numero::varchar AND m.tenant_id = p.tenant_id AND m.filial_id = p.filial_id
          WHERE p.tenant_id = ? AND p.filial_id = ? 
          AND p.status NOT IN ('Finalizado', 'Cancelado')
          ORDER BY p.idmesa, p.created_at ASC",
@@ -55,8 +55,8 @@ foreach ($pedidos as $pedido) {
     if (!isset($pedidosPorMesa[$mesaId])) {
         $pedidosPorMesa[$mesaId] = [
             'mesa' => [
-                'id_mesa' => $pedido['id_mesa'],
-                'nome' => $pedido['mesa_nome']
+                'id_mesa' => $pedido['mesa_numero'],
+                'nome' => 'Mesa ' . $pedido['mesa_numero']
             ],
             'pedidos' => [],
             'total_pedidos' => $pedido['total_pedidos_mesa'],
@@ -780,14 +780,14 @@ if ($tenant && $filial) {
                 <div class="row" id="mesasGrid">
                     <?php foreach ($mesas as $mesa): ?>
                         <?php
-                        $pedidosMesa = isset($pedidosPorMesa[$mesa['id_mesa']]) ? $pedidosPorMesa[$mesa['id_mesa']] : null;
+                        $pedidosMesa = isset($pedidosPorMesa[$mesa['numero']]) ? $pedidosPorMesa[$mesa['numero']] : null;
                         $status = $pedidosMesa ? 'ocupada' : 'livre';
                         ?>
                         <div class="col-lg-2 col-md-3 col-sm-4 col-6 mb-3">
-                            <div class="mesa-card <?php echo $status; ?>" onclick="verMesa(<?php echo $mesa['id_mesa']; ?>, <?php echo $mesa['id_mesa']; ?>)">
+                            <div class="mesa-card <?php echo $status; ?>" onclick="verMesa(<?php echo $mesa['id']; ?>, <?php echo $mesa['numero']; ?>)">
                                 <div class="d-flex align-items-center mb-2">
                                     <span class="mesa-status <?php echo $status; ?>"></span>
-                                    <span class="mesa-numero"><?php echo $mesa['id_mesa']; ?></span>
+                                    <span class="mesa-numero"><?php echo $mesa['numero']; ?></span>
                                 </div>
                                 <div class="mesa-info">
                                     <?php if ($pedidosMesa): ?>
@@ -1438,8 +1438,8 @@ if ($tenant && $filial) {
             html += '<label class="form-label">Selecionar Mesa(s)</label>';
             mesas.forEach(mesa => {
                 html += '<div class="form-check">';
-                html += '<input class="form-check-input" type="checkbox" name="mesas" id="mesa_' + mesa.id_mesa + '" value="' + mesa.id_mesa + '"' + (mesa.id_mesa == mesaAtual || mesa.id_mesa === mesaAtual ? ' checked' : '') + '>';
-                html += '<label class="form-check-label" for="mesa_' + mesa.id_mesa + '">' + mesa.nome + '</label>';
+                html += '<input class="form-check-input" type="checkbox" name="mesas" id="mesa_' + mesa.numero + '" value="' + mesa.numero + '"' + (mesa.numero == mesaAtual || mesa.numero === mesaAtual ? ' checked' : '') + '>';
+                html += '<label class="form-check-label" for="mesa_' + mesa.numero + '">' + mesa.numero + '</label>';
                 html += '</div>';
             });
             html += '</div>';

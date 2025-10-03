@@ -19,7 +19,7 @@ if ($tenant && $filial) {
          FROM mesas m 
          LEFT JOIN pedido p ON m.id_mesa = p.idmesa::varchar AND p.status NOT IN ('Finalizado', 'Cancelado')
          WHERE m.tenant_id = ? AND m.filial_id = ? 
-         ORDER BY m.id_mesa::integer",
+         ORDER BY m.numero::integer",
         [$tenant['id'], $filial['id']]
     );
 }
