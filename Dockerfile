@@ -60,7 +60,8 @@ RUN if [ ! -f .env ]; then cp env.example .env; fi
 
 # Copy and make startup script executable
 COPY docker/start.sh /usr/local/bin/start.sh
-RUN chmod +x /usr/local/bin/start.sh
+RUN chmod +x /usr/local/bin/start.sh && \
+    sed -i 's/\r$//' /usr/local/bin/start.sh
 
 EXPOSE 80
 
