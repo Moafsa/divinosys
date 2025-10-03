@@ -39,7 +39,7 @@ if ($tenant && $filial) {
     $pedidos = $db->fetchAll(
         "SELECT p.*, m.numero as mesa_numero, m.id as mesa_id,
                 COUNT(p.idpedido) OVER (PARTITION BY p.idmesa) as total_pedidos_mesa
-         FROM pedidos p 
+         FROM pedido p 
          LEFT JOIN mesas m ON p.idmesa::varchar = m.numero::varchar AND m.tenant_id = p.tenant_id AND m.filial_id = p.filial_id
          WHERE p.tenant_id = ? AND p.filial_id = ? 
          AND p.status NOT IN ('Finalizado', 'Cancelado')
