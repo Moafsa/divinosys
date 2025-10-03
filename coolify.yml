@@ -5,8 +5,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    ports:
-      - "80:80"
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432
