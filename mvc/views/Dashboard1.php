@@ -39,7 +39,7 @@ if ($tenant && $filial) {
     $pedidos = $db->fetchAll(
         "SELECT p.*, m.numero as mesa_numero, m.id as mesa_id,
                 COUNT(p.idpedido) OVER (PARTITION BY p.idmesa) as total_pedidos_mesa
-         FROM pedidoss p 
+         FROM pedidos p 
          LEFT JOIN mesas m ON p.idmesa::varchar = m.numero::varchar AND m.tenant_id = p.tenant_id AND m.filial_id = p.filial_id
          WHERE p.tenant_id = ? AND p.filial_id = ? 
          AND p.status NOT IN ('Finalizado', 'Cancelado')
@@ -87,7 +87,7 @@ if ($tenant && $filial) {
         'pedidos_pendentes' => $db->count('pedido', 'tenant_id = ? AND filial_id = ? AND status = ?', [$tenant['id'], $filial['id'], 'Pendente']),
         'mesas_ocupadas' => $db->fetch(
             "SELECT COUNT(DISTINCT p.idmesa) as count 
-             FROM pedidoss p 
+             FROM pedidos p 
              WHERE p.tenant_id = ? AND p.filial_id = ? 
              AND p.status NOT IN ('Finalizado', 'Cancelado')
              AND p.delivery = false",
@@ -677,7 +677,7 @@ if ($tenant && $filial) {
                                     // Buscar pedidos de delivery pendentes
                                     $pedidosDelivery = $db->fetchAll(
                                         "SELECT p.*, u.login as usuario_nome
-                                         FROM pedidoss p 
+                                         FROM pedidos p 
                                          LEFT JOIN usuarios u ON p.usuario_id = u.id
                                          WHERE p.tenant_id = ? AND p.filial_id = ? 
                                          AND p.delivery = true 
