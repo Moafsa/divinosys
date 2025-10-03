@@ -81,13 +81,13 @@ if ($tenant && $filial) {
     $stats = [
         'total_pedidos_hoje' => $db->count('pedido', 'tenant_id = ? AND filial_id = ? AND data = CURRENT_DATE', [$tenant['id'], $filial['id']]),
         'valor_total_hoje' => $db->fetch(
-            "SELECT COALESCE(SUM(valor_total), 0) as total FROM pedidos WHERE tenant_id = ? AND filial_id = ? AND data = CURRENT_DATE",
+            "SELECT COALESCE(SUM(valor_total), 0) as total FROM pedido WHERE tenant_id = ? AND filial_id = ? AND data = CURRENT_DATE",
             [$tenant['id'], $filial['id']]
         )['total'] ?? 0,
         'pedidos_pendentes' => $db->count('pedido', 'tenant_id = ? AND filial_id = ? AND status = ?', [$tenant['id'], $filial['id'], 'Pendente']),
         'mesas_ocupadas' => $db->fetch(
             "SELECT COUNT(DISTINCT p.idmesa) as count 
-             FROM pedidos p 
+             FROM pedido p 
              WHERE p.tenant_id = ? AND p.filial_id = ? 
              AND p.status NOT IN ('Finalizado', 'Cancelado')
              AND p.delivery = false",
@@ -96,7 +96,7 @@ if ($tenant && $filial) {
         'delivery_pendentes' => $db->count('pedido', 'tenant_id = ? AND filial_id = ? AND delivery = true AND status IN (?, ?)', [$tenant['id'], $filial['id'], 'Pendente', 'Em Preparo']),
         'faturamento_delivery' => $db->fetch(
             "SELECT COALESCE(SUM(valor_total), 0) as total 
-             FROM pedidos 
+             FROM pedido 
              WHERE tenant_id = ? AND filial_id = ? 
              AND delivery = true 
              AND data = CURRENT_DATE 
@@ -677,7 +677,7 @@ if ($tenant && $filial) {
                                     // Buscar pedidos de delivery pendentes
                                     $pedidosDelivery = $db->fetchAll(
                                         "SELECT p.*, u.login as usuario_nome
-                                         FROM pedidos p 
+                                         FROM pedido p 
                                          LEFT JOIN usuarios u ON p.usuario_id = u.id
                                          WHERE p.tenant_id = ? AND p.filial_id = ? 
                                          AND p.delivery = true 
