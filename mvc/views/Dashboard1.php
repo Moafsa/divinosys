@@ -527,7 +527,7 @@ if ($tenant && $filial) {
                             <i class="fas fa-plus-circle"></i>
                             <span>Novo Pedido</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('pedidoss'); ?>" data-tooltip="Pedidos">
+                        <a class="nav-link" href="<?php echo $router->url('pedidos'); ?>" data-tooltip="Pedidos">
                             <i class="fas fa-list"></i>
                             <span>Pedidos</span>
                         </a>
