@@ -876,7 +876,7 @@ if ($tenant && $filial) {
             document.getElementById('mesaNumero').textContent = mesaNumero;
             
             // Load mesa content via AJAX
-            fetch(`index.php?action=mesa_multiplos_pedidoss&ver_mesa=1&mesa_id=${mesaId}`, {
+            fetch(`index.php?action=mesa_multiplos_pedidos&ver_mesa=1&mesa_id=${mesaId}`, {
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest'
                 }
@@ -1571,7 +1571,7 @@ if ($tenant && $filial) {
                     formData.append('numero_pessoas', result.value.numeroPessoas);
                     formData.append('observacao', result.value.observacao);
                     
-                    fetch('index.php?action=mesa_multiplos_pedidoss', {
+                    fetch('index.php?action=mesa_multiplos_pedidos', {
                         method: 'POST',
                         body: formData
                     })
@@ -1636,7 +1636,7 @@ if ($tenant && $filial) {
                     formData.append('numero_pessoas', result.value.numeroPessoas);
                     formData.append('observacao', result.value.observacao);
                     
-                    fetch('index.php?action=mesa_multiplos_pedidoss', {
+                    fetch('index.php?action=mesa_multiplos_pedidos', {
                         method: 'POST',
                         body: formData
                     })
