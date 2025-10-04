@@ -32,19 +32,14 @@ try {
         
         echo "Existing sequences: " . implode(', ', array_column($sequences, 'sequence_name')) . "\n";
         
-        // If no sequence exists, create it
-        if (empty($sequences)) {
-            echo "Creating sequence for pedidos table...\n";
-            $db->query("CREATE SEQUENCE IF NOT EXISTS pedidos_id_seq");
-            $db->query("ALTER TABLE pedidos ALTER COLUMN idpedido SET DEFAULT nextval('pedidos_id_seq')");
-            echo "✅ Sequence created and linked to pedidos table\n";
-        }
+        // Use the existing sequence name
+        $sequenceName = 'pedidos_idpedido_seq';
         
-        // Set sequence value
+        // Set sequence value using the correct sequence name
         $maxId = $db->fetch("SELECT COALESCE(MAX(idpedido), 0) as max_id FROM pedidos");
         $nextVal = $maxId['max_id'] + 1;
-        $db->query("SELECT setval('pedidos_id_seq', ?, true)", [$nextVal]);
-        echo "✅ Sequence setval to: $nextVal\n";
+        $db->query("SELECT setval(?, ?, true)", [$sequenceName, $nextVal]);
+        echo "✅ Sequence setval to: $nextVal using sequence: $sequenceName\n";
     }
     
     // 2. Fix produtos table - add preco_normal column
@@ -81,7 +76,7 @@ try {
     
     // Test sequence
     try {
-        $db->query("SELECT setval('pedidos_id_seq', 1, true)");
+        $db->query("SELECT setval('pedidos_idpedido_seq', 1, true)");
         echo "✅ Sequence setval test passed\n";
     } catch (Exception $e) {
         echo "❌ Sequence test failed: " . $e->getMessage() . "\n";
