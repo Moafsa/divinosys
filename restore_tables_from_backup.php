@@ -1,10 +1,10 @@
 <?php
-// Direct PDO connection to avoid System class issues
-$host = $_ENV['DB_HOST'] ?? 'postgres';
-$port = $_ENV['DB_PORT'] ?? '5432';
-$dbname = $_ENV['DB_NAME'] ?? 'divino_lanches';
-$user = $_ENV['DB_USER'] ?? 'postgres';
-$password = $_ENV['DB_PASSWORD'] ?? 'divino_password';
+// Direct PDO connection for local Docker testing
+$host = 'postgres'; // Container name
+$port = '5432'; // Internal port
+$dbname = 'divino_db';
+$user = 'divino_user';
+$password = 'divino_password';
 
 try {
     $pdo = new PDO("pgsql:host=$host;port=$port;dbname=$dbname", $user, $password);

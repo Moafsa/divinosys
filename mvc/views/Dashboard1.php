@@ -33,74 +33,76 @@ if ($tenant && $filial) {
     );
 }
 
-// Get pedidoss ativos grouped by mesa
-$pedidoss = [];
+// Get pedido ativos grouped by mesa - only truly active orders
+$pedido = [];
 if ($tenant && $filial) {
-    $pedidoss = $db->fetchAll(
+    // Get only orders with valid status (remove time restriction to see all active orders)
+    $pedido = $db->fetchAll(
         "SELECT p.*, m.numero as mesa_numero, m.id as mesa_id,
-                COUNT(p.idpedido) OVER (PARTITION BY p.idmesa) as total_pedidoss_mesa
-         FROM pedidoss p 
-         LEFT JOIN mesas m ON p.idmesa::varchar = m.numero::varchar AND m.tenant_id = p.tenant_id AND m.filial_id = p.filial_id
+                COUNT(p.idpedido) OVER (PARTITION BY p.idmesa) as total_pedido_mesa
+         FROM pedido p 
+         LEFT JOIN mesas m ON p.idmesa::varchar = m.id_mesa AND m.tenant_id = p.tenant_id AND m.filial_id = p.filial_id
          WHERE p.tenant_id = ? AND p.filial_id = ? 
-         AND p.status NOT IN ('Finalizado', 'Cancelado')
+         AND p.status IN ('Pendente', 'Preparando', 'Pronto', 'Entregue')
          ORDER BY p.idmesa, p.created_at ASC",
         [$tenant['id'], $filial['id']]
     );
 }
 
-// Group pedidoss by mesa
-$pedidossPorMesa = [];
-foreach ($pedidoss as $pedido) {
-    $mesaId = $pedido['idmesa'];
-    if (!isset($pedidossPorMesa[$mesaId])) {
-        $pedidossPorMesa[$mesaId] = [
+// Group pedido by mesa - use idmesa as key for uniqueness
+$pedidoPorMesa = [];
+foreach ($pedido as $pedido) {
+    $mesaId = $pedido['idmesa']; // Use idmesa for unique identification
+    if (!isset($pedidoPorMesa[$mesaId])) {
+        $pedidoPorMesa[$mesaId] = [
             'mesa' => [
                 'id_mesa' => $pedido['mesa_numero'],
                 'nome' => 'Mesa ' . $pedido['mesa_numero']
             ],
-            'pedidoss' => [],
-            'total_pedidoss' => $pedido['total_pedidoss_mesa'],
+            'pedido' => [],
+            'total_pedido' => $pedido['total_pedido_mesa'],
             'valor_total' => 0
         ];
     }
-    $pedidossPorMesa[$mesaId]['pedidoss'][] = $pedido;
-    $pedidossPorMesa[$mesaId]['valor_total'] += $pedido['valor_total'];
+    $pedidoPorMesa[$mesaId]['pedido'][] = $pedido;
+    $pedidoPorMesa[$mesaId]['valor_total'] += $pedido['valor_total'];
 }
 
 // Get stats
 $stats = [
-    'total_pedidoss_hoje' => 0,
+    'total_pedido_hoje' => 0,
     'valor_total_hoje' => 0,
-    'pedidoss_pendentes' => 0,
+    'pedido_pendentes' => 0,
     'mesas_ocupadas' => 0,
     'delivery_pendentes' => 0,
     'faturamento_delivery' => 0
 ];
 
 if ($tenant && $filial) {
+    // After cleanup, all stats should be 0 or based on truly active orders
     $stats = [
-        'total_pedidoss_hoje' => $db->count('pedidoss', 'tenant_id = ? AND filial_id = ? AND data = CURRENT_DATE', [$tenant['id'], $filial['id']]),
+        'total_pedido_hoje' => $db->count('pedido', 'tenant_id = ? AND filial_id = ? AND data = CURRENT_DATE AND status IN (?, ?, ?, ?)', [$tenant['id'], $filial['id'], 'Pendente', 'Preparando', 'Pronto', 'Entregue']),
         'valor_total_hoje' => $db->fetch(
-            "SELECT COALESCE(SUM(valor_total), 0) as total FROM pedidoss WHERE tenant_id = ? AND filial_id = ? AND data = CURRENT_DATE",
+            "SELECT COALESCE(SUM(valor_total), 0) as total FROM pedido WHERE tenant_id = ? AND filial_id = ? AND data = CURRENT_DATE AND status IN ('Pendente', 'Preparando', 'Pronto', 'Entregue')",
             [$tenant['id'], $filial['id']]
         )['total'] ?? 0,
-        'pedidoss_pendentes' => $db->count('pedidoss', 'tenant_id = ? AND filial_id = ? AND status = ?', [$tenant['id'], $filial['id'], 'Pendente']),
+        'pedido_pendentes' => $db->count('pedido', 'tenant_id = ? AND filial_id = ? AND status = ?', [$tenant['id'], $filial['id'], 'Pendente']),
         'mesas_ocupadas' => $db->fetch(
             "SELECT COUNT(DISTINCT p.idmesa) as count 
-             FROM pedidoss p 
+             FROM pedido p 
              WHERE p.tenant_id = ? AND p.filial_id = ? 
-             AND p.status NOT IN ('Finalizado', 'Cancelado')
+             AND p.status IN ('Pendente', 'Preparando', 'Pronto', 'Entregue')
              AND p.delivery = false",
             [$tenant['id'], $filial['id']]
         )['count'] ?? 0,
-        'delivery_pendentes' => $db->count('pedidoss', 'tenant_id = ? AND filial_id = ? AND delivery = true AND status IN (?, ?)', [$tenant['id'], $filial['id'], 'Pendente', 'Em Preparo']),
+        'delivery_pendentes' => $db->count('pedido', 'tenant_id = ? AND filial_id = ? AND delivery = true AND status IN (?, ?)', [$tenant['id'], $filial['id'], 'Pendente', 'Preparando']),
         'faturamento_delivery' => $db->fetch(
             "SELECT COALESCE(SUM(valor_total), 0) as total 
-             FROM pedidoss 
+             FROM pedido 
              WHERE tenant_id = ? AND filial_id = ? 
              AND delivery = true 
              AND data = CURRENT_DATE 
-             AND status NOT IN ('Cancelado')",
+             AND status IN ('Pendente', 'Preparando', 'Pronto', 'Entregue')",
             [$tenant['id'], $filial['id']]
         )['total'] ?? 0
     ];
@@ -327,6 +329,8 @@ if ($tenant && $filial) {
             font-size: 1.5rem;
             font-weight: 700;
             color: #333;
+            display: inline-block;
+            margin-left: 0.5rem;
         }
         
         .mesa-info {
@@ -606,7 +610,7 @@ if ($tenant && $filial) {
                             <div class="stats-icon" style="background: linear-gradient(45deg, #28a745, #20c997);">
                                 <i class="fas fa-shopping-cart"></i>
                             </div>
-                            <div class="stats-number"><?php echo $stats['total_pedidoss_hoje']; ?></div>
+                            <div class="stats-number"><?php echo $stats['total_pedido_hoje']; ?></div>
                             <div class="stats-label">Pedidos Hoje</div>
                         </div>
                     </div>
@@ -624,7 +628,7 @@ if ($tenant && $filial) {
                             <div class="stats-icon" style="background: linear-gradient(45deg, #ffc107, #fd7e14);">
                                 <i class="fas fa-clock"></i>
                             </div>
-                            <div class="stats-number"><?php echo $stats['pedidoss_pendentes']; ?></div>
+                            <div class="stats-number"><?php echo $stats['pedido_pendentes']; ?></div>
                             <div class="stats-label">Pendentes</div>
                         </div>
                     </div>
@@ -674,10 +678,10 @@ if ($tenant && $filial) {
                             <div class="card-body">
                                 <div class="row">
                                     <?php
-                                    // Buscar pedidoss de delivery pendentes
-                                    $pedidossDelivery = $db->fetchAll(
+                                    // Buscar pedido de delivery pendentes
+                                    $pedidoDelivery = $db->fetchAll(
                                         "SELECT p.*, u.login as usuario_nome
-                                         FROM pedidoss p 
+                                         FROM pedido p 
                                          LEFT JOIN usuarios u ON p.usuario_id = u.id
                                          WHERE p.tenant_id = ? AND p.filial_id = ? 
                                          AND p.delivery = true 
@@ -686,7 +690,7 @@ if ($tenant && $filial) {
                                         [$tenant['id'], $filial['id']]
                                     );
                                     
-                                    foreach ($pedidossDelivery as $pedido): ?>
+                                    foreach ($pedidoDelivery as $pedido): ?>
                                     <div class="col-md-6 col-lg-4 mb-3">
                                         <div class="delivery-card">
                                             <div class="delivery-header">
@@ -741,7 +745,7 @@ if ($tenant && $filial) {
                             </a>
                         </div>
                         <div class="col-md-3 mb-2">
-                            <a href="<?php echo $router->url('pedidoss'); ?>" class="action-btn">
+                            <a href="<?php echo $router->url('pedido'); ?>" class="action-btn">
                                 <i class="fas fa-list"></i>
                                 Ver Pedidos
                             </a>
@@ -780,25 +784,25 @@ if ($tenant && $filial) {
                 <div class="row" id="mesasGrid">
                     <?php foreach ($mesas as $mesa): ?>
                         <?php
-                        $pedidossMesa = isset($pedidossPorMesa[$mesa['numero']]) ? $pedidossPorMesa[$mesa['numero']] : null;
-                        $status = $pedidossMesa ? 'ocupada' : 'livre';
+                        $pedidoMesa = isset($pedidoPorMesa[$mesa['id_mesa']]) ? $pedidoPorMesa[$mesa['id_mesa']] : null;
+                        $status = $pedidoMesa ? 'ocupada' : 'livre';
                         ?>
                         <div class="col-lg-2 col-md-3 col-sm-4 col-6 mb-3">
-                            <div class="mesa-card <?php echo $status; ?>" onclick="verMesa(<?php echo $mesa['id']; ?>, <?php echo $mesa['numero']; ?>)">
+                            <div class="mesa-card <?php echo $status; ?>" onclick="verMesa(<?php echo $mesa['id']; ?>, <?php echo $mesa['id_mesa']; ?>)">
                                 <div class="d-flex align-items-center mb-2">
                                     <span class="mesa-status <?php echo $status; ?>"></span>
-                                    <span class="mesa-numero"><?php echo $mesa['numero']; ?></span>
+                                    <span class="mesa-numero">Mesa <?php echo $mesa['numero']; ?></span>
                                 </div>
                                 <div class="mesa-info">
-                                    <?php if ($pedidossMesa): ?>
+                                    <?php if ($pedidoMesa): ?>
                                         <div class="fw-bold text-danger">Ocupada</div>
-                                        <?php if ($pedidossMesa['total_pedidoss'] > 1): ?>
-                                            <div><?php echo $pedidossMesa['total_pedidoss']; ?> Pedidos</div>
+                                        <?php if ($pedidoMesa['total_pedido'] > 1): ?>
+                                            <div><?php echo $pedidoMesa['total_pedido']; ?> Pedidos</div>
                                         <?php else: ?>
-                                            <div>Pedido #<?php echo $pedidossMesa['pedidoss'][0]['idpedido']; ?></div>
+                                            <div>Pedido #<?php echo $pedidoMesa['pedido'][0]['idpedido']; ?></div>
                                         <?php endif; ?>
-                                        <div>R$ <?php echo number_format($pedidossMesa['valor_total'], 2, ',', '.'); ?></div>
-                                        <div class="small"><?php echo $pedidossMesa['pedidoss'][0]['hora_pedido']; ?></div>
+                                        <div>R$ <?php echo number_format($pedidoMesa['valor_total'], 2, ',', '.'); ?></div>
+                                        <div class="small"><?php echo $pedidoMesa['pedido'][0]['hora_pedido']; ?></div>
                                     <?php else: ?>
                                         <div class="fw-bold text-success">Livre</div>
                                         <div>Disponível</div>
@@ -875,8 +879,8 @@ if ($tenant && $filial) {
         function verMesa(mesaId, mesaNumero) {
             document.getElementById('mesaNumero').textContent = mesaNumero;
             
-            // Load mesa content via AJAX
-            fetch(`index.php?action=mesa_multiplos_pedidos&ver_mesa=1&mesa_id=${mesaId}`, {
+            // Load mesa content via AJAX - use mesaNumero which is the correct id_mesa value
+            fetch(`index.php?action=mesa_multiplos_pedidos&ver_mesa=1&mesa_id=${mesaNumero}`, {
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest'
                 }
@@ -912,13 +916,13 @@ if ($tenant && $filial) {
         }
 
         function verPedido(pedidoId) {
-            window.location.href = `<?php echo $router->url('pedidoss'); ?>&pedido=${pedidoId}`;
+            window.location.href = `<?php echo $router->url('pedido'); ?>&pedido=${pedidoId}`;
         }
         
         function verPedidoDelivery(pedidoId) {
             console.log('Buscando pedido delivery:', pedidoId);
             // Buscar dados do pedido via AJAX
-            fetch('mvc/ajax/pedidoss.php', {
+            fetch('mvc/ajax/pedido.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -1053,7 +1057,7 @@ if ($tenant && $filial) {
                     cancelButtonText: 'Cancelar'
                 }).then((result) => {
                     if (result.isConfirmed) {
-                        fetch('mvc/ajax/pedidoss.php', {
+                        fetch('mvc/ajax/pedido.php', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/x-www-form-urlencoded',
@@ -1104,7 +1108,7 @@ if ($tenant && $filial) {
                 confirmButtonColor: '#dc3545'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    fetch('mvc/ajax/pedidoss.php', {
+                    fetch('mvc/ajax/pedido.php', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
@@ -1131,15 +1135,15 @@ if ($tenant && $filial) {
         function fecharMesa(mesaId) {
             Swal.fire({
                 title: 'Fechar Mesa',
-                text: 'Deseja realmente fechar todos os pedidoss desta mesa?',
+                text: 'Deseja realmente fechar todos os pedido desta mesa?',
                 icon: 'question',
                 showCancelButton: true,
                 confirmButtonText: 'Sim, fechar',
                 cancelButtonText: 'Cancelar'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    // Buscar pedidoss ativos da mesa
-                    fetch('index.php?action=pedidoss&t=' + Date.now(), {
+                    // Buscar pedido ativos da mesa
+                    fetch('index.php?action=pedido&t=' + Date.now(), {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
@@ -1214,7 +1218,7 @@ if ($tenant && $filial) {
                 if (result.isConfirmed) {
                     const { formaPagamento, trocoPara, observacaoFechamento } = result.value;
                     
-                    fetch('index.php?action=pedidoss&t=' + Date.now(), {
+                    fetch('index.php?action=pedido&t=' + Date.now(), {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
@@ -1250,7 +1254,7 @@ if ($tenant && $filial) {
                 confirmButtonColor: '#dc3545'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    fetch('index.php?action=pedidoss&t=' + Date.now(), {
+                    fetch('index.php?action=pedido&t=' + Date.now(), {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
@@ -1283,7 +1287,7 @@ if ($tenant && $filial) {
             // Teste simples primeiro
             alert('Função chamada! Pedido: ' + pedidoId + ', Status: ' + novoStatus);
             
-            fetch('index.php?action=pedidoss&t=' + Date.now(), {
+            fetch('index.php?action=pedido&t=' + Date.now(), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -1313,7 +1317,7 @@ if ($tenant && $filial) {
         function salvarObservacao(pedidoId) {
             const observacao = document.getElementById('observacaoPedido').value;
             
-            fetch('index.php?action=pedidoss&t=' + Date.now(), {
+            fetch('index.php?action=pedido&t=' + Date.now(), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -1341,7 +1345,7 @@ if ($tenant && $filial) {
                 return;
             }
 
-            fetch('index.php?action=pedidoss&t=' + Date.now(), {
+            fetch('index.php?action=pedido&t=' + Date.now(), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -1375,7 +1379,7 @@ if ($tenant && $filial) {
                 confirmButtonColor: '#dc3545'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    fetch('index.php?action=pedidoss&t=' + Date.now(), {
+                    fetch('index.php?action=pedido&t=' + Date.now(), {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
@@ -1471,7 +1475,7 @@ if ($tenant && $filial) {
                 if (result.isConfirmed) {
                     const { mesaId } = result.value;
                     
-                    fetch('index.php?action=pedidoss&t=' + Date.now(), {
+                    fetch('index.php?action=pedido&t=' + Date.now(), {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',

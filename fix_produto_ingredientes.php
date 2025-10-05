@@ -1,30 +1,71 @@
 <?php
-require_once __DIR__ . '/system/Config.php';
-require_once __DIR__ . '/system/Database.php';
+echo "=== FIXING PRODUTO_INGREDIENTES TABLE ===\n";
 
-use System\Config;
-use System\Database;
-
-echo "Fixing produto_ingredientes table...\n";
+// Database connection
+$host = 'postgres';
+$port = '5432';
+$dbname = 'divino_db';
+$user = 'divino_user';
+$password = 'divino_password';
 
 try {
-    $db = Database::getInstance();
+    $pdo = new PDO("pgsql:host=$host;port=$port;dbname=$dbname", $user, $password);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    echo "✅ Database connection established\n";
+
+    // Check current structure
+    echo "\n=== CURRENT TABLE STRUCTURE ===\n";
+    $stmt = $pdo->query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'produto_ingredientes' ORDER BY ordinal_position");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        echo "- {$row['column_name']}: {$row['data_type']}\n";
+    }
 
     // Add missing columns
-    $db->query("ALTER TABLE produto_ingredientes ADD COLUMN IF NOT EXISTS tenant_id INTEGER NOT NULL DEFAULT 1;");
-    echo "✅ Added tenant_id column\n";
+    echo "\n=== ADDING MISSING COLUMNS ===\n";
     
-    $db->query("ALTER TABLE produto_ingredientes ADD COLUMN IF NOT EXISTS filial_id INTEGER NOT NULL DEFAULT 1;");
-    echo "✅ Added filial_id column\n";
-    
-    // Add primary key if missing
-    $db->query("ALTER TABLE produto_ingredientes ADD COLUMN IF NOT EXISTS id SERIAL PRIMARY KEY;");
-    echo "✅ Added id column\n";
-    
-    echo "✅ Table produto_ingredientes fixed successfully\n";
+    try {
+        $pdo->exec("ALTER TABLE produto_ingredientes ADD COLUMN obrigatorio BOOLEAN DEFAULT FALSE");
+        echo "✅ Added 'obrigatorio' column\n";
+    } catch (PDOException $e) {
+        if (strpos($e->getMessage(), 'already exists') !== false) {
+            echo "⚠️ Column 'obrigatorio' already exists\n";
+        } else {
+            echo "❌ Error adding 'obrigatorio': " . $e->getMessage() . "\n";
+        }
+    }
 
-} catch (\Exception $e) {
-    error_log("Error fixing table: " . $e->getMessage());
-    echo "❌ Error: " . $e->getMessage() . "\n";
+    try {
+        $pdo->exec("ALTER TABLE produto_ingredientes ADD COLUMN preco_adicional DECIMAL(10,2) DEFAULT 0.00");
+        echo "✅ Added 'preco_adicional' column\n";
+    } catch (PDOException $e) {
+        if (strpos($e->getMessage(), 'already exists') !== false) {
+            echo "⚠️ Column 'preco_adicional' already exists\n";
+        } else {
+            echo "❌ Error adding 'preco_adicional': " . $e->getMessage() . "\n";
+        }
+    }
+
+    // Verify final structure
+    echo "\n=== FINAL TABLE STRUCTURE ===\n";
+    $stmt = $pdo->query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'produto_ingredientes' ORDER BY ordinal_position");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        echo "- {$row['column_name']}: {$row['data_type']}\n";
+    }
+
+    // Test the problematic query
+    echo "\n=== TESTING PROBLEMATIC QUERY ===\n";
+    try {
+        $stmt = $pdo->prepare("SELECT i.*, pi.obrigatorio, pi.preco_adicional FROM ingredientes i JOIN produto_ingredientes pi ON i.id = pi.ingrediente_id WHERE pi.produto_id = ? AND i.tenant_id = ? AND i.filial_id = ?");
+        $stmt->execute([9, 1, 1]);
+        $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        echo "✅ Query executed successfully! Found " . count($results) . " records\n";
+    } catch (PDOException $e) {
+        echo "❌ Query failed: " . $e->getMessage() . "\n";
+    }
+
+    echo "\n✅ PRODUTO_INGREDIENTES TABLE FIXED!\n";
+
+} catch (PDOException $e) {
+    echo "❌ Database error: " . $e->getMessage() . "\n";
 }
 ?>

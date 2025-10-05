@@ -35,20 +35,35 @@ try {
                 throw new \Exception('ID da mesa é obrigatório');
             }
             
-            // Get mesa info
+            // Get mesa info - mesaId is the 'id_mesa' field from the mesas table (sent by Dashboard1.php)
             $mesa = $db->fetch(
                 "SELECT * FROM mesas WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?",
                 [$mesaId, $tenantId, $filialId]
             );
             
+            // If not found, try without tenant/filial filter
             if (!$mesa) {
-                throw new \Exception('Mesa não encontrada');
+                $mesa = $db->fetch(
+                    "SELECT * FROM mesas WHERE id_mesa = ?",
+                    [$mesaId]
+                );
+            }
+            
+            if (!$mesa) {
+                throw new \Exception('Mesa não encontrada para ID: ' . $mesaId . ' (tenant: ' . $tenantId . ', filial: ' . $filialId . ')');
             }
             
             // Get all pedidos for this mesa
+            // First check if pedido table exists
+            $tableExists = $db->fetch("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'pedido')");
+            
+            if (!$tableExists['exists']) {
+                throw new \Exception('Tabela pedido não existe');
+            }
+            
             $pedidos = $db->fetchAll(
-                "SELECT * FROM pedido WHERE idmesa::varchar = ? AND tenant_id = ? AND filial_id = ? AND status NOT IN ('Finalizado', 'Cancelado') ORDER BY created_at ASC",
-                [$mesaId, $tenantId, $filialId]
+                "SELECT * FROM pedido WHERE idmesa::varchar = ? AND tenant_id = ? AND filial_id = ? AND status IN ('Pendente', 'Preparando', 'Pronto', 'Entregue') AND created_at > NOW() - INTERVAL '1 day' ORDER BY created_at ASC",
+                [$mesa['id_mesa'], $tenantId, $filialId]
             );
             
             if (empty($pedidos)) {
@@ -58,7 +73,7 @@ try {
                         <i class="fas fa-table fa-3x text-success mb-3"></i>
                         <h4 class="text-success">Mesa Livre</h4>
                         <p class="text-muted">Esta mesa está disponível para novos pedidos.</p>
-                        <a href="index.php?view=gerar_pedido&mesa=' . $mesaId . '" class="btn btn-success">
+                        <a href="index.php?view=gerar_pedido&mesa=' . $mesa['id_mesa'] . '" class="btn btn-success">
                             <i class="fas fa-plus"></i> Criar Pedido
                         </a>
                     </div>
@@ -73,7 +88,7 @@ try {
                     <div class="mesa-pedidos">
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <h6><i class="fas fa-table"></i> Mesa ' . $mesaId . '</h6>
+                                <h6><i class="fas fa-table"></i> Mesa ' . $mesa['id_mesa'] . '</h6>
                                 <p class="mb-1"><strong>Total de Pedidos:</strong> ' . count($pedidos) . '</p>
                                 <p class="mb-1"><strong>Status:</strong> <span class="badge bg-warning">Ocupada</span></p>
                             </div>
@@ -192,7 +207,7 @@ try {
                         </div>
                         
                         <div class="actions-mesa mt-3">
-                            <button class="btn btn-success btn-lg" onclick="fecharMesaCompleta(' . $mesaId . ')">
+                            <button class="btn btn-success btn-lg" onclick="fecharMesaCompleta(' . $mesa['id_mesa'] . ')">
                                 <i class="fas fa-check-circle"></i> Fechar Mesa Completa
                             </button>
                         </div>

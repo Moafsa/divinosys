@@ -1,31 +1,25 @@
 <?php
-// Direct PDO connection to avoid System class issues
-$host = $_ENV['DB_HOST'] ?? 'postgres';
-$port = $_ENV['DB_PORT'] ?? '5432';
-$dbname = $_ENV['DB_NAME'] ?? 'divino_lanches';
-$user = $_ENV['DB_USER'] ?? 'postgres';
-$password = $_ENV['DB_PASSWORD'] ?? 'divino_password';
-
-try {
-    $pdo = new PDO("pgsql:host=$host;port=$port;dbname=$dbname", $user, $password);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch (PDOException $e) {
-    die("Connection failed: " . $e->getMessage());
-}
+require_once 'system/Database.php';
 
 echo "=== CORREÇÃO COMPLETA DO SISTEMA ===\n";
 
 try {
+    $db = \System\Database::getInstance();
+    echo "✅ Database connection established\n\n";
+    
     // 1. Limpar pedidos antigos (mais de 4 horas)
     echo "=== LIMPANDO PEDIDOS ANTIGOS ===\n";
-    $stmt = $pdo->prepare("UPDATE pedido SET status = 'Finalizado' WHERE status IN ('Pendente', 'Preparando', 'Pronto', 'Entregue') AND created_at <= NOW() - INTERVAL '4 hours'");
-    $stmt->execute();
-    $resultado = $stmt->rowCount();
+    $resultado = $db->update(
+        'pedido',
+        ['status' => 'Finalizado'],
+        'status IN (?, ?, ?, ?) AND created_at <= NOW() - INTERVAL ?',
+        ['Pendente', 'Preparando', 'Pronto', 'Entregue', '4 hours']
+    );
     echo "✅ " . $resultado . " pedido(s) antigo(s) finalizado(s).\n";
     
     // 2. Verificar pedidos ativos restantes
     echo "\n=== VERIFICANDO PEDIDOS ATIVOS RESTANTES ===\n";
-    $stmt = $pdo->query("
+    $pedidosAtivos = $db->fetchAll("
         SELECT p.idpedido, p.idmesa, p.status, p.valor_total, p.hora_pedido, p.created_at,
                m.numero as mesa_numero, m.id_mesa
         FROM pedido p 
@@ -33,7 +27,6 @@ try {
         WHERE p.status NOT IN ('Finalizado', 'Cancelado')
         ORDER BY p.idmesa, p.created_at DESC
     ");
-    $pedidosAtivos = $stmt->fetchAll();
     
     if (empty($pedidosAtivos)) {
         echo "✅ Nenhum pedido ativo restante. Todas as mesas devem estar livres agora.\n";
@@ -46,18 +39,15 @@ try {
     
     // 3. Verificar status das mesas
     echo "\n=== VERIFICANDO STATUS DAS MESAS ===\n";
-    $stmt = $pdo->query("SELECT id, id_mesa, numero, nome, status FROM mesas ORDER BY numero");
-    $mesas = $stmt->fetchAll();
+    $mesas = $db->fetchAll("SELECT id, id_mesa, numero, nome, status FROM mesas ORDER BY numero");
     foreach($mesas as $mesa) {
         // Verificar se há pedidos ativos para esta mesa
-        $stmt2 = $pdo->prepare("
+        $pedidosMesa = $db->fetchAll("
             SELECT p.idpedido, p.status, p.valor_total, p.hora_pedido
             FROM pedido p 
             WHERE p.idmesa = ? AND p.status NOT IN ('Finalizado', 'Cancelado')
             ORDER BY p.created_at DESC
-        ");
-        $stmt2->execute([$mesa['id_mesa']]);
-        $pedidosMesa = $stmt2->fetchAll();
+        ", [$mesa['id_mesa']]);
         
         $statusReal = empty($pedidosMesa) ? 'LIVRE' : 'OCUPADA';
         echo "Mesa " . $mesa['numero'] . " (ID_MESA: " . $mesa['id_mesa'] . ") - Status Real: " . $statusReal . " - Pedidos Ativos: " . count($pedidosMesa) . "\n";
@@ -73,14 +63,13 @@ try {
     echo "\n=== VERIFICANDO INCONSISTÊNCIAS ===\n";
     
     // Mesas com múltiplos pedidos ativos
-    $stmt = $pdo->query("
+    $inconsistencias = $db->fetchAll("
         SELECT p.idmesa, COUNT(*) as total_pedidos
         FROM pedido p 
         WHERE p.status NOT IN ('Finalizado', 'Cancelado')
         GROUP BY p.idmesa
         HAVING COUNT(*) > 1
     ");
-    $inconsistencias = $stmt->fetchAll();
     
     if (!empty($inconsistencias)) {
         echo "⚠️ MESAS COM MÚLTIPLOS PEDIDOS ATIVOS:\n";
@@ -95,6 +84,6 @@ try {
     echo "Agora teste o dashboard para ver se as mesas estão mostrando o status correto.\n";
     
 } catch (Exception $e) {
-    echo "❌ Error: " . $e->getMessage() . "\n";
+    echo "ERRO: " . $e->getMessage() . "\n";
 }
 ?>
