@@ -47,6 +47,7 @@ class Router
             'configuracoes' => 'configuracoes.php',
             'salvar_configuracoes' => 'salvar_configuracoes.php',
             'dashboard_ajax' => 'dashboard.php',
+            'gestao_clientes_fiado' => 'gestao_clientes_fiado.php',
         ];
     }
 
