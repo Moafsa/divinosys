@@ -66,8 +66,8 @@ class BaileysManager {
             
             // Criar instância no banco com dados da WuzAPI
             $this->db->query(
-                "INSERT INTO whatsapp_instances (tenant_id, filial_id, instance_name, phone_number, status, webhook_url, wuzapi_instance_id, wuzapi_token, ativo) VALUES (?, ?, ?, ?, 'disconnected', ?, ?, ?, true)",
-                [$tenantId, $filialId, $instanceName, $phoneNumber, $webhookUrl, $wuzapiResult['instance_id'], $wuzapiResult['token']]
+                "INSERT INTO whatsapp_instances (tenant_id, filial_id, instance_name, phone_number, status, wuzapi_instance_id, wuzapi_token, ativo) VALUES (?, ?, ?, ?, 'disconnected', ?, ?, true)",
+                [$tenantId, $filialId, $instanceName, $phoneNumber, $wuzapiResult['instance_id'], $wuzapiResult['token']]
             );
             
             $instanceId = $this->db->lastInsertId();
@@ -108,7 +108,6 @@ class BaileysManager {
                     'instance_name' => $instance['instance_name'],
                     'phone_number' => $instance['phone_number'],
                     'status' => $instance['status'] === 'connected' ? 'connected' : 'disconnected',
-                    'webhook_url' => $instance['webhook_url'],
                     'created_at' => $instance['created_at']
                 ];
             }, $instances);
