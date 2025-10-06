@@ -414,11 +414,6 @@ class WuzAPIManager
                 $headers[] = 'token: ' . $token;
             }
             
-            error_log("WuzAPIManager::makeApiCall - URL: $url");
-            error_log("WuzAPIManager::makeApiCall - Method: $method");
-            error_log("WuzAPIManager::makeApiCall - Token: $token");
-            error_log("WuzAPIManager::makeApiCall - Data: " . json_encode($data));
-            
             $ch = curl_init();
             curl_setopt_array($ch, [
                 CURLOPT_URL => $url,
@@ -435,10 +430,6 @@ class WuzAPIManager
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             $error = curl_error($ch);
             curl_close($ch);
-            
-            error_log("WuzAPIManager::makeApiCall - HTTP Code: $httpCode");
-            error_log("WuzAPIManager::makeApiCall - Response: $response");
-            error_log("WuzAPIManager::makeApiCall - Error: $error");
             
             if ($error) {
                 throw new Exception("cURL Error: {$error}");
