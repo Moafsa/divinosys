@@ -38,4 +38,4 @@ USER wuzapi
 EXPOSE 8080
 
 # Comando de inicialização (backend + frontend)
-CMD ["sh", "-c", "wuzapi & cd /app/frontend && npm install && npm start"]
+CMD ["sh", "-c", "cd /app && wuzapi -port=8080 -address=0.0.0.0 -admintoken=admin123456 & cd /app/frontend && rm -rf node_modules package-lock.json && npm install && npm start"]
