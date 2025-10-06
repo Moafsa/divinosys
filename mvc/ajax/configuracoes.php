@@ -1,4 +1,8 @@
 <?php
+// Desabilitar exibição de erros para evitar HTML em resposta JSON
+error_reporting(E_ALL);
+ini_set('display_errors', '0');
+
 header('Content-Type: application/json');
 
 // Simples e direto - usar require_once
