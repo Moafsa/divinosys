@@ -1,33 +1,82 @@
 <?php
 /**
- * Script web para corrigir problemas de banco online
- * Acesse via: https://seudominio.com/fix_online_web.php
+ * Script automático para corrigir problemas de banco online
+ * Detecta automaticamente a configuração do banco
  */
 
 // Configuração de segurança
-$allowedIPs = ['127.0.0.1', '::1']; // Adicione IPs permitidos
+$allowedIPs = ['127.0.0.1', '::1'];
 $currentIP = $_SERVER['REMOTE_ADDR'] ?? '';
 
 if (!in_array($currentIP, $allowedIPs) && !isset($_GET['force'])) {
     die('❌ Acesso negado. Use ?force=1 para forçar execução.');
 }
 
-echo "<h1>🔧 Correção de Banco Online - WuzAPI</h1>";
+echo "<h1>🔧 Correção Automática de Banco Online</h1>";
 echo "<p>Executando em: " . date('Y-m-d H:i:s') . "</p>";
 
-// Configuração do banco online
-$host = $_ENV['DB_HOST'] ?? 'localhost';
-$dbname = $_ENV['DB_NAME'] ?? 'divino_db';
-$username = $_ENV['DB_USER'] ?? 'divino_user';
-$password = $_ENV['DB_PASSWORD'] ?? 'divino_password';
+// Detectar configuração do banco automaticamente
+$configs = [
+    // Configuração padrão
+    [
+        'host' => 'localhost',
+        'dbname' => 'divino_db',
+        'username' => 'divino_user',
+        'password' => 'divino_password'
+    ],
+    // Configuração com variáveis de ambiente
+    [
+        'host' => $_ENV['DB_HOST'] ?? 'localhost',
+        'dbname' => $_ENV['DB_NAME'] ?? 'divino_db',
+        'username' => $_ENV['DB_USER'] ?? 'divino_user',
+        'password' => $_ENV['DB_PASSWORD'] ?? 'divino_password'
+    ],
+    // Configuração alternativa
+    [
+        'host' => 'postgres',
+        'dbname' => 'divino_db',
+        'username' => 'divino_user',
+        'password' => 'divino_password'
+    ],
+    // Configuração de produção
+    [
+        'host' => 'db',
+        'dbname' => 'divino_db',
+        'username' => 'divino_user',
+        'password' => 'divino_password'
+    ]
+];
+
+$pdo = null;
+$configUsada = null;
+
+// Tentar cada configuração
+foreach ($configs as $index => $config) {
+    echo "<p>Tentando configuração " . ($index + 1) . ": {$config['host']}:{$config['dbname']}</p>";
+    
+    try {
+        $pdo = new PDO("pgsql:host={$config['host']};dbname={$config['dbname']}", $config['username'], $config['password']);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $configUsada = $config;
+        echo "<p style='color: green;'>✅ Conectado com sucesso!</p>";
+        break;
+    } catch (PDOException $e) {
+        echo "<p style='color: red;'>❌ Falhou: " . $e->getMessage() . "</p>";
+        continue;
+    }
+}
+
+if (!$pdo) {
+    echo "<h2 style='color: red;'>❌ Não foi possível conectar ao banco de dados</h2>";
+    echo "<p>Verifique se o PostgreSQL está rodando e as credenciais estão corretas.</p>";
+    exit;
+}
+
+echo "<h2 style='color: green;'>✅ Conectado ao banco com sucesso!</h2>";
+echo "<p><strong>Configuração usada:</strong> {$configUsada['host']}:{$configUsada['dbname']}</p>";
 
 try {
-    $pdo = new PDO("pgsql:host=$host;dbname=$dbname", $username, $password);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    
-    echo "<p style='color: green;'>✅ Conectado ao banco online com sucesso!</p>";
-    
-    // Verificar tabela whatsapp_instances
+    // 1. Verificar se a tabela whatsapp_instances existe
     $tableExists = $pdo->query("
         SELECT EXISTS (
             SELECT FROM information_schema.tables 
@@ -60,7 +109,7 @@ try {
         echo "<p style='color: green;'>✅ Tabela whatsapp_instances já existe.</p>";
     }
     
-    // Verificar colunas existentes
+    // 2. Verificar colunas existentes
     $existingColumns = $pdo->query("
         SELECT column_name 
         FROM information_schema.columns 
@@ -69,7 +118,7 @@ try {
     
     echo "<p><strong>Colunas existentes:</strong> " . implode(', ', $existingColumns) . "</p>";
     
-    // Adicionar wuzapi_instance_id
+    // 3. Adicionar wuzapi_instance_id se não existir
     if (!in_array('wuzapi_instance_id', $existingColumns)) {
         echo "<p style='color: blue;'>➕ Adicionando coluna wuzapi_instance_id...</p>";
         $pdo->exec("ALTER TABLE whatsapp_instances ADD COLUMN wuzapi_instance_id INTEGER");
@@ -78,7 +127,7 @@ try {
         echo "<p style='color: green;'>✅ Coluna wuzapi_instance_id já existe.</p>";
     }
     
-    // Adicionar wuzapi_token
+    // 4. Adicionar wuzapi_token se não existir
     if (!in_array('wuzapi_token', $existingColumns)) {
         echo "<p style='color: blue;'>➕ Adicionando coluna wuzapi_token...</p>";
         $pdo->exec("ALTER TABLE whatsapp_instances ADD COLUMN wuzapi_token VARCHAR(255)");
@@ -87,7 +136,7 @@ try {
         echo "<p style='color: green;'>✅ Coluna wuzapi_token já existe.</p>";
     }
     
-    // Estrutura final
+    // 5. Estrutura final
     $finalStructure = $pdo->query("
         SELECT column_name, data_type, is_nullable
         FROM information_schema.columns 
@@ -108,11 +157,11 @@ try {
     }
     echo "</table>";
     
-    // Teste de inserção
+    // 6. Teste de inserção
     echo "<h3>🧪 Teste de Inserção</h3>";
     
     $testData = [
-        'instance_name' => 'teste_web_' . time(),
+        'instance_name' => 'teste_auto_' . time(),
         'phone_number' => '5554997092223',
         'status' => 'disconnected',
         'wuzapi_instance_id' => 99999,
@@ -160,7 +209,7 @@ try {
     echo "<p><a href='index.php?view=configuracoes' style='background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;'>Testar Criação de Instância</a></p>";
     
 } catch (PDOException $e) {
-    echo "<p style='color: red;'>❌ Erro de conexão: " . $e->getMessage() . "</p>";
+    echo "<p style='color: red;'>❌ Erro de banco: " . $e->getMessage() . "</p>";
 } catch (Exception $e) {
     echo "<p style='color: red;'>❌ Erro: " . $e->getMessage() . "</p>";
 }
