@@ -1,7 +1,24 @@
 <?php
-// Desabilitar exibição de erros para evitar HTML em resposta JSON
+// Capturar todos os erros e retornar como JSON
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+
+// Capturar erros fatais
+register_shutdown_function(function() {
+    $error = error_get_last();
+    if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        error_log("ERRO FATAL: " . json_encode($error));
+        if (!headers_sent()) {
+            header('Content-Type: application/json');
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Erro interno: ' . $error['message'] . ' em ' . $error['file'] . ':' . $error['line']
+            ]);
+        }
+    }
+});
 
 header('Content-Type: application/json');
 

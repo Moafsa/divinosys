@@ -1029,13 +1029,24 @@ if ($tenant && $filial) {
                 },
                 body: `action=criar_caixa_entrada&instance_name=${encodeURIComponent(instanceName)}&phone_number=${encodeURIComponent(phoneNumber)}`
             })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    Swal.fire('Sucesso', 'Instância criada com sucesso!', 'success');
-                    carregarCaixasEntrada();
-                } else {
-                    Swal.fire('Erro', data.message, 'error');
+            .then(response => {
+                console.log('Response status:', response.status);
+                return response.text();
+            })
+            .then(text => {
+                console.log('Response text:', text);
+                try {
+                    const data = JSON.parse(text);
+                    if (data.success) {
+                        Swal.fire('Sucesso', 'Instância criada com sucesso!', 'success');
+                        carregarCaixasEntrada();
+                    } else {
+                        Swal.fire('Erro', data.message, 'error');
+                    }
+                } catch (e) {
+                    console.error('Erro ao parsear JSON:', e);
+                    console.error('Texto recebido:', text);
+                    Swal.fire('Erro', 'Resposta inválida do servidor. Verifique o console.', 'error');
                 }
             })
             .catch(error => {

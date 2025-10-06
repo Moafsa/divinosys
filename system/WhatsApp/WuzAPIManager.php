@@ -43,8 +43,8 @@ class WuzAPIManager
                 "wuzapi",
                 "wuzapi",
                 [
-                    PDO::ATTR_TIMEOUT => 120,
-                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
+                    \PDO::ATTR_TIMEOUT => 120,
+                    \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION
                 ]
             );
             error_log("WuzAPIManager::createInstance - Conexão PDO estabelecida");
@@ -64,7 +64,10 @@ class WuzAPIManager
             error_log("WuzAPIManager::createInstance - Executando INSERT com: $instanceName, $token, " . ($webhookUrl ?? '') . ", $events");
             
             $stmt->execute([$instanceName, $token, $webhookUrl ?? '', $events]);
-            $result = $stmt->fetch(\PDO::FETCH_ASSOC);
+            $result = array();
+            if ($row = $stmt->fetch()) {
+                $result = $row;
+            }
             
             error_log("WuzAPIManager::createInstance - Resultado: " . json_encode($result));
             
@@ -366,8 +369,8 @@ class WuzAPIManager
                 "wuzapi",
                 "wuzapi",
                 [
-                    PDO::ATTR_TIMEOUT => 120,
-                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
+                    \PDO::ATTR_TIMEOUT => 120,
+                    \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION
                 ]
             );
             
