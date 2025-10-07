@@ -77,7 +77,7 @@ class Database
             error_log('Database query failed: ' . $e->getMessage());
             error_log('SQL: ' . $sql);
             error_log('Params: ' . json_encode($params));
-            throw new \Exception('Database query failed');
+            throw new \Exception('Database query failed: ' . $e->getMessage());
         }
     }
 

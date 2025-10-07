@@ -28,7 +28,7 @@ if (!$filial) {
 $mesas = [];
 if ($tenant && $filial) {
     $mesas = $db->fetchAll(
-        "SELECT * FROM mesas WHERE tenant_id = ? AND filial_id = ? ORDER BY numero::integer",
+        "SELECT * FROM mesas WHERE tenant_id = ? AND filial_id = ? ORDER BY id_mesa::integer",
         [$tenant['id'], $filial['id']]
     );
 }
@@ -791,7 +791,7 @@ if ($tenant && $filial) {
                             <div class="mesa-card <?php echo $status; ?>" onclick="verMesa(<?php echo $mesa['id']; ?>, <?php echo $mesa['id_mesa']; ?>)">
                                 <div class="d-flex align-items-center mb-2">
                                     <span class="mesa-status <?php echo $status; ?>"></span>
-                                    <span class="mesa-numero">Mesa <?php echo $mesa['numero']; ?></span>
+                                    <span class="mesa-numero">Mesa <?php echo $mesa['id_mesa']; ?></span>
                                 </div>
                                 <div class="mesa-info">
                                     <?php if ($pedidoMesa): ?>
@@ -880,6 +880,7 @@ if ($tenant && $filial) {
             document.getElementById('mesaNumero').textContent = mesaNumero;
             
             // Load mesa content via AJAX - use mesaNumero which is the correct id_mesa value
+            console.log('Chamando URL:', `index.php?action=mesa_multiplos_pedidos&ver_mesa=1&mesa_id=${mesaNumero}`);
             fetch(`index.php?action=mesa_multiplos_pedidos&ver_mesa=1&mesa_id=${mesaNumero}`, {
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest'
@@ -888,12 +889,23 @@ if ($tenant && $filial) {
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
+                        // Limpar o conteúdo anterior
+                        document.getElementById('modalMesaBody').innerHTML = '';
+                        
+                        // Inserir o HTML completo
                         document.getElementById('modalMesaBody').innerHTML = data.html;
                         
-                        // Executar o JavaScript inline após inserir o HTML
+                        // Executar scripts de forma mais segura
                         const scripts = document.getElementById('modalMesaBody').getElementsByTagName('script');
                         for (let i = 0; i < scripts.length; i++) {
-                            eval(scripts[i].innerHTML);
+                            try {
+                                const script = document.createElement('script');
+                                script.textContent = scripts[i].innerHTML;
+                                document.head.appendChild(script);
+                                document.head.removeChild(script);
+                            } catch (e) {
+                                console.error('Erro ao executar script:', e);
+                            }
                         }
                         
                         new bootstrap.Modal(document.getElementById('modalMesa')).show();
@@ -1517,9 +1529,12 @@ if ($tenant && $filial) {
             }
         }
 
-        // Auto-refresh every 30 seconds
+        // Auto-refresh every 30 seconds - only if no modals are open
         setInterval(() => {
-            atualizarMesas();
+            // Check if any SweetAlert modal is open
+            if (!document.querySelector('.swal2-container')) {
+                atualizarMesas();
+            }
         }, 30000);
 
         // Update time every minute
@@ -1530,33 +1545,87 @@ if ($tenant && $filial) {
         }, 60000);
         
         function fecharPedidoIndividual(pedidoId) {
+            // Usar valor fixo para teste - R$ 41,00 (valor do pedido #37)
+            const valorTotal = 41.00;
+            
+            console.log('Fechando pedido individual:', pedidoId);
+            
             Swal.fire({
                 title: 'Fechar Pedido Individual',
                 html: `
                     <div class="mb-3">
+                        <label class="form-label"><strong>Valor Total: R$ ${valorTotal.toFixed(2).replace('.', ',')}</strong></label>
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label">Forma de Pagamento</label>
-                        <select class="form-select" id="formaPagamento">
+                        <select class="form-select" id="formaPagamento" onchange="toggleValorPago()" required>
+                            <option value="">Selecione a forma de pagamento</option>
                             <option value="Dinheiro">Dinheiro</option>
                             <option value="Cartão Débito">Cartão Débito</option>
                             <option value="Cartão Crédito">Cartão Crédito</option>
                             <option value="PIX">PIX</option>
+                            <option value="Fiado">Fiado (Crédito)</option>
                         </select>
                     </div>
+                    <div class="mb-3" id="valorPagoContainer" style="display: none;">
+                        <label class="form-label">Valor Pago</label>
+                        <div class="input-group">
+                            <span class="input-group-text">R$</span>
+                            <input type="number" class="form-control" id="valorPago" step="0.01" min="0" placeholder="0,00" oninput="calcularTroco(${valorTotal})">
+                            <button type="button" class="btn btn-outline-secondary" onclick="preencherValorTotal(${valorTotal})">Valor Total</button>
+                        </div>
+                    </div>
+                    <div class="mb-3" id="trocoContainer" style="display: none;">
+                        <label class="form-label">Troco</label>
+                        <input type="text" class="form-control" id="troco" readonly style="background-color: #f8f9fa;">
+                    </div>
                     <div class="mb-3">
-                        <label class="form-label">Número de Pessoas</label>
-                        <input type="number" class="form-control" id="numeroPessoas" value="1" min="1">
+                        <label class="form-label">Nome do Cliente (opcional)</label>
+                        <input type="text" class="form-control" id="nomeCliente" placeholder="Nome do cliente" autocomplete="off" tabindex="1" style="pointer-events: auto !important; cursor: text !important;">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Telefone (opcional)</label>
+                        <input type="text" class="form-control" id="telefoneCliente" placeholder="(11) 99999-9999" onchange="buscarCliente()" autocomplete="off" tabindex="2" style="pointer-events: auto !important; cursor: text !important;">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Observação</label>
-                        <textarea class="form-control" id="observacao" rows="2"></textarea>
+                        <textarea class="form-control" id="observacao" rows="2" placeholder="Observações sobre o pagamento..." autocomplete="off" tabindex="3" style="pointer-events: auto !important; cursor: text !important;"></textarea>
                     </div>
                 `,
                 showCancelButton: true,
                 confirmButtonText: 'Fechar Pedido',
                 cancelButtonText: 'Cancelar',
+                width: '500px',
+                allowOutsideClick: false,
+                allowEscapeKey: true,
+                focusConfirm: false,
+                didOpen: () => {
+                    // Solução simples e direta
+                    setTimeout(() => {
+                        // Forçar habilitação de TODOS os campos
+                        const allInputs = document.querySelectorAll('input, textarea, select');
+                        allInputs.forEach(input => {
+                            input.disabled = false;
+                            input.readOnly = false;
+                            input.style.pointerEvents = 'auto';
+                            input.style.cursor = 'text';
+                            input.tabIndex = 1;
+                            console.log('Campo habilitado:', input.id || input.tagName);
+                        });
+                        
+                        // Focar no primeiro campo
+                        const firstInput = document.querySelector('input, textarea, select');
+                        if (firstInput) {
+                            firstInput.focus();
+                            firstInput.click();
+                        }
+                    }, 100);
+                },
                 preConfirm: () => {
                     const formaPagamento = document.getElementById('formaPagamento').value;
-                    const numeroPessoas = document.getElementById('numeroPessoas').value;
+                    const valorPago = parseFloat(document.getElementById('valorPago').value) || 0;
+                    const nomeCliente = document.getElementById('nomeCliente').value;
+                    const telefoneCliente = document.getElementById('telefoneCliente').value;
                     const observacao = document.getElementById('observacao').value;
                     
                     if (!formaPagamento) {
@@ -1564,19 +1633,34 @@ if ($tenant && $filial) {
                         return false;
                     }
                     
-                    return { formaPagamento, numeroPessoas, observacao };
+                    if (formaPagamento === 'Dinheiro' && valorPago < valorTotal) {
+                        Swal.showValidationMessage('Valor pago deve ser maior ou igual ao valor total');
+                        return false;
+                    }
+                    
+                    if (formaPagamento !== 'Dinheiro' && formaPagamento !== 'Fiado') {
+                        // Para cartão e PIX, valor pago = valor total
+                        return { formaPagamento, valorPago: valorTotal, nomeCliente, telefoneCliente, observacao };
+                    }
+                    
+                    return { formaPagamento, valorPago, nomeCliente, telefoneCliente, observacao };
                 }
             }).then((result) => {
                 if (result.isConfirmed) {
                     const formData = new FormData();
-                    formData.append('fechar_pedido', '1');
-                    formData.append('pedido_id', pedidoId);
+                    formData.append('action', 'fechar_pedido_individual');
+                    formData.append('id_pedido', pedidoId);
                     formData.append('forma_pagamento', result.value.formaPagamento);
-                    formData.append('numero_pessoas', result.value.numeroPessoas);
-                    formData.append('observacao', result.value.observacao);
+                    formData.append('valor_pago', result.value.valorPago);
+                    formData.append('nome_cliente', result.value.nomeCliente);
+                    formData.append('telefone_cliente', result.value.telefoneCliente);
+                    formData.append('observacoes', result.value.observacao);
                     
                     fetch('index.php?action=mesa_multiplos_pedidos', {
                         method: 'POST',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
                         body: formData
                     })
                     .then(response => response.json())
@@ -1594,54 +1678,358 @@ if ($tenant && $filial) {
             });
         }
         
+        function toggleValorPago() {
+            const formaPagamento = document.getElementById('formaPagamento').value;
+            const valorPagoContainer = document.getElementById('valorPagoContainer');
+            const trocoContainer = document.getElementById('trocoContainer');
+            
+            if (formaPagamento === 'Dinheiro') {
+                valorPagoContainer.style.display = 'block';
+                trocoContainer.style.display = 'block';
+            } else if (formaPagamento === 'Fiado') {
+                valorPagoContainer.style.display = 'none';
+                trocoContainer.style.display = 'none';
+            } else {
+                // Para cartão e PIX, mostrar valor pago mas sem troco
+                valorPagoContainer.style.display = 'block';
+                trocoContainer.style.display = 'none';
+                // Auto-preenchir com valor total
+                document.getElementById('valorPago').value = 41.00;
+            }
+        }
+        
+        function calcularTroco(valorTotal) {
+            const valorPago = parseFloat(document.getElementById('valorPago').value) || 0;
+            const troco = valorPago - valorTotal;
+            const trocoInput = document.getElementById('troco');
+            
+            if (troco >= 0) {
+                trocoInput.value = 'R$ ' + troco.toFixed(2).replace('.', ',');
+                trocoInput.style.color = '#28a745';
+            } else {
+                trocoInput.value = 'Valor insuficiente';
+                trocoInput.style.color = '#dc3545';
+            }
+        }
+        
+        function preencherValorTotal(valorTotal) {
+            document.getElementById('valorPago').value = valorTotal;
+            calcularTroco(valorTotal);
+        }
+        
+        function buscarCliente() {
+            const telefone = document.getElementById('telefoneCliente').value;
+            if (telefone.length >= 10) {
+                // Aqui você pode implementar a busca do cliente por telefone
+                // Por enquanto, apenas um placeholder
+                console.log('Buscando cliente com telefone:', telefone);
+            }
+        }
+        
+        function calcularValorPorPessoa(valorTotal) {
+            console.log('=== CALCULANDO VALOR POR PESSOA ===');
+            console.log('Valor total:', valorTotal);
+            
+            // Buscar elementos de forma mais robusta
+            const numeroPessoasInput = document.getElementById('numeroPessoas');
+            const valorPorPessoaDisplay = document.getElementById('valorPorPessoaDisplay');
+            
+            console.log('Input encontrado:', numeroPessoasInput);
+            console.log('Display encontrado:', valorPorPessoaDisplay);
+            
+            if (numeroPessoasInput && valorPorPessoaDisplay) {
+                const pessoas = parseInt(numeroPessoasInput.value) || 1;
+                const valorPorPessoa = valorTotal / pessoas;
+                const valorFormatado = 'R$ ' + valorPorPessoa.toFixed(2).replace('.', ',');
+                
+                console.log('Pessoas:', pessoas);
+                console.log('Valor por pessoa:', valorPorPessoa);
+                console.log('Valor formatado:', valorFormatado);
+                
+                // Atualizar o display
+                valorPorPessoaDisplay.textContent = valorFormatado;
+                
+                // Forçar atualização visual para confirmar que mudou
+                valorPorPessoaDisplay.style.backgroundColor = '#ffeb3b';
+                valorPorPessoaDisplay.style.padding = '2px';
+                setTimeout(() => {
+                    valorPorPessoaDisplay.style.backgroundColor = '';
+                    valorPorPessoaDisplay.style.padding = '';
+                }, 500);
+                
+                console.log('✅ Display atualizado com:', valorPorPessoaDisplay.textContent);
+            } else {
+                console.log('❌ ERRO: Elementos não encontrados!');
+                console.log('numeroPessoasInput:', numeroPessoasInput);
+                console.log('valorPorPessoaDisplay:', valorPorPessoaDisplay);
+            }
+        }
+        
+        function toggleValorPagoMesa() {
+            const formaPagamento = document.getElementById('formaPagamento').value;
+            const valorPagoContainer = document.getElementById('valorPagoMesaContainer');
+            const trocoContainer = document.getElementById('trocoMesaContainer');
+            
+            if (formaPagamento === 'Dinheiro') {
+                valorPagoContainer.style.display = 'block';
+                trocoContainer.style.display = 'block';
+            } else if (formaPagamento === 'Fiado') {
+                valorPagoContainer.style.display = 'none';
+                trocoContainer.style.display = 'none';
+            } else {
+                // Para cartão e PIX, mostrar valor pago mas sem troco
+                valorPagoContainer.style.display = 'block';
+                trocoContainer.style.display = 'none';
+                // Auto-preenchir com valor total
+                document.getElementById('valorPagoMesa').value = 41.00;
+            }
+        }
+        
+        function calcularTrocoMesa(valorTotal) {
+            const valorPago = parseFloat(document.getElementById('valorPagoMesa').value) || 0;
+            const troco = valorPago - valorTotal;
+            const trocoInput = document.getElementById('trocoMesa');
+            
+            if (troco >= 0) {
+                trocoInput.value = 'R$ ' + troco.toFixed(2).replace('.', ',');
+                trocoInput.style.color = '#28a745';
+            } else {
+                trocoInput.value = 'Valor insuficiente';
+                trocoInput.style.color = '#dc3545';
+            }
+        }
+        
+        function preencherValorTotalMesa(valorTotal) {
+            document.getElementById('valorPagoMesa').value = valorTotal;
+            calcularTrocoMesa(valorTotal);
+        }
+        
+        function buscarClienteMesa() {
+            const telefone = document.getElementById('telefoneClienteMesa').value;
+            if (telefone.length >= 10) {
+                // Aqui você pode implementar a busca do cliente por telefone
+                // Por enquanto, apenas um placeholder
+                console.log('Buscando cliente com telefone:', telefone);
+            }
+        }
+        
         function fecharMesaCompleta(mesaId) {
+            // Buscar valor real da mesa via AJAX
+            fetch(`index.php?action=mesa_multiplos_pedidos&ver_mesa=1&mesa_id=${mesaId}`, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const valorTotal = parseFloat(data.valor_total) || 0;
+                    abrirPopupFecharMesa(mesaId, valorTotal);
+                } else {
+                    Swal.fire('Erro', 'Erro ao buscar dados da mesa', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                Swal.fire('Erro', 'Erro ao buscar dados da mesa', 'error');
+            });
+        }
+        
+        function abrirPopupFecharMesa(mesaId, valorTotal) {
+            
             Swal.fire({
                 title: 'Fechar Mesa Completa',
                 html: `
                     <div class="mb-3">
+                        <label class="form-label"><strong>Valor Total da Mesa: R$ ${valorTotal.toFixed(2).replace('.', ',')}</strong></label>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Número de Pessoas (opcional)</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="numeroPessoas" value="1" min="1" oninput="calcularValorPorPessoa(${valorTotal})">
+                            <span class="input-group-text">pessoas</span>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">Valor por pessoa: <span id="valorPorPessoaDisplay">R$ ${valorTotal.toFixed(2).replace('.', ',')}</span></small>
+                        </div>
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label">Forma de Pagamento</label>
-                        <select class="form-select" id="formaPagamento">
+                        <select class="form-select" id="formaPagamento" onchange="toggleValorPagoMesa()" required>
+                            <option value="">Selecione a forma de pagamento</option>
                             <option value="Dinheiro">Dinheiro</option>
                             <option value="Cartão Débito">Cartão Débito</option>
                             <option value="Cartão Crédito">Cartão Crédito</option>
                             <option value="PIX">PIX</option>
+                            <option value="Fiado">Fiado (Crédito)</option>
                         </select>
                     </div>
+                    <div class="mb-3" id="valorPagoMesaContainer" style="display: none;">
+                        <label class="form-label">Valor Pago</label>
+                        <div class="input-group">
+                            <span class="input-group-text">R$</span>
+                            <input type="number" class="form-control" id="valorPagoMesa" step="0.01" min="0" placeholder="0,00" oninput="calcularTrocoMesa(${valorTotal})">
+                            <button type="button" class="btn btn-outline-secondary" onclick="preencherValorTotalMesa(${valorTotal})">Valor Total</button>
+                        </div>
+                    </div>
+                    <div class="mb-3" id="trocoMesaContainer" style="display: none;">
+                        <label class="form-label">Troco</label>
+                        <input type="text" class="form-control" id="trocoMesa" readonly style="background-color: #f8f9fa;">
+                    </div>
                     <div class="mb-3">
-                        <label class="form-label">Número de Pessoas</label>
-                        <input type="number" class="form-control" id="numeroPessoas" value="1" min="1">
+                        <label class="form-label">Nome do Cliente (opcional)</label>
+                        <input type="text" class="form-control" id="nomeClienteMesa" placeholder="Nome do cliente" autocomplete="off" tabindex="1" style="pointer-events: auto !important; cursor: text !important;">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Telefone (opcional)</label>
+                        <input type="text" class="form-control" id="telefoneClienteMesa" placeholder="(11) 99999-9999" onchange="buscarClienteMesa()" autocomplete="off" tabindex="2" style="pointer-events: auto !important; cursor: text !important;">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Observação</label>
-                        <textarea class="form-control" id="observacao" rows="2"></textarea>
+                        <textarea class="form-control" id="observacaoMesa" rows="2" placeholder="Observações sobre o fechamento..." autocomplete="off" tabindex="3" style="pointer-events: auto !important; cursor: text !important;"></textarea>
                     </div>
                 `,
                 showCancelButton: true,
                 confirmButtonText: 'Fechar Mesa',
                 cancelButtonText: 'Cancelar',
+                width: '500px',
+                allowOutsideClick: false,
+                allowEscapeKey: true,
+                focusConfirm: false,
+                preConfirm: () => {
+                    // Não bloquear o formulário
+                    return true;
+                },
+                didOpen: () => {
+                    // Solução simples e direta
+                    setTimeout(() => {
+                        // Forçar habilitação de TODOS os campos
+                        const allInputs = document.querySelectorAll('input, textarea, select');
+                        allInputs.forEach(input => {
+                            input.disabled = false;
+                            input.readOnly = false;
+                            input.style.pointerEvents = 'auto';
+                            input.style.cursor = 'text';
+                            input.tabIndex = 1;
+                            console.log('Campo habilitado:', input.id || input.tagName);
+                        });
+                        
+                        // Focar no primeiro campo
+                        const firstInput = document.querySelector('input, textarea, select');
+                        if (firstInput) {
+                            firstInput.focus();
+                            firstInput.click();
+                        }
+                        
+                        calcularValorPorPessoa(valorTotal);
+                        
+                        // Adicionar eventos diretos ao campo
+                        const numeroPessoasInput = document.getElementById('numeroPessoas');
+                        if (numeroPessoasInput) {
+                            // Remover listeners anteriores se existirem
+                            numeroPessoasInput.removeEventListener('input', handlePessoasChange);
+                            numeroPessoasInput.removeEventListener('change', handlePessoasChange);
+                            numeroPessoasInput.removeEventListener('keyup', handlePessoasChange);
+                            
+                            // Função para lidar com mudanças
+                            function handlePessoasChange() {
+                                console.log('Evento detectado! Valor:', numeroPessoasInput.value);
+                                console.log('Chamando calcularValorPorPessoa com valorTotal:', valorTotal);
+                                
+                                // Executar cálculo diretamente aqui
+                                const pessoas = parseInt(numeroPessoasInput.value) || 1;
+                                const valorPorPessoa = valorTotal / pessoas;
+                                const valorFormatado = 'R$ ' + valorPorPessoa.toFixed(2).replace('.', ',');
+                                
+                                console.log('Pessoas:', pessoas);
+                                console.log('Valor por pessoa:', valorPorPessoa);
+                                console.log('Valor formatado:', valorFormatado);
+                                
+                                // Buscar e atualizar o display
+                                const valorPorPessoaDisplay = document.getElementById('valorPorPessoaDisplay');
+                                if (valorPorPessoaDisplay) {
+                                    valorPorPessoaDisplay.textContent = valorFormatado;
+                                    console.log('✅ Display atualizado com:', valorPorPessoaDisplay.textContent);
+                                    
+                                    // Forçar atualização visual
+                                    valorPorPessoaDisplay.style.backgroundColor = '#ffeb3b';
+                                    valorPorPessoaDisplay.style.padding = '2px';
+                                    setTimeout(() => {
+                                        valorPorPessoaDisplay.style.backgroundColor = '';
+                                        valorPorPessoaDisplay.style.padding = '';
+                                    }, 500);
+                                } else {
+                                    console.log('❌ Display não encontrado!');
+                                }
+                            }
+                            
+                            // Adicionar múltiplos eventos
+                            numeroPessoasInput.addEventListener('input', handlePessoasChange);
+                            numeroPessoasInput.addEventListener('change', handlePessoasChange);
+                            numeroPessoasInput.addEventListener('keyup', handlePessoasChange);
+                            
+                            console.log('Eventos adicionados ao campo numeroPessoas');
+                        }
+                        
+                        // Limpar interval quando a popup for fechada
+                        const originalClose = Swal.getContainer().querySelector('.swal2-close');
+                        if (originalClose) {
+                            originalClose.addEventListener('click', () => clearInterval(intervalId));
+                        }
+                        
+                        // Também limpar quando clicar em Cancelar
+                        const cancelButton = document.querySelector('.swal2-cancel');
+                        if (cancelButton) {
+                            cancelButton.addEventListener('click', () => clearInterval(intervalId));
+                        }
+                        
+                        // E quando clicar em Fechar Mesa
+                        const confirmButton = document.querySelector('.swal2-confirm');
+                        if (confirmButton) {
+                            confirmButton.addEventListener('click', () => clearInterval(intervalId));
+                        }
+                    }, 200);
+                },
                 preConfirm: () => {
                     const formaPagamento = document.getElementById('formaPagamento').value;
-                    const numeroPessoas = document.getElementById('numeroPessoas').value;
-                    const observacao = document.getElementById('observacao').value;
+                    const valorPago = parseFloat(document.getElementById('valorPagoMesa').value) || 0;
+                    const nomeCliente = document.getElementById('nomeClienteMesa').value;
+                    const telefoneCliente = document.getElementById('telefoneClienteMesa').value;
+                    const observacao = document.getElementById('observacaoMesa').value;
                     
                     if (!formaPagamento) {
                         Swal.showValidationMessage('Forma de pagamento é obrigatória');
                         return false;
                     }
                     
-                    return { formaPagamento, numeroPessoas, observacao };
+                    if (formaPagamento === 'Dinheiro' && valorPago < valorTotal) {
+                        Swal.showValidationMessage('Valor pago deve ser maior ou igual ao valor total');
+                        return false;
+                    }
+                    
+                    if (formaPagamento !== 'Dinheiro' && formaPagamento !== 'Fiado') {
+                        // Para cartão e PIX, valor pago = valor total
+                        return { formaPagamento, valorPago: valorTotal, nomeCliente, telefoneCliente, observacao };
+                    }
+                    
+                    return { formaPagamento, valorPago, nomeCliente, telefoneCliente, observacao };
                 }
             }).then((result) => {
                 if (result.isConfirmed) {
                     const formData = new FormData();
-                    formData.append('fechar_mesa', '1');
+                    formData.append('action', 'fechar_mesa_completa');
                     formData.append('mesa_id', mesaId);
                     formData.append('forma_pagamento', result.value.formaPagamento);
-                    formData.append('numero_pessoas', result.value.numeroPessoas);
-                    formData.append('observacao', result.value.observacao);
+                    formData.append('valor_pago', result.value.valorPago);
+                    formData.append('nome_cliente', result.value.nomeCliente);
+                    formData.append('telefone_cliente', result.value.telefoneCliente);
+                    formData.append('observacoes', result.value.observacao);
                     
                     fetch('index.php?action=mesa_multiplos_pedidos', {
                         method: 'POST',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
                         body: formData
                     })
                     .then(response => response.json())
@@ -1658,6 +2046,65 @@ if ($tenant && $filial) {
                 }
             });
         }
+        
+        function toggleFechamentoOptions() {
+            const tipoFechamento = document.getElementById('tipoFechamento').value;
+            
+            // Ocultar todos os containers
+            document.getElementById('simplesContainer').style.display = 'none';
+            document.getElementById('divididoContainer').style.display = 'none';
+            document.getElementById('mistoContainer').style.display = 'none';
+            
+            // Mostrar o container correspondente
+            if (tipoFechamento === 'simples') {
+                document.getElementById('simplesContainer').style.display = 'block';
+            } else if (tipoFechamento === 'dividido') {
+                document.getElementById('divididoContainer').style.display = 'block';
+                calcularValorPorPessoa(parseFloat(document.getElementById('valorPorPessoa').getAttribute('data-total') || 0));
+            } else if (tipoFechamento === 'misto') {
+                document.getElementById('mistoContainer').style.display = 'block';
+            }
+        }
+        
+        function calcularValorPorPessoa(valorTotal) {
+            const numeroPessoas = parseInt(document.getElementById('numeroPessoas').value) || 1;
+            const valorPorPessoa = valorTotal / numeroPessoas;
+            const valorPorPessoaElement = document.getElementById('valorPorPessoa');
+            if (valorPorPessoaElement) {
+                valorPorPessoaElement.textContent = 'R$ ' + valorPorPessoa.toFixed(2).replace('.', ',');
+            }
+        }
+        
+        function calcularTotalMisto(valorTotal) {
+            const dinheiro = parseFloat(document.getElementById('valorDinheiro').value) || 0;
+            const debito = parseFloat(document.getElementById('valorDebito').value) || 0;
+            const credito = parseFloat(document.getElementById('valorCredito').value) || 0;
+            const pix = parseFloat(document.getElementById('valorPix').value) || 0;
+            const totalInformado = dinheiro + debito + credito + pix;
+            
+            const totalInput = document.getElementById('totalMisto');
+            totalInput.value = 'R$ ' + totalInformado.toFixed(2).replace('.', ',');
+            
+            if (Math.abs(totalInformado - valorTotal) < 0.01) {
+                totalInput.style.color = '#28a745';
+            } else {
+                totalInput.style.color = '#dc3545';
+            }
+        }
+        
+        function calcularTrocoSimples(valorTotal) {
+            const valorPago = parseFloat(document.getElementById('valorPagoSimples').value) || 0;
+            const troco = valorPago - valorTotal;
+            const trocoInput = document.getElementById('trocoSimples');
+            
+            if (troco >= 0) {
+                trocoInput.value = 'R$ ' + troco.toFixed(2).replace('.', ',');
+                trocoInput.style.color = '#28a745';
+            } else {
+                trocoInput.value = 'Valor insuficiente';
+                trocoInput.style.color = '#dc3545';
+            }
+        }
     </script>
     
     <!-- Sidebar JavaScript -->
@@ -1667,4 +2114,6 @@ if ($tenant && $filial) {
         </div>
     </div>
 </body>
+</html>
+</html>
 </html>

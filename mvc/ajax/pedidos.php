@@ -1,4 +1,5 @@
 <?php
+session_start();
 header('Content-Type: application/json');
 
 // Autoloader
@@ -85,6 +86,16 @@ try {
             $filialId = $session->getFilialId() ?? 1;
             $usuarioId = $session->getUserId();
             
+            // Auto-corrigir sequência da tabela pedido_itens
+            $maxId = $db->fetch("SELECT MAX(id) as max_id FROM pedido_itens");
+            $currentSeq = $db->fetch("SELECT last_value FROM pedido_itens_id_seq");
+            
+            if ($currentSeq['last_value'] <= $maxId['max_id']) {
+                $newValue = $maxId['max_id'] + 1;
+                $db->query("SELECT setval('pedido_itens_id_seq', ?)", [$newValue]);
+                error_log("Sequência pedido_itens_id_seq corrigida automaticamente para: " . $newValue);
+            }
+            
             // Calcular valor total
             $valorTotal = 0;
             foreach ($itens as $item) {
@@ -112,15 +123,31 @@ try {
                 $ingredientesCom = [];
                 $ingredientesSem = [];
                 
-                if (isset($item['ingredientes_adicionados']) && is_array($item['ingredientes_adicionados'])) {
+                // Verificar ingredientes adicionados - tratar undefined/null/vazio
+                if (isset($item['ingredientes_adicionados']) && 
+                    $item['ingredientes_adicionados'] !== null && 
+                    $item['ingredientes_adicionados'] !== 'undefined' &&
+                    $item['ingredientes_adicionados'] !== '' &&
+                    is_array($item['ingredientes_adicionados']) && 
+                    !empty($item['ingredientes_adicionados'])) {
                     foreach ($item['ingredientes_adicionados'] as $ing) {
-                        $ingredientesCom[] = $ing['nome'];
+                        if (isset($ing['nome']) && !empty($ing['nome'])) {
+                            $ingredientesCom[] = $ing['nome'];
+                        }
                     }
                 }
                 
-                if (isset($item['ingredientes_removidos']) && is_array($item['ingredientes_removidos'])) {
+                // Verificar ingredientes removidos - tratar undefined/null/vazio
+                if (isset($item['ingredientes_removidos']) && 
+                    $item['ingredientes_removidos'] !== null && 
+                    $item['ingredientes_removidos'] !== 'undefined' &&
+                    $item['ingredientes_removidos'] !== '' &&
+                    is_array($item['ingredientes_removidos']) && 
+                    !empty($item['ingredientes_removidos'])) {
                     foreach ($item['ingredientes_removidos'] as $ing) {
-                        $ingredientesSem[] = $ing['nome'];
+                        if (isset($ing['nome']) && !empty($ing['nome'])) {
+                            $ingredientesSem[] = $ing['nome'];
+                        }
                     }
                 }
                 

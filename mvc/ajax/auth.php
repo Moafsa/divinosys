@@ -1,5 +1,6 @@
 <?php
 
+require_once __DIR__ . '/../../system/Config.php';
 require_once __DIR__ . '/../../system/Database.php';
 require_once __DIR__ . '/../../system/Auth.php';
 
@@ -26,6 +27,42 @@ try {
     $action = $_POST['action'] ?? $_GET['action'] ?? '';
     
     switch ($action) {
+        case 'login_admin':
+            $usuario = $_POST['usuario'] ?? '';
+            $senha = $_POST['senha'] ?? '';
+            
+            if (empty($usuario) || empty($senha)) {
+                throw new Exception('Usuário e senha são obrigatórios');
+            }
+            
+            // Buscar usuário admin (aceitar nivel 1 ou NULL)
+            $user = $db->fetch(
+                "SELECT * FROM usuarios WHERE login = ? AND (nivel = 1 OR nivel IS NULL)",
+                [$usuario]
+            );
+            
+            if (!$user) {
+                throw new Exception('Usuário não encontrado');
+            }
+            
+            // Verificar senha
+            if (!password_verify($senha, $user['senha'])) {
+                throw new Exception('Senha incorreta');
+            }
+            
+            // Iniciar sessão
+            session_start();
+            $_SESSION['user'] = $user;
+            $_SESSION['tenant_id'] = $user['tenant_id'] ?? 1;
+            $_SESSION['filial_id'] = $user['filial_id'] ?? 1;
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Login realizado com sucesso',
+                'user' => $user
+            ]);
+            break;
+            
         case 'solicitar_login':
             $telefone = $_POST['telefone'] ?? '';
             

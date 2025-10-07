@@ -76,6 +76,11 @@ try {
         'deletar_usuario' => 'auth.php',
         'buscar_usuario' => 'auth.php',
         'buscar_cliente' => 'auth.php',
+        // Mesa e pedidos actions
+        'mesa_multiplos_pedidos' => 'mesa_multiplos_pedidos_simples.php',
+        'ver_mesa_multiplos_pedidos' => 'mesa_multiplos_pedidos_simples.php',
+        'fechar_pedido_individual' => 'mesa_multiplos_pedidos_simples.php',
+        'fechar_mesa_completa' => 'mesa_multiplos_pedidos_simples.php',
         // WhatsApp/Baileys actions
         'criar_instancia' => 'whatsapp.php',
         'listar_instancias' => 'whatsapp.php',

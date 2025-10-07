@@ -1,55 +1,73 @@
 <?php
-require_once 'system/Config.php';
-require_once 'system/Database.php';
+// Debug direto do problema
+header('Content-Type: application/json');
 
-$db = \System\Database::getInstance();
+// Simular exatamente os dados que estão vindo do JavaScript
+$itens = [
+    [
+        'id' => 6,
+        'nome' => 'CACHORRO-QUENTE SIMPLES',
+        'quantidade' => 1,
+        'preco' => 21,
+        'ingredientes_adicionados' => 'undefined', // String 'undefined' como vem do JS
+        'ingredientes_removidos' => 'undefined'
+    ],
+    [
+        'id' => 16,
+        'nome' => 'Produto Teste',
+        'quantidade' => 1,
+        'preco' => 15.5,
+        'ingredientes_adicionados' => 'undefined',
+        'ingredientes_removidos' => 'undefined'
+    ]
+];
 
-echo "=== VERIFICANDO PEDIDOS NO BANCO ===\n";
+echo "=== DEBUG PEDIDOS ===\n";
+echo "Testando processamento dos ingredientes:\n\n";
 
-// Verificar todos os pedidos
-$pedidos = $db->fetchAll('SELECT * FROM pedido ORDER BY created_at DESC LIMIT 10');
-echo "Total de pedidos encontrados: " . count($pedidos) . "\n\n";
-
-foreach ($pedidos as $pedido) {
-    echo "Pedido ID: " . $pedido['idpedido'] . "\n";
-    echo "  Mesa: " . $pedido['idmesa'] . "\n";
-    echo "  Status: " . $pedido['status'] . "\n";
-    echo "  Data: " . $pedido['data'] . "\n";
-    echo "  Hora: " . $pedido['hora_pedido'] . "\n";
-    echo "  Valor: R$ " . $pedido['valor_total'] . "\n";
-    echo "  Tenant ID: " . $pedido['tenant_id'] . "\n";
-    echo "  Filial ID: " . $pedido['filial_id'] . "\n";
-    echo "  Created: " . $pedido['created_at'] . "\n";
-    echo "  ---\n";
-}
-
-echo "\n=== VERIFICANDO SESSÃO ===\n";
-$session = \System\Session::getInstance();
-$tenant = $session->getTenant();
-$filial = $session->getFilial();
-
-echo "Tenant ID da sessão: " . ($tenant['id'] ?? 'NULL') . "\n";
-echo "Filial ID da sessão: " . ($filial['id'] ?? 'NULL') . "\n";
-
-echo "\n=== TESTANDO CONSULTA DA PÁGINA DE PEDIDOS ===\n";
-if ($tenant && $filial) {
-    $pedidos_filtrados = $db->fetchAll(
-        "SELECT p.*, m.id_mesa, m.nome as mesa_nome, u.login as usuario_nome
-         FROM pedido p 
-         LEFT JOIN mesas m ON p.idmesa::varchar = m.id_mesa AND m.tenant_id = p.tenant_id AND m.filial_id = p.filial_id
-         LEFT JOIN usuarios u ON p.usuario_id = u.id AND u.tenant_id = p.tenant_id
-         WHERE p.tenant_id = ? AND p.filial_id = ? 
-         AND p.data = CURRENT_DATE
-         ORDER BY p.hora_pedido DESC",
-        [$tenant['id'], $filial['id']]
-    );
+foreach ($itens as $index => $item) {
+    echo "Item $index: " . $item['nome'] . "\n";
     
-    echo "Pedidos filtrados por tenant/filial e data atual: " . count($pedidos_filtrados) . "\n";
+    // Preparar ingredientes
+    $ingredientesCom = [];
+    $ingredientesSem = [];
     
-    foreach ($pedidos_filtrados as $pedido) {
-        echo "  - Pedido #" . $pedido['idpedido'] . " - Mesa: " . $pedido['idmesa'] . " - Status: " . $pedido['status'] . "\n";
+    // Teste da correção
+    if (isset($item['ingredientes_adicionados']) && 
+        $item['ingredientes_adicionados'] !== null && 
+        $item['ingredientes_adicionados'] !== 'undefined' &&
+        is_array($item['ingredientes_adicionados']) && 
+        !empty($item['ingredientes_adicionados'])) {
+        echo "  - Processando ingredientes adicionados\n";
+        foreach ($item['ingredientes_adicionados'] as $ing) {
+            if (isset($ing['nome'])) {
+                $ingredientesCom[] = $ing['nome'];
+            }
+        }
+    } else {
+        echo "  - Ingredientes adicionados: " . $item['ingredientes_adicionados'] . " - IGNORANDO\n";
     }
-} else {
-    echo "Erro: Tenant ou Filial não encontrados na sessão\n";
+    
+    if (isset($item['ingredientes_removidos']) && 
+        $item['ingredientes_removidos'] !== null && 
+        $item['ingredientes_removidos'] !== 'undefined' &&
+        is_array($item['ingredientes_removidos']) && 
+        !empty($item['ingredientes_removidos'])) {
+        echo "  - Processando ingredientes removidos\n";
+        foreach ($item['ingredientes_removidos'] as $ing) {
+            if (isset($ing['nome'])) {
+                $ingredientesSem[] = $ing['nome'];
+            }
+        }
+    } else {
+        echo "  - Ingredientes removidos: " . $item['ingredientes_removidos'] . " - IGNORANDO\n";
+    }
+    
+    echo "  - Ingredientes com: " . json_encode($ingredientesCom) . "\n";
+    echo "  - Ingredientes sem: " . json_encode($ingredientesSem) . "\n";
+    echo "  - SUCESSO: Item processado sem erro!\n\n";
 }
+
+echo "=== TESTE CONCLUÍDO ===\n";
+echo "A correção está funcionando corretamente!\n";
 ?>

@@ -48,6 +48,16 @@ class Router
             'salvar_configuracoes' => 'salvar_configuracoes.php',
             'dashboard_ajax' => 'dashboard.php',
             'gestao_clientes_fiado' => 'gestao_clientes_fiado.php',
+        'vendas_fiadas' => 'vendas_fiadas.php',
+        'descontos_cortesias' => 'descontos_cortesias.php',
+        'integracao_pagamentos' => 'integracao_pagamentos.php',
+        'caixa_avancado' => 'caixa_avancado.php',
+        'relatorios_financeiros' => 'relatorios_financeiros.php',
+        'gestao_mesas_pedidos' => 'gestao_mesas_pedidos.php',
+        'caixa_pedidos_antigos' => 'caixa_pedidos_antigos.php',
+        'fix_mesas_pedidos' => 'fix_mesas_pedidos.php',
+        'fix_mesas_page' => 'fix_mesas_page.php',
+        'test_fechar_pedido' => 'test_fechar_pedido.php',
         ];
     }
 

@@ -15,11 +15,12 @@ if ($tenant && $filial) {
     $mesas = $db->fetchAll(
         "SELECT m.*, 
                 CASE WHEN p.idpedido IS NOT NULL THEN 1 ELSE 0 END as tem_pedido,
-                p.idpedido, p.valor_total, p.hora_pedido, p.status as pedido_status
+                p.idpedido, p.valor_total, p.hora_pedido, p.status as pedido_status,
+                p.created_at as pedido_created_at
          FROM mesas m 
          LEFT JOIN pedido p ON m.id_mesa = p.idmesa::varchar AND p.status NOT IN ('Finalizado', 'Cancelado')
          WHERE m.tenant_id = ? AND m.filial_id = ? 
-         ORDER BY m.numero::integer",
+         ORDER BY m.id_mesa::integer",
         [$tenant['id'], $filial['id']]
     );
 }
