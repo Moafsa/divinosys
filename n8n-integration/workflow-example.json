@@ -160,13 +160,7 @@
     },
     {
       "parameters": {
-        "functionCode": "// Format final response\nconst aiResponse = $input.first().json.choices[0].message.content;\n\nreturn {\n  json: {\n    success: true,
-    response: {
-      type: 'response',
-      message: aiResponse
-    },
-    timestamp: new Date().toISOString()
-  }\n};"
+        "functionCode": "// Format final response\nconst aiResponse = $input.first().json.choices[0].message.content;\n\nreturn {\n  json: {\n    success: true,\n    response: {\n      type: 'response',\n      message: aiResponse\n    },\n    timestamp: new Date().toISOString()\n  }\n};"
       },
       "id": "format-response",
       "name": "Format Response",
