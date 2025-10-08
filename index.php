@@ -91,7 +91,16 @@ try {
         'status_instancia' => 'whatsapp.php',
         'send_message' => 'whatsapp_n8n.php',
         'get_instance_status' => 'whatsapp_n8n.php',
-        'webhook_received' => 'whatsapp_n8n.php'
+        'webhook_received' => 'whatsapp_n8n.php',
+        // AI Chat actions
+        'ai_chat' => 'ai_chat.php',
+        'send_message' => 'ai_chat.php',
+        'execute_operation' => 'ai_chat.php',
+        'upload_file' => 'ai_chat.php',
+        'get_context' => 'ai_chat.php',
+        'search_products' => 'ai_chat.php',
+        'search_ingredients' => 'ai_chat.php',
+        'search_categories' => 'ai_chat.php'
     ];
         
         $ajaxFile = $ajaxMap[$action] ?? $action . '.php';

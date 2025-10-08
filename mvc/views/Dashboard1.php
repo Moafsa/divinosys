@@ -43,7 +43,7 @@ if ($tenant && $filial) {
          FROM pedido p 
          LEFT JOIN mesas m ON p.idmesa::varchar = m.id_mesa AND m.tenant_id = p.tenant_id AND m.filial_id = p.filial_id
          WHERE p.tenant_id = ? AND p.filial_id = ? 
-         AND p.status IN ('Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega', 'Finalizado')
+         AND p.status IN ('Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega')
          ORDER BY p.idmesa, p.created_at ASC",
         [$tenant['id'], $filial['id']]
     );
@@ -91,11 +91,11 @@ if ($tenant && $filial) {
             "SELECT COUNT(DISTINCT p.idmesa) as count 
              FROM pedido p 
              WHERE p.tenant_id = ? AND p.filial_id = ? 
-             AND p.status IN ('Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega', 'Finalizado')
+             AND p.status IN ('Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega')
              AND p.delivery = false",
             [$tenant['id'], $filial['id']]
         )['count'] ?? 0,
-        'delivery_pendentes' => $db->count('pedido', 'tenant_id = ? AND filial_id = ? AND delivery = true AND status IN (?, ?)', [$tenant['id'], $filial['id'], 'Pendente', 'Em Preparo']),
+        'delivery_pendentes' => $db->count('pedido', 'tenant_id = ? AND filial_id = ? AND delivery = true AND status IN (?, ?, ?, ?)', [$tenant['id'], $filial['id'], 'Pendente', 'Em Preparo', 'Pronto', 'Saiu para Entrega']),
         'faturamento_delivery' => $db->fetch(
             "SELECT COALESCE(SUM(valor_total), 0) as total 
              FROM pedido 
@@ -714,7 +714,15 @@ if ($tenant && $filial) {
                                             <div class="delivery-header">
                                                 <div class="delivery-id">#<?php echo $pedido['idpedido']; ?></div>
                                                 <div class="delivery-status">
-                                                    <span class="badge bg-<?php echo $pedido['status'] === 'Pendente' ? 'warning' : 'info'; ?>">
+                                                    <span class="badge bg-<?php 
+                                                        switch($pedido['status']) {
+                                                            case 'Pendente': echo 'warning'; break;
+                                                            case 'Em Preparo': echo 'info'; break;
+                                                            case 'Pronto': echo 'success'; break;
+                                                            case 'Saiu para Entrega': echo 'primary'; break;
+                                                            default: echo 'secondary'; break;
+                                                        }
+                                                    ?>">
                                                         <?php echo $pedido['status']; ?>
                                                     </span>
                                                 </div>
@@ -734,7 +742,7 @@ if ($tenant && $filial) {
                                                     <i class="fas fa-eye me-1"></i>
                                                     Ver Detalhes
                                                 </button>
-                                                <select class="form-select form-select-sm status-select" onchange="alterarStatusDelivery(<?php echo $pedido['idpedido']; ?>, this.value, '<?php echo $pedido['status']; ?>')">
+                                                <select class="form-select form-select-sm status-select" onchange="alterarStatusDelivery(<?php echo $pedido['idpedido']; ?>, this.value, '<?php echo $pedido['status']; ?>', this)">
                                                     <option value="">Alterar Status</option>
                                                     <option value="Pendente" <?php echo $pedido['status'] == 'Pendente' ? 'selected' : ''; ?>>Pendente</option>
                                                     <option value="Em Preparo" <?php echo $pedido['status'] == 'Em Preparo' ? 'selected' : ''; ?>>Em Preparo</option>
@@ -1131,10 +1139,10 @@ if ($tenant && $filial) {
             }
         }
         
-        function alterarStatusDelivery(pedidoId, novoStatus, statusAtual) {
+        function alterarStatusDelivery(pedidoId, novoStatus, statusAtual, element) {
             // If no status selected or same status, reset dropdown and return
             if (!novoStatus || novoStatus === '' || novoStatus === statusAtual) {
-                event.target.value = statusAtual;
+                element.value = statusAtual;
                 return;
             }
             
@@ -1162,7 +1170,7 @@ if ($tenant && $filial) {
                             // If status is "Entregue" or "Finalizado", remove card from dashboard
                             if (novoStatus === 'Entregue' || novoStatus === 'Finalizado') {
                                 setTimeout(() => {
-                                    const card = event.target.closest('.col-md-6');
+                                    const card = element.closest('.col-md-6');
                                     if (card) {
                                         card.style.transition = 'opacity 0.5s';
                                         card.style.opacity = '0';
@@ -1172,9 +1180,9 @@ if ($tenant && $filial) {
                             } else {
                                 // Just update the dropdown value
                                 setTimeout(() => {
-                                    event.target.value = novoStatus;
+                                    element.value = novoStatus;
                                     // Update status badge
-                                    const statusBadge = event.target.closest('.delivery-card').querySelector('.badge');
+                                    const statusBadge = element.closest('.delivery-card').querySelector('.badge');
                                     if (statusBadge) {
                                         statusBadge.textContent = novoStatus;
                                         updateStatusBadgeColor(statusBadge, novoStatus);
@@ -1183,16 +1191,16 @@ if ($tenant && $filial) {
                             }
                         } else {
                             Swal.fire('Erro', data.message || 'Erro ao atualizar status', 'error');
-                            event.target.value = statusAtual; // Reset dropdown
+                            element.value = statusAtual; // Reset dropdown
                         }
                     })
                     .catch(error => {
                         console.error('Erro:', error);
                         Swal.fire('Erro', 'Erro ao atualizar status', 'error');
-                        event.target.value = statusAtual; // Reset dropdown
+                        element.value = statusAtual; // Reset dropdown
                     });
                 } else {
-                    event.target.value = statusAtual; // Reset dropdown if cancelled
+                    element.value = statusAtual; // Reset dropdown if cancelled
                 }
             });
         }

@@ -280,6 +280,16 @@ try {
             $tenantId = $session->getTenantId() ?? 1;
             $filialId = $session->getFilialId() ?? 1;
             
+            // Buscar dados do pedido para obter a mesa
+            $pedido = $db->fetch(
+                "SELECT idmesa FROM pedido WHERE idpedido = ? AND tenant_id = ? AND filial_id = ?",
+                [$pedidoId, $tenantId, $filialId]
+            );
+            
+            if (!$pedido) {
+                throw new \Exception('Pedido não encontrado');
+            }
+            
             // Atualizar status do pedido
             $db->update(
                 'pedido',
@@ -287,6 +297,25 @@ try {
                 'idpedido = ? AND tenant_id = ? AND filial_id = ?',
                 [$pedidoId, $tenantId, $filialId]
             );
+            
+            // Sincronizar status da mesa após atualização do pedido
+            if ($pedido['idmesa'] && $pedido['idmesa'] !== '999') {
+                // Verificar se há outros pedidos ativos para esta mesa
+                $pedidosAtivos = $db->fetchAll(
+                    "SELECT COUNT(*) as total FROM pedido WHERE idmesa::varchar = ? AND tenant_id = ? AND filial_id = ? AND status IN ('Pendente', 'Preparando', 'Pronto', 'Entregue')",
+                    [$pedido['idmesa'], $tenantId, $filialId]
+                );
+                
+                $novoStatusMesa = $pedidosAtivos[0]['total'] > 0 ? 'ocupada' : 'livre';
+                
+                // Atualizar status da mesa
+                $db->update(
+                    'mesas',
+                    ['status' => $novoStatusMesa],
+                    'id_mesa = ? AND tenant_id = ? AND filial_id = ?',
+                    [$pedido['idmesa'], $tenantId, $filialId]
+                );
+            }
             
             echo json_encode([
                 'success' => true,

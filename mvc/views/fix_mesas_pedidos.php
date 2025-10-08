@@ -90,7 +90,7 @@ try {
         $novoStatus = $totalPedidos > 0 ? 'ocupada' : 'livre';
         
         if ($mesa['status'] !== $novoStatus) {
-            $stmt = $pdo->prepare("UPDATE mesas SET status = ?, updated_at = NOW() WHERE id = ?");
+            $stmt = $pdo->prepare("UPDATE mesas SET status = ? WHERE id = ?");
             $stmt->execute([$novoStatus, $mesa['id']]);
             
             echo "<div class='alert alert-success'>";

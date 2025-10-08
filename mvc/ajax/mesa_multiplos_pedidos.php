@@ -89,7 +89,7 @@ try {
             }
             
             $pedidos = $db->fetchAll(
-                "SELECT * FROM pedido WHERE idmesa::varchar = ? AND tenant_id = ? AND filial_id = ? AND status IN ('Pendente', 'Preparando', 'Pronto', 'Entregue') AND created_at > NOW() - INTERVAL '1 day' ORDER BY created_at ASC",
+                "SELECT * FROM pedido WHERE idmesa::varchar = ? AND tenant_id = ? AND filial_id = ? AND status IN ('Pendente', 'Preparando', 'Pronto', 'Entregue') ORDER BY created_at ASC",
                 [$mesa['id_mesa'], $tenantId, $filialId]
             );
             

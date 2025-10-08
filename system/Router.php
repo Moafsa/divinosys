@@ -44,6 +44,7 @@ class Router
             'clientes' => 'clientes.php',
             'entregadores' => 'entregadores.php',
             'usuarios' => 'usuarios.php',
+            'ai_chat' => 'AIChat.php',
             'configuracoes' => 'configuracoes.php',
             'salvar_configuracoes' => 'salvar_configuracoes.php',
             'dashboard_ajax' => 'dashboard.php',
@@ -98,7 +99,7 @@ class Router
             'dashboard', 'gerar_pedido', 'pedidos', 'mesas', 'delivery',
             'gerenciar_produtos', 'gerenciar_categorias', 'estoque',
             'financeiro', 'relatorios', 'agenda', 'clientes', 'entregadores',
-            'usuarios', 'configuracoes', 'whatsapp_config'
+            'usuarios', 'ai_chat', 'configuracoes', 'whatsapp_config'
         ];
         return in_array($view, $multiTenantRoutes);
     }
