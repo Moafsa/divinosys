@@ -563,6 +563,10 @@ if ($tenant && $filial) {
                             <i class="fas fa-users"></i>
                             <span>Clientes</span>
                         </a>
+                        <a class="nav-link" href="<?php echo $router->url('ai_chat'); ?>" data-tooltip="Assistente IA">
+                            <i class="fas fa-robot"></i>
+                            <span>Assistente IA</span>
+                        </a>
                         <a class="nav-link" href="<?php echo $router->url('configuracoes'); ?>" data-tooltip="Configurações">
                             <i class="fas fa-cog"></i>
                             <span>Configurações</span>
@@ -934,7 +938,7 @@ if ($tenant && $filial) {
         function verPedidoDelivery(pedidoId) {
             console.log('Buscando pedido delivery:', pedidoId);
             // Buscar dados do pedido via AJAX
-            fetch('mvc/ajax/pedido.php', {
+            fetch('mvc/ajax/pedidos.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -1069,7 +1073,7 @@ if ($tenant && $filial) {
                     cancelButtonText: 'Cancelar'
                 }).then((result) => {
                     if (result.isConfirmed) {
-                        fetch('mvc/ajax/pedido.php', {
+                        fetch('mvc/ajax/pedidos.php', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/x-www-form-urlencoded',
@@ -1120,7 +1124,7 @@ if ($tenant && $filial) {
                 confirmButtonColor: '#dc3545'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    fetch('mvc/ajax/pedido.php', {
+                    fetch('mvc/ajax/pedidos.php', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
@@ -2107,6 +2111,9 @@ if ($tenant && $filial) {
         }
     </script>
     
+    <!-- AI Chat Widget -->
+    <?php include __DIR__ . '/components/AIChatWidget.php'; ?>
+
     <!-- Sidebar JavaScript -->
     <script src="assets/js/sidebar.js"></script>
                 </div>
