@@ -500,11 +500,25 @@ if ($tenant && $filial) {
         .delivery-actions {
             display: flex;
             gap: 0.5rem;
+            align-items: center;
         }
         
         .delivery-actions .btn {
             flex: 1;
             font-size: 0.8rem;
+        }
+        
+        .delivery-actions .status-select {
+            flex: 1;
+            font-size: 0.8rem;
+            cursor: pointer;
+            border: 1px solid #28a745;
+            color: #28a745;
+        }
+        
+        .delivery-actions .status-select:focus {
+            border-color: #28a745;
+            box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
         }
     </style>
 </head>
@@ -689,7 +703,7 @@ if ($tenant && $filial) {
                                          LEFT JOIN usuarios u ON p.usuario_id = u.id
                                          WHERE p.tenant_id = ? AND p.filial_id = ? 
                                          AND p.delivery = true 
-                                         AND p.status IN ('Pendente', 'Em Preparo')
+                                         AND p.status NOT IN ('Entregue', 'Finalizado', 'Cancelado')
                                          ORDER BY p.hora_pedido ASC",
                                         [$tenant['id'], $filial['id']]
                                     );
@@ -720,10 +734,14 @@ if ($tenant && $filial) {
                                                     <i class="fas fa-eye me-1"></i>
                                                     Ver Detalhes
                                                 </button>
-                                                <button class="btn btn-sm btn-success" onclick="atualizarStatusDelivery(<?php echo $pedido['idpedido']; ?>, '<?php echo $pedido['status']; ?>')">
-                                                    <i class="fas fa-arrow-right me-1"></i>
-                                                    Avançar
-                                                </button>
+                                                <select class="form-select form-select-sm status-select" onchange="alterarStatusDelivery(<?php echo $pedido['idpedido']; ?>, this.value, '<?php echo $pedido['status']; ?>')">
+                                                    <option value="">Alterar Status</option>
+                                                    <option value="Pendente" <?php echo $pedido['status'] == 'Pendente' ? 'selected' : ''; ?>>Pendente</option>
+                                                    <option value="Em Preparo" <?php echo $pedido['status'] == 'Em Preparo' ? 'selected' : ''; ?>>Em Preparo</option>
+                                                    <option value="Pronto" <?php echo $pedido['status'] == 'Pronto' ? 'selected' : ''; ?>>Pronto</option>
+                                                    <option value="Saiu para Entrega" <?php echo $pedido['status'] == 'Saiu para Entrega' ? 'selected' : ''; ?>>Saiu para Entrega</option>
+                                                    <option value="Entregue" <?php echo $pedido['status'] == 'Entregue' ? 'selected' : ''; ?>>Entregue</option>
+                                                </select>
                                             </div>
                                         </div>
                                     </div>
@@ -1113,49 +1131,92 @@ if ($tenant && $filial) {
             }
         }
         
-        function atualizarStatusDelivery(pedidoId, statusAtual) {
-            const statuses = ['Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega', 'Finalizado'];
-            const currentIndex = statuses.indexOf(statusAtual);
+        function alterarStatusDelivery(pedidoId, novoStatus, statusAtual) {
+            // If no status selected or same status, reset dropdown and return
+            if (!novoStatus || novoStatus === '' || novoStatus === statusAtual) {
+                event.target.value = statusAtual;
+                return;
+            }
             
-            if (currentIndex < statuses.length - 1) {
-                const novoStatus = statuses[currentIndex + 1];
-                
-                Swal.fire({
-                    title: 'Confirmar Alteração',
-                    text: `Alterar status do pedido #${pedidoId} de "${statusAtual}" para "${novoStatus}"?`,
-                    icon: 'question',
-                    showCancelButton: true,
-                    confirmButtonText: 'Sim, alterar',
-                    cancelButtonText: 'Cancelar'
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        fetch('mvc/ajax/pedidos.php', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/x-www-form-urlencoded',
-                            },
-                            body: `action=atualizar_status&pedido_id=${pedidoId}&status=${novoStatus}`
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.success) {
-                                Swal.fire('Sucesso', 'Status atualizado com sucesso!', 'success');
-                                // Atualizar o status visualmente sem recarregar a página
+            Swal.fire({
+                title: 'Confirmar Alteração',
+                text: `Alterar status do pedido #${pedidoId} de "${statusAtual}" para "${novoStatus}"?`,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Sim, alterar',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    fetch('mvc/ajax/pedidos.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: `action=atualizar_status&pedido_id=${pedidoId}&status=${novoStatus}`
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Sucesso', 'Status atualizado com sucesso!', 'success');
+                            
+                            // If status is "Entregue" or "Finalizado", remove card from dashboard
+                            if (novoStatus === 'Entregue' || novoStatus === 'Finalizado') {
                                 setTimeout(() => {
-                                    atualizarStatusVisual(pedidoId, novoStatus);
+                                    const card = event.target.closest('.col-md-6');
+                                    if (card) {
+                                        card.style.transition = 'opacity 0.5s';
+                                        card.style.opacity = '0';
+                                        setTimeout(() => card.remove(), 500);
+                                    }
                                 }, 1000);
                             } else {
-                                Swal.fire('Erro', data.message || 'Erro ao atualizar status', 'error');
+                                // Just update the dropdown value
+                                setTimeout(() => {
+                                    event.target.value = novoStatus;
+                                    // Update status badge
+                                    const statusBadge = event.target.closest('.delivery-card').querySelector('.badge');
+                                    if (statusBadge) {
+                                        statusBadge.textContent = novoStatus;
+                                        updateStatusBadgeColor(statusBadge, novoStatus);
+                                    }
+                                }, 1000);
                             }
-                        })
-                        .catch(error => {
-                            console.error('Erro:', error);
-                            Swal.fire('Erro', 'Erro ao atualizar status', 'error');
-                        });
-                    }
-                });
-            } else {
-                Swal.fire('Info', 'Pedido já está no status final', 'info');
+                        } else {
+                            Swal.fire('Erro', data.message || 'Erro ao atualizar status', 'error');
+                            event.target.value = statusAtual; // Reset dropdown
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro:', error);
+                        Swal.fire('Erro', 'Erro ao atualizar status', 'error');
+                        event.target.value = statusAtual; // Reset dropdown
+                    });
+                } else {
+                    event.target.value = statusAtual; // Reset dropdown if cancelled
+                }
+            });
+        }
+        
+        function updateStatusBadgeColor(badge, status) {
+            badge.className = 'badge';
+            switch(status) {
+                case 'Pendente':
+                    badge.classList.add('bg-warning');
+                    break;
+                case 'Em Preparo':
+                    badge.classList.add('bg-info');
+                    break;
+                case 'Pronto':
+                    badge.classList.add('bg-success');
+                    break;
+                case 'Saiu para Entrega':
+                    badge.classList.add('bg-primary');
+                    break;
+                case 'Entregue':
+                    badge.classList.add('bg-dark');
+                    break;
+                default:
+                    badge.classList.add('bg-secondary');
             }
         }
         
