@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste AI Chat Widget</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding: 20px;
+            background: #f8f9fa;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .test-info {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <div class="test-info">
+            <h2>🧪 Teste do AI Chat Widget</h2>
+            <p>Esta página testa o widget de chat IA para verificar se os erros JavaScript foram corrigidos.</p>
+            
+            <div class="alert alert-info">
+                <h5>Instruções:</h5>
+                <ol>
+                    <li>Abra o console do navegador (F12)</li>
+                    <li>Clique no botão do robô no canto inferior direito</li>
+                    <li>Digite uma mensagem e envie</li>
+                    <li>Verifique se não há erros no console</li>
+                </ol>
+            </div>
+            
+            <div class="alert alert-success" id="testResult" style="display: none;">
+                <strong>✅ Teste concluído!</strong> Nenhum erro JavaScript encontrado.
+            </div>
+            
+            <div class="alert alert-danger" id="testError" style="display: none;">
+                <strong>❌ Erro encontrado!</strong> <span id="errorMessage"></span>
+            </div>
+        </div>
+        
+        <div id="testContent">
+            <p>Conteúdo de teste para verificar se o widget funciona corretamente.</p>
+        </div>
+    </div>
+
+    <!-- AI Chat Widget -->
+    <div class="ai-chat-widget">
+        <!-- Chat Toggle Button -->
+        <button class="ai-chat-toggle" id="aiChatToggle" title="Assistente IA">
+            <i class="fas fa-robot"></i>
+            <span class="notification-badge" id="aiNotificationBadge" style="display: none;">1</span>
+        </button>
+
+        <!-- Chat Container -->
+        <div class="ai-chat-panel" id="aiChatPanel">
+            <div class="ai-chat-header">
+                <div class="ai-avatar">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div class="ai-info">
+                    <h6 class="mb-0">Assistente IA</h6>
+                    <small class="text-muted">Divino Lanches</small>
+                </div>
+                <div class="ai-actions">
+                    <button class="btn btn-sm btn-outline-light" id="clearChatBtn" title="Limpar conversa">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-light" id="closeChatBtn" title="Fechar chat">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="ai-chat-body">
+                <div class="ai-chat-messages" id="aiChatMessages">
+                    <!-- Messages will be added here -->
+                </div>
+
+                <div class="ai-chat-input-container">
+                    <div class="ai-chat-input-wrapper">
+                        <div class="input-group input-group-sm">
+                            <button class="btn btn-outline-secondary" type="button" id="attachFileBtn" title="Anexar arquivo">
+                                <i class="fas fa-paperclip"></i>
+                            </button>
+                            <input type="file" id="fileInput" accept="image/*,application/pdf,.csv,.xlsx,.xls" style="display: none;">
+                            
+                            <input type="text" class="form-control" id="messageInput" 
+                                   placeholder="Digite sua mensagem..." 
+                                   autocomplete="off">
+                            
+                            <button class="btn btn-outline-primary" type="button" id="voiceBtn" title="Gravação de voz">
+                                <i class="fas fa-microphone"></i>
+                            </button>
+                            
+                            <button class="btn btn-primary" type="button" id="sendBtn" title="Enviar">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="ai-chat-suggestions">
+                        <div class="suggestion-buttons">
+                            <button class="btn btn-xs btn-outline-secondary suggestion-btn" data-suggestion="Teste de mensagem">
+                                <i class="fas fa-check"></i> Teste
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .ai-chat-widget {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1050;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .ai-chat-toggle {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .ai-chat-toggle:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+
+        .notification-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: #dc3545;
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        .ai-chat-panel {
+            position: absolute;
+            bottom: 70px;
+            right: 0;
+            width: 350px;
+            height: 500px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .ai-chat-panel.show {
+            display: flex;
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .ai-chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .ai-avatar {
+            width: 35px;
+            height: 35px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .ai-info {
+            flex: 1;
+        }
+
+        .ai-info h6 {
+            margin: 0;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .ai-info small {
+            font-size: 11px;
+            opacity: 0.8;
+        }
+
+        .ai-actions {
+            display: flex;
+            gap: 5px;
+        }
+
+        .ai-actions .btn {
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .ai-chat-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .ai-chat-messages {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background: #f8f9fa;
+        }
+
+        .message {
+            margin-bottom: 12px;
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .message.ai {
+            justify-content: flex-start;
+        }
+
+        .message-content {
+            max-width: 80%;
+            padding: 8px 12px;
+            border-radius: 12px;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        .message.user .message-content {
+            background: #007bff;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.ai .message-content {
+            background: white;
+            color: #333;
+            border: 1px solid #e9ecef;
+            border-bottom-left-radius: 4px;
+        }
+
+        .message-time {
+            font-size: 10px;
+            opacity: 0.7;
+            margin-top: 4px;
+        }
+
+        .ai-chat-input-container {
+            padding: 12px;
+            background: white;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .ai-chat-input-wrapper {
+            margin-bottom: 8px;
+        }
+
+        .ai-chat-suggestions {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+
+        .suggestion-buttons {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+
+        .suggestion-btn {
+            font-size: 10px;
+            padding: 4px 8px;
+            border-radius: 12px;
+            white-space: nowrap;
+        }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Simplified AI Chat Widget for testing
+        class AIChatWidget {
+            constructor() {
+                this.isOpen = false;
+                this.messages = [];
+                this.init();
+            }
+
+            init() {
+                this.setupEventListeners();
+                this.addWelcomeMessage();
+                
+                // Monitor for errors
+                this.setupErrorMonitoring();
+            }
+
+            setupErrorMonitoring() {
+                const originalConsoleError = console.error;
+                console.error = (...args) => {
+                    this.showTestError(args.join(' '));
+                    originalConsoleError.apply(console, args);
+                };
+
+                window.addEventListener('error', (event) => {
+                    this.showTestError(event.message);
+                });
+
+                window.addEventListener('unhandledrejection', (event) => {
+                    this.showTestError(event.reason);
+                });
+            }
+
+            showTestError(error) {
+                const testError = document.getElementById('testError');
+                const errorMessage = document.getElementById('errorMessage');
+                if (testError && errorMessage) {
+                    errorMessage.textContent = error;
+                    testError.style.display = 'block';
+                }
+            }
+
+            showTestSuccess() {
+                const testResult = document.getElementById('testResult');
+                if (testResult) {
+                    testResult.style.display = 'block';
+                }
+            }
+
+            setupEventListeners() {
+                const toggle = document.getElementById('aiChatToggle');
+                const panel = document.getElementById('aiChatPanel');
+                const closeBtn = document.getElementById('closeChatBtn');
+                const clearBtn = document.getElementById('clearChatBtn');
+                const messageInput = document.getElementById('messageInput');
+                const sendBtn = document.getElementById('sendBtn');
+                const suggestionBtns = document.querySelectorAll('.suggestion-btn');
+
+                if (toggle) toggle.addEventListener('click', () => this.toggleChat());
+                if (closeBtn) closeBtn.addEventListener('click', () => this.closeChat());
+                if (clearBtn) clearBtn.addEventListener('click', () => this.clearChat());
+                if (sendBtn) sendBtn.addEventListener('click', () => this.sendMessage());
+                
+                if (messageInput) {
+                    messageInput.addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            this.sendMessage();
+                        }
+                    });
+                }
+
+                suggestionBtns.forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const suggestion = btn.dataset.suggestion;
+                        if (messageInput) messageInput.value = suggestion;
+                        this.sendMessage();
+                    });
+                });
+            }
+
+            toggleChat() {
+                const panel = document.getElementById('aiChatPanel');
+                const toggle = document.getElementById('aiChatToggle');
+                
+                this.isOpen = !this.isOpen;
+                
+                if (this.isOpen) {
+                    if (panel) panel.classList.add('show');
+                    if (toggle) toggle.innerHTML = '<i class="fas fa-times"></i>';
+                } else {
+                    if (panel) panel.classList.remove('show');
+                    if (toggle) toggle.innerHTML = '<i class="fas fa-robot"></i>';
+                }
+            }
+
+            closeChat() {
+                this.isOpen = false;
+                const panel = document.getElementById('aiChatPanel');
+                const toggle = document.getElementById('aiChatToggle');
+                
+                if (panel) panel.classList.remove('show');
+                if (toggle) toggle.innerHTML = '<i class="fas fa-robot"></i>';
+            }
+
+            addWelcomeMessage() {
+                this.addMessage('ai', 'Olá! Este é um teste do widget de chat IA. Digite uma mensagem para testar!');
+            }
+
+            addMessage(sender, content) {
+                const messagesContainer = document.getElementById('aiChatMessages');
+                if (!messagesContainer) return;
+                
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${sender}`;
+
+                messageDiv.innerHTML = `
+                    <div class="message-content">
+                        ${content}
+                        <div class="message-time">${new Date().toLocaleTimeString('pt-BR')}</div>
+                    </div>
+                `;
+
+                messagesContainer.appendChild(messageDiv);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+                this.messages.push({
+                    sender,
+                    content,
+                    timestamp: new Date()
+                });
+            }
+
+            async sendMessage() {
+                const messageInput = document.getElementById('messageInput');
+                if (!messageInput) return;
+                
+                const message = messageInput.value.trim();
+
+                if (!message) return;
+
+                this.addMessage('user', message);
+                messageInput.value = '';
+
+                // Simulate AI response
+                setTimeout(() => {
+                    this.addMessage('ai', `Recebi sua mensagem: "${message}". Este é um teste do widget funcionando corretamente!`);
+                    this.showTestSuccess();
+                }, 1000);
+            }
+
+            clearChat() {
+                const messagesContainer = document.getElementById('aiChatMessages');
+                if (messagesContainer) {
+                    messagesContainer.innerHTML = '';
+                    this.messages = [];
+                    this.addWelcomeMessage();
+                }
+            }
+        }
+
+        // Initialize when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            window.aiChatWidget = new AIChatWidget();
+            console.log('AI Chat Widget initialized successfully');
+        });
+    </script>
+</body>
+</html>

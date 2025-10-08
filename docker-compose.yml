@@ -18,10 +18,15 @@ services:
       - APP_URL=http://localhost:8080
       - WUZAPI_URL=http://wuzapi:8080
       - WUZAPI_API_KEY=1234ABCD
-      - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL:-}
+      # AI Integration
+      - USE_N8N_AI=${USE_N8N_AI:-false}
+      - AI_N8N_WEBHOOK_URL=${AI_N8N_WEBHOOK_URL}
+      - AI_N8N_TIMEOUT=${AI_N8N_TIMEOUT:-30}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     depends_on:
       - postgres
       - redis
+      - mcp-server
     volumes:
       - ./uploads:/var/www/html/uploads
       - ./logs:/var/www/html/logs
@@ -79,11 +84,47 @@ services:
     networks:
       - divino-network
 
+  # MCP Server - Model Context Protocol for AI data access
+  mcp-server:
+    build:
+      context: ./n8n-mcp-server
+      dockerfile: Dockerfile
+    container_name: divino-mcp-server
+    ports:
+      - "3100:3100"  # MCP API
+    environment:
+      - MCP_PORT=3100
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=divino_db
+      - DB_USER=divino_user
+      - DB_PASSWORD=divino_password
+      - API_KEY=${MCP_API_KEY:-development-key-change-in-production}
+      - NODE_ENV=production
+    depends_on:
+      - postgres
+    volumes:
+      - mcp_logs:/app/logs
+    networks:
+      - divino-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # n8n - Usando servidor externo
+  # O n8n já está instalado em outro servidor
+  # Apenas configure N8N_WEBHOOK_URL no .env apontando para seu servidor
+
 volumes:
   postgres_data:
   redis_data:
   wuzapi_sessions:
   wuzapi_logs:
+  mcp_logs:
 
 networks:
   divino-network:

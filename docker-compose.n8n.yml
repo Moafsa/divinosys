@@ -1,0 +1,103 @@
+# Docker Compose with n8n + MCP Server Integration
+# Use this file for development/testing the n8n integration
+# 
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.n8n.yml up -d
+# 
+# Or merge into your main docker-compose.yml
+
+version: '3.8'
+
+services:
+  # MCP Server - Model Context Protocol server for efficient AI data access
+  mcp-server:
+    build: ./n8n-mcp-server
+    container_name: divino-mcp-server
+    ports:
+      - "3100:3100"
+    environment:
+      - MCP_PORT=3100
+      - DB_HOST=${DB_HOST:-postgres}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-divino_db}
+      - DB_USER=${DB_USER:-divino_user}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - API_KEY=${MCP_API_KEY:-development-key-change-in-production}
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    networks:
+      - divino-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # n8n - Workflow automation platform for AI orchestration
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: divino-n8n
+    ports:
+      - "5678:5678"
+    environment:
+      # Basic Auth
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-change-this-password}
+      
+      # Host Configuration
+      - N8N_HOST=${N8N_HOST:-localhost}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=${N8N_PROTOCOL:-http}
+      
+      # Environment
+      - NODE_ENV=${NODE_ENV:-production}
+      - WEBHOOK_URL=${N8N_WEBHOOK_URL:-http://localhost:5678/}
+      
+      # Timezone
+      - GENERIC_TIMEZONE=America/Sao_Paulo
+      
+      # Execution
+      - EXECUTIONS_PROCESS=main
+      - EXECUTIONS_DATA_SAVE_ON_ERROR=all
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=all
+      - EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=true
+      
+      # Logging
+      - N8N_LOG_LEVEL=info
+      - N8N_LOG_OUTPUT=console
+    volumes:
+      - n8n_data:/home/node/.n8n
+    restart: unless-stopped
+    networks:
+      - divino-network
+    depends_on:
+      - mcp-server
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  n8n_data:
+    driver: local
+
+networks:
+  divino-network:
+    external: true
+    # If the network doesn't exist, create it with:
+    # docker network create divino-network

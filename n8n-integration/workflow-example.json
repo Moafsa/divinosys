@@ -1,0 +1,298 @@
+{
+  "name": "Divino Lanches AI Assistant with MCP",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-chat",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook - AI Question",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract user question and context\nconst question = $input.item.json.body.message;\nconst tenantId = $input.item.json.body.tenant_id || 1;\nconst filialId = $input.item.json.body.filial_id || 1;\n\n// Classify intent to determine which tools to use\nconst intent = {\n  question: question,\n  needsProducts: /produto|cardápio|preço|menu/i.test(question),\n  needsIngredients: /ingrediente|adicional|personaliza/i.test(question),\n  needsCategories: /categoria|tipo|seção/i.test(question),\n  needsOrders: /pedido|mesa|atendimento/i.test(question),\n  needsTables: /mesa|disponível|ocupada/i.test(question),\n  isSearch: /buscar|procurar|encontrar/i.test(question)\n};\n\nreturn {\n  json: {\n    question,\n    tenantId,\n    filialId,\n    intent\n  }\n};"
+      },
+      "id": "classify-intent",
+      "name": "Classify Intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.intent.needsProducts}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-needs-products",
+      "name": "Needs Products?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://mcp-server:3100/execute",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "tool",
+              "value": "={{$json.intent.isSearch ? 'search_products' : 'get_products'}}"
+            },
+            {
+              "name": "parameters",
+              "value": "={{$json.intent.isSearch ? {term: $json.question.match(/\"([^\"]+)\"/)?.[1] || '', limit: 10} : {limit: 20}}}"
+            },
+            {
+              "name": "context",
+              "value": "={{tenant_id: $json.tenantId, filial_id: $json.filialId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "call-mcp-products",
+      "name": "MCP - Get Products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [850, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.intent.needsOrders}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-needs-orders",
+      "name": "Needs Orders?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 500]
+    },
+    {
+      "parameters": {
+        "url": "http://mcp-server:3100/execute",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "tool",
+              "value": "get_orders"
+            },
+            {
+              "name": "parameters",
+              "value": "={{limit: 10}}"
+            },
+            {
+              "name": "context",
+              "value": "={{tenant_id: $json.tenantId, filial_id: $json.filialId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "call-mcp-orders",
+      "name": "MCP - Get Orders",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [850, 400]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Aggregate all MCP results\nconst allResults = [];\n\nfor (const item of $input.all()) {\n  if (item.json.result) {\n    allResults.push(item.json);\n  }\n}\n\n// Get original question\nconst question = $('Classify Intent').first().json.question;\n\nreturn {\n  json: {\n    question,\n    mcpData: allResults,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "aggregate-mcp-data",
+      "name": "Aggregate MCP Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are an AI assistant for Divino Lanches restaurant. Answer questions based ONLY on the provided data from the MCP server. Be concise, helpful, and respond in Portuguese."
+            },
+            {
+              "role": "user",
+              "content": "={{$json.question}}\\n\\nDados disponíveis:\\n{{JSON.stringify($json.mcpData, null, 2)}}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 500
+        }
+      },
+      "id": "openai-chat",
+      "name": "OpenAI - Generate Response",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1250, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "1",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Format final response\nconst aiResponse = $input.first().json.choices[0].message.content;\n\nreturn {\n  json: {\n    success: true,
+    response: {
+      type: 'response',
+      message: aiResponse
+    },
+    timestamp: new Date().toISOString()
+  }\n};"
+      },
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "respond-to-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1650, 300]
+    }
+  ],
+  "connections": {
+    "Webhook - AI Question": {
+      "main": [
+        [
+          {
+            "node": "Classify Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Intent": {
+      "main": [
+        [
+          {
+            "node": "Needs Products?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Needs Orders?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Products?": {
+      "main": [
+        [
+          {
+            "node": "MCP - Get Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Orders?": {
+      "main": [
+        [
+          {
+            "node": "MCP - Get Orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MCP - Get Products": {
+      "main": [
+        [
+          {
+            "node": "Aggregate MCP Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MCP - Get Orders": {
+      "main": [
+        [
+          {
+            "node": "Aggregate MCP Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate MCP Data": {
+      "main": [
+        [
+          {
+            "node": "OpenAI - Generate Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI - Generate Response": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null
+}
