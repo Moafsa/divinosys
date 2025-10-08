@@ -450,10 +450,31 @@ foreach ($pedidos as $pedido) {
                     cancelButtonText: 'Cancelar'
                 }).then((result) => {
                     if (result.isConfirmed) {
-                        Swal.fire('Sucesso', 'Status atualizado com sucesso!', 'success');
-                        setTimeout(() => location.reload(), 1500);
+                        // Fazer chamada AJAX para atualizar o status
+                        fetch('mvc/ajax/pedidos.php', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: `action=atualizar_status&pedido_id=${pedidoId}&status=${novoStatus}`
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                Swal.fire('Sucesso', 'Status atualizado com sucesso!', 'success');
+                                setTimeout(() => location.reload(), 1500);
+                            } else {
+                                Swal.fire('Erro', data.message || 'Erro ao atualizar status', 'error');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Erro:', error);
+                            Swal.fire('Erro', 'Erro ao atualizar status', 'error');
+                        });
                     }
                 });
+            } else {
+                Swal.fire('Info', 'Pedido já está no status final!', 'info');
             }
         }
 

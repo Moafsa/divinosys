@@ -43,7 +43,7 @@ if ($tenant && $filial) {
          FROM pedido p 
          LEFT JOIN mesas m ON p.idmesa::varchar = m.id_mesa AND m.tenant_id = p.tenant_id AND m.filial_id = p.filial_id
          WHERE p.tenant_id = ? AND p.filial_id = ? 
-         AND p.status IN ('Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega')
+         AND p.status IN ('Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega', 'Finalizado')
          ORDER BY p.idmesa, p.created_at ASC",
         [$tenant['id'], $filial['id']]
     );
@@ -83,7 +83,7 @@ if ($tenant && $filial) {
     $stats = [
         'total_pedido_hoje' => $db->count('pedido', 'tenant_id = ? AND filial_id = ? AND data = CURRENT_DATE AND status IN (?, ?, ?, ?, ?)', [$tenant['id'], $filial['id'], 'Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega']),
         'valor_total_hoje' => $db->fetch(
-            "SELECT COALESCE(SUM(valor_total), 0) as total FROM pedido WHERE tenant_id = ? AND filial_id = ? AND data = CURRENT_DATE AND status IN ('Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega')",
+            "SELECT COALESCE(SUM(valor_total), 0) as total FROM pedido WHERE tenant_id = ? AND filial_id = ? AND data = CURRENT_DATE AND status IN ('Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega', 'Finalizado')",
             [$tenant['id'], $filial['id']]
         )['total'] ?? 0,
         'pedido_pendentes' => $db->count('pedido', 'tenant_id = ? AND filial_id = ? AND status = ?', [$tenant['id'], $filial['id'], 'Pendente']),
@@ -91,7 +91,7 @@ if ($tenant && $filial) {
             "SELECT COUNT(DISTINCT p.idmesa) as count 
              FROM pedido p 
              WHERE p.tenant_id = ? AND p.filial_id = ? 
-             AND p.status IN ('Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega')
+             AND p.status IN ('Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega', 'Finalizado')
              AND p.delivery = false",
             [$tenant['id'], $filial['id']]
         )['count'] ?? 0,
@@ -102,7 +102,7 @@ if ($tenant && $filial) {
              WHERE tenant_id = ? AND filial_id = ? 
              AND delivery = true 
              AND data = CURRENT_DATE 
-             AND status IN ('Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega')",
+             AND status IN ('Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega', 'Finalizado')",
             [$tenant['id'], $filial['id']]
         )['total'] ?? 0
     ];
@@ -1081,6 +1081,12 @@ if ($tenant && $filial) {
                     case 'Entregue':
                         statusBadge.classList.add('bg-dark');
                         break;
+                    case 'Saiu para Entrega':
+                        statusBadge.classList.add('bg-info');
+                        break;
+                    case 'Finalizado':
+                        statusBadge.classList.add('bg-success');
+                        break;
                     case 'Cancelado':
                         statusBadge.classList.add('bg-danger');
                         break;
@@ -1092,7 +1098,7 @@ if ($tenant && $filial) {
             // Atualizar o botão de avançar status se existir
             const avancarBtn = document.querySelector(`[data-pedido-id="${pedidoId}"] .btn-avancar-status`);
             if (avancarBtn) {
-                const statuses = ['Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega'];
+                const statuses = ['Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega', 'Finalizado'];
                 const currentIndex = statuses.indexOf(novoStatus);
                 
                 if (currentIndex < statuses.length - 1) {
@@ -1100,7 +1106,7 @@ if ($tenant && $filial) {
                     avancarBtn.textContent = `Avançar para ${proximoStatus}`;
                     avancarBtn.setAttribute('data-next-status', proximoStatus);
                 } else {
-                    avancarBtn.textContent = 'Pedido Entregue';
+                    avancarBtn.textContent = 'Pedido Finalizado';
                     avancarBtn.disabled = true;
                     avancarBtn.classList.add('disabled');
                 }
@@ -1108,7 +1114,7 @@ if ($tenant && $filial) {
         }
         
         function atualizarStatusDelivery(pedidoId, statusAtual) {
-            const statuses = ['Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega'];
+            const statuses = ['Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega', 'Finalizado'];
             const currentIndex = statuses.indexOf(statusAtual);
             
             if (currentIndex < statuses.length - 1) {
