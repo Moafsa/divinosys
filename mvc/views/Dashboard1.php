@@ -43,7 +43,7 @@ if ($tenant && $filial) {
          FROM pedido p 
          LEFT JOIN mesas m ON p.idmesa::varchar = m.id_mesa AND m.tenant_id = p.tenant_id AND m.filial_id = p.filial_id
          WHERE p.tenant_id = ? AND p.filial_id = ? 
-         AND p.status IN ('Pendente', 'Preparando', 'Pronto', 'Entregue')
+         AND p.status IN ('Pendente', 'Em Preparo', 'Finalizado')
          ORDER BY p.idmesa, p.created_at ASC",
         [$tenant['id'], $filial['id']]
     );
@@ -81,9 +81,9 @@ $stats = [
 if ($tenant && $filial) {
     // After cleanup, all stats should be 0 or based on truly active orders
     $stats = [
-        'total_pedido_hoje' => $db->count('pedido', 'tenant_id = ? AND filial_id = ? AND data = CURRENT_DATE AND status IN (?, ?, ?, ?)', [$tenant['id'], $filial['id'], 'Pendente', 'Preparando', 'Pronto', 'Entregue']),
+        'total_pedido_hoje' => $db->count('pedido', 'tenant_id = ? AND filial_id = ? AND data = CURRENT_DATE AND status IN (?, ?, ?)', [$tenant['id'], $filial['id'], 'Pendente', 'Em Preparo', 'Finalizado']),
         'valor_total_hoje' => $db->fetch(
-            "SELECT COALESCE(SUM(valor_total), 0) as total FROM pedido WHERE tenant_id = ? AND filial_id = ? AND data = CURRENT_DATE AND status IN ('Pendente', 'Preparando', 'Pronto', 'Entregue')",
+            "SELECT COALESCE(SUM(valor_total), 0) as total FROM pedido WHERE tenant_id = ? AND filial_id = ? AND data = CURRENT_DATE AND status IN ('Pendente', 'Em Preparo', 'Finalizado')",
             [$tenant['id'], $filial['id']]
         )['total'] ?? 0,
         'pedido_pendentes' => $db->count('pedido', 'tenant_id = ? AND filial_id = ? AND status = ?', [$tenant['id'], $filial['id'], 'Pendente']),
@@ -91,18 +91,18 @@ if ($tenant && $filial) {
             "SELECT COUNT(DISTINCT p.idmesa) as count 
              FROM pedido p 
              WHERE p.tenant_id = ? AND p.filial_id = ? 
-             AND p.status IN ('Pendente', 'Preparando', 'Pronto', 'Entregue')
+             AND p.status IN ('Pendente', 'Em Preparo', 'Finalizado')
              AND p.delivery = false",
             [$tenant['id'], $filial['id']]
         )['count'] ?? 0,
-        'delivery_pendentes' => $db->count('pedido', 'tenant_id = ? AND filial_id = ? AND delivery = true AND status IN (?, ?)', [$tenant['id'], $filial['id'], 'Pendente', 'Preparando']),
+        'delivery_pendentes' => $db->count('pedido', 'tenant_id = ? AND filial_id = ? AND delivery = true AND status IN (?, ?)', [$tenant['id'], $filial['id'], 'Pendente', 'Em Preparo']),
         'faturamento_delivery' => $db->fetch(
             "SELECT COALESCE(SUM(valor_total), 0) as total 
              FROM pedido 
              WHERE tenant_id = ? AND filial_id = ? 
              AND delivery = true 
              AND data = CURRENT_DATE 
-             AND status IN ('Pendente', 'Preparando', 'Pronto', 'Entregue')",
+             AND status IN ('Pendente', 'Em Preparo', 'Finalizado')",
             [$tenant['id'], $filial['id']]
         )['total'] ?? 0
     ];
@@ -1057,8 +1057,49 @@ if ($tenant && $filial) {
             });
         }
         
+        function atualizarStatusVisual(pedidoId, novoStatus) {
+            // Atualizar o badge de status no dashboard
+            const statusBadge = document.querySelector(`[data-pedido-id="${pedidoId}"] .badge`);
+            if (statusBadge) {
+                statusBadge.textContent = novoStatus;
+                
+                // Atualizar a cor do badge baseada no status
+                statusBadge.className = 'badge';
+                switch(novoStatus) {
+                    case 'Pendente':
+                        statusBadge.classList.add('bg-warning');
+                        break;
+                    case 'Em Preparo':
+                        statusBadge.classList.add('bg-info');
+                        break;
+                    case 'Finalizado':
+                        statusBadge.classList.add('bg-success');
+                        break;
+                    default:
+                        statusBadge.classList.add('bg-secondary');
+                }
+            }
+            
+            // Atualizar o botão de avançar status se existir
+            const avancarBtn = document.querySelector(`[data-pedido-id="${pedidoId}"] .btn-avancar-status`);
+            if (avancarBtn) {
+                const statuses = ['Pendente', 'Em Preparo', 'Finalizado'];
+                const currentIndex = statuses.indexOf(novoStatus);
+                
+                if (currentIndex < statuses.length - 1) {
+                    const proximoStatus = statuses[currentIndex + 1];
+                    avancarBtn.textContent = `Avançar para ${proximoStatus}`;
+                    avancarBtn.setAttribute('data-next-status', proximoStatus);
+                } else {
+                    avancarBtn.textContent = 'Pedido Finalizado';
+                    avancarBtn.disabled = true;
+                    avancarBtn.classList.add('disabled');
+                }
+            }
+        }
+        
         function atualizarStatusDelivery(pedidoId, statusAtual) {
-            const statuses = ['Pendente', 'Em Preparo', 'Pronto', 'Saiu para Entrega', 'Entregue'];
+            const statuses = ['Pendente', 'Em Preparo', 'Finalizado'];
             const currentIndex = statuses.indexOf(statusAtual);
             
             if (currentIndex < statuses.length - 1) {
@@ -1084,9 +1125,10 @@ if ($tenant && $filial) {
                         .then(data => {
                             if (data.success) {
                                 Swal.fire('Sucesso', 'Status atualizado com sucesso!', 'success');
+                                // Atualizar o status visualmente sem recarregar a página
                                 setTimeout(() => {
-                                    location.reload();
-                                }, 1500);
+                                    atualizarStatusVisual(pedidoId, novoStatus);
+                                }, 1000);
                             } else {
                                 Swal.fire('Erro', data.message || 'Erro ao atualizar status', 'error');
                             }
