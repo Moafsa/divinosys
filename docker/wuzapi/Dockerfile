@@ -29,16 +29,15 @@ COPY --from=builder /app/static /app/static
 # Copiar arquivo de configuração do frontend
 COPY frontend.env /app/frontend/.env
 
+# Build do frontend React (como root)
+RUN cd /app/frontend && npm install && npm run build
+
 # Criar usuário não-root e dar permissões
 RUN adduser -D -s /bin/sh wuzapi
 RUN chown -R wuzapi:wuzapi /app/frontend /app/static
-USER wuzapi
 
 # Expor porta
 EXPOSE 8080
-
-# Build do frontend React
-RUN cd /app/frontend && npm install && npm run build
 
 # Comando de inicialização (backend + frontend)
 CMD ["sh", "-c", "cd /app && wuzapi -port=8080 -address=0.0.0.0 -admintoken=admin123456 & cd /app/frontend && npx serve -s build -l 3000"]
