@@ -1,0 +1,236 @@
+{
+  "name": "Divino Lanches - AI Agent with MCP",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-chat",
+        "options": {}
+      },
+      "id": "webhook-ai-question",
+      "name": "Webhook - AI Question",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "ai-chat"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "message",
+              "name": "message",
+              "value": "={{ $json.body.message }}",
+              "type": "string"
+            },
+            {
+              "id": "tenant_id", 
+              "name": "tenant_id",
+              "value": "={{ $json.body.tenant_id }}",
+              "type": "string"
+            },
+            {
+              "id": "filial_id",
+              "name": "filial_id", 
+              "value": "={{ $json.body.filial_id }}",
+              "type": "string"
+            },
+            {
+              "id": "user_id",
+              "name": "user_id",
+              "value": "={{ $json.body.user_id }}",
+              "type": "string"
+            },
+            {
+              "id": "timestamp",
+              "name": "timestamp",
+              "value": "={{ $json.body.timestamp }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "map-parameters",
+      "name": "Map Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "Você é um assistente especializado do sistema Divino Lanches, um restaurante com sistema de mesas e pedidos.\n\n**CONTEXTO DO SISTEMA:**\n- Sistema de restaurante com mesas numeradas\n- Pedidos podem ser para mesas específicas ou delivery (mesa 999)\n- Produtos têm categorias, ingredientes e preços\n- Sistema multi-tenant (tenant_id: {{ $json.tenant_id }}, filial_id: {{ $json.filial_id }})\n\n**SUA MISSÃO:**\nAnalise a pergunta do usuário e determine quais dados você precisa buscar do sistema para responder adequadamente.\n\n**DADOS DISPONÍVEIS VIA MCP:**\n- get_products: Lista todos os produtos\n- search_products: Busca produtos por nome/categoria\n- get_ingredients: Lista ingredientes disponíveis\n- get_categories: Lista categorias de produtos\n- get_orders: Lista pedidos ativos\n- get_tables: Lista status das mesas\n- get_order_details: Detalhes de um pedido específico\n- get_table_orders: Pedidos de uma mesa específica\n\n**INSTRUÇÕES:**\n1. Analise a pergunta: \"{{ $json.message }}\"\n2. Determine quais ferramentas MCP você precisa usar\n3. Use as ferramentas apropriadas para buscar os dados necessários\n4. Forneça uma resposta clara, útil e contextualizada\n5. Se for sobre pedidos, sempre inclua informações relevantes como mesa, valor, status\n6. Se for sobre produtos, inclua preços, categorias e disponibilidade\n7. Se for sobre mesas, mostre status (ocupada/livre) e pedidos ativos\n\n**FORMATO DA RESPOSTA:**\n- Seja direto e útil\n- Use emojis quando apropriado (🍕 🍔 🥤 📋)\n- Inclua valores em reais (R$)\n- Se não souber algo, seja honesto\n\n**PERGUNTA DO USUÁRIO:** {{ $json.message }}",
+        "options": {}
+      },
+      "id": "ai-agent",
+      "name": "AI Agent - Divino Lanches",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list", 
+          "value": "gpt-4o-mini"
+        },
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 1000
+        }
+      },
+      "id": "openai-model",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [500, 500],
+      "credentials": {
+        "openAiApi": {
+          "id": "uDwD0LmzJBvAlCSY",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "fromInput",
+        "sessionId": "={{ $json.tenant_id }}_{{ $json.filial_id }}_{{ $json.user_id }}",
+        "options": {}
+      },
+      "id": "redis-memory",
+      "name": "Redis Chat Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryRedisChat",
+      "typeVersion": 1.5,
+      "position": [500, 400],
+      "credentials": {
+        "redis": {
+          "id": "yjkVimFNZvvNdu0A", 
+          "name": "Redis Ricardo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "endpointUrl": "https://divinosys.conext.click:3100/execute",
+        "options": {}
+      },
+      "id": "mcp-client",
+      "name": "MCP Client - Divino System",
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1.1,
+      "position": [500, 600]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Format final response\nconst aiResponse = $input.first().json.choices[0].message.content;\n\nreturn {\n  json: {\n    success: true,\n    response: {\n      type: 'response',\n      message: aiResponse\n    },\n    timestamp: new Date().toISOString(),\n    tenant_id: $('Map Parameters').first().json.tenant_id,\n    filial_id: $('Map Parameters').first().json.filial_id,\n    user_id: $('Map Parameters').first().json.user_id\n  }\n};"
+      },
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Webhook - AI Question": {
+      "main": [
+        [
+          {
+            "node": "Map Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Parameters": {
+      "main": [
+        [
+          {
+            "node": "AI Agent - Divino Lanches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent - Divino Lanches",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent - Divino Lanches",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MCP Client - Divino System": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent - Divino Lanches",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - Divino Lanches": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-08T20:00:00.000Z",
+  "versionId": "1"
+}

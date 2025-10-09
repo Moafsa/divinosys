@@ -29,6 +29,19 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Test endpoint for GET requests
+app.get('/execute', (req, res) => {
+  res.json({
+    error: 'This endpoint requires POST method',
+    message: 'Use POST with JSON body containing: { "tool": "tool_name", "parameters": {}, "context": { "tenant_id": 1, "filial_id": 1 } }',
+    example: {
+      tool: 'get_products',
+      parameters: { limit: 5 },
+      context: { tenant_id: 1, filial_id: 1 }
+    }
+  });
+});
+
 // MCP Protocol endpoint - List available tools
 app.get('/tools', (req, res) => {
   res.json({
