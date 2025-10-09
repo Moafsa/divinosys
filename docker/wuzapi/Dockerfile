@@ -36,8 +36,8 @@ RUN cd /app/frontend && npm install && npm run build
 RUN adduser -D -s /bin/sh wuzapi
 RUN chown -R wuzapi:wuzapi /app/frontend /app/static
 
-# Expor porta
-EXPOSE 8080
+# Expor portas (backend e frontend)
+EXPOSE 8080 3000
 
 # Comando de inicialização (backend + frontend)
 CMD ["sh", "-c", "cd /app && wuzapi -port=8080 -address=0.0.0.0 -admintoken=admin123456 & cd /app/frontend && npx serve -s build -l 3000"]
