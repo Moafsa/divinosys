@@ -771,6 +771,217 @@ if ($tenant && $filial) {
             Swal.fire('Sucesso', 'Cliente selecionado!', 'success');
         }
 
+        function editarUsuario(usuarioId) {
+            // Buscar dados do usuário
+            fetch('mvc/ajax/configuracoes.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `action=buscar_usuario&usuario_id=${usuarioId}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const usuario = data.usuario;
+                    
+                    Swal.fire({
+                        title: 'Editar Usuário',
+                        html: `
+                            <div class="mb-3">
+                                <label class="form-label">Nome *</label>
+                                <input type="text" class="form-control" id="editNomeUsuario" value="${usuario.nome}" placeholder="Nome completo">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Email</label>
+                                <input type="email" class="form-control" id="editEmailUsuario" value="${usuario.email || ''}" placeholder="email@exemplo.com">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Telefone</label>
+                                <input type="text" class="form-control" id="editTelefoneUsuario" value="${usuario.telefone || ''}" placeholder="11999999999">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Tipo de Usuário</label>
+                                <select class="form-control" id="editTipoUsuario">
+                                    <option value="admin" ${usuario.tipo_usuario === 'admin' ? 'selected' : ''}>Administrador</option>
+                                    <option value="cozinha" ${usuario.tipo_usuario === 'cozinha' ? 'selected' : ''}>Cozinha</option>
+                                    <option value="garcom" ${usuario.tipo_usuario === 'garcom' ? 'selected' : ''}>Garçom</option>
+                                    <option value="caixa" ${usuario.tipo_usuario === 'caixa' ? 'selected' : ''}>Caixa</option>
+                                    <option value="entregador" ${usuario.tipo_usuario === 'entregador' ? 'selected' : ''}>Entregador</option>
+                                    <option value="cliente" ${usuario.tipo_usuario === 'cliente' ? 'selected' : ''}>Cliente</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">CPF</label>
+                                <input type="text" class="form-control" id="editCpfUsuario" value="${usuario.cpf || ''}" placeholder="000.000.000-00">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">CNPJ</label>
+                                <input type="text" class="form-control" id="editCnpjUsuario" value="${usuario.cnpj || ''}" placeholder="00.000.000/0000-00">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Endereço</label>
+                                <textarea class="form-control" id="editEnderecoUsuario" placeholder="Endereço completo">${usuario.endereco_completo || ''}</textarea>
+                            </div>
+                        `,
+                        showCancelButton: true,
+                        confirmButtonText: 'Salvar Alterações',
+                        cancelButtonText: 'Cancelar',
+                        preConfirm: () => {
+                            const nome = document.getElementById('editNomeUsuario').value;
+                            const email = document.getElementById('editEmailUsuario').value;
+                            const telefone = document.getElementById('editTelefoneUsuario').value;
+                            const tipoUsuario = document.getElementById('editTipoUsuario').value;
+                            const cpf = document.getElementById('editCpfUsuario').value;
+                            const cnpj = document.getElementById('editCnpjUsuario').value;
+                            const endereco = document.getElementById('editEnderecoUsuario').value;
+                            
+                            if (!nome) {
+                                Swal.showValidationMessage('Nome é obrigatório');
+                                return false;
+                            }
+                            
+                            return { 
+                                usuario_id: usuarioId,
+                                nome, email, telefone, tipo_usuario: tipoUsuario, cpf, cnpj, endereco 
+                            };
+                        }
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            salvarEdicaoUsuario(result.value);
+                        }
+                    });
+                } else {
+                    Swal.fire('Erro', data.message, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire('Erro', 'Erro ao carregar dados do usuário', 'error');
+            });
+        }
+
+        function salvarEdicaoUsuario(dados) {
+            const formData = new FormData();
+            formData.append('usuario_id', dados.usuario_id);
+            formData.append('nome', dados.nome);
+            formData.append('email', dados.email);
+            formData.append('telefone', dados.telefone);
+            formData.append('tipo_usuario', dados.tipo_usuario);
+            formData.append('cpf', dados.cpf);
+            formData.append('cnpj', dados.cnpj);
+            formData.append('endereco', dados.endereco);
+
+            fetch('mvc/ajax/configuracoes.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: `action=editar_usuario&${new URLSearchParams(formData).toString()}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire('Sucesso', 'Usuário atualizado com sucesso!', 'success').then(() => {
+                        carregarUsuarios(); // Recarregar lista de usuários
+                    });
+                } else {
+                    Swal.fire('Erro', data.message, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire('Erro', 'Erro ao atualizar usuário', 'error');
+            });
+        }
+
+        function alterarStatusUsuario(usuarioId, statusAtual) {
+            const novoStatus = !statusAtual;
+            const acao = novoStatus ? 'ativar' : 'desativar';
+            const confirmacao = novoStatus ? 'ativar' : 'desativar';
+            
+            Swal.fire({
+                title: 'Confirmar Ação',
+                text: `Deseja ${acao} este usuário?`,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: `Sim, ${acao}`,
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: novoStatus ? '#28a745' : '#dc3545'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const formData = new FormData();
+                    formData.append('usuario_id', usuarioId);
+                    formData.append('novo_status', novoStatus.toString());
+
+                    fetch('mvc/ajax/configuracoes.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        body: `action=alterar_status_usuario&${new URLSearchParams(formData).toString()}`
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Sucesso', data.message, 'success').then(() => {
+                                carregarUsuarios(); // Recarregar lista de usuários
+                            });
+                        } else {
+                            Swal.fire('Erro', data.message, 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro:', error);
+                        Swal.fire('Erro', 'Erro ao alterar status do usuário', 'error');
+                    });
+                }
+            });
+        }
+
+        function deletarUsuario(usuarioId, nomeUsuario) {
+            Swal.fire({
+                title: 'Confirmar Exclusão',
+                html: `Deseja realmente deletar o usuário <strong>${nomeUsuario}</strong>?<br><br>
+                       <small class="text-danger">Esta ação não pode ser desfeita!</small>`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sim, deletar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#dc3545'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const formData = new FormData();
+                    formData.append('usuario_id', usuarioId);
+
+                    fetch('mvc/ajax/configuracoes.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        body: `action=deletar_usuario&${new URLSearchParams(formData).toString()}`
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Sucesso', data.message, 'success').then(() => {
+                                carregarUsuarios(); // Recarregar lista de usuários
+                            });
+                        } else {
+                            Swal.fire('Erro', data.message, 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro:', error);
+                        Swal.fire('Erro', 'Erro ao deletar usuário', 'error');
+                    });
+                }
+            });
+        }
+
         // Carregar lista de usuários ao abrir a página
         function carregarUsuarios() {
             fetch('mvc/ajax/configuracoes.php', {
@@ -786,9 +997,15 @@ if ($tenant && $filial) {
                 
                 if (data.success && data.usuarios.length > 0) {
                     let html = '<div class="table-responsive"><table class="table table-sm">';
-                    html += '<thead><tr><th>Nome</th><th>Email</th><th>Tipo</th><th>Cargo</th><th>Status</th></tr></thead><tbody>';
+                    html += '<thead><tr><th>Nome</th><th>Email</th><th>Tipo</th><th>Cargo</th><th>Status</th><th>Ações</th></tr></thead><tbody>';
                     
                     data.usuarios.forEach(usuario => {
+                        const isAdminPrincipal = usuario.tipo_usuario === 'admin' && usuario.id == 1;
+                        const statusText = usuario.ativo ? 'Ativo' : 'Inativo';
+                        const statusClass = usuario.ativo ? 'bg-success' : 'bg-danger';
+                        const actionStatusText = usuario.ativo ? 'Desativar' : 'Ativar';
+                        const actionStatusIcon = usuario.ativo ? 'fa-user-slash' : 'fa-user-check';
+                        
                         html += `
                             <tr>
                                 <td>${usuario.nome}</td>
@@ -796,9 +1013,28 @@ if ($tenant && $filial) {
                                 <td>${usuario.tipo_usuario}</td>
                                 <td>${usuario.cargo || '-'}</td>
                                 <td>
-                                    <span class="badge ${usuario.ativo ? 'bg-success' : 'bg-danger'}">
-                                        ${usuario.ativo ? 'Ativo' : 'Inativo'}
+                                    <span class="badge ${statusClass}">
+                                        ${statusText}
                                     </span>
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <button class="btn btn-outline-primary" onclick="editarUsuario(${usuario.id})" title="Editar">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        ${!isAdminPrincipal ? `
+                                            <button class="btn btn-outline-${usuario.ativo ? 'warning' : 'success'}" onclick="alterarStatusUsuario(${usuario.id}, ${usuario.ativo})" title="${actionStatusText}">
+                                                <i class="fas ${actionStatusIcon}"></i>
+                                            </button>
+                                            <button class="btn btn-outline-danger" onclick="deletarUsuario(${usuario.id}, '${usuario.nome}')" title="Deletar">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        ` : `
+                                            <button class="btn btn-outline-secondary" disabled title="Usuário protegido">
+                                                <i class="fas fa-shield-alt"></i>
+                                            </button>
+                                        `}
+                                    </div>
                                 </td>
                             </tr>
                         `;

@@ -312,6 +312,187 @@ try {
             ]);
             break;
             
+        case 'editar_usuario':
+            $usuarioId = (int) ($_POST['usuario_id'] ?? 0);
+            $nome = $_POST['nome'] ?? '';
+            $email = $_POST['email'] ?? '';
+            $telefone = $_POST['telefone'] ?? '';
+            $tipoUsuario = $_POST['tipo_usuario'] ?? '';
+            $cpf = $_POST['cpf'] ?? '';
+            $cnpj = $_POST['cnpj'] ?? '';
+            $endereco = $_POST['endereco'] ?? '';
+            
+            if ($usuarioId <= 0) {
+                throw new \Exception('ID do usuário inválido');
+            }
+            
+            if (empty($nome)) {
+                throw new \Exception('Nome é obrigatório');
+            }
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId() ?? 1;
+            $filialId = $session->getFilialId() ?? 1;
+            
+            // Verificar se o usuário existe
+            $usuario = $db->fetch("SELECT * FROM usuarios_globais WHERE id = ?", [$usuarioId]);
+            if (!$usuario) {
+                throw new \Exception('Usuário não encontrado');
+            }
+            
+            // Atualizar dados na tabela usuarios_globais
+            $db->update('usuarios_globais', [
+                'nome' => $nome,
+                'email' => $email,
+                'telefone' => $telefone,
+                'tipo_usuario' => $tipoUsuario,
+                'cpf' => $cpf,
+                'cnpj' => $cnpj,
+                'endereco_completo' => $endereco,
+                'updated_at' => date('Y-m-d H:i:s')
+            ], 'id = ?', [$usuarioId]);
+            
+            // Atualizar cargo na tabela usuarios_estabelecimento se for usuário interno
+            if (in_array($tipoUsuario, ['admin', 'cozinha', 'garcom', 'caixa', 'entregador'])) {
+                $db->update('usuarios_estabelecimento', [
+                    'cargo' => ucfirst($tipoUsuario),
+                    'updated_at' => date('Y-m-d H:i:s')
+                ], 'usuario_global_id = ? AND tenant_id = ?', [$usuarioId, $tenantId]);
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Usuário atualizado com sucesso!'
+            ]);
+            break;
+            
+        case 'deletar_usuario':
+            $usuarioId = (int) ($_POST['usuario_id'] ?? 0);
+            
+            if ($usuarioId <= 0) {
+                throw new \Exception('ID do usuário inválido');
+            }
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId() ?? 1;
+            
+            // Verificar se o usuário existe
+            $usuario = $db->fetch("SELECT * FROM usuarios_globais WHERE id = ?", [$usuarioId]);
+            if (!$usuario) {
+                throw new \Exception('Usuário não encontrado');
+            }
+            
+            // Não permitir deletar o próprio usuário admin
+            if ($usuario['tipo_usuario'] === 'admin' && $usuario['id'] == 1) {
+                throw new \Exception('Não é possível deletar o usuário administrador principal');
+            }
+            
+            // Deletar da tabela usuarios_estabelecimento primeiro (FK constraint)
+            $db->delete('usuarios_estabelecimento', 'usuario_global_id = ? AND tenant_id = ?', [$usuarioId, $tenantId]);
+            
+            // Deletar da tabela usuarios_globais
+            $db->delete('usuarios_globais', 'id = ?', [$usuarioId]);
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Usuário deletado com sucesso!'
+            ]);
+            break;
+            
+        case 'alterar_status_usuario':
+            $usuarioId = (int) ($_POST['usuario_id'] ?? 0);
+            $novoStatus = $_POST['novo_status'] ?? '';
+            
+            if ($usuarioId <= 0) {
+                throw new \Exception('ID do usuário inválido');
+            }
+            
+            if (!in_array($novoStatus, ['true', 'false'])) {
+                throw new \Exception('Status inválido');
+            }
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId() ?? 1;
+            
+            // Verificar se o usuário existe
+            $usuario = $db->fetch("SELECT * FROM usuarios_globais WHERE id = ?", [$usuarioId]);
+            if (!$usuario) {
+                throw new \Exception('Usuário não encontrado');
+            }
+            
+            // Não permitir desativar o próprio usuário admin principal
+            if ($usuario['tipo_usuario'] === 'admin' && $usuario['id'] == 1 && $novoStatus === 'false') {
+                throw new \Exception('Não é possível desativar o usuário administrador principal');
+            }
+            
+            $statusBoolean = $novoStatus === 'true';
+            
+            // Atualizar status na tabela usuarios_globais
+            $db->update('usuarios_globais', [
+                'ativo' => $statusBoolean,
+                'updated_at' => date('Y-m-d H:i:s')
+            ], 'id = ?', [$usuarioId]);
+            
+            // Atualizar status na tabela usuarios_estabelecimento se existir
+            $db->update('usuarios_estabelecimento', [
+                'ativo' => $statusBoolean,
+                'updated_at' => date('Y-m-d H:i:s')
+            ], 'usuario_global_id = ? AND tenant_id = ?', [$usuarioId, $tenantId]);
+            
+            $statusText = $statusBoolean ? 'ativado' : 'desativado';
+            
+            echo json_encode([
+                'success' => true,
+                'message' => "Usuário {$statusText} com sucesso!"
+            ]);
+            break;
+            
+        case 'buscar_usuario':
+            $usuarioId = (int) ($_POST['usuario_id'] ?? 0);
+            
+            if ($usuarioId <= 0) {
+                throw new \Exception('ID do usuário inválido');
+            }
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId() ?? 1;
+            
+            // Buscar dados completos do usuário
+            $usuario = $db->fetch("
+                SELECT 
+                    ug.id,
+                    ug.nome,
+                    ug.email,
+                    ug.telefone,
+                    ug.tipo_usuario,
+                    ug.cpf,
+                    ug.cnpj,
+                    ug.endereco_completo,
+                    ug.ativo,
+                    ug.data_cadastro,
+                    ug.created_at,
+                    ug.updated_at,
+                    ue.cargo,
+                    ue.ativo as ativo_estabelecimento
+                FROM usuarios_globais ug
+                LEFT JOIN usuarios_estabelecimento ue ON ug.id = ue.usuario_global_id AND ue.tenant_id = ?
+                WHERE ug.id = ?
+            ", [$tenantId, $usuarioId]);
+            
+            if (!$usuario) {
+                throw new \Exception('Usuário não encontrado');
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'usuario' => $usuario
+            ]);
+            break;
+            
         default:
             throw new \Exception('Ação não encontrada: ' . $action);
     }
