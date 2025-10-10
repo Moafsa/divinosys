@@ -519,6 +519,8 @@ if ($tenant && $filial) {
                         html += '<thead><tr><th>Nome</th><th>Email</th><th>Tipo</th><th>Cargo</th><th>Status</th><th>Ações</th></tr></thead><tbody>';
                         
                         data.usuarios.forEach(usuario => {
+                            console.log('Processing user:', usuario);
+                            
                             const isAdminPrincipal = usuario.tipo_usuario === 'admin' && usuario.id == 1;
                             const statusText = usuario.ativo ? 'Ativo' : 'Inativo';
                             const statusClass = usuario.ativo ? 'bg-success' : 'bg-danger';
@@ -527,6 +529,8 @@ if ($tenant && $filial) {
                             
                             // Ensure usuario.id is a valid number
                             const usuarioId = parseInt(usuario.id);
+                            console.log('User ID parsed:', usuarioId, 'from:', usuario.id);
+                            
                             if (isNaN(usuarioId) || usuarioId <= 0) {
                                 console.error('Invalid usuario ID:', usuario.id, usuario);
                                 return; // Skip this user
@@ -548,10 +552,10 @@ if ($tenant && $filial) {
                                             <button class="btn btn-outline-primary" onclick="editarUsuario(${usuarioId})" title="Editar">
                                                 <i class="fas fa-edit"></i>
                                             </button>
-                                            ${!isAdminPrincipal ? `
-                                                <button class="btn btn-outline-${usuario.ativo ? 'warning' : 'success'}" onclick="alterarStatusUsuario(${usuarioId}, ${usuario.ativo})" title="${actionStatusText}">
-                                                    <i class="fas ${actionStatusIcon}"></i>
-                                                </button>
+                                        ${!isAdminPrincipal ? `
+                                            <button class="btn btn-outline-${usuario.ativo ? 'warning' : 'success'}" onclick="alterarStatusUsuario(${usuarioId}, ${usuario.ativo ? 'true' : 'false'})" title="${actionStatusText}">
+                                                <i class="fas ${actionStatusIcon}"></i>
+                                            </button>
                                                 <button class="btn btn-outline-danger" onclick="deletarUsuario(${usuarioId}, '${usuario.nome.replace(/'/g, "\\'")}')" title="Deletar">
                                                     <i class="fas fa-trash"></i>
                                                 </button>
@@ -763,7 +767,7 @@ if ($tenant && $filial) {
             console.log('✏️ Edit user clicked:', usuarioId);
             
             // Validate usuarioId
-            if (!usuarioId || usuarioId <= 0) {
+            if (!usuarioId || usuarioId <= 0 || isNaN(usuarioId)) {
                 console.error('❌ Invalid user ID:', usuarioId);
                 Swal.fire('Erro', 'ID do usuário inválido', 'error');
                 return;
@@ -894,14 +898,22 @@ if ($tenant && $filial) {
         }
 
         function alterarStatusUsuario(usuarioId, statusAtual) {
-            console.log('🔄 Change status clicked:', usuarioId, 'Current status:', statusAtual);
+            console.log('🔄 Change status clicked:', usuarioId, 'Current status:', statusAtual, 'Type:', typeof statusAtual);
             
-            const novoStatus = !statusAtual;
+            // Convert string to boolean if needed
+            let statusBoolean;
+            if (typeof statusAtual === 'string') {
+                statusBoolean = statusAtual === 'true';
+            } else {
+                statusBoolean = Boolean(statusAtual);
+            }
+            
+            const novoStatus = !statusBoolean;
             const acao = novoStatus ? 'ativar' : 'desativar';
             const confirmacao = novoStatus ? 'ativar' : 'desativar';
             
             // Validate usuarioId
-            if (!usuarioId || usuarioId <= 0) {
+            if (!usuarioId || usuarioId <= 0 || isNaN(usuarioId)) {
                 console.error('❌ Invalid user ID:', usuarioId);
                 Swal.fire('Erro', 'ID do usuário inválido', 'error');
                 return;
@@ -951,7 +963,7 @@ if ($tenant && $filial) {
             console.log('🗑️ Delete user clicked:', usuarioId, 'Name:', nomeUsuario);
             
             // Validate usuarioId
-            if (!usuarioId || usuarioId <= 0) {
+            if (!usuarioId || usuarioId <= 0 || isNaN(usuarioId)) {
                 console.error('❌ Invalid user ID:', usuarioId);
                 Swal.fire('Erro', 'ID do usuário inválido', 'error');
                 return;
