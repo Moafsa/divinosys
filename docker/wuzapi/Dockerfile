@@ -40,4 +40,4 @@ RUN chown -R wuzapi:wuzapi /app/frontend /app/static
 EXPOSE 8080 3000
 
 # Comando de inicialização (backend + frontend)
-CMD ["sh", "-c", "cd /app && wuzapi -port=8080 -address=0.0.0.0 -admintoken=${WUZAPI_ADMIN_TOKEN:-admin123456} & cd /app/frontend && npx serve -s build -l 3000"]
+CMD ["sh", "-c", "cd /app && wuzapi -port=8080 -address=0.0.0.0 -admintoken=admin123456 & cd /app/frontend && npx serve -s build -l 3000"]
