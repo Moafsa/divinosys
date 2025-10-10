@@ -418,8 +418,15 @@ try {
             $usuarioId = (int) ($_POST['usuario_id'] ?? 0);
             $novoStatus = $_POST['novo_status'] ?? '';
             
+            error_log("AJAX alterar_status_usuario - usuarioId: " . $usuarioId . ", novoStatus: '" . $novoStatus . "'");
+            
             if ($usuarioId <= 0) {
                 throw new \Exception('ID do usuário inválido');
+            }
+            
+            // Validate and convert status
+            if (empty($novoStatus)) {
+                throw new \Exception('Status não pode estar vazio');
             }
             
             // Convert string values to proper boolean
@@ -428,7 +435,7 @@ try {
             } elseif ($novoStatus === 'false' || $novoStatus === '0' || $novoStatus === false) {
                 $novoStatus = 'false';
             } else {
-                throw new \Exception('Status inválido: ' . $novoStatus);
+                throw new \Exception('Status inválido: "' . $novoStatus . '" (tipo: ' . gettype($novoStatus) . ')');
             }
             
             $db = \System\Database::getInstance();
@@ -470,6 +477,8 @@ try {
             
         case 'buscar_usuario':
             $usuarioId = (int) ($_POST['usuario_id'] ?? 0);
+            
+            error_log("AJAX buscar_usuario - usuarioId: " . $usuarioId);
             
             if ($usuarioId <= 0) {
                 throw new \Exception('ID do usuário inválido');
