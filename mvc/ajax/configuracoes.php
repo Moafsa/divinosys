@@ -187,6 +187,131 @@ try {
             echo json_encode($result);
             break;
             
+        // ===== USER MANAGEMENT FUNCTIONS =====
+        
+        case 'criar_usuario':
+            $nome = $_POST['nome'] ?? '';
+            $email = $_POST['email'] ?? '';
+            $telefone = $_POST['telefone'] ?? '';
+            $tipoUsuario = $_POST['tipo_usuario'] ?? 'cliente';
+            $cpf = $_POST['cpf'] ?? '';
+            $cnpj = $_POST['cnpj'] ?? '';
+            $endereco = $_POST['endereco'] ?? '';
+            
+            if (empty($nome)) {
+                throw new \Exception('Nome é obrigatório');
+            }
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId() ?? 1;
+            $filialId = $session->getFilialId() ?? 1;
+            
+            // Criar usuário na tabela usuarios_globais
+            $usuarioId = $db->insert('usuarios_globais', [
+                'nome' => $nome,
+                'email' => $email,
+                'telefone' => $telefone,
+                'tipo_usuario' => $tipoUsuario,
+                'cpf' => $cpf,
+                'cnpj' => $cnpj,
+                'endereco_completo' => $endereco,
+                'ativo' => true,
+                'data_cadastro' => date('Y-m-d H:i:s'),
+                'created_at' => date('Y-m-d H:i:s'),
+                'updated_at' => date('Y-m-d H:i:s')
+            ]);
+            
+            // Se for um usuário interno (admin, cozinha, garcom, caixa, entregador)
+            // criar também na tabela usuarios_estabelecimento
+            if (in_array($tipoUsuario, ['admin', 'cozinha', 'garcom', 'caixa', 'entregador'])) {
+                $db->insert('usuarios_estabelecimento', [
+                    'usuario_global_id' => $usuarioId,
+                    'tenant_id' => $tenantId,
+                    'filial_id' => $filialId,
+                    'cargo' => ucfirst($tipoUsuario),
+                    'ativo' => true,
+                    'created_at' => date('Y-m-d H:i:s'),
+                    'updated_at' => date('Y-m-d H:i:s')
+                ]);
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Usuário criado com sucesso!',
+                'usuario_id' => $usuarioId
+            ]);
+            break;
+            
+        case 'listar_usuarios':
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId() ?? 1;
+            
+            // Buscar usuários do estabelecimento
+            $usuarios = $db->fetchAll("
+                SELECT 
+                    ug.id,
+                    ug.nome,
+                    ug.email,
+                    ug.telefone,
+                    ug.tipo_usuario,
+                    ug.cpf,
+                    ug.cnpj,
+                    ug.endereco_completo,
+                    ug.ativo,
+                    ug.data_cadastro,
+                    ue.cargo,
+                    ue.ativo as ativo_estabelecimento
+                FROM usuarios_globais ug
+                LEFT JOIN usuarios_estabelecimento ue ON ug.id = ue.usuario_global_id AND ue.tenant_id = ?
+                ORDER BY ug.nome
+            ", [$tenantId]);
+            
+            echo json_encode([
+                'success' => true,
+                'usuarios' => $usuarios
+            ]);
+            break;
+            
+        case 'buscar_cliente':
+            $termo = $_POST['termo'] ?? '';
+            
+            if (empty($termo)) {
+                throw new \Exception('Termo de busca é obrigatório');
+            }
+            
+            $db = \System\Database::getInstance();
+            
+            // Buscar clientes por nome, telefone ou CPF
+            $clientes = $db->fetchAll("
+                SELECT 
+                    id,
+                    nome,
+                    email,
+                    telefone,
+                    cpf,
+                    cnpj,
+                    endereco_completo,
+                    data_cadastro
+                FROM usuarios_globais 
+                WHERE tipo_usuario = 'cliente'
+                AND (
+                    nome ILIKE ? OR 
+                    telefone ILIKE ? OR 
+                    cpf ILIKE ? OR
+                    email ILIKE ?
+                )
+                ORDER BY nome
+                LIMIT 20
+            ", ["%$termo%", "%$termo%", "%$termo%", "%$termo%"]);
+            
+            echo json_encode([
+                'success' => true,
+                'clientes' => $clientes
+            ]);
+            break;
+            
         default:
             throw new \Exception('Ação não encontrada: ' . $action);
     }

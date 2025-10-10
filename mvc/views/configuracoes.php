@@ -677,7 +677,9 @@ if ($tenant && $filial) {
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    Swal.fire('Sucesso', 'Usuário criado com sucesso!', 'success');
+                    Swal.fire('Sucesso', 'Usuário criado com sucesso!', 'success').then(() => {
+                        carregarUsuarios(); // Recarregar lista de usuários
+                    });
                 } else {
                     Swal.fire('Erro', data.message, 'error');
                 }
@@ -689,6 +691,137 @@ if ($tenant && $filial) {
         }
 
         function abrirModalBuscarCliente() {
+            Swal.fire({
+                title: 'Buscar Cliente',
+                html: `
+                    <div class="mb-3">
+                        <label class="form-label">Termo de busca</label>
+                        <input type="text" class="form-control" id="termoBusca" placeholder="Nome, telefone, CPF ou email">
+                    </div>
+                    <div id="resultadosBusca" class="mt-3" style="max-height: 300px; overflow-y: auto;">
+                        <!-- Resultados serão carregados aqui -->
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Buscar',
+                cancelButtonText: 'Cancelar',
+                didOpen: () => {
+                    // Adicionar evento de busca em tempo real
+                    document.getElementById('termoBusca').addEventListener('input', function() {
+                        const termo = this.value.trim();
+                        if (termo.length >= 2) {
+                            buscarClientes(termo);
+                        } else {
+                            document.getElementById('resultadosBusca').innerHTML = '';
+                        }
+                    });
+                }
+            });
+        }
+
+        function buscarClientes(termo) {
+            const formData = new FormData();
+            formData.append('termo', termo);
+
+            fetch('mvc/ajax/configuracoes.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `action=buscar_cliente&${new URLSearchParams(formData).toString()}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                const resultadosDiv = document.getElementById('resultadosBusca');
+                
+                if (data.success && data.clientes.length > 0) {
+                    let html = '<h6>Resultados:</h6>';
+                    data.clientes.forEach(cliente => {
+                        html += `
+                            <div class="card mb-2 p-2">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>${cliente.nome}</strong><br>
+                                        <small class="text-muted">
+                                            ${cliente.telefone ? 'Tel: ' + cliente.telefone : ''}
+                                            ${cliente.cpf ? ' | CPF: ' + cliente.cpf : ''}
+                                            ${cliente.email ? ' | Email: ' + cliente.email : ''}
+                                        </small>
+                                    </div>
+                                    <button class="btn btn-sm btn-primary" onclick="selecionarCliente(${cliente.id})">
+                                        Selecionar
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    resultadosDiv.innerHTML = html;
+                } else {
+                    resultadosDiv.innerHTML = '<p class="text-muted">Nenhum cliente encontrado.</p>';
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                document.getElementById('resultadosBusca').innerHTML = '<p class="text-danger">Erro ao buscar clientes.</p>';
+            });
+        }
+
+        function selecionarCliente(clienteId) {
+            // Implementar ação quando cliente é selecionado
+            Swal.fire('Sucesso', 'Cliente selecionado!', 'success');
+        }
+
+        // Carregar lista de usuários ao abrir a página
+        function carregarUsuarios() {
+            fetch('mvc/ajax/configuracoes.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'action=listar_usuarios'
+            })
+            .then(response => response.json())
+            .then(data => {
+                const usuariosList = document.getElementById('usuariosList');
+                
+                if (data.success && data.usuarios.length > 0) {
+                    let html = '<div class="table-responsive"><table class="table table-sm">';
+                    html += '<thead><tr><th>Nome</th><th>Email</th><th>Tipo</th><th>Cargo</th><th>Status</th></tr></thead><tbody>';
+                    
+                    data.usuarios.forEach(usuario => {
+                        html += `
+                            <tr>
+                                <td>${usuario.nome}</td>
+                                <td>${usuario.email || '-'}</td>
+                                <td>${usuario.tipo_usuario}</td>
+                                <td>${usuario.cargo || '-'}</td>
+                                <td>
+                                    <span class="badge ${usuario.ativo ? 'bg-success' : 'bg-danger'}">
+                                        ${usuario.ativo ? 'Ativo' : 'Inativo'}
+                                    </span>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                    
+                    html += '</tbody></table></div>';
+                    usuariosList.innerHTML = html;
+                } else {
+                    usuariosList.innerHTML = '<p class="text-muted">Nenhum usuário cadastrado.</p>';
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                document.getElementById('usuariosList').innerHTML = '<p class="text-danger">Erro ao carregar usuários.</p>';
+            });
+        }
+
+        // Carregar usuários quando a página carrega
+        document.addEventListener('DOMContentLoaded', function() {
+            carregarUsuarios();
+        });
+
+        function abrirModalBuscarClienteOld() {
             Swal.fire({
                 title: 'Buscar Cliente',
                 html: `
