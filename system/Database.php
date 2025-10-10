@@ -112,7 +112,12 @@ class Database
         
         foreach ($data as $key => $value) {
             $set[] = "{$key} = ?";
-            $params[] = $value;
+            // Convert boolean values to proper PostgreSQL boolean format
+            if (is_bool($value)) {
+                $params[] = $value ? 'true' : 'false';
+            } else {
+                $params[] = $value;
+            }
         }
         $setClause = implode(', ', $set);
         
