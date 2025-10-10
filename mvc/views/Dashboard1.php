@@ -775,7 +775,7 @@ if ($tenant && $filial) {
                             </a>
                         </div>
                         <div class="col-md-3 mb-2">
-                            <a href="<?php echo $router->url('pedido'); ?>" class="action-btn">
+                            <a href="<?php echo $router->url('pedidos'); ?>" class="action-btn">
                                 <i class="fas fa-list"></i>
                                 Ver Pedidos
                             </a>
