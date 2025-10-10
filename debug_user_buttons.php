@@ -37,7 +37,8 @@ foreach ($usuarios as $usuario) {
     echo "<div class='user'>";
     echo "<strong>{$usuario['nome']}</strong> - Status: $statusText<br>";
     echo "<button class='btn btn-primary' onclick='testEditUser($usuarioId)'>Editar</button>";
-    echo "<button class='btn btn-warning' onclick='testChangeStatus($usuarioId, {$usuario['ativo'] ? 'true' : 'false'})'>$actionStatusText</button>";
+    $statusValue = $usuario['ativo'] ? 'true' : 'false';
+    echo "<button class='btn btn-warning' onclick='testChangeStatus($usuarioId, $statusValue)'>$actionStatusText</button>";
     echo "<button class='btn btn-danger' onclick='testDeleteUser($usuarioId, \"{$usuario['nome']}\")'>Deletar</button>";
     echo "</div>";
 }
