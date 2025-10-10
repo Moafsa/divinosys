@@ -120,6 +120,11 @@ try {
                 throw new Exception('Nome e preço normal são obrigatórios');
             }
             
+            // Validar categoria obrigatória
+            if (empty($categoriaId)) {
+                throw new Exception('Categoria é obrigatória para criar um produto');
+            }
+            
             // Processar imagem se enviada
             $imagemPath = null;
             if (isset($_FILES['imagem']) && $_FILES['imagem']['error'] === UPLOAD_ERR_OK) {

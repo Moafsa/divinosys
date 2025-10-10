@@ -798,7 +798,25 @@ if ($tenant && $filial) {
             
             // Validar dados obrigatórios
             if (!nome || !precoNormal) {
-                alert('Nome e preço normal são obrigatórios!');
+                Swal.fire({
+                    title: 'Campos Obrigatórios!',
+                    text: 'Nome e preço normal são obrigatórios!',
+                    icon: 'warning',
+                    confirmButtonText: 'OK'
+                });
+                return;
+            }
+            
+            // Validar categoria obrigatória
+            if (!categoriaId) {
+                Swal.fire({
+                    title: 'Categoria Obrigatória!',
+                    text: 'Por favor, selecione uma categoria para o produto!',
+                    icon: 'warning',
+                    confirmButtonText: 'OK'
+                }).then(() => {
+                    document.getElementById('produtoCategoria').focus();
+                });
                 return;
             }
             
@@ -831,16 +849,32 @@ if ($tenant && $filial) {
             .then(data => {
                 console.log('Resposta do servidor:', data);
                 if (data.success) {
-                    alert(data.message);
-                    bootstrap.Modal.getInstance(document.getElementById('modalProduto')).hide();
-                    location.reload();
+                    Swal.fire({
+                        title: 'Sucesso!',
+                        text: data.message,
+                        icon: 'success',
+                        confirmButtonText: 'OK'
+                    }).then(() => {
+                        bootstrap.Modal.getInstance(document.getElementById('modalProduto')).hide();
+                        location.reload();
+                    });
                 } else {
-                    alert('Erro: ' + data.message);
+                    Swal.fire({
+                        title: 'Erro!',
+                        text: data.message || 'Erro desconhecido ao salvar produto',
+                        icon: 'error',
+                        confirmButtonText: 'OK'
+                    });
                 }
             })
             .catch(error => {
                 console.error('Erro:', error);
-                alert('Erro ao salvar produto: ' + error.message);
+                Swal.fire({
+                    title: 'Erro de Conexão!',
+                    text: 'Erro ao salvar produto: ' + error.message,
+                    icon: 'error',
+                    confirmButtonText: 'OK'
+                });
             });
         }
 

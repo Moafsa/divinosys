@@ -1,15 +1,38 @@
 <?php
 // Script para adicionar colunas faltantes na tabela pedido no ambiente online
-require_once 'mvc/bootstrap.php';
 
+// Conexão direta com o banco de dados usando variáveis de ambiente
 try {
-    $db = \System\Database::getInstance();
+    // Obter configurações do ambiente
+    $dbConfig = [
+        'host' => getenv('DB_HOST') ?: 'postgres',
+        'port' => getenv('DB_PORT') ?: '5432',
+        'name' => getenv('DB_NAME') ?: 'divino_lanches',
+        'user' => getenv('DB_USER') ?: 'postgres',
+        'password' => getenv('DB_PASSWORD') ?: 'divino_password'
+    ];
+
+    $dsn = sprintf(
+        'pgsql:host=%s;port=%s;dbname=%s',
+        $dbConfig['host'],
+        $dbConfig['port'],
+        $dbConfig['name']
+    );
+
+    $pdo = new PDO($dsn, $dbConfig['user'], $dbConfig['password'], [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => false,
+    ]);
+
+    echo "✅ Conexão com banco estabelecida com sucesso!\n";
+    echo "📊 Configuração: {$dbConfig['host']}:{$dbConfig['port']}/{$dbConfig['name']}\n\n";
 
     echo "=== ADICIONANDO COLUNAS FALTANTES ===\n";
 
     // Adicionar coluna troco_para se não existir
     try {
-        $db->query("ALTER TABLE pedido ADD COLUMN IF NOT EXISTS troco_para DECIMAL(10,2)");
+        $pdo->query("ALTER TABLE pedido ADD COLUMN IF NOT EXISTS troco_para DECIMAL(10,2)");
         echo "✅ Coluna 'troco_para' adicionada/verificada\n";
     } catch (\Exception $e) {
         echo "❌ Erro ao adicionar coluna 'troco_para': " . $e->getMessage() . "\n";
@@ -25,7 +48,7 @@ try {
 
     foreach ($columnsToCheck as $column => $definition) {
         try {
-            $db->query("ALTER TABLE pedido ADD COLUMN IF NOT EXISTS {$column} {$definition}");
+            $pdo->query("ALTER TABLE pedido ADD COLUMN IF NOT EXISTS {$column} {$definition}");
             echo "✅ Coluna '{$column}' adicionada/verificada\n";
         } catch (\Exception $e) {
             echo "❌ Erro ao adicionar coluna '{$column}': " . $e->getMessage() . "\n";
@@ -35,12 +58,14 @@ try {
     echo "\n=== VERIFICAÇÃO FINAL ===\n";
 
     // Verificar estrutura final
-    $columns = $db->fetchAll("
+    $stmt = $pdo->query("
         SELECT column_name, data_type, is_nullable, column_default
         FROM information_schema.columns
         WHERE table_name = 'pedido' AND column_name IN ('troco_para', 'forma_pagamento', 'observacao', 'status', 'valor_total')
         ORDER BY ordinal_position
     ");
+
+    $columns = $stmt->fetchAll();
 
     foreach ($columns as $column) {
         echo sprintf(
