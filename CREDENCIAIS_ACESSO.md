@@ -29,11 +29,12 @@ Senha: admin123
 
 ### 🔑 Credenciais WuzAPI
 ```
-Token Admin: admin123456
+Token Admin: ${WUZAPI_ADMIN_TOKEN} (configurado via variável de ambiente)
+Default local: admin123456
 ```
 
 ### 📖 Como usar:
-1. Acesse `https://divinosys.conext.click:3001/login?token=admin123456`
+1. Acesse `https://divinosys.conext.click:3001/login?token=${WUZAPI_ADMIN_TOKEN}`
 2. Escaneie o QR Code com seu WhatsApp
 3. Pronto! Seu WhatsApp estará conectado à API
 
