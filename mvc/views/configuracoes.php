@@ -772,6 +772,12 @@ if ($tenant && $filial) {
         }
 
         function editarUsuario(usuarioId) {
+            // Validate usuarioId
+            if (!usuarioId || usuarioId <= 0) {
+                Swal.fire('Erro', 'ID do usuário inválido', 'error');
+                return;
+            }
+            
             // Buscar dados do usuário
             fetch('mvc/ajax/configuracoes.php', {
                 method: 'POST',
@@ -901,6 +907,12 @@ if ($tenant && $filial) {
             const acao = novoStatus ? 'ativar' : 'desativar';
             const confirmacao = novoStatus ? 'ativar' : 'desativar';
             
+            // Validate usuarioId
+            if (!usuarioId || usuarioId <= 0) {
+                Swal.fire('Erro', 'ID do usuário inválido', 'error');
+                return;
+            }
+            
             Swal.fire({
                 title: 'Confirmar Ação',
                 text: `Deseja ${acao} este usuário?`,
@@ -913,7 +925,7 @@ if ($tenant && $filial) {
                 if (result.isConfirmed) {
                     const formData = new FormData();
                     formData.append('usuario_id', usuarioId);
-                    formData.append('novo_status', novoStatus.toString());
+                    formData.append('novo_status', novoStatus ? 'true' : 'false');
 
                     fetch('mvc/ajax/configuracoes.php', {
                         method: 'POST',
@@ -942,6 +954,12 @@ if ($tenant && $filial) {
         }
 
         function deletarUsuario(usuarioId, nomeUsuario) {
+            // Validate usuarioId
+            if (!usuarioId || usuarioId <= 0) {
+                Swal.fire('Erro', 'ID do usuário inválido', 'error');
+                return;
+            }
+            
             Swal.fire({
                 title: 'Confirmar Exclusão',
                 html: `Deseja realmente deletar o usuário <strong>${nomeUsuario}</strong>?<br><br>
@@ -1006,6 +1024,13 @@ if ($tenant && $filial) {
                         const actionStatusText = usuario.ativo ? 'Desativar' : 'Ativar';
                         const actionStatusIcon = usuario.ativo ? 'fa-user-slash' : 'fa-user-check';
                         
+                        // Ensure usuario.id is a valid number
+                        const usuarioId = parseInt(usuario.id);
+                        if (isNaN(usuarioId) || usuarioId <= 0) {
+                            console.error('Invalid usuario ID:', usuario.id, usuario);
+                            return; // Skip this user
+                        }
+                        
                         html += `
                             <tr>
                                 <td>${usuario.nome}</td>
@@ -1019,14 +1044,14 @@ if ($tenant && $filial) {
                                 </td>
                                 <td>
                                     <div class="btn-group btn-group-sm" role="group">
-                                        <button class="btn btn-outline-primary" onclick="editarUsuario(${usuario.id})" title="Editar">
+                                        <button class="btn btn-outline-primary" onclick="editarUsuario(${usuarioId})" title="Editar">
                                             <i class="fas fa-edit"></i>
                                         </button>
                                         ${!isAdminPrincipal ? `
-                                            <button class="btn btn-outline-${usuario.ativo ? 'warning' : 'success'}" onclick="alterarStatusUsuario(${usuario.id}, ${usuario.ativo})" title="${actionStatusText}">
+                                            <button class="btn btn-outline-${usuario.ativo ? 'warning' : 'success'}" onclick="alterarStatusUsuario(${usuarioId}, ${usuario.ativo})" title="${actionStatusText}">
                                                 <i class="fas ${actionStatusIcon}"></i>
                                             </button>
-                                            <button class="btn btn-outline-danger" onclick="deletarUsuario(${usuario.id}, '${usuario.nome}')" title="Deletar">
+                                            <button class="btn btn-outline-danger" onclick="deletarUsuario(${usuarioId}, '${usuario.nome.replace(/'/g, "\\'")}')" title="Deletar">
                                                 <i class="fas fa-trash"></i>
                                             </button>
                                         ` : `

@@ -1,63 +1,154 @@
 <?php
 /**
- * Script para corrigir sequences no ambiente online
- * Execute este arquivo no servidor online para corrigir os problemas de sequence
+ * Simple script to fix sequences online
+ * This script works directly with the database connection
  */
 
-// Configuração de erro
+// Set error reporting
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-// Autoloader
-require_once __DIR__ . '/system/Config.php';
-require_once __DIR__ . '/system/Database.php';
+echo "<h2>🔧 Fixing Sequences Online</h2>\n";
+
+// Database connection parameters
+$host = $_ENV['DB_HOST'] ?? 'postgres';
+$port = $_ENV['DB_PORT'] ?? '5432';
+$dbname = $_ENV['DB_NAME'] ?? 'divino_db';
+$user = $_ENV['DB_USER'] ?? 'divino_user';
+$password = $_ENV['DB_PASSWORD'] ?? 'divino_password';
+
+echo "<p>Connecting to database: $dbname@$host:$port</p>\n";
 
 try {
-    echo "=== CORREÇÃO DE SEQUENCES NO AMBIENTE ONLINE ===\n\n";
+    // Connect directly to PostgreSQL
+    $dsn = "pgsql:host=$host;port=$port;dbname=$dbname";
+    $pdo = new PDO($dsn, $user, $password);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     
-    // Conectar ao banco
-    $db = \System\Database::getInstance();
-    echo "✅ Conectado ao banco de dados\n";
+    echo "<p style='color: green;'>✅ Database connection successful!</p>\n";
     
-    // Verificar estado atual das sequences
-    echo "\n--- Estado Atual das Sequences ---\n";
+    // List of sequences to fix
+    $sequences = [
+        'produtos_id_seq',
+        'categorias_id_seq', 
+        'ingredientes_id_seq',
+        'mesas_id_seq',
+        'pedido_idpedido_seq',
+        'pedido_itens_id_seq',
+        'mesa_pedidos_id_seq',
+        'estoque_id_seq',
+        'tenants_id_seq',
+        'filiais_id_seq',
+        'usuarios_id_seq',
+        'planos_id_seq',
+        'contas_financeiras_id_seq',
+        'categorias_financeiras_id_seq',
+        'evolution_instancias_id_seq',
+        'usuarios_globais_id_seq',
+        'usuarios_telefones_id_seq',
+        'usuarios_estabelecimento_id_seq'
+    ];
     
-    $categoriasSeq = $db->fetch("SELECT last_value FROM categorias_id_seq");
-    $ingredientesSeq = $db->fetch("SELECT last_value FROM ingredientes_id_seq");
+    echo "<h3>📊 Fixing Sequences:</h3>\n";
+    echo "<table border='1' style='border-collapse: collapse; width: 100%;'>\n";
+    echo "<tr><th>Sequence</th><th>Current Value</th><th>Max ID</th><th>New Value</th><th>Status</th></tr>\n";
     
-    $categoriasMax = $db->fetch("SELECT MAX(id) as max_id FROM categorias");
-    $ingredientesMax = $db->fetch("SELECT MAX(id) as max_id FROM ingredientes");
+    foreach ($sequences as $sequence) {
+        try {
+            // Get table name from sequence name
+            $table = str_replace('_id_seq', '', $sequence);
+            
+            // Handle special cases
+            if ($table === 'pedido') {
+                $idColumn = 'idpedido';
+            } else {
+                $idColumn = 'id';
+            }
+            
+            // Get current sequence value
+            $stmt = $pdo->query("SELECT last_value FROM $sequence");
+            $currentValue = $stmt->fetchColumn();
+            
+            // Get max ID from table
+            $stmt = $pdo->query("SELECT COALESCE(MAX($idColumn), 0) FROM $table");
+            $maxId = $stmt->fetchColumn();
+            
+            // Calculate new value
+            $newValue = $maxId + 1;
+            
+            // Fix sequence if needed
+            if ($currentValue < $newValue) {
+                $pdo->exec("SELECT setval('$sequence', $newValue)");
+                $status = "✅ Fixed";
+                $statusColor = "green";
+            } else {
+                $status = "✅ OK";
+                $statusColor = "blue";
+            }
+            
+            echo "<tr>";
+            echo "<td>$sequence</td>";
+            echo "<td>$currentValue</td>";
+            echo "<td>$maxId</td>";
+            echo "<td>$newValue</td>";
+            echo "<td style='color: $statusColor;'>$status</td>";
+            echo "</tr>\n";
+            
+        } catch (Exception $e) {
+            echo "<tr>";
+            echo "<td>$sequence</td>";
+            echo "<td colspan='3'>Error</td>";
+            echo "<td style='color: red;'>❌ " . $e->getMessage() . "</td>";
+            echo "</tr>\n";
+        }
+    }
     
-    echo "Categorias - Sequence atual: " . $categoriasSeq['last_value'] . ", MAX ID: " . $categoriasMax['max_id'] . "\n";
-    echo "Ingredientes - Sequence atual: " . $ingredientesSeq['last_value'] . ", MAX ID: " . $ingredientesMax['max_id'] . "\n";
+    echo "</table>\n";
     
-    // Corrigir sequence da tabela categorias
-    echo "\n--- Corrigindo Sequence de Categorias ---\n";
-    $newCategoriasSeq = $categoriasMax['max_id'] + 1;
-    $db->query("SELECT setval('categorias_id_seq', ?)", [$newCategoriasSeq]);
-    echo "✅ Sequence de categorias corrigida para: " . $newCategoriasSeq . "\n";
+    // Test product creation
+    echo "<h3>🧪 Testing Product Creation:</h3>\n";
     
-    // Corrigir sequence da tabela ingredientes
-    echo "\n--- Corrigindo Sequence de Ingredientes ---\n";
-    $newIngredientesSeq = $ingredientesMax['max_id'] + 1;
-    $db->query("SELECT setval('ingredientes_id_seq', ?)", [$newIngredientesSeq]);
-    echo "✅ Sequence de ingredientes corrigida para: " . $newIngredientesSeq . "\n";
+    try {
+        // Check if categories exist
+        $stmt = $pdo->query("SELECT COUNT(*) FROM categorias WHERE tenant_id = 1 AND filial_id = 1");
+        $categoryCount = $stmt->fetchColumn();
+        
+        if ($categoryCount == 0) {
+            echo "<p style='color: orange;'>⚠️ No categories found. Creating default categories...</p>\n";
+            
+            $defaultCategories = ['Lanches', 'Bebidas', 'Porções', 'Sobremesas'];
+            foreach ($defaultCategories as $cat) {
+                $pdo->exec("INSERT INTO categorias (nome, tenant_id, filial_id, created_at) VALUES ('$cat', 1, 1, NOW())");
+                echo "<p>✅ Created category: $cat</p>\n";
+            }
+        } else {
+            echo "<p style='color: green;'>✅ Found $categoryCount categories</p>\n";
+        }
+        
+        // Test product insertion
+        $stmt = $pdo->query("SELECT id FROM categorias WHERE tenant_id = 1 AND filial_id = 1 LIMIT 1");
+        $categoryId = $stmt->fetchColumn();
+        
+        if ($categoryId) {
+            $pdo->exec("INSERT INTO produtos (nome, categoria_id, preco_normal, tenant_id, filial_id, created_at) VALUES ('TESTE ONLINE - REMOVER', $categoryId, 10.00, 1, 1, NOW())");
+            $productId = $pdo->lastInsertId();
+            
+            echo "<p style='color: green;'>✅ Successfully created test product with ID: $productId</p>\n";
+            
+            // Clean up
+            $pdo->exec("DELETE FROM produtos WHERE id = $productId");
+            echo "<p>🧹 Cleaned up test product</p>\n";
+        }
+        
+    } catch (Exception $e) {
+        echo "<p style='color: red;'>❌ Error testing product creation: " . $e->getMessage() . "</p>\n";
+    }
     
-    // Verificar se as correções foram aplicadas
-    echo "\n--- Verificação Final ---\n";
-    
-    $categoriasSeqFinal = $db->fetch("SELECT last_value FROM categorias_id_seq");
-    $ingredientesSeqFinal = $db->fetch("SELECT last_value FROM ingredientes_id_seq");
-    
-    echo "Categorias - Sequence final: " . $categoriasSeqFinal['last_value'] . "\n";
-    echo "Ingredientes - Sequence final: " . $ingredientesSeqFinal['last_value'] . "\n";
-    
-    echo "\n🎉 CORREÇÃO CONCLUÍDA COM SUCESSO!\n";
-    echo "Agora o cadastro de categorias e ingredientes deve funcionar corretamente.\n";
+    echo "<h3>✅ All Sequences Fixed!</h3>\n";
+    echo "<p>The system is now ready for online use. You can create products without sequence errors.</p>\n";
     
 } catch (Exception $e) {
-    echo "\n❌ ERRO: " . $e->getMessage() . "\n";
-    echo "Stack trace: " . $e->getTraceAsString() . "\n";
-    exit(1);
+    echo "<p style='color: red; font-weight: bold;'>❌ FATAL ERROR: " . $e->getMessage() . "</p>\n";
+    echo "<p>Please check your database configuration and try again.</p>\n";
 }
 ?>

@@ -4,7 +4,38 @@
  * This ensures all sequences work correctly in the Coolify environment
  */
 
-require_once 'config/database.php';
+// Try multiple possible paths for the config file
+$configPaths = [
+    'config/database.php',
+    'system/Database.php',
+    '../config/database.php',
+    '../system/Database.php'
+];
+
+$configLoaded = false;
+foreach ($configPaths as $path) {
+    if (file_exists($path)) {
+        require_once $path;
+        $configLoaded = true;
+        break;
+    }
+}
+
+if (!$configLoaded) {
+    echo "<h2>❌ Erro: Arquivo de configuração não encontrado</h2>\n";
+    echo "<p>Tentou os seguintes caminhos:</p>\n";
+    echo "<ul>\n";
+    foreach ($configPaths as $path) {
+        echo "<li>$path</li>\n";
+    }
+    echo "</ul>\n";
+    echo "<p>Diretório atual: " . getcwd() . "</p>\n";
+    echo "<p>Arquivos disponíveis:</p>\n";
+    echo "<pre>";
+    print_r(scandir('.'));
+    echo "</pre>";
+    exit;
+}
 
 try {
     $db = \System\Database::getInstance();

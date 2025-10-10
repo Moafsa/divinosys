@@ -409,8 +409,13 @@ try {
                 throw new \Exception('ID do usuário inválido');
             }
             
-            if (!in_array($novoStatus, ['true', 'false'])) {
-                throw new \Exception('Status inválido');
+            // Convert string values to proper boolean
+            if ($novoStatus === 'true' || $novoStatus === '1' || $novoStatus === true) {
+                $novoStatus = 'true';
+            } elseif ($novoStatus === 'false' || $novoStatus === '0' || $novoStatus === false) {
+                $novoStatus = 'false';
+            } else {
+                throw new \Exception('Status inválido: ' . $novoStatus);
             }
             
             $db = \System\Database::getInstance();
