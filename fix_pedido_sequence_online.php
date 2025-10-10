@@ -77,15 +77,15 @@ try {
     if ($tenantId && $filialId) {
         echo "<p>Using tenant_id: $tenantId, filial_id: $filialId</p>\n";
         
-        // Insert test pedido
+        // Insert test pedido using correct column names
         $stmt = $pdo->prepare("
             INSERT INTO pedido (
                 idpedido,
-                mesa_id,
-                cliente_nome,
-                cliente_telefone,
+                idmesa,
+                cliente,
+                telefone_cliente,
                 status,
-                total,
+                valor_total,
                 tenant_id,
                 filial_id,
                 created_at
@@ -93,7 +93,7 @@ try {
         ");
         
         $stmt->execute([
-            1, // mesa_id
+            '1', // idmesa (character varying)
             'TESTE SEQUENCE',
             '11999999999',
             'aberto',
