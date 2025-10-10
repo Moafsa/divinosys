@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste - Fechamento de Pedido de Delivery</title>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .btn:hover {
+            background: #0056b3;
+        }
+        .btn-success {
+            background: #28a745;
+        }
+        .btn-danger {
+            background: #dc3545;
+        }
+        .btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .status {
+            padding: 5px 10px;
+            border-radius: 4px;
+            color: white;
+            font-weight: bold;
+        }
+        .status.success { background: #28a745; }
+        .status.error { background: #dc3545; }
+        .status.info { background: #17a2b8; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>Teste - Fechamento de Pedido de Delivery</h1>
+
+        <div style="margin-bottom: 20px;">
+            <button class="btn btn-success" onclick="testDeliveryClose()">Testar Fechamento de Delivery</button>
+            <button class="btn btn-danger" onclick="clearLog()">Limpar Log</button>
+        </div>
+
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const statusClass = `status ${type}`;
+            logDiv.innerHTML += `<div><span class="${statusClass}">[${timestamp}]</span> ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        function testDeliveryClose() {
+            log('🚀 Iniciando teste de fechamento de pedido de delivery...', 'info');
+
+            // Simular dados de um pedido de delivery
+            const pedidoId = 123; // ID fictício do pedido
+            const formaPagamento = 'PIX';
+            const trocoPara = '';
+            const observacaoFechamento = 'Teste de fechamento via interface';
+
+            log(`📋 Dados do teste:
+- Pedido ID: ${pedidoId}
+- Forma de Pagamento: ${formaPagamento}
+- Troco para: ${trocoPara || 'N/A'}
+- Observação: ${observacaoFechamento}`, 'info');
+
+            // Simular o popup de fechamento (como se fosse chamado pela função fecharPedidoDelivery)
+            Swal.fire({
+                title: 'Fechar Pedido de Delivery',
+                html: `
+                    <div class="mb-3">
+                        <label class="form-label">Forma de Pagamento</label>
+                        <select class="form-select" id="formaPagamento" required>
+                            <option value="">Selecione a forma de pagamento</option>
+                            <option value="Dinheiro" ${formaPagamento === 'Dinheiro' ? 'selected' : ''}>Dinheiro</option>
+                            <option value="Cartão de Débito" ${formaPagamento === 'Cartão de Débito' ? 'selected' : ''}>Cartão de Débito</option>
+                            <option value="Cartão de Crédito" ${formaPagamento === 'Cartão de Crédito' ? 'selected' : ''}>Cartão de Crédito</option>
+                            <option value="PIX" ${formaPagamento === 'PIX' ? 'selected' : ''}>PIX</option>
+                            <option value="Vale Refeição" ${formaPagamento === 'Vale Refeição' ? 'selected' : ''}>Vale Refeição</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Troco para (se dinheiro)</label>
+                        <input type="number" class="form-control" id="trocoPara" step="0.01" min="0" placeholder="0,00" value="${trocoPara}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Observações do Fechamento</label>
+                        <textarea class="form-control" id="observacaoFechamento" rows="2" placeholder="Observações adicionais...">${observacaoFechamento}</textarea>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Fechar Pedido',
+                cancelButtonText: 'Cancelar',
+                width: '500px',
+                allowOutsideClick: false,
+                allowEscapeKey: true,
+                focusConfirm: false,
+                preConfirm: () => {
+                    return true;
+                },
+                didOpen: () => {
+                    log('✅ Popup aberto com sucesso', 'success');
+                    setTimeout(() => {
+                        const allInputs = document.querySelectorAll('input, textarea, select');
+                        allInputs.forEach(input => {
+                            input.disabled = false;
+                            input.readOnly = false;
+                            input.style.pointerEvents = 'auto';
+                            input.style.cursor = 'text';
+                            input.tabIndex = 1;
+                        });
+
+                        const firstInput = document.querySelector('input, textarea, select');
+                        if (firstInput) {
+                            firstInput.focus();
+                            log('🎯 Foco definido no primeiro campo', 'success');
+                        }
+                    }, 100);
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    log('✅ Usuário confirmou o fechamento', 'success');
+
+                    const formaPagamentoSelected = document.getElementById('formaPagamento').value;
+                    const trocoParaSelected = document.getElementById('trocoPara').value;
+                    const observacaoFechamentoSelected = document.getElementById('observacaoFechamento').value;
+
+                    log(`📝 Dados selecionados:
+- Forma de Pagamento: ${formaPagamentoSelected}
+- Troco para: ${trocoParaSelected || 'N/A'}
+- Observação: ${observacaoFechamentoSelected}`, 'info');
+
+                    if (!formaPagamentoSelected) {
+                        log('❌ Forma de pagamento não selecionada', 'error');
+                        Swal.fire('Erro', 'Selecione uma forma de pagamento', 'error');
+                        return;
+                    }
+
+                    // Simular chamada AJAX (em produção, isso seria uma chamada real para mvc/ajax/pedidos.php)
+                    log('📡 Simulando chamada AJAX para fechar pedido...', 'info');
+
+                    // Simular resposta de sucesso
+                    setTimeout(() => {
+                        log('✅ Pedido fechado com sucesso (simulado)', 'success');
+                        Swal.fire('Sucesso', 'Pedido de delivery fechado com sucesso!', 'success');
+
+                        setTimeout(() => {
+                            log('🔄 Simulando recarregamento da página...', 'info');
+                            // Em produção: location.reload();
+                        }, 1500);
+                    }, 1000);
+
+                } else {
+                    log('❌ Usuário cancelou o fechamento', 'error');
+                }
+            });
+        }
+
+        // Função que simula o backend (para testar a lógica)
+        function simulateBackendCall(action, data) {
+            log(`📡 Chamando backend: action=${action}, data=${JSON.stringify(data)}`, 'info');
+
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    if (action === 'fechar_pedido_delivery') {
+                        resolve({
+                            success: true,
+                            message: 'Pedido de delivery fechado com sucesso!'
+                        });
+                    } else {
+                        resolve({
+                            success: false,
+                            message: 'Ação não reconhecida'
+                        });
+                    }
+                }, 500);
+            });
+        }
+    </script>
+</body>
+</html>

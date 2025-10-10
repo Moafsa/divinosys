@@ -284,6 +284,11 @@ foreach ($pedidos as $pedido) {
                                             <?php endif; ?>
                                             
                                             <div class="mt-2">
+                                                <?php if ($status === 'Entregue'): ?>
+                                                    <button class="btn btn-sm btn-success" onclick="event.stopPropagation(); fecharPedidoDelivery(<?php echo $pedido['idpedido']; ?>)" title="Fechar Pedido">
+                                                        <i class="fas fa-check-circle"></i>
+                                                    </button>
+                                                <?php endif; ?>
                                                 <button class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); atualizarStatus(<?php echo $pedido['idpedido']; ?>, '<?php echo $status; ?>')">
                                                     <i class="fas fa-arrow-right"></i>
                                                 </button>
@@ -508,6 +513,94 @@ foreach ($pedidos as $pedido) {
                     .catch(error => {
                         console.error('Erro:', error);
                         Swal.fire('Erro', 'Erro ao excluir pedido', 'error');
+                    });
+                }
+            });
+        }
+
+        function fecharPedidoDelivery(pedidoId) {
+            Swal.fire({
+                title: 'Fechar Pedido de Delivery',
+                html: `
+                    <div class="mb-3">
+                        <label class="form-label">Forma de Pagamento</label>
+                        <select class="form-select" id="formaPagamento" required>
+                            <option value="">Selecione a forma de pagamento</option>
+                            <option value="Dinheiro">Dinheiro</option>
+                            <option value="Cartão de Débito">Cartão de Débito</option>
+                            <option value="Cartão de Crédito">Cartão de Crédito</option>
+                            <option value="PIX">PIX</option>
+                            <option value="Vale Refeição">Vale Refeição</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Troco para (se dinheiro)</label>
+                        <input type="number" class="form-control" id="trocoPara" step="0.01" min="0" placeholder="0,00">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Observações do Fechamento</label>
+                        <textarea class="form-control" id="observacaoFechamento" rows="2" placeholder="Observações adicionais..."></textarea>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Fechar Pedido',
+                cancelButtonText: 'Cancelar',
+                width: '500px',
+                allowOutsideClick: false,
+                allowEscapeKey: true,
+                focusConfirm: false,
+                preConfirm: () => {
+                    return true;
+                },
+                didOpen: () => {
+                    setTimeout(() => {
+                        const allInputs = document.querySelectorAll('input, textarea, select');
+                        allInputs.forEach(input => {
+                            input.disabled = false;
+                            input.readOnly = false;
+                            input.style.pointerEvents = 'auto';
+                            input.style.cursor = 'text';
+                            input.tabIndex = 1;
+                        });
+
+                        const firstInput = document.querySelector('input, textarea, select');
+                        if (firstInput) {
+                            firstInput.focus();
+                        }
+                    }, 100);
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const formaPagamento = document.getElementById('formaPagamento').value;
+                    const trocoPara = document.getElementById('trocoPara').value;
+                    const observacaoFechamento = document.getElementById('observacaoFechamento').value;
+
+                    if (!formaPagamento) {
+                        Swal.fire('Erro', 'Selecione uma forma de pagamento', 'error');
+                        return;
+                    }
+
+                    // Fazer chamada AJAX para fechar o pedido
+                    fetch('mvc/ajax/pedidos.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: `action=fechar_pedido_delivery&pedido_id=${pedidoId}&forma_pagamento=${encodeURIComponent(formaPagamento)}&troco_para=${trocoPara}&observacao_fechamento=${encodeURIComponent(observacaoFechamento)}`
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Sucesso', 'Pedido de delivery fechado com sucesso!', 'success');
+                            setTimeout(() => location.reload(), 1500);
+                        } else {
+                            Swal.fire('Erro', data.message || 'Erro ao fechar pedido de delivery', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro:', error);
+                        Swal.fire('Erro', 'Erro ao fechar pedido de delivery', 'error');
                     });
                 }
             });

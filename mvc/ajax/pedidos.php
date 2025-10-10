@@ -731,7 +731,57 @@ try {
             'message' => 'Pedido fechado com sucesso!'
         ]);
         break;
-            
+
+    case 'fechar_pedido_delivery':
+        $pedidoId = $_POST['pedido_id'] ?? '';
+        $formaPagamento = $_POST['forma_pagamento'] ?? '';
+        $trocoPara = $_POST['troco_para'] ?? '';
+        $observacaoFechamento = $_POST['observacao_fechamento'] ?? '';
+
+        if (empty($pedidoId) || empty($formaPagamento)) {
+            throw new \Exception('ID do pedido e forma de pagamento são obrigatórios');
+        }
+
+        $db = \System\Database::getInstance();
+        $session = \System\Session::getInstance();
+        $tenantId = $session->getTenantId() ?? 1;
+        $filialId = $session->getFilialId() ?? 1;
+
+        // Buscar pedido de delivery
+        $pedido = $db->fetch(
+            "SELECT * FROM pedido WHERE idpedido = ? AND tenant_id = ? AND filial_id = ? AND delivery = true",
+            [$pedidoId, $tenantId, $filialId]
+        );
+
+        if (!$pedido) {
+            throw new \Exception('Pedido de delivery não encontrado');
+        }
+
+        if ($pedido['status'] === 'Finalizado' || $pedido['status'] === 'Cancelado') {
+            throw new \Exception('Pedido já foi finalizado ou cancelado');
+        }
+
+        // Atualizar pedido de delivery
+        $db->update(
+            'pedido',
+            [
+                'status' => 'Finalizado',
+                'forma_pagamento' => $formaPagamento,
+                'troco_para' => $trocoPara ?: null,
+                'observacao' => $observacaoFechamento ? ($pedido['observacao'] . "\n\nFechamento: " . $observacaoFechamento) : $pedido['observacao']
+            ],
+            'idpedido = ? AND tenant_id = ? AND filial_id = ?',
+            [$pedidoId, $tenantId, $filialId]
+        );
+
+        // Não liberar mesa para delivery (mesmo que tenha mesa_id, é delivery)
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'Pedido de delivery fechado com sucesso!'
+        ]);
+        break;
+
         default:
             throw new \Exception('Ação não encontrada: ' . $action);
     }
