@@ -497,6 +497,7 @@ if ($tenant && $filial) {
         });
 
         function carregarUsuarios() {
+            console.log('🔍 Loading users...');
             fetch('mvc/ajax/configuracoes.php', {
                 method: 'POST',
                 headers: {
@@ -505,8 +506,12 @@ if ($tenant && $filial) {
                 },
                 body: 'action=listar_usuarios'
             })
-                .then(response => response.json())
+                .then(response => {
+                    console.log('📡 Response received:', response.status);
+                    return response.json();
+                })
                 .then(data => {
+                    console.log('📊 Data received:', data);
                     const usuariosList = document.getElementById('usuariosList');
                     
                     if (data.success && data.usuarios.length > 0) {
@@ -573,79 +578,6 @@ if ($tenant && $filial) {
                 });
         }
 
-        function exibirUsuariosOld(usuarios) {
-            const container = document.getElementById('usuariosList');
-            
-            if (usuarios.length === 0) {
-                container.innerHTML = '<p class="text-muted">Nenhum usuário encontrado</p>';
-                return;
-            }
-
-            let html = '';
-            usuarios.forEach(usuario => {
-                // Determinar tipo e cor baseado no tipo_usuario
-                let tipoClass = 'secondary';
-                let tipoUsuario = 'Cliente';
-                
-                switch(usuario.tipo_usuario) {
-                    case 'admin':
-                        tipoClass = 'danger';
-                        tipoUsuario = 'Admin';
-                        break;
-                    case 'cozinha':
-                        tipoClass = 'warning';
-                        tipoUsuario = 'Cozinha';
-                        break;
-                    case 'garcom':
-                        tipoClass = 'info';
-                        tipoUsuario = 'Garçom';
-                        break;
-                    case 'caixa':
-                        tipoClass = 'success';
-                        tipoUsuario = 'Caixa';
-                        break;
-                    case 'entregador':
-                        tipoClass = 'primary';
-                        tipoUsuario = 'Entregador';
-                        break;
-                    default:
-                        tipoClass = 'secondary';
-                        tipoUsuario = 'Funcionário';
-                }
-                
-                html += `
-                    <div class="card mb-2">
-                        <div class="card-body">
-                            <div class="row align-items-center">
-                                <div class="col-md-3">
-                                    <h6 class="mb-1">${usuario.nome || 'Sem nome'}</h6>
-                                    <small class="text-muted">${usuario.email || 'Sem email'}</small>
-                                </div>
-                                <div class="col-md-2">
-                                    <span class="badge bg-${tipoClass}">${tipoUsuario}</span>
-                                </div>
-                                <div class="col-md-2">
-                                    <small class="text-muted">${usuario.telefone || 'Sem telefone'}</small>
-                                </div>
-                                <div class="col-md-3">
-                                    <small class="text-muted">${usuario.cpf || usuario.cnpj || 'Sem documento'}</small>
-                                </div>
-                                <div class="col-md-2 text-end">
-                                    <button class="btn btn-sm btn-outline-primary me-1" onclick="editarUsuario(${usuario.id})">
-                                        <i class="fas fa-edit"></i> Editar
-                                    </button>
-                                    <button class="btn btn-sm btn-outline-danger" onclick="deletarUsuario(${usuario.id})">
-                                        <i class="fas fa-trash"></i> Deletar
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            });
-            
-            container.innerHTML = html;
-        }
 
         function abrirModalNovoUsuario() {
             Swal.fire({
@@ -828,8 +760,11 @@ if ($tenant && $filial) {
         }
 
         function editarUsuario(usuarioId) {
+            console.log('✏️ Edit user clicked:', usuarioId);
+            
             // Validate usuarioId
             if (!usuarioId || usuarioId <= 0) {
+                console.error('❌ Invalid user ID:', usuarioId);
                 Swal.fire('Erro', 'ID do usuário inválido', 'error');
                 return;
             }
@@ -959,12 +894,15 @@ if ($tenant && $filial) {
         }
 
         function alterarStatusUsuario(usuarioId, statusAtual) {
+            console.log('🔄 Change status clicked:', usuarioId, 'Current status:', statusAtual);
+            
             const novoStatus = !statusAtual;
             const acao = novoStatus ? 'ativar' : 'desativar';
             const confirmacao = novoStatus ? 'ativar' : 'desativar';
             
             // Validate usuarioId
             if (!usuarioId || usuarioId <= 0) {
+                console.error('❌ Invalid user ID:', usuarioId);
                 Swal.fire('Erro', 'ID do usuário inválido', 'error');
                 return;
             }
@@ -1010,8 +948,11 @@ if ($tenant && $filial) {
         }
 
         function deletarUsuario(usuarioId, nomeUsuario) {
+            console.log('🗑️ Delete user clicked:', usuarioId, 'Name:', nomeUsuario);
+            
             // Validate usuarioId
             if (!usuarioId || usuarioId <= 0) {
+                console.error('❌ Invalid user ID:', usuarioId);
                 Swal.fire('Erro', 'ID do usuário inválido', 'error');
                 return;
             }
