@@ -492,6 +492,7 @@ if ($tenant && $filial) {
         // Carregar dados ao carregar a página
         document.addEventListener('DOMContentLoaded', function() {
             console.log('Carregando página configurações - versão 4.0 (WuzAPI)');
+            carregarUsuarios();
             carregarCaixasEntrada();
         });
 
@@ -506,18 +507,73 @@ if ($tenant && $filial) {
             })
                 .then(response => response.json())
                 .then(data => {
-                    if (data.success) {
-                        exibirUsuarios(data.usuarios);
+                    const usuariosList = document.getElementById('usuariosList');
+                    
+                    if (data.success && data.usuarios.length > 0) {
+                        let html = '<div class="table-responsive"><table class="table table-sm">';
+                        html += '<thead><tr><th>Nome</th><th>Email</th><th>Tipo</th><th>Cargo</th><th>Status</th><th>Ações</th></tr></thead><tbody>';
+                        
+                        data.usuarios.forEach(usuario => {
+                            const isAdminPrincipal = usuario.tipo_usuario === 'admin' && usuario.id == 1;
+                            const statusText = usuario.ativo ? 'Ativo' : 'Inativo';
+                            const statusClass = usuario.ativo ? 'bg-success' : 'bg-danger';
+                            const actionStatusText = usuario.ativo ? 'Desativar' : 'Ativar';
+                            const actionStatusIcon = usuario.ativo ? 'fa-user-slash' : 'fa-user-check';
+                            
+                            // Ensure usuario.id is a valid number
+                            const usuarioId = parseInt(usuario.id);
+                            if (isNaN(usuarioId) || usuarioId <= 0) {
+                                console.error('Invalid usuario ID:', usuario.id, usuario);
+                                return; // Skip this user
+                            }
+                            
+                            html += `
+                                <tr>
+                                    <td>${usuario.nome}</td>
+                                    <td>${usuario.email || '-'}</td>
+                                    <td>${usuario.tipo_usuario}</td>
+                                    <td>${usuario.cargo || '-'}</td>
+                                    <td>
+                                        <span class="badge ${statusClass}">
+                                            ${statusText}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <button class="btn btn-outline-primary" onclick="editarUsuario(${usuarioId})" title="Editar">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            ${!isAdminPrincipal ? `
+                                                <button class="btn btn-outline-${usuario.ativo ? 'warning' : 'success'}" onclick="alterarStatusUsuario(${usuarioId}, ${usuario.ativo})" title="${actionStatusText}">
+                                                    <i class="fas ${actionStatusIcon}"></i>
+                                                </button>
+                                                <button class="btn btn-outline-danger" onclick="deletarUsuario(${usuarioId}, '${usuario.nome.replace(/'/g, "\\'")}')" title="Deletar">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            ` : `
+                                                <button class="btn btn-outline-secondary" disabled title="Usuário protegido">
+                                                    <i class="fas fa-shield-alt"></i>
+                                                </button>
+                                            `}
+                                        </div>
+                                    </td>
+                                </tr>
+                            `;
+                        });
+                        
+                        html += '</tbody></table></div>';
+                        usuariosList.innerHTML = html;
                     } else {
-                        console.error('Erro ao carregar usuários:', data.message);
+                        usuariosList.innerHTML = '<p class="text-muted">Nenhum usuário cadastrado.</p>';
                     }
                 })
                 .catch(error => {
                     console.error('Erro:', error);
+                    document.getElementById('usuariosList').innerHTML = '<p class="text-danger">Erro ao carregar usuários.</p>';
                 });
         }
 
-        function exibirUsuarios(usuarios) {
+        function exibirUsuariosOld(usuarios) {
             const container = document.getElementById('usuariosList');
             
             if (usuarios.length === 0) {
@@ -1000,87 +1056,6 @@ if ($tenant && $filial) {
             });
         }
 
-        // Carregar lista de usuários ao abrir a página
-        function carregarUsuarios() {
-            fetch('mvc/ajax/configuracoes.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: 'action=listar_usuarios'
-            })
-            .then(response => response.json())
-            .then(data => {
-                const usuariosList = document.getElementById('usuariosList');
-                
-                if (data.success && data.usuarios.length > 0) {
-                    let html = '<div class="table-responsive"><table class="table table-sm">';
-                    html += '<thead><tr><th>Nome</th><th>Email</th><th>Tipo</th><th>Cargo</th><th>Status</th><th>Ações</th></tr></thead><tbody>';
-                    
-                    data.usuarios.forEach(usuario => {
-                        const isAdminPrincipal = usuario.tipo_usuario === 'admin' && usuario.id == 1;
-                        const statusText = usuario.ativo ? 'Ativo' : 'Inativo';
-                        const statusClass = usuario.ativo ? 'bg-success' : 'bg-danger';
-                        const actionStatusText = usuario.ativo ? 'Desativar' : 'Ativar';
-                        const actionStatusIcon = usuario.ativo ? 'fa-user-slash' : 'fa-user-check';
-                        
-                        // Ensure usuario.id is a valid number
-                        const usuarioId = parseInt(usuario.id);
-                        if (isNaN(usuarioId) || usuarioId <= 0) {
-                            console.error('Invalid usuario ID:', usuario.id, usuario);
-                            return; // Skip this user
-                        }
-                        
-                        html += `
-                            <tr>
-                                <td>${usuario.nome}</td>
-                                <td>${usuario.email || '-'}</td>
-                                <td>${usuario.tipo_usuario}</td>
-                                <td>${usuario.cargo || '-'}</td>
-                                <td>
-                                    <span class="badge ${statusClass}">
-                                        ${statusText}
-                                    </span>
-                                </td>
-                                <td>
-                                    <div class="btn-group btn-group-sm" role="group">
-                                        <button class="btn btn-outline-primary" onclick="editarUsuario(${usuarioId})" title="Editar">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
-                                        ${!isAdminPrincipal ? `
-                                            <button class="btn btn-outline-${usuario.ativo ? 'warning' : 'success'}" onclick="alterarStatusUsuario(${usuarioId}, ${usuario.ativo})" title="${actionStatusText}">
-                                                <i class="fas ${actionStatusIcon}"></i>
-                                            </button>
-                                            <button class="btn btn-outline-danger" onclick="deletarUsuario(${usuarioId}, '${usuario.nome.replace(/'/g, "\\'")}')" title="Deletar">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                        ` : `
-                                            <button class="btn btn-outline-secondary" disabled title="Usuário protegido">
-                                                <i class="fas fa-shield-alt"></i>
-                                            </button>
-                                        `}
-                                    </div>
-                                </td>
-                            </tr>
-                        `;
-                    });
-                    
-                    html += '</tbody></table></div>';
-                    usuariosList.innerHTML = html;
-                } else {
-                    usuariosList.innerHTML = '<p class="text-muted">Nenhum usuário cadastrado.</p>';
-                }
-            })
-            .catch(error => {
-                console.error('Erro:', error);
-                document.getElementById('usuariosList').innerHTML = '<p class="text-danger">Erro ao carregar usuários.</p>';
-            });
-        }
-
-        // Carregar usuários quando a página carrega
-        document.addEventListener('DOMContentLoaded', function() {
-            carregarUsuarios();
-        });
 
         function abrirModalBuscarClienteOld() {
             Swal.fire({

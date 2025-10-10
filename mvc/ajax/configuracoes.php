@@ -244,34 +244,47 @@ try {
             break;
             
         case 'listar_usuarios':
-            $db = \System\Database::getInstance();
-            $session = \System\Session::getInstance();
-            $tenantId = $session->getTenantId() ?? 1;
-            
-            // Buscar usuários do estabelecimento
-            $usuarios = $db->fetchAll("
-                SELECT 
-                    ug.id,
-                    ug.nome,
-                    ug.email,
-                    ug.telefone,
-                    ug.tipo_usuario,
-                    ug.cpf,
-                    ug.cnpj,
-                    ug.endereco_completo,
-                    ug.ativo,
-                    ug.data_cadastro,
-                    ue.cargo,
-                    ue.ativo as ativo_estabelecimento
-                FROM usuarios_globais ug
-                LEFT JOIN usuarios_estabelecimento ue ON ug.id = ue.usuario_global_id AND ue.tenant_id = ?
-                ORDER BY ug.nome
-            ", [$tenantId]);
-            
-            echo json_encode([
-                'success' => true,
-                'usuarios' => $usuarios
-            ]);
+            try {
+                $db = \System\Database::getInstance();
+                $session = \System\Session::getInstance();
+                $tenantId = $session->getTenantId() ?? 1;
+                
+                error_log("AJAX listar_usuarios - Tenant ID: " . $tenantId);
+                
+                // Buscar usuários do estabelecimento
+                $usuarios = $db->fetchAll("
+                    SELECT 
+                        ug.id,
+                        ug.nome,
+                        ug.email,
+                        ug.telefone,
+                        ug.tipo_usuario,
+                        ug.cpf,
+                        ug.cnpj,
+                        ug.endereco_completo,
+                        ug.ativo,
+                        ug.data_cadastro,
+                        ue.cargo,
+                        ue.ativo as ativo_estabelecimento
+                    FROM usuarios_globais ug
+                    LEFT JOIN usuarios_estabelecimento ue ON ug.id = ue.usuario_global_id AND ue.tenant_id = ?
+                    ORDER BY ug.nome
+                ", [$tenantId]);
+                
+                error_log("AJAX listar_usuarios - Usuários encontrados: " . count($usuarios));
+                
+                echo json_encode([
+                    'success' => true,
+                    'usuarios' => $usuarios,
+                    'count' => count($usuarios)
+                ]);
+            } catch (\Exception $e) {
+                error_log("AJAX listar_usuarios - Erro: " . $e->getMessage());
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Erro ao carregar usuários: ' . $e->getMessage()
+                ]);
+            }
             break;
             
         case 'buscar_cliente':
