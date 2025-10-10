@@ -553,7 +553,7 @@ if ($tenant && $filial) {
                                                 <i class="fas fa-edit"></i>
                                             </button>
                                         ${!isAdminPrincipal ? `
-                                            <button class="btn btn-outline-${usuario.ativo ? 'warning' : 'success'}" onclick="alterarStatusUsuario(${usuarioId}, ${usuario.ativo ? 'true' : 'false'})" title="${actionStatusText}">
+                                            <button class="btn btn-outline-${usuario.ativo ? 'warning' : 'success'}" onclick="alterarStatusUsuario(${usuarioId}, '${usuario.ativo ? 'true' : 'false'}')" title="${actionStatusText}">
                                                 <i class="fas ${actionStatusIcon}"></i>
                                             </button>
                                                 <button class="btn btn-outline-danger" onclick="deletarUsuario(${usuarioId}, '${usuario.nome.replace(/'/g, "\\'")}')" title="Deletar">
