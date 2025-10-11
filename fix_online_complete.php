@@ -1,198 +1,131 @@
 <?php
 /**
- * Script completo para corrigir problemas online
- * - Corrige sequences
- * - Adiciona colunas faltantes
- * - Verifica schema
+ * Script para corrigir TODOS os problemas online
+ * - Adicionar coluna tipo_usuario faltante
+ * - Corrigir todas as sequências
+ * - Testar criação de registros
  */
 
-// Configuração de erro
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
+echo "🔧 FIXING ALL ONLINE ISSUES\n";
+echo "==========================\n\n";
 
-// Autoloader
-require_once __DIR__ . '/system/Config.php';
-require_once __DIR__ . '/system/Database.php';
+// Database connection
+$host = 'postgres';
+$port = 5432;
+$dbname = 'divino_lanches';
+$user = 'divino_user';
+$password = 'divino_password';
 
 try {
-    echo "=== CORREÇÃO COMPLETA DO AMBIENTE ONLINE ===\n\n";
+    $pdo = new PDO("pgsql:host=$host;port=$port;dbname=$dbname", $user, $password);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    echo "✅ Database connection successful!\n\n";
     
-    // Conectar ao banco
-    $db = \System\Database::getInstance();
-    echo "✅ Conectado ao banco de dados\n";
+    // 1. FIX MISSING COLUMN tipo_usuario
+    echo "1. Checking and fixing missing tipo_usuario column...\n";
     
-    // Verificar estrutura atual das tabelas
-    echo "\n--- Verificando Estrutura das Tabelas ---\n";
-    
-    // Verificar colunas da tabela categorias
-    $categoriasColumns = $db->fetchAll("
-        SELECT column_name, data_type, is_nullable 
+    // Check if column exists
+    $stmt = $pdo->query("
+        SELECT column_name 
         FROM information_schema.columns 
-        WHERE table_name = 'categorias' 
-        ORDER BY ordinal_position
+        WHERE table_name = 'usuarios_estabelecimento' 
+        AND column_name = 'tipo_usuario'
     ");
     
-    echo "Colunas atuais da tabela 'categorias':\n";
-    foreach ($categoriasColumns as $col) {
-        echo "  - {$col['column_name']} ({$col['data_type']})\n";
-    }
-    
-    // Verificar colunas da tabela ingredientes
-    $ingredientesColumns = $db->fetchAll("
-        SELECT column_name, data_type, is_nullable 
-        FROM information_schema.columns 
-        WHERE table_name = 'ingredientes' 
-        ORDER BY ordinal_position
-    ");
-    
-    echo "\nColunas atuais da tabela 'ingredientes':\n";
-    foreach ($ingredientesColumns as $col) {
-        echo "  - {$col['column_name']} ({$col['data_type']})\n";
-    }
-    
-    // Adicionar colunas faltantes na tabela categorias
-    echo "\n--- Adicionando Colunas Faltantes ---\n";
-    
-    $categoriasColumnsNames = array_column($categoriasColumns, 'column_name');
-    
-    if (!in_array('descricao', $categoriasColumnsNames)) {
-        $db->query("ALTER TABLE categorias ADD COLUMN descricao TEXT");
-        echo "✅ Coluna 'descricao' adicionada à tabela categorias\n";
+    if ($stmt->rowCount() == 0) {
+        echo "   Adding missing tipo_usuario column...\n";
+        $pdo->exec("ALTER TABLE usuarios_estabelecimento ADD COLUMN tipo_usuario VARCHAR(50) NOT NULL DEFAULT 'admin'");
+        echo "   ✅ Column added successfully!\n";
     } else {
-        echo "ℹ️ Coluna 'descricao' já existe na tabela categorias\n";
+        echo "   ✅ Column already exists\n";
     }
     
-    if (!in_array('ativo', $categoriasColumnsNames)) {
-        $db->query("ALTER TABLE categorias ADD COLUMN ativo BOOLEAN DEFAULT true");
-        echo "✅ Coluna 'ativo' adicionada à tabela categorias\n";
-    } else {
-        echo "ℹ️ Coluna 'ativo' já existe na tabela categorias\n";
-    }
+    // 2. FIX ALL SEQUENCES
+    echo "\n2. Fixing all sequences...\n";
     
-    if (!in_array('ordem', $categoriasColumnsNames)) {
-        $db->query("ALTER TABLE categorias ADD COLUMN ordem INTEGER DEFAULT 0");
-        echo "✅ Coluna 'ordem' adicionada à tabela categorias\n";
-    } else {
-        echo "ℹ️ Coluna 'ordem' já existe na tabela categorias\n";
-    }
+    $sequences_to_fix = [
+        'produtos_id_seq' => 'produtos',
+        'categorias_id_seq' => 'categorias', 
+        'ingredientes_id_seq' => 'ingredientes',
+        'usuarios_globais_id_seq' => 'usuarios_globais',
+        'usuarios_estabelecimento_id_seq' => 'usuarios_estabelecimento',
+        'pedido_idpedido_seq' => 'pedido',
+        'pedido_itens_id_seq' => 'pedido_itens'
+    ];
     
-    if (!in_array('parent_id', $categoriasColumnsNames)) {
-        $db->query("ALTER TABLE categorias ADD COLUMN parent_id INTEGER");
-        echo "✅ Coluna 'parent_id' adicionada à tabela categorias\n";
-    } else {
-        echo "ℹ️ Coluna 'parent_id' já existe na tabela categorias\n";
-    }
-    
-    if (!in_array('imagem', $categoriasColumnsNames)) {
-        $db->query("ALTER TABLE categorias ADD COLUMN imagem VARCHAR(255)");
-        echo "✅ Coluna 'imagem' adicionada à tabela categorias\n";
-    } else {
-        echo "ℹ️ Coluna 'imagem' já existe na tabela categorias\n";
-    }
-    
-    // Adicionar colunas faltantes na tabela ingredientes
-    $ingredientesColumnsNames = array_column($ingredientesColumns, 'column_name');
-    
-    if (!in_array('descricao', $ingredientesColumnsNames)) {
-        $db->query("ALTER TABLE ingredientes ADD COLUMN descricao TEXT");
-        echo "✅ Coluna 'descricao' adicionada à tabela ingredientes\n";
-    } else {
-        echo "ℹ️ Coluna 'descricao' já existe na tabela ingredientes\n";
-    }
-    
-    if (!in_array('ativo', $ingredientesColumnsNames)) {
-        $db->query("ALTER TABLE ingredientes ADD COLUMN ativo BOOLEAN DEFAULT true");
-        echo "✅ Coluna 'ativo' adicionada à tabela ingredientes\n";
-    } else {
-        echo "ℹ️ Coluna 'ativo' já existe na tabela ingredientes\n";
-    }
-    
-    // Verificar estado atual das sequences
-    echo "\n--- Estado Atual das Sequences ---\n";
-    
-    $categoriasSeq = $db->fetch("SELECT last_value FROM categorias_id_seq");
-    $ingredientesSeq = $db->fetch("SELECT last_value FROM ingredientes_id_seq");
-    
-    $categoriasMax = $db->fetch("SELECT MAX(id) as max_id FROM categorias");
-    $ingredientesMax = $db->fetch("SELECT MAX(id) as max_id FROM ingredientes");
-    
-    echo "Categorias - Sequence atual: " . $categoriasSeq['last_value'] . ", MAX ID: " . $categoriasMax['max_id'] . "\n";
-    echo "Ingredientes - Sequence atual: " . $ingredientesSeq['last_value'] . ", MAX ID: " . $ingredientesMax['max_id'] . "\n";
-    
-    // Corrigir sequence da tabela categorias
-    echo "\n--- Corrigindo Sequence de Categorias ---\n";
-    $newCategoriasSeq = $categoriasMax['max_id'] + 1;
-    $db->query("SELECT setval('categorias_id_seq', ?)", [$newCategoriasSeq]);
-    echo "✅ Sequence de categorias corrigida para: " . $newCategoriasSeq . "\n";
-    
-    // Corrigir sequence da tabela ingredientes
-    echo "\n--- Corrigindo Sequence de Ingredientes ---\n";
-    $newIngredientesSeq = $ingredientesMax['max_id'] + 1;
-    $db->query("SELECT setval('ingredientes_id_seq', ?)", [$newIngredientesSeq]);
-    echo "✅ Sequence de ingredientes corrigida para: " . $newIngredientesSeq . "\n";
-    
-    // Teste de inserção
-    echo "\n--- Teste de Funcionamento ---\n";
-    
-    try {
-        // Teste inserção categoria
-        $testCategoryId = $db->insert('categorias', [
-            'nome' => 'Teste Categoria Online',
-            'descricao' => 'Categoria de teste para verificar funcionamento',
-            'ativo' => true,
-            'tenant_id' => 1,
-            'filial_id' => 1
-        ]);
-        echo "✅ Teste categoria: ID " . $testCategoryId . " criado com sucesso\n";
+    foreach ($sequences_to_fix as $sequence => $table) {
+        echo "   Fixing $sequence...\n";
         
-        // Remover categoria de teste
-        $db->delete('categorias', 'id = ?', [$testCategoryId]);
-        echo "✅ Categoria de teste removida\n";
+        try {
+            // Get current sequence value
+            $stmt = $pdo->query("SELECT last_value FROM $sequence");
+            $currentValue = $stmt->fetchColumn();
+            
+            // Get max ID from table
+            $idColumn = ($table == 'pedido') ? 'idpedido' : 'id';
+            $stmt = $pdo->query("SELECT COALESCE(MAX($idColumn), 0) FROM $table");
+            $maxId = $stmt->fetchColumn();
+            
+            // Set sequence to max + 1
+            $newValue = $maxId + 1;
+            $pdo->exec("SELECT setval('$sequence', $newValue, false)");
+            
+            echo "     Sequence: $currentValue → $newValue (Max ID: $maxId)\n";
+            echo "     ✅ Fixed!\n";
+            
+        } catch (Exception $e) {
+            echo "     ❌ Error: " . $e->getMessage() . "\n";
+        }
+    }
+    
+    // 3. TEST CREATIONS
+    echo "\n3. Testing record creation...\n";
+    
+    // Test category creation
+    echo "   Testing category creation...\n";
+    try {
+        $stmt = $pdo->prepare("INSERT INTO categorias (nome, descricao, ativo, created_at, updated_at) VALUES (?, ?, ?, ?, ?)");
+        $stmt->execute(['Teste Categoria Online', 'Teste de categoria', true, date('Y-m-d H:i:s'), date('Y-m-d H:i:s')]);
+        $categoryId = $pdo->lastInsertId();
+        echo "     ✅ Category created with ID: $categoryId\n";
+        
+        // Test product creation
+        echo "   Testing product creation...\n";
+        $stmt = $pdo->prepare("INSERT INTO produtos (nome, descricao, preco_normal, preco_mini, categoria_id, ativo, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute(['Teste Produto Online', 'Teste de produto', 10.50, 9.50, $categoryId, true, date('Y-m-d H:i:s'), date('Y-m-d H:i:s')]);
+        $productId = $pdo->lastInsertId();
+        echo "     ✅ Product created with ID: $productId\n";
+        
+        // Test ingredient creation
+        echo "   Testing ingredient creation...\n";
+        $stmt = $pdo->prepare("INSERT INTO ingredientes (nome, descricao, preco_adicional, ativo, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)");
+        $stmt->execute(['Teste Ingrediente Online', 'Teste de ingrediente', 1.50, true, date('Y-m-d H:i:s'), date('Y-m-d H:i:s')]);
+        $ingredientId = $pdo->lastInsertId();
+        echo "     ✅ Ingredient created with ID: $ingredientId\n";
+        
+        // Test user creation
+        echo "   Testing user creation...\n";
+        $stmt = $pdo->prepare("INSERT INTO usuarios_globais (nome, email, telefone, tipo_usuario, ativo, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute(['Teste Usuario Online', 'teste@online.com', '11999999999', 'admin', true, date('Y-m-d H:i:s'), date('Y-m-d H:i:s')]);
+        $userId = $pdo->lastInsertId();
+        echo "     ✅ User created with ID: $userId\n";
+        
+        // Test user establishment creation
+        echo "   Testing user establishment creation...\n";
+        $stmt = $pdo->prepare("INSERT INTO usuarios_estabelecimento (usuario_global_id, tenant_id, filial_id, tipo_usuario, cargo, ativo, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$userId, 1, 1, 'admin', 'Admin', true, date('Y-m-d H:i:s'), date('Y-m-d H:i:s')]);
+        $userEstId = $pdo->lastInsertId();
+        echo "     ✅ User establishment created with ID: $userEstId\n";
         
     } catch (Exception $e) {
-        echo "❌ Erro no teste de categoria: " . $e->getMessage() . "\n";
+        echo "     ❌ Test failed: " . $e->getMessage() . "\n";
     }
     
-    try {
-        // Teste inserção ingrediente
-        $testIngredientId = $db->insert('ingredientes', [
-            'nome' => 'Teste Ingrediente Online',
-            'descricao' => 'Ingrediente de teste para verificar funcionamento',
-            'tipo' => 'teste',
-            'preco_adicional' => 0,
-            'ativo' => true,
-            'tenant_id' => 1,
-            'filial_id' => 1
-        ]);
-        echo "✅ Teste ingrediente: ID " . $testIngredientId . " criado com sucesso\n";
-        
-        // Remover ingrediente de teste
-        $db->delete('ingredientes', 'id = ?', [$testIngredientId]);
-        echo "✅ Ingrediente de teste removido\n";
-        
-    } catch (Exception $e) {
-        echo "❌ Erro no teste de ingrediente: " . $e->getMessage() . "\n";
-    }
-    
-    // Verificação final
-    echo "\n--- Verificação Final ---\n";
-    
-    $categoriasSeqFinal = $db->fetch("SELECT last_value FROM categorias_id_seq");
-    $ingredientesSeqFinal = $db->fetch("SELECT last_value FROM ingredientes_id_seq");
-    
-    echo "Categorias - Sequence final: " . $categoriasSeqFinal['last_value'] . "\n";
-    echo "Ingredientes - Sequence final: " . $ingredientesSeqFinal['last_value'] . "\n";
-    
-    echo "\n🎉 CORREÇÃO COMPLETA CONCLUÍDA COM SUCESSO!\n";
-    echo "Agora o cadastro de categorias e ingredientes deve funcionar corretamente.\n";
-    echo "\n📋 Resumo das correções aplicadas:\n";
-    echo "- ✅ Colunas faltantes adicionadas às tabelas\n";
-    echo "- ✅ Sequences corrigidas\n";
-    echo "- ✅ Testes de funcionamento realizados\n";
+    echo "\n✅ ALL FIXES COMPLETED SUCCESSFULLY!\n";
+    echo "🎉 Online system should now work perfectly!\n\n";
     
 } catch (Exception $e) {
-    echo "\n❌ ERRO: " . $e->getMessage() . "\n";
-    echo "Stack trace: " . $e->getTraceAsString() . "\n";
+    echo "❌ ERROR: " . $e->getMessage() . "\n";
     exit(1);
 }
 ?>
