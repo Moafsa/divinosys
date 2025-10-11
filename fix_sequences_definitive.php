@@ -12,7 +12,7 @@ echo "===========================================\n\n";
 // Database connection
 $host = 'postgres';
 $port = 5432;
-$dbname = 'divino_lanches';
+$dbname = 'divino_db';
 $user = 'divino_user';
 $password = 'divino_password';
 
