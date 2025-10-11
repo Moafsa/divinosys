@@ -229,6 +229,7 @@ try {
                     'usuario_global_id' => $usuarioId,
                     'tenant_id' => $tenantId,
                     'filial_id' => $filialId,
+                    'tipo_usuario' => $tipoUsuario,
                     'cargo' => ucfirst($tipoUsuario),
                     'ativo' => true,
                     'created_at' => date('Y-m-d H:i:s'),
