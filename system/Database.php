@@ -95,15 +95,6 @@ class Database
 
     public function insert($table, $data)
     {
-        // Garantir que a sequência esteja sincronizada antes da inserção
-        try {
-            $sequenceManager = \System\SequenceManager::getInstance();
-            $sequenceManager->beforeInsert($table);
-        } catch (\Exception $e) {
-            // Log mas não falha a inserção
-            error_log("Sequence sync warning for table $table: " . $e->getMessage());
-        }
-        
         $columns = implode(',', array_keys($data));
         $placeholders = ':' . implode(', :', array_keys($data));
         

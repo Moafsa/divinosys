@@ -44,15 +44,7 @@ try {
     $tenantId = 1; // Usar valor padrão
     $filialId = 1; // Usar valor padrão
     
-    // Auto-corrigir sequência da tabela pedido_itens
-    $maxId = $db->fetch("SELECT MAX(id) as max_id FROM pedido_itens");
-    $currentSeq = $db->fetch("SELECT last_value FROM pedido_itens_id_seq");
-    
-    if ($currentSeq['last_value'] <= $maxId['max_id']) {
-        $newValue = $maxId['max_id'] + 1;
-        $db->query("SELECT setval('pedido_itens_id_seq', ?)", [$newValue]);
-        error_log("Sequência pedido_itens_id_seq corrigida automaticamente para: " . $newValue);
-    }
+    // PostgreSQL gerencia sequências automaticamente - não precisamos interferir
     
     switch ($action) {
         case 'ver_mesa_multiplos_pedidos':
