@@ -59,14 +59,11 @@ RUN composer install --no-dev --optimize-autoloader
 RUN if [ ! -f .env ]; then cp env.example .env; fi
 
 # Copy and make startup scripts executable
-COPY docker/start.sh /usr/local/bin/start.sh
 COPY docker/start-production.sh /usr/local/bin/start-production.sh
-RUN chmod +x /usr/local/bin/start.sh && \
-    chmod +x /usr/local/bin/start-production.sh && \
-    sed -i 's/\r$//' /usr/local/bin/start.sh && \
+RUN chmod +x /usr/local/bin/start-production.sh && \
     sed -i 's/\r$//' /usr/local/bin/start-production.sh
 
 EXPOSE 80
 
-# Use bash to execute the script
-CMD ["/bin/bash", "/usr/local/bin/start.sh"]
+# Use production startup script that auto-fixes sequences
+CMD ["/bin/bash", "/usr/local/bin/start-production.sh"]
