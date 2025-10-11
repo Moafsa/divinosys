@@ -25,6 +25,13 @@ if (!is_dir(LOGS_PATH)) {
     mkdir(LOGS_PATH, 0755, true);
 }
 
+// Auto-fix sequences on application start (only once per session)
+if (!isset($_SESSION['sequences_fixed'])) {
+    require_once __DIR__ . '/auto_fix_sequences.php';
+    autoFixSequences();
+    $_SESSION['sequences_fixed'] = true;
+}
+
 // Autoloader
 spl_autoload_register(function ($class) {
     $prefixes = [
