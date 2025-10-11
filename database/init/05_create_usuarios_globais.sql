@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS usuarios_estabelecimento (
     usuario_global_id INTEGER REFERENCES usuarios_globais(id) ON DELETE CASCADE,
     tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
     filial_id INTEGER REFERENCES filiais(id) ON DELETE CASCADE,
+    tipo_usuario VARCHAR(50) NOT NULL DEFAULT 'admin',
     cargo VARCHAR(100),
     ativo BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -104,6 +105,7 @@ CREATE INDEX IF NOT EXISTS idx_usuarios_telefones_ativo ON usuarios_telefones(at
 CREATE INDEX IF NOT EXISTS idx_usuarios_estabelecimento_usuario ON usuarios_estabelecimento(usuario_global_id);
 CREATE INDEX IF NOT EXISTS idx_usuarios_estabelecimento_tenant ON usuarios_estabelecimento(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_usuarios_estabelecimento_filial ON usuarios_estabelecimento(filial_id);
+CREATE INDEX IF NOT EXISTS idx_usuarios_estabelecimento_tipo ON usuarios_estabelecimento(tipo_usuario);
 
 CREATE INDEX IF NOT EXISTS idx_evolution_instancias_tenant ON evolution_instancias(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_evolution_instancias_filial ON evolution_instancias(filial_id);
