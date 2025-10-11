@@ -32,6 +32,10 @@ php migrate.php
 echo "Running database schema fix..."
 php fix_database_schema.php
 
+# Auto-fix sequences (prevents duplicate key errors)
+echo "Auto-fixing sequences..."
+php auto_fix_sequences.php
+
 # Start Apache
 echo "Starting Apache..."
 exec apache2-foreground
