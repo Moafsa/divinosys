@@ -1,4 +1,5 @@
 ﻿<?php
+require_once __DIR__ . '/../../vendor/autoload.php';
 $config = \System\Config::getInstance();
 $session = \System\Session::getInstance();
 $router = \System\Router::getInstance();
