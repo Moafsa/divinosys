@@ -19,6 +19,7 @@ if ($tenant && $filial) {
          LEFT JOIN usuarios u ON p.usuario_id = u.id AND u.tenant_id = p.tenant_id
          WHERE p.tenant_id = ? AND p.filial_id = ? 
          AND p.data >= CURRENT_DATE - INTERVAL '7 days'
+         AND NOT (p.status = 'Entregue' AND p.status_pagamento = 'quitado')
          ORDER BY p.hora_pedido DESC",
         [$tenant['id'], $filial['id']]
     );

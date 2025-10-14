@@ -19,6 +19,7 @@ if ($tenant && $filial) {
          WHERE p.tenant_id = ? AND p.filial_id = ? 
          AND p.delivery = true
          AND p.data >= CURRENT_DATE - INTERVAL '7 days'
+         AND NOT (p.status = 'Entregue' AND p.status_pagamento = 'quitado')
          ORDER BY p.hora_pedido DESC",
         [$tenant['id'], $filial['id']]
     );
@@ -309,6 +310,10 @@ foreach ($pedidos as $pedido) {
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
+    <!-- Partial Payment System -->
+    <script src="assets/js/pagamentos-parciais.js"></script>
+    
     <script>
         function verPedido(pedidoId) {
             console.log('Buscando pedido:', pedidoId);
@@ -446,40 +451,27 @@ foreach ($pedidos as $pedido) {
             if (currentIndex < statuses.length - 1) {
                 const novoStatus = statuses[currentIndex + 1];
                 
-                Swal.fire({
-                    title: 'Atualizar Status',
-                    text: `Mover pedido #${pedidoId} para "${novoStatus}"?`,
-                    icon: 'question',
-                    showCancelButton: true,
-                    confirmButtonText: 'Sim, atualizar',
-                    cancelButtonText: 'Cancelar'
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        // Fazer chamada AJAX para atualizar o status
-                        fetch('mvc/ajax/pedidos.php', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/x-www-form-urlencoded',
-                            },
-                            body: `action=atualizar_status&pedido_id=${pedidoId}&status=${novoStatus}`
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.success) {
-                                Swal.fire('Sucesso', 'Status atualizado com sucesso!', 'success');
-                                setTimeout(() => location.reload(), 1500);
-                            } else {
-                                Swal.fire('Erro', data.message || 'Erro ao atualizar status', 'error');
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Erro:', error);
-                            Swal.fire('Erro', 'Erro ao atualizar status', 'error');
-                        });
+                // Atualizar status diretamente sem confirmação
+                fetch('mvc/ajax/pedidos.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `action=atualizar_status&pedido_id=${pedidoId}&status=${novoStatus}`
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Recarregar a página para mostrar o novo status
+                        location.reload();
+                    } else {
+                        console.error('Erro ao atualizar status:', data.message);
+                        // Mostrar erro apenas no console, sem popup
                     }
+                })
+                .catch(error => {
+                    console.error('Erro:', error);
                 });
-            } else {
-                Swal.fire('Info', 'Pedido já está no status final!', 'info');
             }
         }
 
@@ -519,91 +511,8 @@ foreach ($pedidos as $pedido) {
         }
 
         function fecharPedidoDelivery(pedidoId) {
-            Swal.fire({
-                title: 'Fechar Pedido de Delivery',
-                html: `
-                    <div class="mb-3">
-                        <label class="form-label">Forma de Pagamento</label>
-                        <select class="form-select" id="formaPagamento" required>
-                            <option value="">Selecione a forma de pagamento</option>
-                            <option value="Dinheiro">Dinheiro</option>
-                            <option value="Cartão de Débito">Cartão de Débito</option>
-                            <option value="Cartão de Crédito">Cartão de Crédito</option>
-                            <option value="PIX">PIX</option>
-                            <option value="Vale Refeição">Vale Refeição</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Troco para (se dinheiro)</label>
-                        <input type="number" class="form-control" id="trocoPara" step="0.01" min="0" placeholder="0,00">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Observações do Fechamento</label>
-                        <textarea class="form-control" id="observacaoFechamento" rows="2" placeholder="Observações adicionais..."></textarea>
-                    </div>
-                `,
-                showCancelButton: true,
-                confirmButtonText: 'Fechar Pedido',
-                cancelButtonText: 'Cancelar',
-                width: '500px',
-                allowOutsideClick: false,
-                allowEscapeKey: true,
-                focusConfirm: false,
-                preConfirm: () => {
-                    return true;
-                },
-                didOpen: () => {
-                    setTimeout(() => {
-                        const allInputs = document.querySelectorAll('input, textarea, select');
-                        allInputs.forEach(input => {
-                            input.disabled = false;
-                            input.readOnly = false;
-                            input.style.pointerEvents = 'auto';
-                            input.style.cursor = 'text';
-                            input.tabIndex = 1;
-                        });
-
-                        const firstInput = document.querySelector('input, textarea, select');
-                        if (firstInput) {
-                            firstInput.focus();
-                        }
-                    }, 100);
-                }
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    const formaPagamento = document.getElementById('formaPagamento').value;
-                    const trocoPara = document.getElementById('trocoPara').value;
-                    const observacaoFechamento = document.getElementById('observacaoFechamento').value;
-
-                    if (!formaPagamento) {
-                        Swal.fire('Erro', 'Selecione uma forma de pagamento', 'error');
-                        return;
-                    }
-
-                    // Fazer chamada AJAX para fechar o pedido
-                    fetch('mvc/ajax/pedidos.php', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                            'X-Requested-With': 'XMLHttpRequest'
-                        },
-                        body: `action=fechar_pedido_delivery&pedido_id=${pedidoId}&forma_pagamento=${encodeURIComponent(formaPagamento)}&troco_para=${trocoPara}&observacao_fechamento=${encodeURIComponent(observacaoFechamento)}`
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            Swal.fire('Sucesso', 'Pedido de delivery fechado com sucesso!', 'success');
-                            setTimeout(() => location.reload(), 1500);
-                        } else {
-                            Swal.fire('Erro', data.message || 'Erro ao fechar pedido de delivery', 'error');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Erro:', error);
-                        Swal.fire('Erro', 'Erro ao fechar pedido de delivery', 'error');
-                    });
-                }
-            });
+            // Redirecionar para a página de fechar pedido (mesmo modelo da mesa)
+            window.location.href = `index.php?view=fechar_pedido&pedido_id=${pedidoId}`;
         }
 
         function atualizarDelivery() {

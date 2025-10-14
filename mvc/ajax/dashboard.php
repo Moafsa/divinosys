@@ -27,9 +27,9 @@ try {
                 throw new \Exception('Mesa não encontrada');
             }
             
-            // Get pedidos ativos da mesa
+            // Get pedidos ativos da mesa (excluindo quitados)
             $pedidos = $db->fetchAll(
-                "SELECT * FROM pedido WHERE idmesa = ? AND tenant_id = ? AND filial_id = ? AND status NOT IN ('Finalizado', 'Cancelado') ORDER BY data DESC, hora_pedido DESC",
+                "SELECT * FROM pedido WHERE idmesa = ? AND tenant_id = ? AND filial_id = ? AND status NOT IN ('Finalizado', 'Cancelado') AND status_pagamento != 'quitado' ORDER BY data DESC, hora_pedido DESC",
                 [$mesaId, $tenantId, $filialId]
             );
             

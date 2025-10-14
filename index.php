@@ -63,16 +63,24 @@ if (file_exists(__DIR__ . '/vendor/autoload.php')) {
 require_once __DIR__ . '/system/helpers.php';
 
 try {
+    error_log('INDEX: Iniciando aplicação');
+    
     // Initialize system
     $config = \System\Config::getInstance();
     $router = \System\Router::getInstance();
     
+    error_log('INDEX: Sistema inicializado');
+    
     // Handle AJAX requests
-    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && 
-        strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
+    if (!empty($_GET['action']) || !empty($_POST['action'])) {
+        
+        error_log('INDEX: Entrou no bloco AJAX');
         
         // Try to load AJAX handler
         $action = $_GET['action'] ?? $_POST['action'] ?? '';
+        
+        error_log('INDEX: Action detectada: ' . $action);
+        
         
     // Mapear ações para arquivos AJAX
     $ajaxMap = [
@@ -88,6 +96,7 @@ try {
         'ver_mesa_multiplos_pedidos' => 'mesa_multiplos_pedidos_simples.php',
         'fechar_pedido_individual' => 'mesa_multiplos_pedidos_simples.php',
         'fechar_mesa_completa' => 'mesa_multiplos_pedidos_simples.php',
+        'pagamentos_parciais' => 'pagamentos_parciais.php',
         // WhatsApp/Baileys actions
         'criar_instancia' => 'whatsapp.php',
         'listar_instancias' => 'whatsapp.php',
@@ -107,7 +116,7 @@ try {
         'get_context' => 'ai_chat.php',
         'search_products' => 'ai_chat.php',
         'search_ingredients' => 'ai_chat.php',
-        'search_categories' => 'ai_chat.php'
+        'search_categories' => 'ai_chat.php',
     ];
         
         $ajaxFile = $ajaxMap[$action] ?? $action . '.php';

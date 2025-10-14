@@ -62,10 +62,10 @@ try {
                 throw new \Exception('Mesa não encontrada');
             }
             
-            // Buscar pedidos ativos da mesa
+            // Buscar pedidos ativos da mesa (excluindo quitados)
             $pedidos = $db->fetchAll(
-                'SELECT * FROM pedido WHERE idmesa = ? AND status NOT IN (?, ?) AND tenant_id = ? AND filial_id = ? ORDER BY created_at ASC',
-                [$mesaId, 'Finalizado', 'Cancelado', $tenantId, $filialId]
+                'SELECT * FROM pedido WHERE idmesa = ? AND status NOT IN (?, ?) AND status_pagamento != ? AND tenant_id = ? AND filial_id = ? ORDER BY created_at ASC',
+                [$mesaId, 'Finalizado', 'Cancelado', 'quitado', $tenantId, $filialId]
             );
             
             $valorTotal = array_sum(array_column($pedidos, 'valor_total'));

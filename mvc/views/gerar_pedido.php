@@ -1050,9 +1050,9 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                         .endereco { font-size: 10px; }
                         .pedido-info { margin: 10px 0; }
                         .item { margin: 5px 0; }
-                        .item-nome { font-weight: bold; }
-                        .item-detalhes { font-size: 10px; margin-left: 10px; }
-                        .modificacoes { margin-left: 20px; font-size: 10px; }
+                        .item-nome { font-weight: bold; font-size: 14px; }
+                        .item-detalhes { font-size: 13px; margin-left: 10px; }
+                        .modificacoes { margin-left: 20px; font-size: 13px; }
                         .adicionado { color: green; }
                         .removido { color: red; }
                         .total { border-top: 1px dashed #000; padding-top: 10px; margin-top: 10px; font-weight: bold; }

@@ -4,6 +4,7 @@ namespace System;
 
 use PDO;
 use PDOException;
+use System\Config;
 
 class Database
 {

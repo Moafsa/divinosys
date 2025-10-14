@@ -101,6 +101,9 @@ try {
                 'data' => date('Y-m-d'),
                 'hora_pedido' => date('H:i:s'),
                 'valor_total' => $valorTotal,
+                'valor_pago' => 0.00,
+                'saldo_devedor' => $valorTotal,
+                'status_pagamento' => 'pendente',
                 'status' => 'Pendente',
                 'observacao' => $observacao,
                 'usuario_id' => $usuarioId,
@@ -634,9 +637,9 @@ try {
         $tenantId = $session->getTenantId() ?? 1;
         $filialId = $session->getFilialId() ?? 1;
         
-        // Buscar pedidos ativos da mesa
+        // Buscar pedidos ativos da mesa (excluindo quitados)
         $pedidos = $db->fetchAll(
-            "SELECT * FROM pedido WHERE idmesa::varchar = ? AND tenant_id = ? AND filial_id = ? AND status NOT IN ('Finalizado', 'Cancelado')",
+            "SELECT * FROM pedido WHERE idmesa::varchar = ? AND tenant_id = ? AND filial_id = ? AND status NOT IN ('Finalizado', 'Cancelado') AND status_pagamento != 'quitado'",
             [$mesaId, $tenantId, $filialId]
         );
         

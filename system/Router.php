@@ -33,6 +33,7 @@ class Router
             'dashboard' => 'Dashboard1.php',
             'gerar_pedido' => 'gerar_pedido.php',
             'pedidos' => 'pedidos.php',
+            'fechar_pedido' => 'FecharPedido.php',
             'mesas' => 'mesas.php',
             'delivery' => 'delivery.php',
             'gerenciar_produtos' => 'gerenciar_produtos.php',

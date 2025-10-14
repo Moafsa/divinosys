@@ -29,15 +29,22 @@ try {
     $fecharMesa = $_GET['fechar_mesa'] ?? $_POST['fechar_mesa'] ?? '';
     $dividirPagamento = $_GET['dividir_pagamento'] ?? $_POST['dividir_pagamento'] ?? '';
     
-    if ($verMesa == '1') {
+    // DEBUG: Log original action
+    error_log('MESA_MODAL DEBUG: Action original = ' . $action . ', verMesa = ' . $verMesa);
+    
+    // Só sobrescrever action se não for uma action específica do sistema de pagamentos parciais
+    if ($verMesa == '1' && !in_array($action, ['buscar_pedidos_mesa', 'liberar_mesa', 'fechar_mesa'])) {
         $action = 'ver_mesa_multiplos_pedidos';
-    } elseif ($fecharPedido == '1') {
+        error_log('MESA_MODAL DEBUG: Action sobrescrita para ver_mesa_multiplos_pedidos');
+    } elseif ($fecharPedido == '1' && !in_array($action, ['buscar_pedidos_mesa', 'liberar_mesa', 'fechar_mesa'])) {
         $action = 'fechar_pedido_individual';
-    } elseif ($fecharMesa == '1') {
+    } elseif ($fecharMesa == '1' && !in_array($action, ['buscar_pedidos_mesa', 'liberar_mesa', 'fechar_mesa'])) {
         $action = 'fechar_mesa_completa';
-    } elseif ($dividirPagamento == '1') {
+    } elseif ($dividirPagamento == '1' && !in_array($action, ['buscar_pedidos_mesa', 'liberar_mesa', 'fechar_mesa'])) {
         $action = 'dividir_pagamento';
     }
+    
+    error_log('MESA_MODAL DEBUG: Action final = ' . $action);
     
     $db = \System\Database::getInstance();
     $session = \System\Session::getInstance();
@@ -47,8 +54,33 @@ try {
     // PostgreSQL gerencia sequências automaticamente - não precisamos interferir
     
     switch ($action) {
+        case 'buscar_pedidos_mesa':
+            $mesaId = $_POST['mesa_id'] ?? '';
+            
+            if (empty($mesaId)) {
+                throw new \Exception('ID da mesa é obrigatório');
+            }
+            
+            // Buscar pedidos ativos da mesa (excluindo entregues e quitados)
+            $pedidos = $db->fetchAll(
+                "SELECT * FROM pedido 
+                 WHERE idmesa = ? AND status NOT IN ('Finalizado', 'Cancelado')
+                 AND tenant_id = ? AND filial_id = ?
+                 AND NOT (status = 'Entregue' AND status_pagamento = 'quitado')
+                 ORDER BY created_at ASC",
+                [$mesaId, $tenantId, $filialId]
+            );
+            
+            echo json_encode([
+                'success' => true,
+                'pedidos' => $pedidos,
+                'total' => count($pedidos)
+            ]);
+            break;
+            
         case 'ver_mesa_multiplos_pedidos':
             $mesaId = (int) ($_GET['mesa_id'] ?? 0);
+            
             
             if (!$mesaId) {
                 throw new \Exception('ID da mesa é obrigatório');
@@ -80,18 +112,28 @@ try {
                 throw new \Exception('Tabela pedido não existe');
             }
             
+            // Buscar todos os pedidos da mesa (excluindo quitados e entregues quitados)
             $pedidos = $db->fetchAll(
-                "SELECT * FROM pedido WHERE idmesa::varchar = ? AND tenant_id = ? AND filial_id = ? AND status IN ('Pendente', 'Preparando', 'Pronto', 'Entregue') ORDER BY created_at ASC",
+                "SELECT * FROM pedido WHERE idmesa::varchar = ? AND tenant_id = ? AND filial_id = ? AND status IN ('Pendente', 'Preparando', 'Pronto', 'Entregue') AND status_pagamento != 'quitado' AND NOT (status = 'Entregue' AND status_pagamento = 'quitado') ORDER BY created_at ASC",
                 [$mesa['id_mesa'], $tenantId, $filialId]
             );
             
-            if (empty($pedidos)) {
-                // Mesa livre
+            // Calcular saldo devedor total da mesa
+            $saldoDevedorTotal = 0;
+            foreach ($pedidos as $pedido) {
+                if ($pedido['status_pagamento'] !== 'quitado') {
+                    $saldoDevedorTotal += (float)$pedido['saldo_devedor'];
+                }
+            }
+            
+            // Só mostrar pedidos se há saldo devedor
+            if ($saldoDevedorTotal <= 0) {
+                // Mesa livre - sem saldo devedor
                 $html = '
                     <div class="text-center py-5">
                         <i class="fas fa-table fa-3x text-success mb-3"></i>
                         <h4 class="text-success">Mesa Livre</h4>
-                        <p class="text-muted">Esta mesa está disponível para novos pedidos.</p>
+                        <p class="text-muted">Esta mesa está disponível para novos pedidos. Todos os pedidos foram quitados.</p>
                         <a href="index.php?view=gerar_pedido&mesa=' . $mesa['id_mesa'] . '" class="btn btn-success">
                             <i class="fas fa-plus"></i> Criar Pedido
                         </a>
@@ -278,10 +320,10 @@ try {
                 throw new \Exception('Mesa e forma de pagamento são obrigatórios');
             }
             
-            // Get all open pedidos for this mesa
+            // Get all open pedidos for this mesa (excluindo entregues e quitados)
             $pedidos = $db->fetchAll(
-                'SELECT * FROM pedido WHERE idmesa = ? AND status NOT IN (?, ?) AND tenant_id = ? AND filial_id = ?',
-                [$mesaId, 'Finalizado', 'Cancelado', $tenantId, $filialId]
+                'SELECT * FROM pedido WHERE idmesa = ? AND status NOT IN (?, ?) AND tenant_id = ? AND filial_id = ? AND NOT (status = ? AND status_pagamento = ?)',
+                [$mesaId, 'Finalizado', 'Cancelado', $tenantId, $filialId, 'Entregue', 'quitado']
             );
             
             if (empty($pedidos)) {
@@ -354,10 +396,10 @@ try {
                 ['Finalizado', $formaPagamento, $valorPago, $nomeCliente, $telefoneCliente, $observacoes, $pedidoId, $tenantId, $filialId]
             );
             
-            // Verificar se a mesa pode ser liberada
+            // Verificar se a mesa pode ser liberada (excluindo entregues e quitados)
             $pedidosAtivosNaMesa = $db->fetch(
-                'SELECT COUNT(*) as total FROM pedido WHERE idmesa = ? AND status NOT IN (?, ?) AND tenant_id = ? AND filial_id = ?',
-                [$pedido['idmesa'], 'Finalizado', 'Cancelado', $tenantId, $filialId]
+                'SELECT COUNT(*) as total FROM pedido WHERE idmesa = ? AND status NOT IN (?, ?) AND tenant_id = ? AND filial_id = ? AND NOT (status = ? AND status_pagamento = ?)',
+                [$pedido['idmesa'], 'Finalizado', 'Cancelado', $tenantId, $filialId, 'Entregue', 'quitado']
             );
             
             if ($pedidosAtivosNaMesa['total'] == 0) {
@@ -384,10 +426,10 @@ try {
                 throw new \Exception('Dados incompletos para fechar a mesa');
             }
             
-            // Buscar todos os pedidos ativos da mesa
+            // Buscar todos os pedidos ativos da mesa (excluindo entregues e quitados)
             $pedidos = $db->fetchAll(
-                'SELECT * FROM pedido WHERE idmesa = ? AND status NOT IN (?, ?) AND tenant_id = ? AND filial_id = ?',
-                [$mesaId, 'Finalizado', 'Cancelado', $tenantId, $filialId]
+                'SELECT * FROM pedido WHERE idmesa = ? AND status NOT IN (?, ?) AND tenant_id = ? AND filial_id = ? AND NOT (status = ? AND status_pagamento = ?)',
+                [$mesaId, 'Finalizado', 'Cancelado', $tenantId, $filialId, 'Entregue', 'quitado']
             );
             
             if (empty($pedidos)) {
