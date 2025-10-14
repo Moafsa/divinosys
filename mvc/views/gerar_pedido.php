@@ -1174,106 +1174,90 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
             const isEditing = <?php echo $editarPedido ? 'true' : 'false'; ?>;
             const pedidoId = <?php echo $editarPedido ? $editarPedido['idpedido'] : 'null'; ?>;
             
-            const title = isEditing ? 'Atualizar Pedido' : 'Finalizar Pedido';
-            const text = isEditing ? 
-                `Confirma as alterações no pedido #${pedidoId}?` : 
-                `Confirmar pedido para ${mesaSelecionada.numero}?`;
+            // Finalizar/Atualizar pedido via AJAX diretamente
+            console.log('Carrinho antes de enviar:', carrinho);
+            carrinho.forEach((item, index) => {
+                console.log(`Item ${index}:`, {
+                    id: item.id,
+                    nome: item.nome,
+                    ingredientes_adicionados: item.ingredientes_adicionados,
+                    ingredientes_removidos: item.ingredientes_removidos
+                });
+            });
             
-            Swal.fire({
-                title: title,
-                text: text,
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonText: isEditing ? 'Sim, atualizar' : 'Sim, finalizar',
-                cancelButtonText: 'Cancelar'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    // Finalizar/Atualizar pedido via AJAX
-                    console.log('Carrinho antes de enviar:', carrinho);
-                    carrinho.forEach((item, index) => {
-                        console.log(`Item ${index}:`, {
-                            id: item.id,
-                            nome: item.nome,
-                            ingredientes_adicionados: item.ingredientes_adicionados,
-                            ingredientes_removidos: item.ingredientes_removidos
-                        });
-                    });
+            const formData = new URLSearchParams();
+            formData.append('action', isEditing ? 'atualizar_pedido' : 'criar_pedido');
+            formData.append('mesa_id', mesaSelecionada.id);
+            formData.append('itens', JSON.stringify(carrinho));
+            formData.append('observacao', document.getElementById('observacaoPedido').value || '');
+            
+            if (isEditing) {
+                formData.append('pedido_id', pedidoId);
+            }
+            
+            fetch('index.php?action=pedidos', {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire('Sucesso', data.message, 'success');
                     
-                    const formData = new URLSearchParams();
-                    formData.append('action', isEditing ? 'atualizar_pedido' : 'criar_pedido');
-                    formData.append('mesa_id', mesaSelecionada.id);
-                    formData.append('itens', JSON.stringify(carrinho));
-                    formData.append('observacao', document.getElementById('observacaoPedido').value || '');
+                    // Verificar se deve imprimir
+                    const deveImprimir = document.getElementById('imprimirPedido').checked;
+                    console.log('Deve imprimir:', deveImprimir);
+                    console.log('Dados do pedido:', data.pedido);
                     
-                    if (isEditing) {
-                        formData.append('pedido_id', pedidoId);
+                    if (deveImprimir && data.pedido) {
+                        // Preparar dados para impressão
+                        const pedidoData = {
+                            id: data.pedido.idpedido || data.pedido.id,
+                            tipo: mesaSelecionada.tipo || 'mesa',
+                            mesa: mesaSelecionada.numero || mesaSelecionada.nome,
+                            cliente: mesaSelecionada.cliente || 'Cliente Mesa',
+                            telefone: mesaSelecionada.telefone || '',
+                            endereco: mesaSelecionada.endereco || '',
+                            itens: carrinho,
+                            valor_total: carrinho.reduce((total, item) => total + (item.preco * item.quantidade), 0),
+                            observacao: document.getElementById('observacaoPedido').value || ''
+                        };
+                        
+                        console.log('Dados preparados para impressão:', pedidoData);
+                        
+                        // Imprimir cupom
+                        setTimeout(() => {
+                            imprimirCupom(pedidoData);
+                        }, 1000);
+                    } else {
+                        console.log('Não imprimindo - deveImprimir:', deveImprimir, 'data.pedido:', data.pedido);
                     }
                     
-                    fetch('index.php?action=pedidos', {
-                        method: 'POST',
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest',
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                        },
-                        body: formData
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            Swal.fire('Sucesso', data.message, 'success');
-                            
-                            // Verificar se deve imprimir
-                            const deveImprimir = document.getElementById('imprimirPedido').checked;
-                            console.log('Deve imprimir:', deveImprimir);
-                            console.log('Dados do pedido:', data.pedido);
-                            
-                            if (deveImprimir && data.pedido) {
-                                // Preparar dados para impressão
-                                const pedidoData = {
-                                    id: data.pedido.idpedido || data.pedido.id,
-                                    tipo: mesaSelecionada.tipo || 'mesa',
-                                    mesa: mesaSelecionada.numero || mesaSelecionada.nome,
-                                    cliente: mesaSelecionada.cliente || 'Cliente Mesa',
-                                    telefone: mesaSelecionada.telefone || '',
-                                    endereco: mesaSelecionada.endereco || '',
-                                    itens: carrinho,
-                                    valor_total: carrinho.reduce((total, item) => total + (item.preco * item.quantidade), 0),
-                                    observacao: document.getElementById('observacaoPedido').value || ''
-                                };
-                                
-                                console.log('Dados preparados para impressão:', pedidoData);
-                                
-                                // Imprimir cupom
-                                setTimeout(() => {
-                                    imprimirCupom(pedidoData);
-                                }, 1000);
-                            } else {
-                                console.log('Não imprimindo - deveImprimir:', deveImprimir, 'data.pedido:', data.pedido);
-                            }
-                            
-                            if (!isEditing) {
-                                // Reset form apenas para novos pedidos
-                                carrinho = [];
-                                mesaSelecionada = null;
-                                document.querySelectorAll('.mesa-card').forEach(card => {
-                                    card.classList.remove('selected');
-                                });
-                                atualizarCarrinho();
-                            }
-                            
-                            // Redirecionar para pedidos após 3 segundos (para dar tempo da impressão)
-                            setTimeout(() => {
-                                window.location.href = '<?php echo $router->url('pedidos'); ?>';
-                            }, 3000);
-                        } else {
-                            Swal.fire('Erro', data.message, 'error');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        Swal.fire('Erro', 'Erro ao criar pedido', 'error');
-                    });
+                    if (!isEditing) {
+                        // Reset form apenas para novos pedidos
+                        carrinho = [];
+                        mesaSelecionada = null;
+                        document.querySelectorAll('.mesa-card').forEach(card => {
+                            card.classList.remove('selected');
+                        });
+                        atualizarCarrinho();
+                    }
+                    
+                    // Redirecionar para pedidos após 3 segundos (para dar tempo da impressão)
+                    setTimeout(() => {
+                        window.location.href = '<?php echo $router->url('pedidos'); ?>';
+                    }, 3000);
+                } else {
+                    Swal.fire('Erro', data.message, 'error');
                 }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                Swal.fire('Erro', 'Erro ao criar pedido', 'error');
             });
         }
 

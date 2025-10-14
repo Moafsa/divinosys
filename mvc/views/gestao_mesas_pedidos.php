@@ -571,84 +571,78 @@ function atualizarStatus() {
 }
 
 function finalizarPedido(pedidoId) {
-    if (confirm('Tem certeza que deseja finalizar este pedido?')) {
-        fetch('mvc/ajax/gestao_mesas_pedidos.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: `acao=finalizar_pedido&pedido_id=${pedidoId}`
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('Pedido finalizado com sucesso!');
-                carregarStatusGeral();
-                carregarPedidosAtivos();
-                carregarMesas();
-            } else {
-                alert('Erro ao finalizar pedido: ' + data.message);
-            }
-        })
-        .catch(error => {
-            console.error('Erro:', error);
-            alert('Erro ao finalizar pedido');
-        });
-    }
+    fetch('mvc/ajax/gestao_mesas_pedidos.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `acao=finalizar_pedido&pedido_id=${pedidoId}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Pedido finalizado com sucesso!');
+            carregarStatusGeral();
+            carregarPedidosAtivos();
+            carregarMesas();
+        } else {
+            alert('Erro ao finalizar pedido: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao finalizar pedido');
+    });
 }
 
 function liberarMesa(mesaId) {
-    if (confirm('Tem certeza que deseja liberar esta mesa? Todos os pedidos ativos serão finalizados.')) {
-        fetch('mvc/ajax/gestao_mesas_pedidos.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: `acao=liberar_mesa&mesa_id=${mesaId}`
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('Mesa liberada com sucesso!');
-                carregarStatusGeral();
-                carregarMesas();
-                carregarPedidosAtivos();
-            } else {
-                alert('Erro ao liberar mesa: ' + data.message);
-            }
-        })
-        .catch(error => {
-            console.error('Erro:', error);
-            alert('Erro ao liberar mesa');
-        });
-    }
+    fetch('mvc/ajax/gestao_mesas_pedidos.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `acao=liberar_mesa&mesa_id=${mesaId}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Mesa liberada com sucesso!');
+            carregarStatusGeral();
+            carregarMesas();
+            carregarPedidosAtivos();
+        } else {
+            alert('Erro ao liberar mesa: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao liberar mesa');
+    });
 }
 
 function forcarFinalizacao(pedidoId) {
-    if (confirm('Tem certeza que deseja forçar a finalização deste pedido antigo?')) {
-        fetch('mvc/ajax/gestao_mesas_pedidos.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: `acao=forcar_finalizacao&pedido_id=${pedidoId}`
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('Pedido finalizado com sucesso!');
-                carregarStatusGeral();
-                carregarPedidosAntigos();
-                carregarMesas();
-            } else {
-                alert('Erro ao finalizar pedido: ' + data.message);
-            }
-        })
-        .catch(error => {
-            console.error('Erro:', error);
-            alert('Erro ao finalizar pedido');
-        });
-    }
+    fetch('mvc/ajax/gestao_mesas_pedidos.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `acao=forcar_finalizacao&pedido_id=${pedidoId}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Pedido finalizado com sucesso!');
+            carregarStatusGeral();
+            carregarPedidosAntigos();
+            carregarMesas();
+        } else {
+            alert('Erro ao finalizar pedido: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao finalizar pedido');
+    });
 }
 
 function gerarRelatorioMesas() {

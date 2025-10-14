@@ -220,6 +220,209 @@ class Auth
     }
 
     /**
+     * Gerar e enviar código de acesso via WhatsApp
+     */
+    public static function generateAndSendAccessCode($telefone, $tenantId, $filialId = null)
+    {
+        try {
+            // Buscar ou criar usuário
+            $usuario = self::findUserByPhone($telefone);
+            if (!$usuario) {
+                // Criar novo usuário
+                $usuarioId = self::createUser([
+                    'nome' => 'Usuário ' . $telefone,
+                    'ativo' => true
+                ]);
+                
+                // Adicionar telefone
+                self::addUserPhone($usuarioId, $telefone, 'principal');
+                
+                $usuario = self::findUserByPhone($telefone);
+            }
+
+            // Verificar se usuário tem acesso ao estabelecimento
+            $userEstablishment = self::$db->fetch(
+                "SELECT * FROM usuarios_estabelecimento 
+                 WHERE usuario_global_id = ? AND tenant_id = ? AND filial_id = ? AND ativo = true",
+                [$usuario['id'], $tenantId, $filialId]
+            );
+
+            if (!$userEstablishment) {
+                // Criar associação com estabelecimento como cliente
+                self::$db->insert('usuarios_estabelecimento', [
+                    'usuario_global_id' => $usuario['id'],
+                    'tenant_id' => $tenantId,
+                    'filial_id' => $filialId,
+                    'tipo_usuario' => 'cliente',
+                    'ativo' => true
+                ]);
+            }
+
+            // Gerar código de acesso (6 dígitos)
+            $codigo = str_pad(random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
+            
+            // Definir expiração (5 minutos)
+            $expiraEm = date('Y-m-d H:i:s', strtotime('+5 minutes'));
+
+            // Salvar código no banco
+            self::$db->insert('codigos_acesso', [
+                'usuario_global_id' => $usuario['id'],
+                'telefone' => $telefone,
+                'codigo' => $codigo,
+                'expira_em' => $expiraEm,
+                'tenant_id' => $tenantId,
+                'filial_id' => $filialId
+            ]);
+
+            // Enviar código via WhatsApp
+            $sendResult = self::sendAccessCodeViaWhatsApp($telefone, $codigo, $tenantId, $filialId);
+            
+            if (!$sendResult['success']) {
+                return $sendResult;
+            }
+
+            return [
+                'success' => true,
+                'message' => 'Código de acesso enviado para seu WhatsApp',
+                'usuario_id' => $usuario['id'],
+                'expires_in' => 300 // 5 minutos em segundos
+            ];
+
+        } catch (\Exception $e) {
+            error_log("Auth::generateAndSendAccessCode - Error: " . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'Erro ao gerar código de acesso: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Enviar código de acesso via WhatsApp usando WuzAPI
+     */
+    public static function sendAccessCodeViaWhatsApp($telefone, $codigo, $tenantId, $filialId)
+    {
+        try {
+            // Buscar instância WhatsApp ativa
+            $instancia = self::$db->fetch(
+                "SELECT * FROM whatsapp_instances 
+                 WHERE tenant_id = ? AND filial_id = ? AND status = 'open' 
+                 ORDER BY created_at DESC LIMIT 1",
+                [$tenantId, $filialId]
+            );
+
+            if (!$instancia) {
+                return [
+                    'success' => false,
+                    'message' => 'Nenhuma instância WhatsApp ativa encontrada'
+                ];
+            }
+
+            // Formatar telefone (remover caracteres especiais e adicionar código do país se necessário)
+            $telefoneFormatado = preg_replace('/[^0-9]/', '', $telefone);
+            if (strlen($telefoneFormatado) == 11 && substr($telefoneFormatado, 0, 2) == '11') {
+                $telefoneFormatado = '55' . $telefoneFormatado; // Adicionar código do Brasil
+            }
+
+            // Criar mensagem
+            $mensagem = "🔐 *Divino Lanches - Código de Acesso*\n\n";
+            $mensagem .= "Seu código de acesso é: *{$codigo}*\n\n";
+            $mensagem .= "⏰ Este código expira em 5 minutos.\n";
+            $mensagem .= "🚫 Não compartilhe este código com ninguém.\n\n";
+            $mensagem .= "Se você não solicitou este código, ignore esta mensagem.";
+
+            // Usar WuzAPIManager para enviar mensagem
+            $wuzapiManager = new \System\WhatsApp\WuzAPIManager();
+            $result = $wuzapiManager->sendMessage($instancia['id'], $telefoneFormatado, $mensagem);
+
+            if ($result['success']) {
+                return [
+                    'success' => true,
+                    'message' => 'Código enviado com sucesso',
+                    'message_id' => $result['message_id'] ?? null
+                ];
+            } else {
+                return [
+                    'success' => false,
+                    'message' => 'Erro ao enviar código: ' . $result['message']
+                ];
+            }
+
+        } catch (\Exception $e) {
+            error_log("Auth::sendAccessCodeViaWhatsApp - Error: " . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'Erro ao enviar código via WhatsApp: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Validar código de acesso
+     */
+    public static function validateAccessCode($telefone, $codigo, $tenantId, $filialId = null)
+    {
+        try {
+            // Buscar código válido
+            $codigoData = self::$db->fetch(
+                "SELECT ca.*, ug.* FROM codigos_acesso ca
+                 JOIN usuarios_globais ug ON ca.usuario_global_id = ug.id
+                 WHERE ca.telefone = ? AND ca.codigo = ? AND ca.tenant_id = ? 
+                 AND ca.filial_id = ? AND ca.usado = false AND ca.expira_em > NOW()",
+                [$telefone, $codigo, $tenantId, $filialId]
+            );
+
+            if (!$codigoData) {
+                return [
+                    'success' => false,
+                    'message' => 'Código inválido ou expirado'
+                ];
+            }
+
+            // Marcar código como usado
+            self::$db->update(
+                'codigos_acesso',
+                ['usado' => true],
+                'id = ?',
+                [$codigoData['id']]
+            );
+
+            // Buscar dados do estabelecimento do usuário
+            $userEstablishment = self::$db->fetch(
+                "SELECT * FROM usuarios_estabelecimento 
+                 WHERE usuario_global_id = ? AND tenant_id = ? AND filial_id = ? AND ativo = true",
+                [$codigoData['usuario_global_id'], $tenantId, $filialId]
+            );
+
+            if (!$userEstablishment) {
+                return [
+                    'success' => false,
+                    'message' => 'Usuário não tem acesso a este estabelecimento'
+                ];
+            }
+
+            // Criar sessão
+            $sessionToken = self::createSession($codigoData['usuario_global_id'], $tenantId, $filialId);
+
+            return [
+                'success' => true,
+                'message' => 'Login realizado com sucesso',
+                'user' => $codigoData,
+                'establishment' => $userEstablishment,
+                'session_token' => $sessionToken,
+                'permissions' => self::getUserPermissions($userEstablishment['tipo_usuario'])
+            ];
+
+        } catch (\Exception $e) {
+            error_log("Auth::validateAccessCode - Error: " . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'Erro ao validar código: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
      * Buscar todos os telefones de um usuário
      */
     public static function getUserPhones($usuarioGlobalId)
@@ -367,22 +570,24 @@ class Auth
         $permissions = [
             'admin' => [
                 'dashboard', 'pedidos', 'delivery', 'produtos', 'estoque', 
-                'financeiro', 'relatorios', 'clientes', 'configuracoes', 'usuarios'
+                'financeiro', 'relatorios', 'clientes', 'configuracoes', 'usuarios',
+                'novo_pedido', 'mesas', 'relatorios_avancados'
             ],
             'cozinha' => [
-                'pedidos', 'estoque'
+                'pedidos', 'estoque', 'produtos'
             ],
             'garcom' => [
-                'novo_pedido', 'pedidos', 'delivery'
+                'novo_pedido', 'pedidos', 'delivery', 'dashboard', 'mesas'
             ],
             'entregador' => [
-                'delivery'
+                'delivery', 'pedidos'
             ],
             'caixa' => [
-                'dashboard', 'novo_pedido', 'delivery', 'produtos', 'estoque'
+                'dashboard', 'novo_pedido', 'delivery', 'produtos', 'estoque', 
+                'pedidos', 'financeiro', 'mesas'
             ],
             'cliente' => [
-                'historico_pedidos'
+                'historico_pedidos', 'perfil', 'novo_pedido'
             ]
         ];
 

@@ -167,10 +167,35 @@
                 </div>
                 
                 <button type="submit" class="btn btn-login" id="btnLogin">
-                    <span class="btn-text">Solicitar Login</span>
+                    <span class="btn-text">Solicitar Código</span>
                     <span class="loading">
                         <i class="fas fa-spinner fa-spin"></i> Enviando...
                     </span>
+                </button>
+            </form>
+        </div>
+        
+        <div id="codeForm" style="display: none;">
+            <form id="formCode">
+                <div class="mb-3">
+                    <label for="codigo" class="form-label">Código de Acesso</label>
+                    <div class="phone-input">
+                        <i class="fas fa-key"></i>
+                        <input type="text" class="form-control" id="codigo" name="codigo" 
+                               placeholder="000000" maxlength="6" required>
+                    </div>
+                    <small class="text-muted">Digite o código de 6 dígitos enviado para seu WhatsApp</small>
+                </div>
+                
+                <button type="submit" class="btn btn-login" id="btnValidateCode">
+                    <span class="btn-text">Validar Código</span>
+                    <span class="loading">
+                        <i class="fas fa-spinner fa-spin"></i> Validando...
+                    </span>
+                </button>
+                
+                <button type="button" class="btn btn-outline-secondary mt-2 w-100" id="btnBack">
+                    <i class="fas fa-arrow-left"></i> Voltar
                 </button>
             </form>
         </div>
@@ -192,7 +217,7 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
-        let tokenAtual = null;
+        let telefoneAtual = null;
         let estabelecimentos = [];
         let estabelecimentoSelecionado = null;
 
@@ -211,6 +236,11 @@
             }
         });
 
+        // Máscara para código (apenas números)
+        document.getElementById('codigo').addEventListener('input', function(e) {
+            e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
+        });
+
         // Formulário de login
         document.getElementById('formLogin').addEventListener('submit', function(e) {
             e.preventDefault();
@@ -222,10 +252,33 @@
                 return;
             }
             
-            solicitarLogin(telefone);
+            telefoneAtual = telefone;
+            solicitarCodigo(telefone);
         });
 
-        function solicitarLogin(telefone) {
+        // Formulário de código
+        document.getElementById('formCode').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const codigo = document.getElementById('codigo').value;
+            
+            if (codigo.length !== 6) {
+                showAlert('Por favor, insira o código de 6 dígitos', 'warning');
+                return;
+            }
+            
+            validarCodigo(telefoneAtual, codigo);
+        });
+
+        // Botão voltar
+        document.getElementById('btnBack').addEventListener('click', function() {
+            document.getElementById('loginForm').style.display = 'block';
+            document.getElementById('codeForm').style.display = 'none';
+            document.getElementById('telefone').value = '';
+            telefoneAtual = null;
+        });
+
+        function solicitarCodigo(telefone) {
             const btnLogin = document.getElementById('btnLogin');
             const btnText = btnLogin.querySelector('.btn-text');
             const loading = btnLogin.querySelector('.loading');
@@ -234,30 +287,32 @@
             btnText.style.display = 'none';
             loading.classList.add('show');
             
-            fetch('mvc/ajax/auth.php', {
+            fetch('mvc/ajax/phone_auth.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 },
-                body: `action=solicitar_login&telefone=${telefone}`
+                body: `action=solicitar_codigo&telefone=${telefone}`
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    showAlert('Link de login enviado para seu WhatsApp!', 'success');
+                    showAlert('Código de acesso enviado para seu WhatsApp!', 'success');
                     
-                    // Simular envio para n8n (em produção, isso seria feito pelo n8n)
-                    console.log('Dados para n8n:', data.data);
+                    // Mostrar formulário de código
+                    document.getElementById('loginForm').style.display = 'none';
+                    document.getElementById('codeForm').style.display = 'block';
+                    document.getElementById('codigo').focus();
                     
-                    // Verificar token automaticamente
-                    verificarToken(data.data.login_url);
+                    // Timer para expiração do código
+                    startCodeTimer(data.expires_in || 300);
                 } else {
-                    showAlert(data.message || 'Erro ao solicitar login', 'error');
+                    showAlert(data.message || 'Erro ao solicitar código', 'error');
                 }
             })
             .catch(error => {
                 console.error('Erro:', error);
-                showAlert('Erro ao solicitar login', 'error');
+                showAlert('Erro ao solicitar código', 'error');
             })
             .finally(() => {
                 btnLogin.disabled = false;
@@ -266,119 +321,96 @@
             });
         }
 
-        function verificarToken(loginUrl) {
-            const url = new URL(loginUrl);
-            const token = url.searchParams.get('token');
+        function validarCodigo(telefone, codigo) {
+            const btnValidateCode = document.getElementById('btnValidateCode');
+            const btnText = btnValidateCode.querySelector('.btn-text');
+            const loading = btnValidateCode.querySelector('.loading');
             
-            if (!token) return;
-            
-            tokenAtual = token;
-            
-            // Verificar token a cada 2 segundos
-            const interval = setInterval(() => {
-                fetch(`mvc/ajax/auth.php?action=validar_token&token=${token}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        clearInterval(interval);
-                        estabelecimentos = data.estabelecimentos;
-                        mostrarEstabelecimentos();
-                    }
-                })
-                .catch(error => {
-                    console.error('Erro ao verificar token:', error);
-                });
-            }, 2000);
-            
-            // Parar verificação após 5 minutos
-            setTimeout(() => {
-                clearInterval(interval);
-            }, 300000);
-        }
-
-        function mostrarEstabelecimentos() {
-            const loginForm = document.getElementById('loginForm');
-            const estabelecimentoSelect = document.getElementById('estabelecimentoSelect');
-            const estabelecimentosList = document.getElementById('estabelecimentosList');
-            
-            loginForm.style.display = 'none';
-            estabelecimentoSelect.classList.add('show');
-            
-            estabelecimentosList.innerHTML = '';
-            
-            estabelecimentos.forEach(estabelecimento => {
-                const card = document.createElement('div');
-                card.className = 'estabelecimento-card';
-                card.onclick = () => selecionarEstabelecimento(estabelecimento, card);
-                
-                card.innerHTML = `
-                    <h6>${estabelecimento.tenant_nome || 'Estabelecimento'}</h6>
-                    <small>${estabelecimento.filial_nome || 'Filial Principal'}</small>
-                    <br>
-                    <small><strong>Cargo:</strong> ${estabelecimento.cargo || estabelecimento.tipo_usuario}</small>
-                `;
-                
-                estabelecimentosList.appendChild(card);
-            });
-        }
-
-        function selecionarEstabelecimento(estabelecimento, card) {
-            // Remover seleção anterior
-            document.querySelectorAll('.estabelecimento-card').forEach(c => {
-                c.classList.remove('selected');
-            });
-            
-            // Selecionar atual
-            card.classList.add('selected');
-            estabelecimentoSelecionado = estabelecimento;
-            
-            // Habilitar botão entrar
-            document.getElementById('btnEntrar').disabled = false;
-        }
-
-        // Botão entrar
-        document.getElementById('btnEntrar').addEventListener('click', function() {
-            if (!estabelecimentoSelecionado || !tokenAtual) {
-                showAlert('Selecione um estabelecimento', 'warning');
-                return;
-            }
-            
-            const btnEntrar = this;
-            const btnText = btnEntrar.querySelector('.btn-text');
-            const loading = btnEntrar.querySelector('.loading');
-            
-            btnEntrar.disabled = true;
+            btnValidateCode.disabled = true;
             btnText.style.display = 'none';
             loading.classList.add('show');
             
-            fetch('mvc/ajax/auth.php', {
+            fetch('mvc/ajax/phone_auth.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 },
-                body: `action=fazer_login&token=${tokenAtual}&tenant_id=${estabelecimentoSelecionado.tenant_id}&filial_id=${estabelecimentoSelecionado.filial_id}`
+                body: `action=validar_codigo&telefone=${telefone}&codigo=${codigo}`
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
                     showAlert('Login realizado com sucesso!', 'success');
+                    
+                    // Redirecionar baseado no tipo de usuário
                     setTimeout(() => {
-                        window.location.href = 'index.php?view=dashboard';
+                        redirectByUserType(data.user_type, data.permissions);
                     }, 1500);
                 } else {
-                    showAlert(data.message || 'Erro ao fazer login', 'error');
+                    showAlert(data.message || 'Código inválido ou expirado', 'error');
                 }
             })
             .catch(error => {
                 console.error('Erro:', error);
-                showAlert('Erro ao fazer login', 'error');
+                showAlert('Erro ao validar código', 'error');
             })
             .finally(() => {
-                btnEntrar.disabled = false;
+                btnValidateCode.disabled = false;
                 btnText.style.display = 'inline';
                 loading.classList.remove('show');
             });
-        });
+        }
+
+        function redirectByUserType(userType, permissions) {
+            let redirectUrl = 'index.php?view=dashboard';
+            
+            switch (userType) {
+                case 'admin':
+                    redirectUrl = 'index.php?view=dashboard';
+                    break;
+                case 'cozinha':
+                    redirectUrl = 'index.php?view=pedidos';
+                    break;
+                case 'garcom':
+                    redirectUrl = 'index.php?view=dashboard';
+                    break;
+                case 'entregador':
+                    redirectUrl = 'index.php?view=delivery';
+                    break;
+                case 'caixa':
+                    redirectUrl = 'index.php?view=dashboard';
+                    break;
+                case 'cliente':
+                    redirectUrl = 'index.php?view=cliente_dashboard';
+                    break;
+                default:
+                    redirectUrl = 'index.php?view=dashboard';
+            }
+            
+            window.location.href = redirectUrl;
+        }
+
+        function startCodeTimer(seconds) {
+            const timerElement = document.createElement('div');
+            timerElement.id = 'codeTimer';
+            timerElement.className = 'text-center text-muted mt-2';
+            document.getElementById('codeForm').appendChild(timerElement);
+            
+            let timeLeft = seconds;
+            const timer = setInterval(() => {
+                const minutes = Math.floor(timeLeft / 60);
+                const seconds = timeLeft % 60;
+                timerElement.textContent = `Código expira em: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+                
+                if (timeLeft <= 0) {
+                    clearInterval(timer);
+                    timerElement.textContent = 'Código expirado. Solicite um novo código.';
+                    timerElement.className = 'text-center text-danger mt-2';
+                }
+                timeLeft--;
+            }, 1000);
+        }
+
 
         function showAlert(message, type) {
             const alertContainer = document.getElementById('alertContainer');
