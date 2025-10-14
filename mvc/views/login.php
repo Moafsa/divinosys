@@ -162,7 +162,7 @@
                     <div class="phone-input">
                         <i class="fas fa-phone"></i>
                         <input type="tel" class="form-control" id="telefone" name="telefone" 
-                               placeholder="(11) 99999-9999" required>
+                               placeholder="+55 (11) 99999-9999 ou +34 635 13 28 30" required>
                     </div>
                 </div>
                 
@@ -221,19 +221,46 @@
         let estabelecimentos = [];
         let estabelecimentoSelecionado = null;
 
-        // Máscara para telefone
+        // Máscara para telefone internacional
         document.getElementById('telefone').addEventListener('input', function(e) {
             let value = e.target.value.replace(/\D/g, '');
-            if (value.length <= 11) {
-                if (value.length <= 2) {
-                    value = value;
-                } else if (value.length <= 7) {
-                    value = `(${value.slice(0, 2)}) ${value.slice(2)}`;
-                } else {
-                    value = `(${value.slice(0, 2)}) ${value.slice(2, 7)}-${value.slice(7)}`;
+            
+            // Se começar com 55 (Brasil), aplicar máscara brasileira
+            if (value.startsWith('55')) {
+                let brazilNumber = value.substring(2); // Remove o 55
+                if (brazilNumber.length <= 11) {
+                    if (brazilNumber.length <= 2) {
+                        value = `+55 (${brazilNumber}`;
+                    } else if (brazilNumber.length <= 7) {
+                        value = `+55 (${brazilNumber.slice(0, 2)}) ${brazilNumber.slice(2)}`;
+                    } else {
+                        value = `+55 (${brazilNumber.slice(0, 2)}) ${brazilNumber.slice(2, 7)}-${brazilNumber.slice(7)}`;
+                    }
                 }
-                e.target.value = value;
+            } else if (value.startsWith('34')) {
+                // Espanha - formato +34 XXX XXX XXX
+                let spainNumber = value.substring(2);
+                if (spainNumber.length <= 9) {
+                    if (spainNumber.length <= 3) {
+                        value = `+34 ${spainNumber}`;
+                    } else if (spainNumber.length <= 6) {
+                        value = `+34 ${spainNumber.slice(0, 3)} ${spainNumber.slice(3)}`;
+                    } else {
+                        value = `+34 ${spainNumber.slice(0, 3)} ${spainNumber.slice(3, 6)} ${spainNumber.slice(6)}`;
+                    }
+                }
+            } else if (value.length > 0) {
+                // Outros países - formato genérico +XX XXXXXXXXX
+                if (value.length <= 2) {
+                    value = `+${value}`;
+                } else if (value.length <= 5) {
+                    value = `+${value.slice(0, 2)} ${value.slice(2)}`;
+                } else {
+                    value = `+${value.slice(0, 2)} ${value.slice(2)}`;
+                }
             }
+            
+            e.target.value = value;
         });
 
         // Máscara para código (apenas números)
@@ -247,8 +274,8 @@
             
             const telefone = document.getElementById('telefone').value.replace(/\D/g, '');
             
-            if (telefone.length < 10) {
-                showAlert('Por favor, insira um telefone válido', 'warning');
+            if (telefone.length < 8) {
+                showAlert('Por favor, insira um telefone válido (mínimo 8 dígitos)', 'warning');
                 return;
             }
             

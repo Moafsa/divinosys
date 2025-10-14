@@ -1,9 +1,9 @@
 <?php
 
-require_once '../../config/config.php';
-require_once '../../system/Database.php';
-require_once '../../system/Auth.php';
-require_once '../../system/Session.php';
+require_once __DIR__ . '/../../system/Config.php';
+require_once __DIR__ . '/../../system/Database.php';
+require_once __DIR__ . '/../../system/Auth.php';
+require_once __DIR__ . '/../../system/Session.php';
 
 use System\Auth;
 use System\Database;
@@ -22,7 +22,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 try {
     // Initialize database and session
-    Database::init();
+    $config = \System\Config::getInstance();
+    $db = Database::getInstance();
     Auth::init();
     $session = Session::getInstance();
 
@@ -72,7 +73,8 @@ function handleRequestCode() {
     
     // Get tenant and filial from session or default
     $tenantId = $_SESSION['tenant_id'] ?? 1;
-    $filialId = $_SESSION['filial_id'] ?? null;
+    $filialId = $_SESSION['filial_id'] ?? 1;
+    
     
     // Generate and send access code
     $result = Auth::generateAndSendAccessCode($telefone, $tenantId, $filialId);

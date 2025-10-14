@@ -2,6 +2,8 @@
 
 namespace System;
 
+require_once __DIR__ . '/WhatsApp/WuzAPIManager.php';
+
 class Auth
 {
     private static $db;
@@ -304,7 +306,7 @@ class Auth
             // Buscar instância WhatsApp ativa
             $instancia = self::$db->fetch(
                 "SELECT * FROM whatsapp_instances 
-                 WHERE tenant_id = ? AND filial_id = ? AND status = 'open' 
+                 WHERE tenant_id = ? AND (filial_id = ? OR filial_id IS NULL) AND status IN ('open', 'connected') 
                  ORDER BY created_at DESC LIMIT 1",
                 [$tenantId, $filialId]
             );

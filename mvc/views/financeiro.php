@@ -100,7 +100,7 @@ if ($tenant && $filial) {
         [$tenant['id'], $filial['id'], $dataInicio, $dataFim]
     );
     
-    // Calcular resumo financeiro
+    // Calcular resumo financeiro incluindo pedidos quitados
     $resumoFinanceiro = $db->fetch(
         "SELECT 
             COALESCE(SUM(CASE WHEN tipo = 'receita' THEN valor ELSE 0 END), 0) as total_receitas,
@@ -113,6 +113,23 @@ if ($tenant && $filial) {
          AND created_at BETWEEN ? AND ?",
         [$tenant['id'], $filial['id'], $dataInicio . ' 00:00:00', $dataFim . ' 23:59:59']
     );
+    
+    // Adicionar receitas dos pedidos quitados
+    $receitasPedidos = $db->fetch(
+        "SELECT 
+            COALESCE(SUM(valor_total), 0) as total_vendas_pedidos,
+            COUNT(*) as total_pedidos_quitados
+         FROM pedido 
+         WHERE tenant_id = ? AND filial_id = ?
+         AND data BETWEEN ? AND ?
+         AND status_pagamento = 'quitado'",
+        [$tenant['id'], $filial['id'], $dataInicio, $dataFim]
+    );
+    
+    // Somar receitas dos pedidos aos lançamentos
+    $resumoFinanceiro['total_receitas'] += $receitasPedidos['total_vendas_pedidos'];
+    $resumoFinanceiro['saldo_liquido'] = $resumoFinanceiro['total_receitas'] - $resumoFinanceiro['total_despesas'];
+    $resumoFinanceiro['total_lancamentos'] += $receitasPedidos['total_pedidos_quitados'];
 }
 
 // Buscar categorias e contas para filtros
@@ -135,7 +152,12 @@ $contas = $db->fetchAll(
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
+    <link href="assets/css/sidebar.css" rel="stylesheet">
     <style>
+        :root {
+            --primary-color: <?php echo $tenant['cor_primaria'] ?? '#007bff'; ?>;
+            --primary-light: <?php echo $tenant['cor_primaria'] ?? '#007bff'; ?>20;
+        }
         .financial-card {
             border: none;
             border-radius: 15px;
@@ -230,33 +252,55 @@ $contas = $db->fetchAll(
     </style>
 </head>
 <body class="bg-light">
-    <!-- Sidebar -->
-    <div class="d-flex">
-        <div class="bg-primary" style="width: 60px; min-height: 100vh;">
-            <div class="d-flex flex-column align-items-center py-3">
-                <a href="index.php?view=dashboard" class="text-white mb-3" title="Dashboard">
-                    <i class="fas fa-tachometer-alt fa-lg"></i>
-                </a>
-                <a href="index.php?view=pedidos" class="text-white mb-3" title="Pedidos">
-                    <i class="fas fa-list fa-lg"></i>
-                </a>
-                <a href="index.php?view=delivery" class="text-white mb-3" title="Delivery">
-                    <i class="fas fa-motorcycle fa-lg"></i>
-                </a>
-                <a href="index.php?view=financeiro" class="text-white mb-3" title="Financeiro">
-                    <i class="fas fa-chart-line fa-lg"></i>
-                </a>
-                <a href="index.php?view=relatorios" class="text-white mb-3" title="Relatórios">
-                    <i class="fas fa-chart-bar fa-lg"></i>
-                </a>
-                <a href="index.php?view=configuracoes" class="text-white mb-3" title="Configurações">
-                    <i class="fas fa-cog fa-lg"></i>
-                </a>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="sidebar collapsed" id="sidebar">
+                <button class="sidebar-toggle" id="sidebarToggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <div class="sidebar-content">
+                    <div class="sidebar-brand">
+                        <div class="brand-icon text-white">
+                            <i class="fas fa-utensils"></i>
+                        </div>
+                    </div>
+                    <nav class="nav flex-column">
+                        <a class="nav-link" href="<?php echo $router->url('dashboard'); ?>" data-tooltip="Dashboard">
+                            <i class="fas fa-tachometer-alt"></i>
+                            <span>Dashboard</span>
+                        </a>
+                        <a class="nav-link" href="<?php echo $router->url('gerar_pedido'); ?>" data-tooltip="Novo Pedido">
+                            <i class="fas fa-plus-circle"></i>
+                            <span>Novo Pedido</span>
+                        </a>
+                        <a class="nav-link" href="<?php echo $router->url('pedidos'); ?>" data-tooltip="Pedidos">
+                            <i class="fas fa-list"></i>
+                            <span>Pedidos</span>
+                        </a>
+                        <a class="nav-link" href="<?php echo $router->url('delivery'); ?>" data-tooltip="Delivery">
+                            <i class="fas fa-motorcycle"></i>
+                            <span>Delivery</span>
+                        </a>
+                        <a class="nav-link active" href="<?php echo $router->url('financeiro'); ?>" data-tooltip="Financeiro">
+                            <i class="fas fa-chart-line"></i>
+                            <span>Financeiro</span>
+                        </a>
+                        <a class="nav-link" href="<?php echo $router->url('relatorios'); ?>" data-tooltip="Relatórios">
+                            <i class="fas fa-chart-bar"></i>
+                            <span>Relatórios</span>
+                        </a>
+                        <a class="nav-link" href="<?php echo $router->url('configuracoes'); ?>" data-tooltip="Configurações">
+                            <i class="fas fa-cog"></i>
+                            <span>Configurações</span>
+                        </a>
+                    </nav>
+                </div>
             </div>
-        </div>
 
-        <!-- Main Content -->
-        <div class="flex-grow-1 p-4">
+            <!-- Main Content -->
+            <div class="main-content" id="mainContent">
+                <div class="p-4">
             <!-- Header -->
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <div>
@@ -655,6 +699,7 @@ $contas = $db->fetchAll(
                         </div>
                     </div>
                 </div>
+                </div>
             </div>
         </div>
     </div>
@@ -663,6 +708,7 @@ $contas = $db->fetchAll(
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="assets/js/sidebar.js"></script>
     <script>
         // Inicializar Select2
         $(document).ready(function() {
