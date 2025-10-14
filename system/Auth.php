@@ -212,9 +212,8 @@ class Auth
     public static function findUserByPhone($telefone)
     {
         return self::$db->fetch(
-            "SELECT ug.* FROM usuarios_globais ug 
-             JOIN usuarios_telefones ut ON ug.id = ut.usuario_global_id 
-             WHERE ut.telefone = ? AND ug.ativo = true AND ut.ativo = true",
+            "SELECT * FROM usuarios_globais 
+             WHERE telefone = ? AND ativo = true",
             [$telefone]
         );
     }
@@ -228,14 +227,13 @@ class Auth
             // Buscar ou criar usuário
             $usuario = self::findUserByPhone($telefone);
             if (!$usuario) {
-                // Criar novo usuário
-                $usuarioId = self::createUser([
+                // Criar novo usuário na tabela usuarios_globais
+                $usuarioId = self::$db->insert('usuarios_globais', [
                     'nome' => 'Usuário ' . $telefone,
+                    'telefone' => $telefone,
+                    'tipo_usuario' => 'cliente',
                     'ativo' => true
                 ]);
-                
-                // Adicionar telefone
-                self::addUserPhone($usuarioId, $telefone, 'principal');
                 
                 $usuario = self::findUserByPhone($telefone);
             }
