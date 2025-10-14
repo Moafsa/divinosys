@@ -249,6 +249,47 @@ $contas = $db->fetchAll(
         .loading.show {
             display: block;
         }
+        
+        /* Responsividade */
+        .main-content {
+            margin-left: 60px;
+            transition: margin-left 0.3s ease;
+            min-height: 100vh;
+            overflow-x: auto;
+        }
+        
+        .sidebar.expanded + .main-content {
+            margin-left: 250px;
+        }
+        
+        @media (max-width: 768px) {
+            .main-content {
+                margin-left: 0;
+            }
+            
+            .sidebar.expanded + .main-content {
+                margin-left: 0;
+            }
+            
+            .card {
+                margin-bottom: 1rem;
+            }
+            
+            .table-responsive {
+                font-size: 0.875rem;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            .p-4 {
+                padding: 1rem !important;
+            }
+            
+            .btn-group-vertical .btn {
+                font-size: 0.8rem;
+                padding: 0.375rem 0.75rem;
+            }
+        }
     </style>
 </head>
 <body class="bg-light">
@@ -278,9 +319,21 @@ $contas = $db->fetchAll(
                             <i class="fas fa-list"></i>
                             <span>Pedidos</span>
                         </a>
+                        <a class="nav-link" href="<?php echo $router->url('mesas'); ?>" data-tooltip="Mesas">
+                            <i class="fas fa-table"></i>
+                            <span>Mesas</span>
+                        </a>
                         <a class="nav-link" href="<?php echo $router->url('delivery'); ?>" data-tooltip="Delivery">
                             <i class="fas fa-motorcycle"></i>
                             <span>Delivery</span>
+                        </a>
+                        <a class="nav-link" href="<?php echo $router->url('gerenciar_produtos'); ?>" data-tooltip="Produtos">
+                            <i class="fas fa-box"></i>
+                            <span>Produtos</span>
+                        </a>
+                        <a class="nav-link" href="<?php echo $router->url('estoque'); ?>" data-tooltip="Estoque">
+                            <i class="fas fa-warehouse"></i>
+                            <span>Estoque</span>
                         </a>
                         <a class="nav-link active" href="<?php echo $router->url('financeiro'); ?>" data-tooltip="Financeiro">
                             <i class="fas fa-chart-line"></i>
@@ -290,9 +343,21 @@ $contas = $db->fetchAll(
                             <i class="fas fa-chart-bar"></i>
                             <span>Relatórios</span>
                         </a>
+                        <a class="nav-link" href="<?php echo $router->url('clientes'); ?>" data-tooltip="Clientes">
+                            <i class="fas fa-users"></i>
+                            <span>Clientes</span>
+                        </a>
+                        <a class="nav-link" href="<?php echo $router->url('ai_chat'); ?>" data-tooltip="Assistente IA">
+                            <i class="fas fa-robot"></i>
+                            <span>Assistente IA</span>
+                        </a>
                         <a class="nav-link" href="<?php echo $router->url('configuracoes'); ?>" data-tooltip="Configurações">
                             <i class="fas fa-cog"></i>
                             <span>Configurações</span>
+                        </a>
+                        <a class="nav-link" href="<?php echo $router->url('logout'); ?>" data-tooltip="Sair">
+                            <i class="fas fa-sign-out-alt"></i>
+                            <span>Sair</span>
                         </a>
                     </nav>
                 </div>
@@ -635,6 +700,10 @@ $contas = $db->fetchAll(
                                                                     <i class="fas fa-download me-1"></i>
                                                                     Exportar
                                                                 </button>
+                                                                <button class="btn btn-outline-danger" onclick="excluirPedido(<?= $pedido['idpedido'] ?>)">
+                                                                    <i class="fas fa-trash me-1"></i>
+                                                                    Excluir Pedido
+                                                                </button>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -767,6 +836,55 @@ $contas = $db->fetchAll(
                 title: 'Exportar Pedido',
                 text: 'Funcionalidade em desenvolvimento',
                 icon: 'info'
+            });
+        }
+
+        function excluirPedido(id) {
+            Swal.fire({
+                title: 'Excluir Pedido',
+                text: 'Tem certeza que deseja excluir este pedido? Esta ação não pode ser desfeita.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sim, excluir',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#dc3545'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Fazer requisição AJAX para excluir
+                    fetch('mvc/ajax/pedidos.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: `action=excluir_pedido&pedido_id=${id}`
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire({
+                                title: 'Excluído!',
+                                text: 'Pedido excluído com sucesso.',
+                                icon: 'success'
+                            }).then(() => {
+                                location.reload();
+                            });
+                        } else {
+                            Swal.fire({
+                                title: 'Erro!',
+                                text: data.message || 'Erro ao excluir pedido',
+                                icon: 'error'
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro:', error);
+                        Swal.fire({
+                            title: 'Erro!',
+                            text: 'Erro ao processar solicitação',
+                            icon: 'error'
+                        });
+                    });
+                }
             });
         }
 

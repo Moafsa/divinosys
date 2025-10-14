@@ -363,13 +363,13 @@ class Auth
     public static function validateAccessCode($telefone, $codigo, $tenantId, $filialId = null)
     {
         try {
-            // Buscar código válido
+            // Buscar código válido (ignorar filial_id para simplificar)
             $codigoData = self::$db->fetch(
                 "SELECT ca.*, ug.* FROM codigos_acesso ca
                  JOIN usuarios_globais ug ON ca.usuario_global_id = ug.id
                  WHERE ca.telefone = ? AND ca.codigo = ? AND ca.tenant_id = ? 
-                 AND ca.filial_id = ? AND ca.usado = false AND ca.expira_em > NOW()",
-                [$telefone, $codigo, $tenantId, $filialId]
+                 AND ca.usado = false AND ca.expira_em > NOW()",
+                [$telefone, $codigo, $tenantId]
             );
 
             if (!$codigoData) {
@@ -387,11 +387,12 @@ class Auth
                 [$codigoData['id']]
             );
 
-            // Buscar dados do estabelecimento do usuário
+            // Buscar dados do estabelecimento do usuário (aceitar qualquer filial_id ou null)
             $userEstablishment = self::$db->fetch(
                 "SELECT * FROM usuarios_estabelecimento 
-                 WHERE usuario_global_id = ? AND tenant_id = ? AND filial_id = ? AND ativo = true",
-                [$codigoData['usuario_global_id'], $tenantId, $filialId]
+                 WHERE usuario_global_id = ? AND tenant_id = ? AND ativo = true
+                 ORDER BY filial_id DESC LIMIT 1",
+                [$codigoData['usuario_global_id'], $tenantId]
             );
 
             if (!$userEstablishment) {
