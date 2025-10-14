@@ -318,6 +318,93 @@ try {
             ]);
             break;
             
+        case 'buscar_pedido':
+            $pedidoId = $_GET['pedido_id'] ?? $_POST['pedido_id'] ?? '';
+            
+            if (empty($pedidoId)) {
+                throw new \Exception('ID do pedido é obrigatório');
+            }
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId() ?? 1;
+            $filialId = $session->getFilialId() ?? 1;
+            
+            // Buscar pedido
+            $pedido = $db->fetch(
+                "SELECT * FROM pedido WHERE idpedido = ? AND tenant_id = ? AND filial_id = ?",
+                [$pedidoId, $tenantId, $filialId]
+            );
+            
+            if (!$pedido) {
+                throw new \Exception('Pedido não encontrado');
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'pedido' => $pedido
+            ]);
+            break;
+            
+        case 'atualizar_pedido':
+            $pedidoId = $_POST['id'] ?? '';
+            $cliente = $_POST['cliente'] ?? '';
+            $telefoneCliente = $_POST['telefone_cliente'] ?? '';
+            $valorTotal = $_POST['valor_total'] ?? '';
+            $status = $_POST['status'] ?? '';
+            $statusPagamento = $_POST['status_pagamento'] ?? '';
+            $observacao = $_POST['observacao'] ?? '';
+            
+            if (empty($pedidoId) || empty($cliente) || empty($valorTotal)) {
+                throw new \Exception('Campos obrigatórios não preenchidos');
+            }
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId() ?? 1;
+            $filialId = $session->getFilialId() ?? 1;
+            
+            // Verificar se pedido existe
+            $pedidoAtual = $db->fetch(
+                "SELECT * FROM pedido WHERE idpedido = ? AND tenant_id = ? AND filial_id = ?",
+                [$pedidoId, $tenantId, $filialId]
+            );
+            
+            if (!$pedidoAtual) {
+                throw new \Exception('Pedido não encontrado');
+            }
+            
+            $valorTotal = (float) $valorTotal;
+            if ($valorTotal <= 0) {
+                throw new \Exception('Valor total deve ser maior que zero');
+            }
+            
+            // Calcular saldo devedor baseado no novo valor total
+            $valorPago = (float) ($pedidoAtual['valor_pago'] ?? 0);
+            $novoSaldoDevedor = $valorTotal - $valorPago;
+            
+            // Atualizar pedido
+            $atualizado = $db->update('pedido', [
+                'cliente' => $cliente,
+                'telefone_cliente' => $telefoneCliente,
+                'valor_total' => $valorTotal,
+                'saldo_devedor' => $novoSaldoDevedor,
+                'status' => $status,
+                'status_pagamento' => $statusPagamento,
+                'observacao' => $observacao,
+                'updated_at' => date('Y-m-d H:i:s')
+            ], 'idpedido = ? AND tenant_id = ? AND filial_id = ?', [$pedidoId, $tenantId, $filialId]);
+            
+            if (!$atualizado) {
+                throw new \Exception('Erro ao atualizar pedido');
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Pedido atualizado com sucesso!'
+            ]);
+            break;
+            
         case 'excluir_pedido':
             $pedidoId = $_POST['pedido_id'] ?? '';
             

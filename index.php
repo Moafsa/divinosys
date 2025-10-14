@@ -10,6 +10,11 @@ ini_set('display_errors', 1);
 // Set timezone
 date_default_timezone_set('America/Sao_Paulo');
 
+// Start session
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 // Define application paths
 define('APP_PATH', __DIR__);
 define('SYSTEM_PATH', __DIR__ . '/system');

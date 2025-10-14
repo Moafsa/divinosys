@@ -104,7 +104,7 @@ function handleValidateCode() {
     $result = Auth::validateAccessCode($telefone, $codigo, $tenantId, $filialId);
     
     if ($result['success']) {
-        // Set session data
+        // Set session data in the format expected by the main system
         $_SESSION['auth_token'] = $result['session_token'];
         $_SESSION['usuario_global_id'] = $result['user']['usuario_global_id'];
         $_SESSION['tenant_id'] = $tenantId;
@@ -112,6 +112,18 @@ function handleValidateCode() {
         $_SESSION['user_type'] = $result['establishment']['tipo_usuario'];
         $_SESSION['permissions'] = $result['permissions'];
         $_SESSION['user_name'] = $result['user']['nome'];
+        
+        // Set session data in the format expected by Session class
+        $_SESSION['user'] = [
+            'id' => $result['user']['usuario_global_id'],
+            'login' => $result['user']['nome'],
+            'nivel' => $result['establishment']['tipo_usuario'] === 'admin' ? 1 : 2,
+            'tenant_id' => $tenantId,
+            'filial_id' => $filialId
+        ];
+        $_SESSION['user_id'] = $result['user']['usuario_global_id'];
+        $_SESSION['user_login'] = $result['user']['nome'];
+        $_SESSION['user_nivel'] = $result['establishment']['tipo_usuario'] === 'admin' ? 1 : 2;
     }
     
     echo json_encode($result);

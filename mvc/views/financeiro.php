@@ -700,6 +700,10 @@ $contas = $db->fetchAll(
                                                                     <i class="fas fa-download me-1"></i>
                                                                     Exportar
                                                                 </button>
+                                                                <button class="btn btn-outline-warning" onclick="editarPedido(<?= $pedido['idpedido'] ?>)">
+                                                                    <i class="fas fa-edit me-1"></i>
+                                                                    Editar Pedido
+                                                                </button>
                                                                 <button class="btn btn-outline-danger" onclick="excluirPedido(<?= $pedido['idpedido'] ?>)">
                                                                     <i class="fas fa-trash me-1"></i>
                                                                     Excluir Pedido
@@ -836,6 +840,128 @@ $contas = $db->fetchAll(
                 title: 'Exportar Pedido',
                 text: 'Funcionalidade em desenvolvimento',
                 icon: 'info'
+            });
+        }
+
+        function editarPedido(id) {
+            // Buscar dados do pedido
+            fetch(`mvc/ajax/pedidos.php?action=buscar_pedido&pedido_id=${id}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.pedido) {
+                    const pedido = data.pedido;
+                    
+                    Swal.fire({
+                        title: 'Editar Pedido',
+                        html: `
+                            <div class="mb-3">
+                                <label class="form-label">Cliente</label>
+                                <input type="text" class="form-control" id="editCliente" value="${pedido.cliente || ''}" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Telefone</label>
+                                <input type="text" class="form-control" id="editTelefone" value="${pedido.telefone_cliente || ''}" placeholder="(11) 99999-9999">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Valor Total</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">R$</span>
+                                    <input type="number" class="form-control" id="editValorTotal" value="${pedido.valor_total}" step="0.01" min="0" required>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Status do Pedido</label>
+                                <select class="form-select" id="editStatus">
+                                    <option value="Pendente" ${pedido.status === 'Pendente' ? 'selected' : ''}>Pendente</option>
+                                    <option value="Em Preparo" ${pedido.status === 'Em Preparo' ? 'selected' : ''}>Em Preparo</option>
+                                    <option value="Pronto" ${pedido.status === 'Pronto' ? 'selected' : ''}>Pronto</option>
+                                    <option value="Entregue" ${pedido.status === 'Entregue' ? 'selected' : ''}>Entregue</option>
+                                    <option value="Finalizado" ${pedido.status === 'Finalizado' ? 'selected' : ''}>Finalizado</option>
+                                    <option value="Cancelado" ${pedido.status === 'Cancelado' ? 'selected' : ''}>Cancelado</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Status do Pagamento</label>
+                                <select class="form-select" id="editStatusPagamento">
+                                    <option value="pendente" ${pedido.status_pagamento === 'pendente' ? 'selected' : ''}>Pendente</option>
+                                    <option value="parcial" ${pedido.status_pagamento === 'parcial' ? 'selected' : ''}>Parcial</option>
+                                    <option value="quitado" ${pedido.status_pagamento === 'quitado' ? 'selected' : ''}>Quitado</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Observações</label>
+                                <textarea class="form-control" id="editObservacoes" rows="3" placeholder="Observações sobre o pedido...">${pedido.observacao || ''}</textarea>
+                            </div>
+                        `,
+                        showCancelButton: true,
+                        confirmButtonText: 'Salvar',
+                        cancelButtonText: 'Cancelar',
+                        width: '600px',
+                        preConfirm: () => {
+                            const cliente = document.getElementById('editCliente').value;
+                            const telefone = document.getElementById('editTelefone').value;
+                            const valorTotal = document.getElementById('editValorTotal').value;
+                            const status = document.getElementById('editStatus').value;
+                            const statusPagamento = document.getElementById('editStatusPagamento').value;
+                            const observacoes = document.getElementById('editObservacoes').value;
+                            
+                            if (!cliente || !valorTotal) {
+                                Swal.showValidationMessage('Cliente e valor total são obrigatórios');
+                                return false;
+                            }
+                            
+                            return {
+                                id: id,
+                                cliente: cliente,
+                                telefone_cliente: telefone,
+                                valor_total: valorTotal,
+                                status: status,
+                                status_pagamento: statusPagamento,
+                                observacao: observacoes
+                            };
+                        }
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            atualizarPedido(result.value);
+                        }
+                    });
+                } else {
+                    Swal.fire('Erro!', data.message || 'Erro ao buscar pedido', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire('Erro!', 'Erro ao processar solicitação', 'error');
+            });
+        }
+
+        function atualizarPedido(dados) {
+            const formData = new URLSearchParams();
+            formData.append('action', 'atualizar_pedido');
+            Object.keys(dados).forEach(key => {
+                formData.append(key, dados[key]);
+            });
+            
+            fetch('mvc/ajax/pedidos.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire('Sucesso!', 'Pedido atualizado com sucesso!', 'success').then(() => {
+                        location.reload();
+                    });
+                } else {
+                    Swal.fire('Erro!', data.message || 'Erro ao atualizar pedido', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire('Erro!', 'Erro ao processar solicitação', 'error');
             });
         }
 

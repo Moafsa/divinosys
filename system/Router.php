@@ -41,6 +41,7 @@ class Router
             'estoque' => 'estoque.php',
             'financeiro' => 'financeiro.php',
             'relatorios' => 'relatorios.php',
+            'lancamentos' => 'lancamentos.php',
             'agenda' => 'agenda/index.php',
             'clientes' => 'clientes.php',
             'entregadores' => 'entregadores.php',
@@ -78,6 +79,9 @@ class Router
         // Check authentication for protected routes
         if ($this->isProtectedRoute($view)) {
             $this->checkAuthentication();
+            
+            // Check access control based on user type
+            $this->checkAccessControl($view);
         }
 
         // Check tenant context for multi-tenant routes
@@ -99,7 +103,7 @@ class Router
         $multiTenantRoutes = [
             'dashboard', 'gerar_pedido', 'pedidos', 'mesas', 'delivery',
             'gerenciar_produtos', 'gerenciar_categorias', 'estoque',
-            'financeiro', 'relatorios', 'agenda', 'clientes', 'entregadores',
+            'financeiro', 'relatorios', 'lancamentos', 'agenda', 'clientes', 'entregadores',
             'usuarios', 'ai_chat', 'configuracoes', 'whatsapp_config'
         ];
         return in_array($view, $multiTenantRoutes);
@@ -125,6 +129,18 @@ class Router
         }
     }
 
+    private function checkAccessControl($view)
+    {
+        // Importar o AccessControl
+        require_once __DIR__ . '/Middleware/AccessControl.php';
+        
+        // Verificar se o usuário tem acesso à página
+        if (!\System\Middleware\AccessControl::checkAccess($view)) {
+            // O AccessControl já redireciona automaticamente
+            exit();
+        }
+    }
+
     private function loadView($view)
     {
         $viewFile = $this->routes[$view];
@@ -144,6 +160,18 @@ class Router
     private function setGlobalVariables()
     {
         $session = Session::getInstance();
+        
+        // Set access control variables if user is logged in
+        if ($session->isLoggedIn()) {
+            require_once __DIR__ . '/Middleware/AccessControl.php';
+            
+            $navigationMenu = \System\Middleware\AccessControl::getNavigationMenu();
+            $currentUserType = \System\Middleware\AccessControl::getCurrentUserType();
+            
+            // Make these available to views
+            $GLOBALS['navigationMenu'] = $navigationMenu;
+            $GLOBALS['currentUserType'] = $currentUserType;
+        }
         $config = Config::getInstance();
         
         // Make these available in views

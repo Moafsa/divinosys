@@ -319,6 +319,7 @@
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 },
+                credentials: 'same-origin',
                 body: `action=solicitar_codigo&telefone=${telefone}`
             })
             .then(response => response.json())
@@ -362,6 +363,7 @@
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 },
+                credentials: 'same-origin',
                 body: `action=validar_codigo&telefone=${telefone}&codigo=${codigo}`
             })
             .then(response => response.json())
@@ -371,7 +373,7 @@
                     
                     // Redirecionar baseado no tipo de usuário
                     setTimeout(() => {
-                        redirectByUserType(data.user_type, data.permissions);
+                        redirectByUserType(data.establishment?.tipo_usuario, data.permissions);
                     }, 1500);
                 } else {
                     showAlert(data.message || 'Código inválido ou expirado', 'error');
