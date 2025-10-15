@@ -773,10 +773,14 @@ $contas = $db->fetchAll(
                                 <i class="fas fa-credit-card me-2"></i>
                                 Pedidos Fiado
                             </h5>
-                            <button class="btn btn-primary btn-sm" onclick="atualizarPedidosFiado()">
-                                <i class="fas fa-sync-alt me-1"></i>
-                                Atualizar
-                            </button>
+                   <button class="btn btn-primary btn-sm" onclick="atualizarPedidosFiado()">
+                       <i class="fas fa-sync-alt me-1"></i>
+                       Atualizar
+                   </button>
+                   <button class="btn btn-warning btn-sm" onclick="console.log('🔍 Teste manual'); atualizarPedidosFiado();">
+                       <i class="fas fa-bug me-1"></i>
+                       Debug
+                   </button>
                         </div>
                         <div class="card-body">
                             <div class="table-responsive">
@@ -871,10 +875,19 @@ $contas = $db->fetchAll(
                 theme: 'bootstrap-5'
             });
             
-            // Carregar pedidos fiado quando a aba for ativada
-            $('#pedidos-fiado-tab').on('shown.bs.tab', function () {
+        // Carregar pedidos fiado quando a aba for ativada
+        $('#pedidos-fiado-tab').on('shown.bs.tab', function () {
+            console.log('🔍 Aba Pedidos Fiado ativada!');
+            atualizarPedidosFiado();
+        });
+        
+        // Também carregar quando clicar diretamente na aba
+        $('#pedidos-fiado-tab').on('click', function () {
+            console.log('🖱️ Clique na aba Pedidos Fiado!');
+            setTimeout(() => {
                 atualizarPedidosFiado();
-            });
+            }, 100);
+        });
             
             // Carregar total de recebíveis fiado na inicialização
             carregarTotalRecebiveisFiado();
@@ -1043,14 +1056,20 @@ $contas = $db->fetchAll(
         }
 
         function atualizarPedidosFiado() {
+            console.log('🔄 Iniciando atualização de pedidos fiado...');
             fetch('mvc/ajax/financeiro.php?action=buscar_pedidos_fiado', {
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest'
                 }
             })
-            .then(response => response.json())
+            .then(response => {
+                console.log('📡 Resposta recebida:', response.status);
+                return response.json();
+            })
             .then(data => {
+                console.log('📊 Dados recebidos:', data);
                 if (data.success) {
+                    console.log('✅ Sucesso! Processando', data.pedidos.length, 'pedidos');
                     const tbody = document.querySelector('#tabelaPedidosFiado tbody');
                     tbody.innerHTML = '';
                     
@@ -1099,9 +1118,12 @@ $contas = $db->fetchAll(
                     });
                     
                     // Atualizar o card de recebíveis fiado
+                    console.log('💰 Total recebíveis calculado:', totalRecebiveis);
                     document.getElementById('totalFiado').textContent = `R$ ${totalRecebiveis.toFixed(2).replace('.', ',')}`;
+                    console.log('✅ Tabela atualizada com sucesso!');
                     
                 } else {
+                    console.error('❌ Erro na resposta:', data);
                     Swal.fire('Erro', 'Erro ao carregar pedidos fiado', 'error');
                 }
             })
@@ -1112,19 +1134,28 @@ $contas = $db->fetchAll(
         }
 
         function carregarTotalRecebiveisFiado() {
+            console.log('🔄 Carregando total de recebíveis fiado...');
             fetch('mvc/ajax/financeiro.php?action=buscar_total_recebiveis_fiado', {
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest'
                 }
             })
-            .then(response => response.json())
+            .then(response => {
+                console.log('📡 Resposta recebíveis:', response.status);
+                return response.json();
+            })
             .then(data => {
+                console.log('💰 Dados recebíveis:', data);
                 if (data.success) {
-                    document.getElementById('totalFiado').textContent = `R$ ${parseFloat(data.total_recebiveis).toFixed(2).replace('.', ',')}`;
+                    const total = parseFloat(data.total_recebiveis).toFixed(2).replace('.', ',');
+                    console.log('💰 Atualizando card com total:', total);
+                    document.getElementById('totalFiado').textContent = `R$ ${total}`;
+                } else {
+                    console.error('❌ Erro ao carregar recebíveis:', data);
                 }
             })
             .catch(error => {
-                console.error('Error:', error);
+                console.error('❌ Erro na requisição recebíveis:', error);
             });
         }
 
