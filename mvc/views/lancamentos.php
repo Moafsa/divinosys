@@ -223,17 +223,9 @@ $totais = $db->fetch(
                             <i class="fas fa-tachometer-alt"></i>
                             <span>Dashboard</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('gerar_pedido'); ?>" data-tooltip="Novo Pedido">
-                            <i class="fas fa-plus-circle"></i>
-                            <span>Novo Pedido</span>
-                        </a>
                         <a class="nav-link" href="<?php echo $router->url('pedidos'); ?>" data-tooltip="Pedidos">
                             <i class="fas fa-list"></i>
                             <span>Pedidos</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('mesas'); ?>" data-tooltip="Mesas">
-                            <i class="fas fa-table"></i>
-                            <span>Mesas</span>
                         </a>
                         <a class="nav-link" href="<?php echo $router->url('delivery'); ?>" data-tooltip="Delivery">
                             <i class="fas fa-motorcycle"></i>
@@ -856,3 +848,7 @@ $totais = $db->fetch(
     </script>
 </body>
 </html>
+
+
+
+

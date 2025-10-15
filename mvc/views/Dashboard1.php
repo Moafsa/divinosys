@@ -538,61 +538,7 @@ if ($tenant && $filial) {
                             <i class="fas fa-utensils"></i>
                         </div>
                     </div>
-                    <nav class="nav flex-column">
-                        <a class="nav-link active" href="<?php echo $router->url('dashboard'); ?>" data-tooltip="Dashboard">
-                            <i class="fas fa-tachometer-alt"></i>
-                            <span>Dashboard</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('gerar_pedido'); ?>" data-tooltip="Novo Pedido">
-                            <i class="fas fa-plus-circle"></i>
-                            <span>Novo Pedido</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('pedidos'); ?>" data-tooltip="Pedidos">
-                            <i class="fas fa-list"></i>
-                            <span>Pedidos</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('mesas'); ?>" data-tooltip="Mesas">
-                            <i class="fas fa-table"></i>
-                            <span>Mesas</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('delivery'); ?>" data-tooltip="Delivery">
-                            <i class="fas fa-motorcycle"></i>
-                            <span>Delivery</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('gerenciar_produtos'); ?>" data-tooltip="Produtos">
-                            <i class="fas fa-box"></i>
-                            <span>Produtos</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('estoque'); ?>" data-tooltip="Estoque">
-                            <i class="fas fa-warehouse"></i>
-                            <span>Estoque</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('financeiro'); ?>" data-tooltip="Financeiro">
-                            <i class="fas fa-chart-line"></i>
-                            <span>Financeiro</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('relatorios'); ?>" data-tooltip="Relatórios">
-                            <i class="fas fa-chart-bar"></i>
-                            <span>Relatórios</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('clientes'); ?>" data-tooltip="Clientes">
-                            <i class="fas fa-users"></i>
-                            <span>Clientes</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('ai_chat'); ?>" data-tooltip="Assistente IA">
-                            <i class="fas fa-robot"></i>
-                            <span>Assistente IA</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('configuracoes'); ?>" data-tooltip="Configurações">
-                            <i class="fas fa-cog"></i>
-                            <span>Configurações</span>
-                        </a>
-                        <hr class="text-white-50">
-                        <a class="nav-link" href="<?php echo $router->url('logout'); ?>" data-tooltip="Sair">
-                            <i class="fas fa-sign-out-alt"></i>
-                            <span>Sair</span>
-                        </a>
-                    </nav>
+                    <?php include __DIR__ . '/components/navigation_menu.php'; ?>
                 </div>
             </div>
 
@@ -1278,39 +1224,9 @@ if ($tenant && $filial) {
         }
 
         function fecharMesa(mesaId) {
-            Swal.fire({
-                title: 'Fechar Mesa',
-                text: 'Deseja realmente fechar todos os pedido desta mesa?',
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonText: 'Sim, fechar',
-                cancelButtonText: 'Cancelar'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    // Buscar pedido ativos da mesa
-                    fetch('index.php?action=pedido&t=' + Date.now(), {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                            'X-Requested-With': 'XMLHttpRequest'
-                        },
-                        body: `fechar_mesa=1&mesa_id=${mesaId}`
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            Swal.fire('Sucesso', 'Mesa fechada com sucesso!', 'success');
-                            setTimeout(() => location.reload(), 1500);
-                        } else {
-                            Swal.fire('Erro', data.message, 'error');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        Swal.fire('Erro', 'Erro ao fechar mesa', 'error');
-                    });
-                }
-            });
+            console.log('Redirecionando para página de fechamento da mesa:', mesaId);
+            // Redirecionar para página dedicada em vez de popup
+            window.location.href = `index.php?view=fechar_pedido&mesa_id=${mesaId}`;
         }
 
         function editarPedido(pedidoId) {
@@ -1943,25 +1859,9 @@ if ($tenant && $filial) {
         }
         
         function fecharMesaCompleta(mesaId) {
-            // Buscar valor real da mesa via AJAX
-            fetch(`index.php?action=mesa_multiplos_pedidos&ver_mesa=1&mesa_id=${mesaId}`, {
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    const valorTotal = parseFloat(data.valor_total) || 0;
-                    abrirPopupFecharMesa(mesaId, valorTotal);
-                } else {
-                    Swal.fire('Erro', 'Erro ao buscar dados da mesa', 'error');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                Swal.fire('Erro', 'Erro ao buscar dados da mesa', 'error');
-            });
+            console.log('Redirecionando para página de fechamento da mesa completa:', mesaId);
+            // Redirecionar para página dedicada em vez de popup
+            window.location.href = `index.php?view=fechar_pedido&mesa_id=${mesaId}`;
         }
         
         function abrirPopupFecharMesa(mesaId, valorTotal) {

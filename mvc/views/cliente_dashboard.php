@@ -1,65 +1,16 @@
 <?php
-require_once '../../config/config.php';
-require_once '../../system/Database.php';
-require_once '../../system/Auth.php';
-require_once '../../system/Session.php';
+// Cliente Dashboard - Página específica para clientes
+$config = \System\Config::getInstance();
+$session = \System\Session::getInstance();
+$router = \System\Router::getInstance();
+$db = \System\Database::getInstance();
 
-use System\Auth;
-use System\Database;
-use System\Session;
+// Get current user, tenant and filial
+$user = $session->getUser();
+$tenant = $session->getTenant();
+$filial = $session->getFilial();
 
-// Check authentication
-$session = Auth::validateSession();
-if (!$session) {
-    header('Location: index.php?view=login');
-    exit;
-}
-
-// Get user establishment data
-$db = Database::getInstance();
-$userEstablishment = $db->fetch(
-    "SELECT * FROM usuarios_estabelecimento 
-     WHERE usuario_global_id = ? AND tenant_id = ? AND filial_id = ? AND ativo = true",
-    [$session['usuario_global_id'], $session['tenant_id'], $session['filial_id']]
-);
-
-if (!$userEstablishment || $userEstablishment['tipo_usuario'] !== 'cliente') {
-    header('Location: index.php?view=login');
-    exit;
-}
-
-// Get user data
-$user = $db->fetch(
-    "SELECT * FROM usuarios_globais WHERE id = ?",
-    [$session['usuario_global_id']]
-);
-
-// Get user orders
-$pedidos = $db->fetchAll(
-    "SELECT p.*, 
-            CASE WHEN p.mesa_id IS NOT NULL THEN m.numero ELSE 'Delivery' END as mesa_numero,
-            CASE WHEN p.tipo = 'delivery' THEN 'Delivery' 
-                 WHEN p.tipo = 'mesa' THEN CONCAT('Mesa ', m.numero)
-                 ELSE 'Balcão' END as tipo_pedido
-     FROM pedidos p 
-     LEFT JOIN mesas m ON p.mesa_id = m.id 
-     WHERE p.cliente_telefone = ? AND p.tenant_id = ? AND p.filial_id = ?
-     ORDER BY p.created_at DESC 
-     LIMIT 20",
-    [$session['usuario_global_id'], $session['tenant_id'], $session['filial_id']]
-);
-
-// Get order items for each order
-foreach ($pedidos as &$pedido) {
-    $pedido['itens'] = $db->fetchAll(
-        "SELECT pi.*, pr.nome as produto_nome, pr.preco_normal
-         FROM pedido_itens pi
-         JOIN produtos pr ON pi.produto_id = pr.id
-         WHERE pi.pedido_id = ?
-         ORDER BY pi.id",
-        [$pedido['id']]
-    );
-}
+// User is already authenticated by the router
 ?>
 
 <!DOCTYPE html>
@@ -67,292 +18,117 @@ foreach ($pedidos as &$pedido) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Meus Pedidos - Divino Lanches</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>Dashboard do Cliente - Divino Lanches</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         body {
-            background-color: #f8f9fa;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
         }
-        
-        .navbar-brand {
-            font-weight: 600;
-        }
-        
-        .card {
-            border: none;
+        .dashboard-card {
+            background: white;
             border-radius: 15px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
         }
-        
-        .card-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 15px 15px 0 0 !important;
-            border: none;
+        .dashboard-card:hover {
+            transform: translateY(-5px);
         }
-        
-        .status-badge {
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 600;
+        .card-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
         }
-        
-        .status-pendente {
-            background-color: #fff3cd;
-            color: #856404;
-        }
-        
-        .status-preparando {
-            background-color: #d1ecf1;
-            color: #0c5460;
-        }
-        
-        .status-pronto {
-            background-color: #d4edda;
-            color: #155724;
-        }
-        
-        .status-entregue {
-            background-color: #e2e3e5;
-            color: #383d41;
-        }
-        
-        .status-cancelado {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
-        
-        .order-item {
-            border-bottom: 1px solid #e9ecef;
-            padding: 10px 0;
-        }
-        
-        .order-item:last-child {
-            border-bottom: none;
-        }
-        
-        .profile-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border: none;
-            border-radius: 10px;
-        }
-        
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-        }
-        
-        .empty-state {
-            text-align: center;
-            padding: 60px 20px;
-            color: #6c757d;
-        }
-        
-        .empty-state i {
-            font-size: 4rem;
-            margin-bottom: 20px;
-            opacity: 0.5;
+        .welcome-header {
+            background: white;
+            border-radius: 15px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }
     </style>
 </head>
 <body>
-    <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container">
-            <a class="navbar-brand" href="#">
-                <i class="fas fa-utensils"></i> Divino Lanches
-            </a>
-            <div class="navbar-nav ms-auto">
-                <a class="nav-link" href="#" onclick="logout()">
-                    <i class="fas fa-sign-out-alt"></i> Sair
-                </a>
-            </div>
-        </div>
-    </nav>
-
     <div class="container mt-4">
-        <!-- Profile Card -->
-        <div class="card profile-card mb-4">
-            <div class="card-body">
-                <div class="row align-items-center">
-                    <div class="col-md-8">
-                        <h4 class="mb-1">Olá, <?php echo htmlspecialchars($user['nome']); ?>!</h4>
-                        <p class="mb-0">Bem-vindo ao seu painel de pedidos</p>
+        <!-- Welcome Header -->
+        <div class="welcome-header text-center">
+            <h1 class="display-4 text-primary mb-3">
+                <i class="fas fa-user-circle"></i>
+                Dashboard do Cliente
+            </h1>
+            <p class="lead text-muted">
+                Bem-vindo(a), <strong><?php echo htmlspecialchars($user['login'] ?? 'Cliente'); ?>!</strong>
+            </p>
+        </div>
+
+        <!-- Dashboard Cards -->
+        <div class="row">
+            <!-- Histórico de Pedidos -->
+            <div class="col-md-6 col-lg-4 mb-4">
+                <div class="dashboard-card card h-100 text-center p-4">
+                    <div class="card-icon text-primary">
+                        <i class="fas fa-history"></i>
                     </div>
-                    <div class="col-md-4 text-end">
-                        <i class="fas fa-user-circle fa-3x"></i>
+                    <h5 class="card-title">Histórico de Pedidos</h5>
+                    <p class="card-text">Visualize seus pedidos anteriores e acompanhe o status.</p>
+                    <a href="<?php echo $router->url('historico_pedidos'); ?>" class="btn btn-primary">
+                        <i class="fas fa-eye"></i> Ver Histórico
+                    </a>
+                </div>
+            </div>
+
+            <!-- Meu Perfil -->
+            <div class="col-md-6 col-lg-4 mb-4">
+                <div class="dashboard-card card h-100 text-center p-4">
+                    <div class="card-icon text-success">
+                        <i class="fas fa-user"></i>
                     </div>
+                    <h5 class="card-title">Meu Perfil</h5>
+                    <p class="card-text">Gerencie suas informações pessoais e preferências.</p>
+                    <a href="<?php echo $router->url('perfil'); ?>" class="btn btn-success">
+                        <i class="fas fa-edit"></i> Editar Perfil
+                    </a>
+                </div>
+            </div>
+
+            <!-- Novo Pedido -->
+            <div class="col-md-6 col-lg-4 mb-4">
+                <div class="dashboard-card card h-100 text-center p-4">
+                    <div class="card-icon text-warning">
+                        <i class="fas fa-plus-circle"></i>
+                    </div>
+                    <h5 class="card-title">Novo Pedido</h5>
+                    <p class="card-text">Faça um novo pedido rapidamente.</p>
+                    <a href="<?php echo $router->url('novo_pedido'); ?>" class="btn btn-warning">
+                        <i class="fas fa-shopping-cart"></i> Fazer Pedido
+                    </a>
                 </div>
             </div>
         </div>
 
-        <!-- Actions -->
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <a href="index.php?view=novo_pedido" class="btn btn-primary btn-lg w-100">
-                    <i class="fas fa-plus"></i> Novo Pedido
-                </a>
-            </div>
-            <div class="col-md-6">
-                <button class="btn btn-outline-primary btn-lg w-100" onclick="refreshOrders()">
-                    <i class="fas fa-sync-alt"></i> Atualizar
-                </button>
-            </div>
-        </div>
-
-        <!-- Orders History -->
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0">
-                    <i class="fas fa-history"></i> Meus Pedidos
-                </h5>
-            </div>
-            <div class="card-body">
-                <?php if (empty($pedidos)): ?>
-                    <div class="empty-state">
-                        <i class="fas fa-shopping-bag"></i>
-                        <h5>Nenhum pedido encontrado</h5>
-                        <p>Você ainda não fez nenhum pedido. Que tal fazer o primeiro?</p>
-                        <a href="index.php?view=novo_pedido" class="btn btn-primary">
-                            <i class="fas fa-plus"></i> Novo Pedido
-                        </a>
+        <!-- Recent Orders Preview -->
+        <div class="row">
+            <div class="col-12">
+                <div class="dashboard-card card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-clock"></i> Pedidos Recentes
+                        </h5>
                     </div>
-                <?php else: ?>
-                    <?php foreach ($pedidos as $pedido): ?>
-                        <div class="order-item">
-                            <div class="row align-items-center">
-                                <div class="col-md-3">
-                                    <h6 class="mb-1">Pedido #<?php echo $pedido['numero_pedido']; ?></h6>
-                                    <small class="text-muted">
-                                        <i class="fas fa-calendar"></i> 
-                                        <?php echo date('d/m/Y H:i', strtotime($pedido['created_at'])); ?>
-                                    </small>
-                                </div>
-                                <div class="col-md-3">
-                                    <span class="status-badge status-<?php echo $pedido['status']; ?>">
-                                        <?php 
-                                        $statusLabels = [
-                                            'pendente' => 'Pendente',
-                                            'preparando' => 'Preparando',
-                                            'pronto' => 'Pronto',
-                                            'entregue' => 'Entregue',
-                                            'cancelado' => 'Cancelado'
-                                        ];
-                                        echo $statusLabels[$pedido['status']] ?? $pedido['status'];
-                                        ?>
-                                    </span>
-                                    <br>
-                                    <small class="text-muted"><?php echo $pedido['tipo_pedido']; ?></small>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="order-items-preview">
-                                        <?php foreach (array_slice($pedido['itens'], 0, 2) as $item): ?>
-                                            <small class="d-block">
-                                                <?php echo $item['quantidade']; ?>x <?php echo htmlspecialchars($item['produto_nome']); ?>
-                                            </small>
-                                        <?php endforeach; ?>
-                                        <?php if (count($pedido['itens']) > 2): ?>
-                                            <small class="text-muted">
-                                                +<?php echo count($pedido['itens']) - 2; ?> item(s) mais
-                                            </small>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                                <div class="col-md-2 text-end">
-                                    <h6 class="mb-0">R$ <?php echo number_format($pedido['total'], 2, ',', '.'); ?></h6>
-                                    <button class="btn btn-sm btn-outline-primary" onclick="viewOrderDetails(<?php echo $pedido['id']; ?>)">
-                                        <i class="fas fa-eye"></i> Ver
-                                    </button>
-                                </div>
-                            </div>
+                    <div class="card-body">
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i>
+                            Seus pedidos recentes aparecerão aqui. 
+                            <a href="<?php echo $router->url('historico_pedidos'); ?>" class="alert-link">
+                                Ver histórico completo
+                            </a>
                         </div>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-            </div>
-        </div>
-    </div>
-
-    <!-- Order Details Modal -->
-    <div class="modal fade" id="orderDetailsModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Detalhes do Pedido</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body" id="orderDetailsContent">
-                    <!-- Content will be loaded here -->
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        function logout() {
-            if (confirm('Deseja realmente sair?')) {
-                fetch('mvc/ajax/phone_auth.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    body: 'action=logout'
-                })
-                .then(response => response.json())
-                .then(data => {
-                    window.location.href = 'index.php?view=login';
-                })
-                .catch(error => {
-                    console.error('Erro:', error);
-                    window.location.href = 'index.php?view=login';
-                });
-            }
-        }
-
-        function refreshOrders() {
-            window.location.reload();
-        }
-
-        function viewOrderDetails(orderId) {
-            // This would typically fetch order details via AJAX
-            // For now, we'll show a simple message
-            const modal = new bootstrap.Modal(document.getElementById('orderDetailsModal'));
-            document.getElementById('orderDetailsContent').innerHTML = `
-                <div class="text-center">
-                    <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
-                    <p>Carregando detalhes do pedido...</p>
-                </div>
-            `;
-            modal.show();
-            
-            // Simulate loading
-            setTimeout(() => {
-                document.getElementById('orderDetailsContent').innerHTML = `
-                    <div class="text-center">
-                        <i class="fas fa-info-circle fa-2x mb-3 text-primary"></i>
-                        <p>Funcionalidade de detalhes será implementada em breve.</p>
-                        <p>ID do Pedido: ${orderId}</p>
                     </div>
-                `;
-            }, 1000);
-        }
+                </div>
+            </div>
+        </div>
+    </div>
 
-        // Auto-refresh every 30 seconds
-        setInterval(() => {
-            // Only refresh if no modals are open
-            if (!document.querySelector('.modal.show')) {
-                // You could implement a silent refresh here
-                console.log('Auto-refresh triggered');
-            }
-        }, 30000);
-    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

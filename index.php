@@ -5,7 +5,7 @@ ob_start();
 
 // Set error reporting
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0); // Desativar display de erros para evitar HTML no JSON
 
 // Set timezone
 date_default_timezone_set('America/Sao_Paulo');
@@ -102,6 +102,9 @@ try {
         'fechar_pedido_individual' => 'mesa_multiplos_pedidos_simples.php',
         'fechar_mesa_completa' => 'mesa_multiplos_pedidos_simples.php',
         'pagamentos_parciais' => 'pagamentos_parciais.php',
+        'pedidos' => 'pedidos.php',
+        'produtos' => 'produtos.php',
+        'excluir_produto' => 'produtos.php',
         // WhatsApp/Baileys actions
         'criar_instancia' => 'whatsapp.php',
         'listar_instancias' => 'whatsapp.php',

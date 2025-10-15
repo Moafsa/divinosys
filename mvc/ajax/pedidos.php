@@ -86,12 +86,80 @@ try {
             $filialId = $session->getFilialId() ?? 1;
             $usuarioId = $session->getUserId();
             
+        // Verificar se o usuário existe na tabela usuarios
+        if ($usuarioId) {
+            $usuarioExiste = $db->fetch("SELECT id FROM usuarios WHERE id = ?", [$usuarioId]);
+            if (!$usuarioExiste) {
+                // Verificar se existe no sistema usuarios_globais
+                $usuarioGlobal = $db->fetch("SELECT * FROM usuarios_globais WHERE id = ?", [$usuarioId]);
+                if ($usuarioGlobal) {
+                    // Verificar se já existe um usuário com esse login no tenant
+                    $usuarioExistente = $db->fetch(
+                        "SELECT id FROM usuarios WHERE login = ? AND tenant_id = ?", 
+                        [$usuarioGlobal['nome'], $tenantId]
+                    );
+                    
+                    if ($usuarioExistente) {
+                        // Usar o usuário existente
+                        $usuarioId = $usuarioExistente['id'];
+                        error_log("PEDIDOS: Usando usuário existente na tabela usuarios (ID: {$usuarioId}) para usuário global ID {$usuarioGlobal['id']}");
+                    } else {
+                        // Criar registro na tabela usuarios para compatibilidade
+                        $novoUsuarioId = $db->insert('usuarios', [
+                            'login' => $usuarioGlobal['nome'] ?? "Usuario_{$usuarioId}",
+                            'senha' => password_hash('temp_password', PASSWORD_DEFAULT),
+                            'nivel' => 1,
+                            'pergunta' => 'Pergunta temporária',
+                            'resposta' => 'Resposta temporária',
+                            'tenant_id' => $tenantId,
+                            'filial_id' => $filialId
+                        ]);
+                        
+                        if ($novoUsuarioId) {
+                            $usuarioId = $novoUsuarioId;
+                            error_log("PEDIDOS: Criado usuário na tabela usuarios (ID: {$usuarioId}) para usuário global ID {$usuarioGlobal['id']}");
+                        } else {
+                            $usuarioId = 1; // Fallback para admin
+                            error_log("PEDIDOS: Erro ao criar usuário na tabela usuarios, usando admin (ID=1)");
+                        }
+                    }
+                } else {
+                    // Se não existe em nenhuma tabela, usar admin
+                    $usuarioId = 1;
+                    error_log("PEDIDOS: Usuário ID {$usuarioId} não encontrado em nenhuma tabela, usando admin (ID=1)");
+                }
+            }
+        } else {
+            // Se não há usuário na sessão, usar admin
+            $usuarioId = 1;
+            error_log("PEDIDOS: Nenhum usuário na sessão, usando admin (ID=1)");
+        }
+            
             // PostgreSQL gerencia sequências automaticamente - não precisamos interferir
             
             // Calcular valor total
             $valorTotal = 0;
             foreach ($itens as $item) {
                 $valorTotal += $item['preco'] * $item['quantidade'];
+            }
+            
+            // Buscar dados do usuário para registrar junto com o pedido
+            $usuarioData = $db->fetch("SELECT login FROM usuarios WHERE id = ?", [$usuarioId]);
+            if (!$usuarioData) {
+                // Se não encontrar na tabela usuarios, buscar em usuarios_globais
+                $usuarioGlobal = $db->fetch("SELECT nome, telefone FROM usuarios_globais WHERE id = ?", [$usuarioId]);
+                if ($usuarioGlobal) {
+                    $usuarioData = [
+                        'login' => $usuarioGlobal['nome'],
+                        'telefone' => $usuarioGlobal['telefone'] ?? ''
+                    ];
+                }
+            }
+            
+            // Se não tem telefone, tentar buscar de usuarios_globais pelo ID
+            if (empty($usuarioData['telefone'])) {
+                $telefoneUsuario = $db->fetch("SELECT telefone FROM usuarios_globais WHERE id = ?", [$usuarioId]);
+                $usuarioData['telefone'] = $telefoneUsuario['telefone'] ?? '';
             }
             
             // Criar pedido
@@ -260,6 +328,52 @@ try {
                     'message' => 'Erro ao carregar dados do pedido: ' . $e->getMessage()
                 ]);
             }
+            break;
+            
+        case 'buscar_usuario':
+            $usuarioId = $_GET['id'] ?? $_POST['id'] ?? '';
+            
+            if (empty($usuarioId)) {
+                throw new \Exception('ID do usuário é obrigatório');
+            }
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId() ?? 1;
+            $filialId = $session->getFilialId() ?? 1;
+            
+            // Buscar usuário na tabela usuarios primeiro
+            $usuario = $db->fetch(
+                "SELECT * FROM usuarios WHERE id = ? AND tenant_id = ?",
+                [$usuarioId, $tenantId]
+            );
+            
+            if (!$usuario) {
+                // Se não encontrar na tabela usuarios, buscar em usuarios_globais
+                $usuarioGlobal = $db->fetch(
+                    "SELECT * FROM usuarios_globais WHERE id = ?",
+                    [$usuarioId]
+                );
+                
+                if ($usuarioGlobal) {
+                    $usuario = [
+                        'id' => $usuarioGlobal['id'],
+                        'login' => $usuarioGlobal['nome'],
+                        'nome' => $usuarioGlobal['nome'],
+                        'telefone' => $usuarioGlobal['telefone'] ?? '',
+                        'email' => $usuarioGlobal['email'] ?? ''
+                    ];
+                }
+            }
+            
+            if (!$usuario) {
+                throw new \Exception('Usuário não encontrado');
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'usuario' => $usuario
+            ]);
             break;
             
         case 'atualizar_status':
@@ -571,14 +685,14 @@ try {
             ]);
             break;
             
-        case 'atualizar_pedido':
+        case 'atualizar_pedido_completo':
             $pedidoId = $_POST['pedido_id'] ?? '';
             $mesaId = $_POST['mesa_id'] ?? '';
             $itens = json_decode($_POST['itens'] ?? '[]', true);
             $observacao = $_POST['observacao'] ?? '';
             
             // Debug: Log dos dados recebidos
-            error_log("=== ATUALIZAR PEDIDO DEBUG ===");
+            error_log("=== ATUALIZAR PEDIDO COMPLETO DEBUG ===");
             error_log("Pedido ID: " . $pedidoId);
             error_log("Mesa ID: " . $mesaId);
             error_log("Itens recebidos: " . json_encode($itens));
@@ -608,13 +722,34 @@ try {
                 $valorTotal += $item['preco'] * $item['quantidade'];
             }
             
+            // Buscar dados do usuário atual para atualizar no pedido
+            $usuarioId = $session->getUserId() ?? 1;
+            $usuarioData = $db->fetch("SELECT login FROM usuarios WHERE id = ?", [$usuarioId]);
+            if (!$usuarioData) {
+                // Se não encontrar na tabela usuarios, buscar em usuarios_globais
+                $usuarioGlobal = $db->fetch("SELECT nome, telefone FROM usuarios_globais WHERE id = ?", [$usuarioId]);
+                if ($usuarioGlobal) {
+                    $usuarioData = [
+                        'login' => $usuarioGlobal['nome'],
+                        'telefone' => $usuarioGlobal['telefone'] ?? ''
+                    ];
+                }
+            }
+            
+            // Se não tem telefone, tentar buscar de usuarios_globais pelo ID
+            if (empty($usuarioData['telefone'])) {
+                $telefoneUsuario = $db->fetch("SELECT telefone FROM usuarios_globais WHERE id = ?", [$usuarioId]);
+                $usuarioData['telefone'] = $telefoneUsuario['telefone'] ?? '';
+            }
+            
             // Atualizar dados do pedido
             $db->update(
                 'pedido',
                 [
                     'idmesa' => $mesaId,
                     'valor_total' => $valorTotal,
-                    'observacao' => $observacao
+                    'observacao' => $observacao,
+                    'usuario_id' => $usuarioId
                 ],
                 'idpedido = ? AND tenant_id = ? AND filial_id = ?',
                 [$pedidoId, $tenantId, $filialId]

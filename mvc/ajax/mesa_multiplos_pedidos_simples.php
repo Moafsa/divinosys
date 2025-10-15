@@ -179,9 +179,7 @@ try {
             }
             
             $html .= '<div class="mesa-actions mt-3">';
-            if (!empty($pedidos)) {
-                $html .= '<button class="btn btn-primary" onclick="fecharMesaCompleta(' . $mesaId . ')">Fechar Mesa Completa</button>';
-            } else {
+            if (empty($pedidos)) {
                 $html .= '<button class="btn btn-success" onclick="fazerPedido(' . $mesaId . ')">Fazer Pedido</button>';
             }
             $html .= '</div>';

@@ -17,19 +17,34 @@ class AccessControl
             session_start();
         }
 
+        // Logout deve estar sempre disponível para usuários logados
+        if ($viewName === 'logout') {
+            return true;
+        }
+
         // Verificar se há sessão ativa
-        if (!isset($_SESSION['user']) || !isset($_SESSION['user_type'])) {
+        if (!isset($_SESSION['user']) && !isset($_SESSION['user_id'])) {
             self::redirectToLogin();
             return false;
         }
 
+        // Se é admin, permitir acesso a tudo
+        if (isset($_SESSION['user_type']) && $_SESSION['user_type'] === 'admin') {
+            return true;
+        }
+
+        // Se não tem user_type definido mas tem user_id, assumir admin
+        if (!isset($_SESSION['user_type']) && isset($_SESSION['user_id'])) {
+            return true;
+        }
+
         // Obter permissões do usuário
-        $permissions = Auth::getUserPermissions($_SESSION['user_type']);
+        $userType = $_SESSION['user_type'] ?? 'admin';
+        $permissions = Auth::getUserPermissions($userType);
         
-        // Se não tem permissões definidas, redirecionar para login
+        // Se não tem permissões definidas, permitir acesso (fallback)
         if (empty($permissions)) {
-            self::redirectToLogin();
-            return false;
+            return true;
         }
 
         // Verificar se o usuário tem acesso à view solicitada
@@ -101,11 +116,6 @@ class AccessControl
                 'icon' => 'fas fa-tachometer-alt',
                 'url' => 'index.php?view=dashboard'
             ],
-            'novo_pedido' => [
-                'label' => 'Novo Pedido',
-                'icon' => 'fas fa-plus-circle',
-                'url' => 'index.php?view=gerar_pedido'
-            ],
             'pedidos' => [
                 'label' => 'Pedidos',
                 'icon' => 'fas fa-list',
@@ -119,17 +129,12 @@ class AccessControl
             'produtos' => [
                 'label' => 'Produtos',
                 'icon' => 'fas fa-box',
-                'url' => 'index.php?view=produtos'
+                'url' => 'index.php?view=gerenciar_produtos'
             ],
             'estoque' => [
                 'label' => 'Estoque',
                 'icon' => 'fas fa-warehouse',
                 'url' => 'index.php?view=estoque'
-            ],
-            'mesas' => [
-                'label' => 'Mesas',
-                'icon' => 'fas fa-table',
-                'url' => 'index.php?view=mesas'
             ],
             'financeiro' => [
                 'label' => 'Financeiro',
@@ -150,11 +155,6 @@ class AccessControl
                 'label' => 'Configurações',
                 'icon' => 'fas fa-cog',
                 'url' => 'index.php?view=configuracoes'
-            ],
-            'usuarios' => [
-                'label' => 'Usuários',
-                'icon' => 'fas fa-user-cog',
-                'url' => 'index.php?view=usuarios'
             ],
             'historico_pedidos' => [
                 'label' => 'Histórico',

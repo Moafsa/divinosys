@@ -297,12 +297,13 @@ if ($tenant && $filial) {
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Forma de Pagamento</label>
-                        <select class="form-select" id="formaPagamento" required>
+                        <select class="form-select" id="formaPagamento" required onchange="toggleFiadoFields()">
                             <option value="">Selecione a forma de pagamento</option>
                             <option value="Dinheiro">Dinheiro</option>
                             <option value="Cartão Débito">Cartão Débito</option>
                             <option value="Cartão Crédito">Cartão Crédito</option>
                             <option value="PIX">PIX</option>
+                            <option value="FIADO">FIADO</option>
                         </select>
                     </div>
                        <div class="mb-3">
@@ -362,6 +363,18 @@ if ($tenant && $filial) {
                         return false;
                     }
                     
+                    // Validação específica para FIADO
+                    if (formaPagamento === 'FIADO') {
+                        if (!nomeCliente || nomeCliente.trim() === '') {
+                            Swal.showValidationMessage('Nome do cliente é obrigatório para pagamento fiado');
+                            return false;
+                        }
+                        if (!telefoneCliente || telefoneCliente.trim() === '') {
+                            Swal.showValidationMessage('Telefone do cliente é obrigatório para pagamento fiado');
+                            return false;
+                        }
+                    }
+                    
                     return { formaPagamento, valorPagar, nomeCliente, telefoneCliente, descricao };
                 }
             }).then((result) => {
@@ -369,6 +382,24 @@ if ($tenant && $filial) {
                     registrarPagamentoMesa(result.value);
                 }
             });
+        }
+
+        function toggleFiadoFieldsMesa() {
+            const formaPagamento = document.getElementById('formaPagamentoMesa').value;
+            const nomeClienteField = document.getElementById('nomeClienteMesa');
+            const telefoneClienteField = document.getElementById('telefoneClienteMesa');
+            
+            if (formaPagamento === 'FIADO') {
+                nomeClienteField.required = true;
+                telefoneClienteField.required = true;
+                nomeClienteField.placeholder = 'Nome obrigatório para pagamento fiado';
+                telefoneClienteField.placeholder = 'Telefone obrigatório para pagamento fiado';
+            } else {
+                nomeClienteField.required = false;
+                telefoneClienteField.required = false;
+                nomeClienteField.placeholder = 'Cliente Mesa';
+                telefoneClienteField.placeholder = 'Telefone (opcional)';
+            }
         }
 
         function registrarPagamentoMesa(dados) {
@@ -431,12 +462,13 @@ if ($tenant && $filial) {
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Forma de Pagamento</label>
-                        <select class="form-select" id="formaPagamento" required>
+                        <select class="form-select" id="formaPagamento" required onchange="toggleFiadoFields()">
                             <option value="">Selecione a forma de pagamento</option>
                             <option value="Dinheiro">Dinheiro</option>
                             <option value="Cartão Débito">Cartão Débito</option>
                             <option value="Cartão Crédito">Cartão Crédito</option>
                             <option value="PIX">PIX</option>
+                            <option value="FIADO">FIADO</option>
                         </select>
                     </div>
                     <div class="mb-3">
@@ -496,6 +528,18 @@ if ($tenant && $filial) {
                         return false;
                     }
                     
+                    // Validação específica para FIADO
+                    if (formaPagamento === 'FIADO') {
+                        if (!nomeCliente || nomeCliente.trim() === '') {
+                            Swal.showValidationMessage('Nome do cliente é obrigatório para pagamento fiado');
+                            return false;
+                        }
+                        if (!telefoneCliente || telefoneCliente.trim() === '') {
+                            Swal.showValidationMessage('Telefone do cliente é obrigatório para pagamento fiado');
+                            return false;
+                        }
+                    }
+                    
                     return { formaPagamento, valorPagar, nomeCliente, telefoneCliente, descricao };
                 }
             }).then((result) => {
@@ -503,6 +547,24 @@ if ($tenant && $filial) {
                     registrarPagamento(result.value);
                 }
             });
+        }
+
+        function toggleFiadoFields() {
+            const formaPagamento = document.getElementById('formaPagamento').value;
+            const nomeClienteField = document.getElementById('nomeCliente');
+            const telefoneClienteField = document.getElementById('telefoneCliente');
+            
+            if (formaPagamento === 'FIADO') {
+                nomeClienteField.required = true;
+                telefoneClienteField.required = true;
+                nomeClienteField.placeholder = 'Nome obrigatório para pagamento fiado';
+                telefoneClienteField.placeholder = 'Telefone obrigatório para pagamento fiado';
+            } else {
+                nomeClienteField.required = false;
+                telefoneClienteField.required = false;
+                nomeClienteField.placeholder = 'Cliente Mesa';
+                telefoneClienteField.placeholder = 'Telefone (opcional)';
+            }
         }
 
         function registrarPagamento(dados) {

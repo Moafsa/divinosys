@@ -9,6 +9,21 @@ $user = $session->getUser();
 $tenant = $session->getTenant();
 $filial = $session->getFilial();
 
+// Debug: Se não tem tenant/filial, usar valores padrão
+if (!$tenant) {
+    $tenant = $db->fetch("SELECT * FROM tenants WHERE id = 1");
+    if ($tenant) {
+        $session->setTenant($tenant);
+    }
+}
+
+if (!$filial) {
+    $filial = $db->fetch("SELECT * FROM filiais WHERE id = 1");
+    if ($filial) {
+        $session->setFilial($filial);
+    }
+}
+
 // Get pedidos data
 $pedidos = [];
 if ($tenant && $filial) {
@@ -479,6 +494,9 @@ $stats = [
                                     <div class="btn-group" role="group">
                                         <button type="button" class="btn btn-outline-primary btn-sm" onclick="editarPedido(${pedido.idpedido})">
                                             <i class="fas fa-edit"></i> Editar
+                                        </button>
+                                        <button type="button" class="btn btn-outline-success btn-sm" onclick="imprimirPedido(${pedido.idpedido})" title="Imprimir Pedido">
+                                            <i class="fas fa-print"></i> Imprimir
                                         </button>
                                         <button type="button" class="btn btn-outline-danger btn-sm" onclick="excluirPedido(${pedido.idpedido})">
                                             <i class="fas fa-trash"></i> Excluir
@@ -966,6 +984,133 @@ $stats = [
         setInterval(() => {
             atualizarPedidos();
         }, 30000);
+
+        function imprimirPedido(pedidoId) {
+            console.log('Imprimindo pedido:', pedidoId);
+            
+            // Create a new window for printing
+            const printWindow = window.open('', '_blank', 'width=800,height=600');
+            
+            // Fetch pedido data
+            fetch(`mvc/ajax/pedidos.php?buscar_pedido=1&pedido_id=${pedidoId}`, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const pedido = data.pedido;
+                    const itens = data.itens || [];
+                    
+                    // Generate print HTML using the same format as gerar_pedido.php
+                    let printHtml = `
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <meta charset="UTF-8">
+                            <title>Cupom Fiscal - Pedido #${pedido.idpedido}</title>
+                            <style>
+                                body { font-family: 'Courier New', monospace; font-size: 11px; margin: 0; padding: 8px; }
+                                .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
+                                .empresa { font-weight: bold; font-size: 13px; }
+                                .endereco { font-size: 9px; }
+                                .pedido-info { margin: 8px 0; font-size: 10px; }
+                                .item { margin: 3px 0; }
+                                .item-nome { font-weight: bold; font-size: 11px; }
+                                .item-detalhes { font-size: 10px; margin-left: 8px; }
+                                .modificacoes { margin-left: 15px; font-size: 10px; }
+                                .adicionado { color: green; }
+                                .removido { color: red; }
+                                .total { border-top: 1px dashed #000; padding-top: 8px; margin-top: 8px; font-weight: bold; font-size: 12px; }
+                                .footer { text-align: center; margin-top: 15px; font-size: 9px; }
+                                @media print { body { margin: 0; padding: 5px; font-size: 10px; } }
+                            </style>
+                        </head>
+                        <body>
+                            <div class="header">
+                                <div class="empresa">DIVINO LANCHES</div>
+                                <div class="endereco">Rua das Flores, 123 - Centro</div>
+                                <div class="endereco">Tel: (11) 99999-9999</div>
+                            </div>
+                            
+                            <div class="pedido-info">
+                                <strong>PEDIDO #${pedido.idpedido}</strong><br>
+                                Data/Hora: ${pedido.data} ${pedido.hora_pedido}<br>
+                                ${pedido.idmesa && pedido.idmesa !== '999' ? `Mesa: ${pedido.idmesa}` : 'DELIVERY'}<br>
+                                ${pedido.cliente ? `Cliente: ${pedido.cliente}` : ''}
+                                ${pedido.telefone_cliente ? `<br>Telefone: ${pedido.telefone_cliente}` : ''}
+                                ${pedido.usuario_nome ? `<br>Atendente: ${pedido.usuario_nome}` : ''}
+                            </div>
+                            
+                            <div class="itens">
+                                <strong>ITENS DO PEDIDO:</strong><br>`;
+                    
+                    itens.forEach(item => {
+                        printHtml += `
+                            <div class="item">
+                                <div class="item-nome">${item.quantidade}x ${item.nome_produto || 'Produto'}</div>
+                                <div class="item-detalhes">R$ ${parseFloat(item.valor_unitario).toFixed(2).replace('.', ',')}</div>`;
+                        
+                        if (item.ingredientes_com && item.ingredientes_com.length > 0) {
+                            printHtml += `<div class="modificacoes">`;
+                            item.ingredientes_com.forEach(ing => {
+                                printHtml += `<div class="adicionado">+ ${ing}</div>`;
+                            });
+                            printHtml += `</div>`;
+                        }
+                        
+                        if (item.ingredientes_sem && item.ingredientes_sem.length > 0) {
+                            printHtml += `<div class="modificacoes">`;
+                            item.ingredientes_sem.forEach(ing => {
+                                printHtml += `<div class="removido">- ${ing}</div>`;
+                            });
+                            printHtml += `</div>`;
+                        }
+                        
+                        if (item.observacao) {
+                            printHtml += `<div class="item-detalhes">Obs: ${item.observacao}</div>`;
+                        }
+                        
+                        printHtml += `</div>`;
+                    });
+                    
+                    printHtml += `
+                            </div>
+                            
+                            <div class="total">
+                                <strong>TOTAL: R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</strong>
+                            </div>
+                            
+                            ${pedido.observacao ? `<div class="pedido-info"><strong>Observação:</strong> ${pedido.observacao}</div>` : ''}
+                            
+                            <div class="footer">
+                                Obrigado pela preferência!<br>
+                                Volte sempre!<br>
+                                Impresso em: ${new Date().toLocaleString('pt-BR')}
+                            </div>
+                        </body>
+                        </html>`;
+                    
+                    // Write content to print window
+                    printWindow.document.write(printHtml);
+                    printWindow.document.close();
+                    
+                    // Print after content loads
+                    printWindow.onload = function() {
+                        printWindow.print();
+                        printWindow.close();
+                    };
+                    
+                } else {
+                    Swal.fire('Erro', 'Erro ao carregar dados do pedido para impressão', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao imprimir pedido:', error);
+                Swal.fire('Erro', 'Erro ao imprimir pedido', 'error');
+            });
+        }
     </script>
     
     <!-- Include sidebar JavaScript -->

@@ -1,629 +1,945 @@
 /**
- * Sistema Financeiro - JavaScript
- * Gerencia lançamentos financeiros, relatórios e análises
+ * JavaScript para Sistema Financeiro
+ * Divino Lanches
  */
 
-class FinanceiroManager {
+class FinancialSystem {
     constructor() {
+        this.currentReportData = null;
+        this.currentReportType = null;
+        this.charts = {};
         this.init();
     }
 
     init() {
         this.bindEvents();
-        this.loadCategorias();
-        this.loadContas();
+        this.initializeComponents();
     }
 
     bindEvents() {
-        // Botão novo lançamento
-        $(document).on('click', '#btnNovoLancamento', () => {
-            this.abrirModalLancamento();
-        });
-
-        // Botão editar lançamento
-        $(document).on('click', '.btn-editar-lancamento', (e) => {
-            const id = $(e.currentTarget).data('id');
-            this.editarLancamento(id);
-        });
-
-        // Botão excluir lançamento
-        $(document).on('click', '.btn-excluir-lancamento', (e) => {
-            const id = $(e.currentTarget).data('id');
-            this.excluirLancamento(id);
-        });
-
-        // Botão gerar relatório
-        $(document).on('click', '#btnGerarRelatorio', () => {
-            this.abrirModalRelatorio();
-        });
-
-        // Filtros
-        $(document).on('change', '#filtroForm', () => {
-            this.aplicarFiltros();
-        });
+        // Verificar se jQuery está disponível
+        if (typeof $ === 'undefined') {
+            console.error('jQuery não está disponível');
+            return;
+        }
+        
+        // Eventos para novo lançamento
+        $(document).on('change', '#tipo', this.handleTipoChange.bind(this));
+        $(document).on('change', '#recorrencia', this.handleRecorrenciaChange.bind(this));
+        $(document).on('input', '#valor', this.updateResumo.bind(this));
+        $(document).on('change', '#conta_id, #categoria_id', this.updateResumo.bind(this));
+        
+        // Eventos para upload de arquivos
+        this.setupFileUpload();
+        
+        // Eventos para formulários
+        $(document).on('submit', '#lancamentoForm', this.handleLancamentoSubmit.bind(this));
     }
 
-    abrirModalLancamento(lancamentoId = null) {
-        const modal = `
-            <div class="modal fade" id="modalLancamento" tabindex="-1">
-                <div class="modal-dialog modal-lg">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">
-                                <i class="fas fa-plus-circle me-2"></i>
-                                ${lancamentoId ? 'Editar Lançamento' : 'Novo Lançamento'}
-                            </h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <form id="formLancamento">
-                            <div class="modal-body">
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="mb-3">
-                                            <label class="form-label">Tipo *</label>
-                                            <select class="form-select" name="tipo" required>
-                                                <option value="">Selecione o tipo</option>
-                                                <option value="receita">Receita</option>
-                                                <option value="despesa">Despesa</option>
-                                                <option value="transferencia">Transferência</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="mb-3">
-                                            <label class="form-label">Categoria</label>
-                                            <select class="form-select" name="categoria_id" id="categoriaSelect">
-                                                <option value="">Selecione uma categoria</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="mb-3">
-                                            <label class="form-label">Conta *</label>
-                                            <select class="form-select" name="conta_id" id="contaSelect" required>
-                                                <option value="">Selecione uma conta</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6" id="contaDestinoDiv" style="display: none;">
-                                        <div class="mb-3">
-                                            <label class="form-label">Conta Destino</label>
-                                            <select class="form-select" name="conta_destino_id" id="contaDestinoSelect">
-                                                <option value="">Selecione a conta destino</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                </div>
+    initializeComponents() {
+        // Inicializar Select2
+        if (typeof $ !== 'undefined' && $.fn.select2) {
+            $('.form-select').select2({
+                theme: 'bootstrap-5',
+                width: '100%'
+            });
+        }
 
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="mb-3">
-                                            <label class="form-label">Valor *</label>
-                                            <div class="input-group">
-                                                <span class="input-group-text">R$</span>
-                                                <input type="number" class="form-control" name="valor" step="0.01" min="0" required>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="mb-3">
-                                            <label class="form-label">Data de Vencimento</label>
-                                            <input type="date" class="form-control" name="data_vencimento">
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="mb-3">
-                                            <label class="form-label">Data de Pagamento</label>
-                                            <input type="date" class="form-control" name="data_pagamento">
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="mb-3">
-                                            <label class="form-label">Forma de Pagamento</label>
-                                            <select class="form-select" name="forma_pagamento">
-                                                <option value="">Selecione a forma</option>
-                                                <option value="Dinheiro">Dinheiro</option>
-                                                <option value="Cartão Débito">Cartão Débito</option>
-                                                <option value="Cartão Crédito">Cartão Crédito</option>
-                                                <option value="PIX">PIX</option>
-                                                <option value="Transferência">Transferência</option>
-                                                <option value="Cheque">Cheque</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="mb-3">
-                                    <label class="form-label">Descrição *</label>
-                                    <textarea class="form-control" name="descricao" rows="3" required placeholder="Descreva o lançamento..."></textarea>
-                                </div>
-
-                                <div class="mb-3">
-                                    <label class="form-label">Observações</label>
-                                    <textarea class="form-control" name="observacoes" rows="2" placeholder="Observações adicionais..."></textarea>
-                                </div>
-
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="mb-3">
-                                            <label class="form-label">Recorrência</label>
-                                            <select class="form-select" name="recorrencia">
-                                                <option value="nenhuma">Nenhuma</option>
-                                                <option value="diaria">Diária</option>
-                                                <option value="semanal">Semanal</option>
-                                                <option value="mensal">Mensal</option>
-                                                <option value="anual">Anual</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6" id="dataFimRecorrenciaDiv" style="display: none;">
-                                        <div class="mb-3">
-                                            <label class="form-label">Data Fim Recorrência</label>
-                                            <input type="date" class="form-control" name="data_fim_recorrencia">
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="mb-3">
-                                    <label class="form-label">Anexos</label>
-                                    <input type="file" class="form-control" name="anexos[]" multiple accept="image/*,.pdf,.doc,.docx">
-                                    <small class="text-muted">Formatos permitidos: JPG, PNG, PDF, DOC, DOCX (máx. 5MB cada)</small>
-                                </div>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="fas fa-save me-1"></i>
-                                    Salvar Lançamento
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        $('body').append(modal);
-        $('#modalLancamento').modal('show');
-
-        // Bind form submit
-        $('#formLancamento').on('submit', (e) => {
-            e.preventDefault();
-            this.salvarLancamento(lancamentoId);
-        });
-
-        // Bind tipo change
-        $('select[name="tipo"]').on('change', (e) => {
-            const tipo = $(e.target).val();
-            if (tipo === 'transferencia') {
-                $('#contaDestinoDiv').show();
-                $('#contaDestinoSelect').prop('required', true);
-            } else {
-                $('#contaDestinoDiv').hide();
-                $('#contaDestinoSelect').prop('required', false);
-            }
-        });
-
-        // Bind recorrência change
-        $('select[name="recorrencia"]').on('change', (e) => {
-            const recorrência = $(e.target).val();
-            if (recorrência !== 'nenhuma') {
-                $('#dataFimRecorrenciaDiv').show();
-            } else {
-                $('#dataFimRecorrenciaDiv').hide();
-            }
-        });
-
-        // Carregar dados se editando
-        if (lancamentoId) {
-            this.carregarDadosLancamento(lancamentoId);
+        // Inicializar tooltips
+        if (typeof bootstrap !== 'undefined') {
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
         }
     }
 
-    carregarDadosLancamento(id) {
-        $.ajax({
-            url: 'mvc/ajax/financeiro.php',
-            method: 'GET',
-            data: { action: 'buscar_lancamento', id: id },
-            dataType: 'json',
-            success: (response) => {
-                if (response.success) {
-                    const lancamento = response.data;
-                    $('#formLancamento').find('input, select, textarea').each(function() {
-                        const name = $(this).attr('name');
-                        if (lancamento[name] !== undefined) {
-                            $(this).val(lancamento[name]);
-                        }
-                    });
-                }
+    // ===== NOVO LANÇAMENTO =====
+
+    handleTipoChange() {
+        const tipo = $('#tipo').val();
+        
+        // Mostrar/ocultar conta destino para transferências
+        if (tipo === 'transferencia') {
+            $('#conta_destino_section').show();
+            $('#conta_destino_id').prop('required', true);
+        } else {
+            $('#conta_destino_section').hide();
+            $('#conta_destino_id').prop('required', false);
+        }
+        
+        // Filtrar categorias por tipo
+        this.filterCategoriasByTipo(tipo);
+        this.updateResumo();
+    }
+
+    filterCategoriasByTipo(tipo) {
+        $('#categoria_id option').each(function() {
+            const categoriaTipo = $(this).data('tipo');
+            if (tipo === '' || categoriaTipo === tipo || categoriaTipo === 'investimento') {
+                $(this).show();
+            } else {
+                $(this).hide();
             }
+        });
+        $('#categoria_id').val('').trigger('change');
+    }
+
+    handleRecorrenciaChange() {
+        const recorrencia = $('#recorrencia').val();
+        if (recorrencia !== 'nenhuma') {
+            $('#fim_recorrencia_section').show();
+        } else {
+            $('#fim_recorrencia_section').hide();
+        }
+    }
+
+    updateResumo() {
+        const tipo = $('#tipo option:selected').text();
+        const valor = $('#valor').val();
+        const conta = $('#conta_id option:selected').text();
+        const categoria = $('#categoria_id option:selected').text();
+
+        $('#resumo_tipo').text(tipo || '-');
+        $('#resumo_valor').text(valor ? `R$ ${parseFloat(valor).toLocaleString('pt-BR', {minimumFractionDigits: 2})}` : '-');
+        $('#resumo_conta').text(conta || '-');
+        $('#resumo_categoria').text(categoria || '-');
+        $('#resumo_total').text(valor ? `R$ ${parseFloat(valor).toLocaleString('pt-BR', {minimumFractionDigits: 2})}` : 'R$ 0,00');
+    }
+
+    setupFileUpload() {
+        const fileUploadArea = document.getElementById('fileUploadArea');
+        const fileInput = document.getElementById('anexos');
+        const filePreviews = document.getElementById('filePreviews');
+
+        if (!fileUploadArea || !fileInput || !filePreviews) return;
+
+        fileUploadArea.addEventListener('click', () => fileInput.click());
+        fileUploadArea.addEventListener('dragover', this.handleDragOver.bind(this));
+        fileUploadArea.addEventListener('dragleave', this.handleDragLeave.bind(this));
+        fileUploadArea.addEventListener('drop', this.handleDrop.bind(this));
+        fileInput.addEventListener('change', this.handleFileSelect.bind(this));
+    }
+
+    handleDragOver(e) {
+        e.preventDefault();
+        e.currentTarget.classList.add('dragover');
+    }
+
+    handleDragLeave(e) {
+        e.preventDefault();
+        e.currentTarget.classList.remove('dragover');
+    }
+
+    handleDrop(e) {
+        e.preventDefault();
+        e.currentTarget.classList.remove('dragover');
+        const files = e.dataTransfer.files;
+        this.handleFiles(files);
+    }
+
+    handleFileSelect(e) {
+        const files = e.target.files;
+        this.handleFiles(files);
+    }
+
+    handleFiles(files) {
+        Array.from(files).forEach(file => {
+            if (file.size > 5 * 1024 * 1024) {
+                this.showAlert('Erro!', 'Arquivo muito grande. Máximo 5MB.', 'error');
+                return;
+            }
+            
+            const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'application/pdf'];
+            if (!allowedTypes.includes(file.type)) {
+                this.showAlert('Erro!', 'Tipo de arquivo não permitido.', 'error');
+                return;
+            }
+
+            this.addFilePreview(file);
         });
     }
 
-    salvarLancamento(id = null) {
-        const formData = new FormData($('#formLancamento')[0]);
-        formData.append('action', id ? 'editar_lancamento' : 'criar_lancamento');
-        if (id) formData.append('lancamento_id', id);
+    addFilePreview(file) {
+        const filePreviews = document.getElementById('filePreviews');
+        if (!filePreviews) return;
 
-        $.ajax({
-            url: 'mvc/ajax/financeiro.php',
+        const preview = document.createElement('div');
+        preview.className = 'file-preview';
+        preview.innerHTML = `
+            <div>
+                <i class="fas fa-file me-2"></i>
+                <span>${file.name}</span>
+                <small class="text-muted ms-2">(${(file.size / 1024 / 1024).toFixed(2)} MB)</small>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-danger" onclick="financialSystem.removeFilePreview(this)">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        filePreviews.appendChild(preview);
+    }
+
+    removeFilePreview(button) {
+        button.parentElement.remove();
+    }
+
+    handleLancamentoSubmit(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(e.target);
+        formData.append('action', 'criar_lancamento');
+
+        this.showLoading('Salvando...', 'Criando lançamento financeiro...');
+
+        fetch('mvc/ajax/financeiro.php', {
             method: 'POST',
-            data: formData,
-            processData: false,
-            contentType: false,
-            dataType: 'json',
-            success: (response) => {
-                if (response.success) {
-                    Swal.fire({
-                        title: 'Sucesso!',
-                        text: response.message,
-                        icon: 'success'
-                    }).then(() => {
-                        $('#modalLancamento').modal('hide');
-                        location.reload();
-                    });
-                } else {
-                    Swal.fire({
-                        title: 'Erro!',
-                        text: response.message,
-                        icon: 'error'
-                    });
-                }
-            },
-            error: () => {
-                Swal.fire({
-                    title: 'Erro!',
-                    text: 'Erro ao salvar lançamento',
-                    icon: 'error'
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                this.showAlert('Sucesso!', 'Lançamento criado com sucesso!', 'success', () => {
+                    window.location.href = 'index.php?view=financeiro';
                 });
+            } else {
+                this.showAlert('Erro!', data.message || 'Erro ao criar lançamento', 'error');
             }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            this.showAlert('Erro!', 'Erro ao processar solicitação', 'error');
         });
     }
 
-    editarLancamento(id) {
-        this.abrirModalLancamento(id);
+    salvarRascunho() {
+        const form = document.getElementById('lancamentoForm');
+        if (!form) return;
+
+        const formData = new FormData(form);
+        formData.append('action', 'salvar_rascunho');
+
+        this.showLoading('Salvando Rascunho...', 'Salvando como rascunho...');
+
+        fetch('mvc/ajax/financeiro.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                this.showAlert('Sucesso!', 'Rascunho salvo com sucesso!', 'success');
+            } else {
+                this.showAlert('Erro!', data.message || 'Erro ao salvar rascunho', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            this.showAlert('Erro!', 'Erro ao processar solicitação', 'error');
+        });
     }
 
-    excluirLancamento(id) {
-        Swal.fire({
-            title: 'Excluir Lançamento',
-            text: 'Tem certeza que deseja excluir este lançamento?',
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonText: 'Sim, excluir',
-            cancelButtonText: 'Cancelar'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                $.ajax({
-                    url: 'mvc/ajax/financeiro.php',
-                    method: 'POST',
-                    data: { action: 'excluir_lancamento', lancamento_id: id },
-                    dataType: 'json',
-                    success: (response) => {
-                        if (response.success) {
-                            Swal.fire({
-                                title: 'Excluído!',
-                                text: response.message,
-                                icon: 'success'
-                            }).then(() => {
-                                location.reload();
-                            });
-                        } else {
-                            Swal.fire({
-                                title: 'Erro!',
-                                text: response.message,
-                                icon: 'error'
-                            });
+    limparFormulario() {
+        this.showConfirm(
+            'Limpar Formulário',
+            'Tem certeza que deseja limpar todos os campos?',
+            'warning',
+            () => {
+                const form = document.getElementById('lancamentoForm');
+                if (form) {
+                    form.reset();
+                    $('#categoria_id, #conta_id, #conta_destino_id').val('').trigger('change');
+                    const filePreviews = document.getElementById('filePreviews');
+                    if (filePreviews) filePreviews.innerHTML = '';
+                    this.updateResumo();
+                }
+            }
+        );
+    }
+
+    // ===== RELATÓRIOS =====
+
+    gerarRelatorio(tipo) {
+        const form = document.getElementById('filtroRelatorioForm');
+        if (!form) return;
+
+        const formData = new FormData(form);
+        formData.append('action', 'gerar_relatorio');
+        formData.append('tipo', tipo);
+
+        this.showLoading('Gerando Relatório...', 'Processando dados financeiros...');
+
+        fetch('mvc/ajax/financeiro.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                this.currentReportData = data.data;
+                this.currentReportType = tipo;
+                this.exibirRelatorio(data.data, tipo);
+                this.enableReportButtons();
+                this.closeLoading();
+            } else {
+                this.showAlert('Erro!', data.message || 'Erro ao gerar relatório', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            this.showAlert('Erro!', 'Erro ao processar solicitação', 'error');
+        });
+    }
+
+    exibirRelatorio(dados, tipo) {
+        const content = document.getElementById('relatorioContent');
+        if (!content) return;
+        
+        switch(tipo) {
+            case 'fluxo_caixa':
+                this.exibirFluxoCaixa(dados);
+                break;
+            case 'receitas_categoria':
+                this.exibirReceitasCategoria(dados);
+                break;
+            case 'despesas_categoria':
+                this.exibirDespesasCategoria(dados);
+                break;
+            case 'lucro_prejuizo':
+                this.exibirLucroPrejuizo(dados);
+                break;
+            case 'vendas_periodo':
+                this.exibirVendasPeriodo(dados);
+                break;
+            case 'completo':
+                this.exibirRelatorioCompleto(dados);
+                break;
+            default:
+                content.innerHTML = '<div class="text-center py-5"><h5 class="text-muted">Tipo de relatório não reconhecido</h5></div>';
+        }
+    }
+
+    exibirFluxoCaixa(dados) {
+        const content = document.getElementById('relatorioContent');
+        content.innerHTML = `
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card bg-success text-white">
+                        <div class="card-body text-center">
+                            <h5>Total Receitas</h5>
+                            <h3>R$ ${dados.total_receitas.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-danger text-white">
+                        <div class="card-body text-center">
+                            <h5>Total Despesas</h5>
+                            <h3>R$ ${dados.total_despesas.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-primary text-white">
+                        <div class="card-body text-center">
+                            <h5>Saldo Líquido</h5>
+                            <h3>R$ ${dados.saldo_liquido.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-info text-white">
+                        <div class="card-body text-center">
+                            <h5>Total Lançamentos</h5>
+                            <h3>${dados.total_lancamentos}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="fluxoCaixaChart"></canvas>
+            </div>
+        `;
+
+        this.createFluxoCaixaChart(dados);
+    }
+
+    createFluxoCaixaChart(dados) {
+        const ctx = document.getElementById('fluxoCaixaChart');
+        if (!ctx) return;
+
+        // Destruir gráfico anterior se existir
+        if (this.charts.fluxoCaixa) {
+            this.charts.fluxoCaixa.destroy();
+        }
+
+        this.charts.fluxoCaixa = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: dados.periodos,
+                datasets: [{
+                    label: 'Receitas',
+                    data: dados.receitas,
+                    borderColor: '#28a745',
+                    backgroundColor: '#28a74520',
+                    tension: 0.4
+                }, {
+                    label: 'Despesas',
+                    data: dados.despesas,
+                    borderColor: '#dc3545',
+                    backgroundColor: '#dc354520',
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Fluxo de Caixa por Período'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return 'R$ ' + value.toLocaleString('pt-BR');
+                            }
                         }
                     }
-                });
+                }
             }
         });
     }
 
-    abrirModalRelatorio() {
-        const modal = `
-            <div class="modal fade" id="modalRelatorio" tabindex="-1">
-                <div class="modal-dialog modal-lg">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">
-                                <i class="fas fa-chart-bar me-2"></i>
-                                Gerar Relatório
-                            </h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <form id="formRelatorio">
-                            <div class="modal-body">
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="mb-3">
-                                            <label class="form-label">Tipo de Relatório *</label>
-                                            <select class="form-select" name="tipo" required>
-                                                <option value="">Selecione o tipo</option>
-                                                <option value="fluxo_caixa">Fluxo de Caixa</option>
-                                                <option value="receitas_categoria">Receitas por Categoria</option>
-                                                <option value="despesas_categoria">Despesas por Categoria</option>
-                                                <option value="lucro_prejuizo">Lucro/Prejuízo</option>
-                                                <option value="vendas_periodo">Vendas por Período</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="mb-3">
-                                            <label class="form-label">Formato *</label>
-                                            <select class="form-select" name="formato" required>
-                                                <option value="pdf">PDF</option>
-                                                <option value="excel">Excel</option>
-                                                <option value="csv">CSV</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="mb-3">
-                                            <label class="form-label">Data Início *</label>
-                                            <input type="date" class="form-control" name="data_inicio" required>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="mb-3">
-                                            <label class="form-label">Data Fim *</label>
-                                            <input type="date" class="form-control" name="data_fim" required>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="mb-3">
-                                    <label class="form-label">Filtros Adicionais</label>
-                                    <div class="row">
-                                        <div class="col-md-6">
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" name="incluir_graficos" id="incluirGraficos" checked>
-                                                <label class="form-check-label" for="incluirGraficos">
-                                                    Incluir Gráficos
-                                                </label>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-6">
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" name="incluir_detalhes" id="incluirDetalhes" checked>
-                                                <label class="form-check-label" for="incluirDetalhes">
-                                                    Incluir Detalhes
-                                                </label>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="mb-3">
-                                    <label class="form-label">Observações</label>
-                                    <textarea class="form-control" name="observacoes" rows="3" placeholder="Observações para o relatório..."></textarea>
-                                </div>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="fas fa-file-pdf me-1"></i>
-                                    Gerar Relatório
-                                </button>
-                            </div>
-                        </form>
+    exibirReceitasCategoria(dados) {
+        const content = document.getElementById('relatorioContent');
+        content.innerHTML = `
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="chart-container">
+                        <canvas id="receitasChart"></canvas>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h5>Detalhamento por Categoria</h5>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Categoria</th>
+                                    <th>Valor</th>
+                                    <th>%</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${dados.categorias.map(cat => `
+                                    <tr>
+                                        <td>${cat.nome}</td>
+                                        <td>R$ ${cat.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                                        <td>${cat.percentual.toFixed(1)}%</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
         `;
 
-        $('body').append(modal);
-        $('#modalRelatorio').modal('show');
-
-        // Set default dates
-        const hoje = new Date();
-        const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-        $('#formRelatorio input[name="data_inicio"]').val(primeiroDia.toISOString().split('T')[0]);
-        $('#formRelatorio input[name="data_fim"]').val(hoje.toISOString().split('T')[0]);
-
-        // Bind form submit
-        $('#formRelatorio').on('submit', (e) => {
-            e.preventDefault();
-            this.gerarRelatorio();
-        });
+        this.createReceitasChart(dados);
     }
 
-    gerarRelatorio() {
-        const formData = new FormData($('#formRelatorio')[0]);
-        formData.append('action', 'gerar_relatorio');
+    createReceitasChart(dados) {
+        const ctx = document.getElementById('receitasChart');
+        if (!ctx) return;
 
-        Swal.fire({
-            title: 'Gerando Relatório',
-            text: 'Aguarde enquanto processamos os dados...',
-            icon: 'info',
-            allowOutsideClick: false,
-            showConfirmButton: false
-        });
+        if (this.charts.receitas) {
+            this.charts.receitas.destroy();
+        }
 
-        $.ajax({
-            url: 'mvc/ajax/financeiro.php',
-            method: 'POST',
-            data: formData,
-            processData: false,
-            contentType: false,
-            dataType: 'json',
-            success: (response) => {
-                if (response.success) {
-                    Swal.fire({
-                        title: 'Relatório Gerado!',
-                        text: 'O relatório foi gerado com sucesso.',
-                        icon: 'success'
-                    }).then(() => {
-                        $('#modalRelatorio').modal('hide');
-                        // Aqui você pode implementar o download do relatório
-                        this.downloadRelatorio(response.relatorio_id);
-                    });
-                } else {
-                    Swal.fire({
-                        title: 'Erro!',
-                        text: response.message,
-                        icon: 'error'
-                    });
-                }
+        this.charts.receitas = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: dados.categorias.map(cat => cat.nome),
+                datasets: [{
+                    data: dados.categorias.map(cat => cat.valor),
+                    backgroundColor: [
+                        '#28a745', '#17a2b8', '#ffc107', '#dc3545', '#6f42c1',
+                        '#fd7e14', '#20c997', '#6c757d', '#e83e8c', '#343a40'
+                    ]
+                }]
             },
-            error: () => {
-                Swal.fire({
-                    title: 'Erro!',
-                    text: 'Erro ao gerar relatório',
-                    icon: 'error'
-                });
-            }
-        });
-    }
-
-    downloadRelatorio(relatorioId) {
-        // Implementar download do relatório
-        window.open(`mvc/ajax/financeiro.php?action=download_relatorio&id=${relatorioId}`, '_blank');
-    }
-
-    loadCategorias() {
-        $.ajax({
-            url: 'mvc/ajax/financeiro.php',
-            method: 'GET',
-            data: { action: 'listar_categorias' },
-            dataType: 'json',
-            success: (response) => {
-                if (response.success) {
-                    const select = $('#categoriaSelect');
-                    select.empty().append('<option value="">Selecione uma categoria</option>');
-                    
-                    response.data.forEach(categoria => {
-                        select.append(`<option value="${categoria.id}">${categoria.nome}</option>`);
-                    });
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Receitas por Categoria'
+                    },
+                    legend: {
+                        position: 'bottom'
+                    }
                 }
             }
         });
     }
 
-    loadContas() {
-        $.ajax({
-            url: 'mvc/ajax/financeiro.php',
-            method: 'GET',
-            data: { action: 'listar_contas' },
-            dataType: 'json',
-            success: (response) => {
-                if (response.success) {
-                    const select = $('#contaSelect, #contaDestinoSelect');
-                    select.empty().append('<option value="">Selecione uma conta</option>');
-                    
-                    response.data.forEach(conta => {
-                        select.append(`<option value="${conta.id}">${conta.nome}</option>`);
-                    });
+    exibirDespesasCategoria(dados) {
+        const content = document.getElementById('relatorioContent');
+        content.innerHTML = `
+            <div class="row mb-4">
+                <div class="col-md-8">
+                    <div class="chart-container">
+                        <canvas id="despesasChart"></canvas>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <h5>Resumo</h5>
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Total Despesas:</span>
+                                <strong>R$ ${dados.total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Maior Categoria:</span>
+                                <strong>${dados.maior_categoria}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>Menor Categoria:</span>
+                                <strong>${dados.menor_categoria}</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        this.createDespesasChart(dados);
+    }
+
+    createDespesasChart(dados) {
+        const ctx = document.getElementById('despesasChart');
+        if (!ctx) return;
+
+        if (this.charts.despesas) {
+            this.charts.despesas.destroy();
+        }
+
+        this.charts.despesas = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: dados.categorias.map(cat => cat.nome),
+                datasets: [{
+                    label: 'Despesas',
+                    data: dados.categorias.map(cat => cat.valor),
+                    backgroundColor: '#dc3545',
+                    borderColor: '#dc3545',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Despesas por Categoria'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return 'R$ ' + value.toLocaleString('pt-BR');
+                            }
+                        }
+                    }
                 }
             }
         });
     }
 
-    aplicarFiltros() {
-        const form = $('#filtroForm');
-        const url = new URL(window.location);
+    exibirLucroPrejuizo(dados) {
+        const content = document.getElementById('relatorioContent');
+        content.innerHTML = `
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="chart-container">
+                        <canvas id="lucroChart"></canvas>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h5>Análise de Lucratividade</h5>
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Receitas:</span>
+                                <span class="text-success">R$ ${dados.receitas.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Despesas:</span>
+                                <span class="text-danger">R$ ${dados.despesas.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                            </div>
+                            <hr>
+                            <div class="d-flex justify-content-between">
+                                <strong>Lucro/Prejuízo:</strong>
+                                <strong class="${dados.lucro >= 0 ? 'text-success' : 'text-danger'}">
+                                    R$ ${dados.lucro.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                                </strong>
+                            </div>
+                            <div class="d-flex justify-content-between mt-2">
+                                <span>Margem:</span>
+                                <span class="${dados.margem >= 0 ? 'text-success' : 'text-danger'}">
+                                    ${dados.margem.toFixed(1)}%
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    exibirVendasPeriodo(dados) {
+        const content = document.getElementById('relatorioContent');
+        content.innerHTML = `
+            <div class="row mb-4">
+                <div class="col-md-8">
+                    <div class="chart-container">
+                        <canvas id="vendasChart"></canvas>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <h5>Estatísticas</h5>
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Total Vendas:</span>
+                                <strong>R$ ${dados.total_vendas.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Ticket Médio:</span>
+                                <strong>R$ ${dados.ticket_medio.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Total Pedidos:</span>
+                                <strong>${dados.total_pedidos}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>Melhor Dia:</span>
+                                <strong>${dados.melhor_dia}</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    exibirRelatorioCompleto(dados) {
+        const content = document.getElementById('relatorioContent');
+        content.innerHTML = `
+            <div class="report-preview">
+                <h4>Relatório Financeiro Completo</h4>
+                <p class="text-muted">Período: ${dados.periodo_inicio} a ${dados.periodo_fim}</p>
+                
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card bg-success text-white">
+                            <div class="card-body text-center">
+                                <h5>Receitas</h5>
+                                <h3>R$ ${dados.resumo.receitas.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-danger text-white">
+                            <div class="card-body text-center">
+                                <h5>Despesas</h5>
+                                <h3>R$ ${dados.resumo.despesas.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-primary text-white">
+                            <div class="card-body text-center">
+                                <h5>Saldo Líquido</h5>
+                                <h3>R$ ${dados.resumo.saldo_liquido.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-info text-white">
+                            <div class="card-body text-center">
+                                <h5>Lançamentos</h5>
+                                <h3>${dados.resumo.total_lancamentos}</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5>Top 5 Receitas por Categoria</h5>
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Categoria</th>
+                                    <th>Valor</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${dados.top_receitas.map(cat => `
+                                    <tr>
+                                        <td>${cat.nome}</td>
+                                        <td>R$ ${cat.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h5>Top 5 Despesas por Categoria</h5>
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Categoria</th>
+                                    <th>Valor</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${dados.top_despesas.map(cat => `
+                                    <tr>
+                                        <td>${cat.nome}</td>
+                                        <td>R$ ${cat.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    enableReportButtons() {
+        const btnExportar = document.getElementById('btnExportar');
+        const btnImprimir = document.getElementById('btnImprimir');
         
-        form.serializeArray().forEach(field => {
-            if (field.value) {
-                url.searchParams.set(field.name, field.value);
-            } else {
-                url.searchParams.delete(field.name);
-            }
+        if (btnExportar) btnExportar.disabled = false;
+        if (btnImprimir) btnImprimir.disabled = false;
+    }
+
+    exportarRelatorio() {
+        if (!this.currentReportData) {
+            this.showAlert('Aviso!', 'Nenhum relatório selecionado', 'warning');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('action', 'exportar_relatorio');
+        formData.append('tipo', this.currentReportType);
+        formData.append('dados', JSON.stringify(this.currentReportData));
+
+        this.showLoading('Exportando...', 'Preparando arquivo para download...');
+
+        fetch('mvc/ajax/financeiro.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.blob())
+        .then(blob => {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `relatorio_${this.currentReportType}_${new Date().toISOString().split('T')[0]}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            this.closeLoading();
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            this.showAlert('Erro!', 'Erro ao exportar relatório', 'error');
         });
-        
-        window.location.href = url.toString();
     }
 
-    // Métodos para relatórios
-    exportarDados(formato) {
-        const params = new URLSearchParams(window.location.search);
-        params.set('export', formato);
+    imprimirRelatorio() {
+        if (!this.currentReportData) {
+            this.showAlert('Aviso!', 'Nenhum relatório selecionado', 'warning');
+            return;
+        }
+
+        const printWindow = window.open('', '_blank');
+        const content = document.getElementById('relatorioContent');
         
-        window.open(`mvc/ajax/financeiro.php?${params.toString()}`, '_blank');
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Relatório Financeiro</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; }
+                        .header { text-align: center; margin-bottom: 30px; }
+                        .summary { display: flex; justify-content: space-around; margin: 20px 0; }
+                        .summary-item { text-align: center; padding: 10px; border: 1px solid #ddd; }
+                        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+                        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                        th { background-color: #f2f2f2; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h1>Relatório Financeiro</h1>
+                        <p>Gerado em: ${new Date().toLocaleDateString('pt-BR')}</p>
+                    </div>
+                    <div id="printContent">
+                        ${content.innerHTML}
+                    </div>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+        printWindow.print();
     }
 
-    // Métodos para gráficos
-    atualizarGraficos() {
-        // Implementar atualização de gráficos
-        if (typeof Chart !== 'undefined') {
-            // Recarregar dados dos gráficos
-            this.carregarDadosGraficos();
+    // ===== UTILITÁRIOS =====
+
+    showAlert(title, text, icon, callback = null) {
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                title: title,
+                text: text,
+                icon: icon
+            }).then(() => {
+                if (callback) callback();
+            });
+        } else {
+            alert(`${title}: ${text}`);
+            if (callback) callback();
         }
     }
 
-    carregarDadosGraficos() {
-        $.ajax({
-            url: 'mvc/ajax/financeiro.php',
-            method: 'GET',
-            data: { action: 'dados_graficos' },
-            dataType: 'json',
-            success: (response) => {
-                if (response.success) {
-                    this.renderizarGraficos(response.data);
+    showConfirm(title, text, icon, confirmCallback, cancelCallback = null) {
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                title: title,
+                text: text,
+                icon: icon,
+                showCancelButton: true,
+                confirmButtonText: 'Sim',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed && confirmCallback) {
+                    confirmCallback();
+                } else if (result.isDismissed && cancelCallback) {
+                    cancelCallback();
                 }
+            });
+        } else {
+            if (confirm(`${title}: ${text}`)) {
+                if (confirmCallback) confirmCallback();
+            } else if (cancelCallback) {
+                cancelCallback();
             }
-        });
+        }
     }
 
-    renderizarGraficos(dados) {
-        // Implementar renderização de gráficos
-        console.log('Dados dos gráficos:', dados);
+    showLoading(title, text) {
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                title: title,
+                text: text,
+                icon: 'info',
+                allowOutsideClick: false,
+                showConfirmButton: false
+            });
+        }
+    }
+
+    closeLoading() {
+        if (typeof Swal !== 'undefined') {
+            Swal.close();
+        }
+    }
+
+    // ===== FUNÇÕES GLOBAIS =====
+
+    // Funções para serem chamadas globalmente
+    static abrirModalLancamento() {
+        window.location.href = 'index.php?view=novo_lancamento';
+    }
+
+    static abrirModalRelatorio() {
+        window.location.href = 'index.php?view=gerar_relatorios';
+    }
+
+    static gerarRelatorio(tipo) {
+        if (window.financialSystem) {
+            window.financialSystem.gerarRelatorio(tipo);
+        }
+    }
+
+    static exportarRelatorio() {
+        if (window.financialSystem) {
+            window.financialSystem.exportarRelatorio();
+        }
+    }
+
+    static imprimirRelatorio() {
+        if (window.financialSystem) {
+            window.financialSystem.imprimirRelatorio();
+        }
+    }
+
+    static salvarRascunho() {
+        if (window.financialSystem) {
+            window.financialSystem.salvarRascunho();
+        }
+    }
+
+    static limparFormulario() {
+        if (window.financialSystem) {
+            window.financialSystem.limparFormulario();
+        }
     }
 }
 
-// Inicializar quando o documento estiver pronto
-$(document).ready(function() {
-    window.financeiroManager = new FinanceiroManager();
+// Inicializar sistema quando o DOM estiver pronto
+document.addEventListener('DOMContentLoaded', function() {
+    window.financialSystem = new FinancialSystem();
 });
 
 // Funções globais para compatibilidade
 function abrirModalLancamento() {
-    window.financeiroManager.abrirModalLancamento();
-}
-
-function editarLancamento(id) {
-    window.financeiroManager.editarLancamento(id);
-}
-
-function excluirLancamento(id) {
-    window.financeiroManager.excluirLancamento(id);
+    FinancialSystem.abrirModalLancamento();
 }
 
 function abrirModalRelatorio() {
-    window.financeiroManager.abrirModalRelatorio();
+    FinancialSystem.abrirModalRelatorio();
 }
 
 function gerarRelatorio(tipo) {
-    window.financeiroManager.gerarRelatorio();
+    FinancialSystem.gerarRelatorio(tipo);
 }
 
-function exportarDados() {
-    Swal.fire({
-        title: 'Exportar Dados',
-        text: 'Escolha o formato de exportação:',
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonText: 'Excel',
-        cancelButtonText: 'CSV',
-        showDenyButton: true,
-        denyButtonText: 'PDF'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            window.financeiroManager.exportarDados('excel');
-        } else if (result.dismiss === Swal.DismissReason.cancel) {
-            window.financeiroManager.exportarDados('csv');
-        } else if (result.isDenied) {
-            window.financeiroManager.exportarDados('pdf');
-        }
-    });
+function exportarRelatorio() {
+    FinancialSystem.exportarRelatorio();
+}
+
+function imprimirRelatorio() {
+    FinancialSystem.imprimirRelatorio();
+}
+
+function salvarRascunho() {
+    FinancialSystem.salvarRascunho();
+}
+
+function limparFormulario() {
+    FinancialSystem.limparFormulario();
 }

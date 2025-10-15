@@ -220,10 +220,6 @@ if ($tenant && $filial) {
                             <i class="fas fa-list"></i>
                             <span>Pedidos</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('mesas'); ?>" data-tooltip="Mesas">
-                            <i class="fas fa-table"></i>
-                            <span>Mesas</span>
-                        </a>
                         <a class="nav-link" href="<?php echo $router->url('delivery'); ?>" data-tooltip="Delivery">
                             <i class="fas fa-motorcycle"></i>
                             <span>Delivery</span>
@@ -749,7 +745,7 @@ if ($tenant && $filial) {
                 confirmButtonColor: '#dc3545'
             }).then((result) => {
                 if (result.isConfirmed) {
-            fetch('mvc/ajax/produtos_fix.php', {
+            fetch('index.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',

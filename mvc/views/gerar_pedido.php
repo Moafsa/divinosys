@@ -1074,6 +1074,9 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                         ${pedidoData.cliente ? `Cliente: ${pedidoData.cliente}` : ''}
                         ${pedidoData.telefone ? `<br>Telefone: ${pedidoData.telefone}` : ''}
                         ${pedidoData.endereco ? `<br>Endereço: ${pedidoData.endereco}` : ''}
+                        ${pedidoData.atendente ? `<br>Atendente: ${pedidoData.atendente}` : ''}
+                        ${pedidoData.telefone_atendente ? `<br>Tel. Atendente: ${pedidoData.telefone_atendente}` : ''}
+                        ${pedidoData.estabelecimento ? `<br>Estabelecimento: ${pedidoData.estabelecimento}` : ''}
                     </div>
                     
                     <div class="itens">
@@ -1131,35 +1134,70 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
         }
 
         function imprimirCupom(pedidoData) {
-            console.log('Imprimindo cupom para pedido:', pedidoData);
+            console.log('=== FUNÇÃO IMPRIMIRCUPOM CHAMADA ===');
+            console.log('Dados do pedido recebidos:', pedidoData);
+            console.log('=====================================');
             
-            const cupomHtml = gerarCupomFiscal(pedidoData);
-            const janelaImpressao = window.open('', '_blank', 'width=400,height=600,scrollbars=yes,resizable=yes');
-            
-            janelaImpressao.document.write(cupomHtml);
-            janelaImpressao.document.close();
-            
-            // Aguardar carregamento e imprimir
-            janelaImpressao.onload = function() {
-                console.log('Janela de impressão carregada');
+            try {
+                const cupomHtml = gerarCupomFiscal(pedidoData);
+                console.log('HTML do cupom gerado:', cupomHtml.substring(0, 200) + '...');
+                
+                const janelaImpressao = window.open('', '_blank', 'width=400,height=600,scrollbars=yes,resizable=yes');
+                console.log('Janela de impressão criada:', janelaImpressao);
+                
+                if (!janelaImpressao) {
+                    console.error('Erro: Não foi possível abrir janela de impressão');
+                    alert('Erro: Não foi possível abrir janela de impressão. Verifique se o popup está bloqueado.');
+                    return;
+                }
+                
+                janelaImpressao.document.write(cupomHtml);
+                janelaImpressao.document.close();
+                
+                // Aguardar carregamento e imprimir automaticamente
+                janelaImpressao.addEventListener('load', function() {
+                    console.log('Janela de impressão carregada');
+                    setTimeout(() => {
+                        try {
+                            janelaImpressao.focus();
+                            janelaImpressao.print();
+                            console.log('Comando de impressão enviado');
+                            
+                            // Fechar janela após um tempo
+                            setTimeout(() => {
+                                janelaImpressao.close();
+                            }, 3000);
+                        } catch (error) {
+                            console.error('Erro ao imprimir:', error);
+                            alert('Erro ao imprimir. Verifique se há uma impressora configurada.');
+                        }
+                    }, 500);
+                });
+                
+                // Fallback caso o evento load não funcione
                 setTimeout(() => {
-                    try {
-                        janelaImpressao.focus();
-                        janelaImpressao.print();
-                        console.log('Comando de impressão enviado');
-                        
-                        // Fechar janela após um tempo
-                        setTimeout(() => {
+                    if (!janelaImpressao.closed) {
+                        try {
+                            janelaImpressao.focus();
+                            janelaImpressao.print();
+                            console.log('Comando de impressão enviado (fallback)');
+                            
+                            setTimeout(() => {
+                                janelaImpressao.close();
+                            }, 3000);
+                        } catch (error) {
+                            console.error('Erro ao imprimir (fallback):', error);
                             janelaImpressao.close();
-                        }, 2000);
-                    } catch (error) {
-                        console.error('Erro ao imprimir:', error);
-                        alert('Erro ao imprimir. Verifique se há uma impressora configurada.');
+                        }
                     }
-                }, 1000);
-            };
+                }, 1500);
+                
+            } catch (error) {
+                console.error('Erro na função imprimirCupom:', error);
+                alert('Erro ao gerar cupom fiscal: ' + error.message);
+            }
         }
-
+        
         function finalizarPedido() {
             if (!mesaSelecionada) {
                 Swal.fire('Atenção', 'Selecione uma mesa primeiro!', 'warning');
@@ -1186,7 +1224,7 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
             });
             
             const formData = new URLSearchParams();
-            formData.append('action', isEditing ? 'atualizar_pedido' : 'criar_pedido');
+            formData.append('action', isEditing ? 'atualizar_pedido_completo' : 'criar_pedido');
             formData.append('mesa_id', mesaSelecionada.id);
             formData.append('itens', JSON.stringify(carrinho));
             formData.append('observacao', document.getElementById('observacaoPedido').value || '');
@@ -1210,11 +1248,16 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                     
                     // Verificar se deve imprimir
                     const deveImprimir = document.getElementById('imprimirPedido').checked;
+                    console.log('=== DEBUG IMPRESSÃO ===');
                     console.log('Deve imprimir:', deveImprimir);
+                    console.log('Checkbox elemento:', document.getElementById('imprimirPedido'));
                     console.log('Dados do pedido:', data.pedido);
+                    console.log('========================');
                     
                     if (deveImprimir && data.pedido) {
-                        // Preparar dados para impressão
+                        console.log('=== INICIANDO IMPRESSÃO ===');
+                        
+                        // Preparar dados básicos para impressão (versão simplificada)
                         const pedidoData = {
                             id: data.pedido.idpedido || data.pedido.id,
                             tipo: mesaSelecionada.tipo || 'mesa',
@@ -1224,15 +1267,21 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                             endereco: mesaSelecionada.endereco || '',
                             itens: carrinho,
                             valor_total: carrinho.reduce((total, item) => total + (item.preco * item.quantidade), 0),
-                            observacao: document.getElementById('observacaoPedido').value || ''
+                            observacao: document.getElementById('observacaoPedido').value || '',
+                            atendente: 'Usuário',
+                            telefone_atendente: '',
+                            estabelecimento: 'Divino Lanches'
                         };
                         
-                        console.log('Dados preparados para impressão:', pedidoData);
+                        console.log('Dados preparados para impressão (simplificado):', pedidoData);
                         
-                        // Imprimir cupom
+                        // Imprimir imediatamente
+                        console.log('=== CHAMANDO IMPRIMIRCUPOM (VERSÃO SIMPLIFICADA) ===');
                         setTimeout(() => {
+                            console.log('Executando imprimirCupom após timeout (versão simplificada)');
                             imprimirCupom(pedidoData);
                         }, 1000);
+                        
                     } else {
                         console.log('Não imprimindo - deveImprimir:', deveImprimir, 'data.pedido:', data.pedido);
                     }

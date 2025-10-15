@@ -23,6 +23,7 @@ class Router
         return self::$instance;
     }
 
+
     private function loadRoutes()
     {
         $this->routes = [
@@ -31,21 +32,24 @@ class Router
             'login_admin' => 'login_admin.php',
             'logout' => 'logout.php',
             'dashboard' => 'Dashboard1.php',
+            'cliente_dashboard' => 'cliente_dashboard.php',
+            'historico_pedidos' => 'historico_pedidos.php',
+            'perfil' => 'perfil.php',
             'gerar_pedido' => 'gerar_pedido.php',
             'pedidos' => 'pedidos.php',
             'fechar_pedido' => 'FecharPedido.php',
-            'mesas' => 'mesas.php',
             'delivery' => 'delivery.php',
             'gerenciar_produtos' => 'gerenciar_produtos.php',
             'crud_simples' => 'crud_simples.php',
             'estoque' => 'estoque.php',
             'financeiro' => 'financeiro.php',
+            'novo_lancamento' => 'novo_lancamento.php',
+            'gerar_relatorios' => 'gerar_relatorios.php',
             'relatorios' => 'relatorios.php',
             'lancamentos' => 'lancamentos.php',
             'agenda' => 'agenda/index.php',
             'clientes' => 'clientes.php',
             'entregadores' => 'entregadores.php',
-            'usuarios' => 'usuarios.php',
             'ai_chat' => 'AIChat.php',
             'configuracoes' => 'configuracoes.php',
             'salvar_configuracoes' => 'salvar_configuracoes.php',
@@ -101,10 +105,10 @@ class Router
     private function isMultiTenantRoute($view)
     {
         $multiTenantRoutes = [
-            'dashboard', 'gerar_pedido', 'pedidos', 'mesas', 'delivery',
+            'dashboard', 'gerar_pedido', 'pedidos', 'delivery',
             'gerenciar_produtos', 'gerenciar_categorias', 'estoque',
             'financeiro', 'relatorios', 'lancamentos', 'agenda', 'clientes', 'entregadores',
-            'usuarios', 'ai_chat', 'configuracoes', 'whatsapp_config'
+            'ai_chat', 'configuracoes', 'whatsapp_config'
         ];
         return in_array($view, $multiTenantRoutes);
     }
@@ -247,7 +251,6 @@ class Router
             'dashboard' => 'Dashboard',
             'gerar_pedido' => 'Novo Pedido',
             'pedidos' => 'Pedidos',
-            'mesas' => 'Mesas',
             'delivery' => 'Delivery',
             'gerenciar_produtos' => 'Produtos',
             'gerenciar_categorias' => 'Categorias',
@@ -257,7 +260,6 @@ class Router
             'agenda' => 'Agenda',
             'clientes' => 'Clientes',
             'entregadores' => 'Entregadores',
-            'usuarios' => 'Usuários',
             'configuracoes' => 'Configurações',
         ];
         

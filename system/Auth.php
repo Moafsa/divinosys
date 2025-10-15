@@ -575,20 +575,20 @@ class Auth
                 'novo_pedido', 'mesas', 'relatorios_avancados'
             ],
             'cozinha' => [
-                'pedidos', 'estoque', 'produtos'
+                'dashboard', 'pedidos', 'estoque', 'produtos', 'gerenciar_produtos', 'gerar_pedido', 'novo_pedido', 'logout'
             ],
             'garcom' => [
-                'novo_pedido', 'pedidos', 'delivery', 'dashboard', 'mesas'
+                'novo_pedido', 'pedidos', 'delivery', 'dashboard', 'mesas', 'logout'
             ],
             'entregador' => [
-                'delivery', 'pedidos'
+                'delivery', 'pedidos', 'logout'
             ],
             'caixa' => [
                 'dashboard', 'novo_pedido', 'delivery', 'produtos', 'estoque', 
-                'pedidos', 'financeiro', 'mesas'
+                'pedidos', 'financeiro', 'mesas', 'logout'
             ],
             'cliente' => [
-                'historico_pedidos', 'perfil', 'novo_pedido'
+                'cliente_dashboard', 'historico_pedidos', 'perfil', 'novo_pedido', 'gerar_pedido', 'pedidos', 'logout'
             ]
         ];
 
@@ -600,6 +600,11 @@ class Auth
      */
     public static function logout()
     {
+        // Inicializar banco de dados se necessário
+        if (!self::$db) {
+            self::$db = Database::getInstance();
+        }
+        
         if (isset($_SESSION['auth_token'])) {
             // Marcar sessão como expirada
             self::$db->update(

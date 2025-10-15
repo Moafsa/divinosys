@@ -109,6 +109,16 @@ try {
                 throw new \Exception('Payment method is required');
             }
             
+            // Validate FIADO payment requirements
+            if ($formaPagamento === 'FIADO') {
+                if (empty($nomeCliente)) {
+                    throw new \Exception('Nome do cliente é obrigatório para pagamento fiado');
+                }
+                if (empty($telefoneCliente)) {
+                    throw new \Exception('Telefone do cliente é obrigatório para pagamento fiado');
+                }
+            }
+            
             // Start transaction
             $db->beginTransaction();
             
@@ -163,6 +173,9 @@ try {
                     $statusPagamento = 'pendente';
                 }
                 
+                // FIADO is treated as a normal payment - it counts towards the total
+                // No special handling needed - FIADO counts as payment
+                
                 // Insert payment record
                 $pagamentoId = $db->insert('pagamentos_pedido', [
                     'pedido_id' => $pedidoId,
@@ -197,8 +210,8 @@ try {
                         $updateData['telefone_cliente'] = $telefoneCliente;
                     }
                     
-                    // Free the table if not delivery
-                    if ($pedido['idmesa'] && $pedido['idmesa'] != '999') {
+                    // Free the table if not delivery AND saldo_devedor is zero
+                    if ($pedido['idmesa'] && $pedido['idmesa'] != '999' && $saldoDevedor <= 0) {
                         // Check if there are other open orders for this table
                         $pedidosAbertos = $db->fetch(
                             "SELECT COUNT(*) as count 
@@ -220,6 +233,17 @@ try {
                                 [$pedido['idmesa'], $tenantId, $filialId]
                             );
                         }
+                    }
+                }
+                
+                // For FIADO payments, still update client info but don't change table status
+                if ($formaPagamento === 'FIADO') {
+                    // Update client info (mandatory for FIADO)
+                    if ($nomeCliente) {
+                        $updateData['cliente'] = $nomeCliente;
+                    }
+                    if ($telefoneCliente) {
+                        $updateData['telefone_cliente'] = $telefoneCliente;
                     }
                 }
                 
@@ -353,18 +377,16 @@ try {
             
             error_log('PAGAMENTOS_PARCIAIS: Pedidos encontrados na mesa: ' . json_encode($pedidosMesa));
 
-            // Calcular o saldo devedor total da mesa - apenas pedidos NÃO quitados
+            // Calcular o saldo devedor total da mesa - FIADO conta como pagamento normal
             $saldoDevedorMesa = 0;
             $valorTotalMesa = 0;
             
             foreach ($pedidosMesa as $pedido) {
                 if (!in_array($pedido['status'], ['Finalizado', 'Cancelado'])) {
-                    // Se o pedido NÃO está quitado, incluir no cálculo
-                    if ($pedido['status_pagamento'] != 'quitado') {
-                        // Usar saldo_devedor do banco de dados (que já está correto)
-                        $saldoDevedorMesa += (float)($pedido['saldo_devedor'] ?? 0);
-                        $valorTotalMesa += (float)($pedido['valor_total'] ?? 0);
-                    }
+                    $valorTotalMesa += (float)($pedido['valor_total'] ?? 0);
+                    
+                    // Usar o saldo_devedor do banco que já considera todos os pagamentos (incluindo FIADO)
+                    $saldoDevedorMesa += (float)($pedido['saldo_devedor'] ?? 0);
                 }
             }
 
@@ -383,6 +405,16 @@ try {
 
             if (!$mesaId || !$formaPagamento || $valorPago === null) {
                 throw new \Exception('Dados incompletos para registrar pagamento da mesa.');
+            }
+            
+            // Validate FIADO payment requirements for mesa
+            if ($formaPagamento === 'FIADO') {
+                if (empty($nomeCliente)) {
+                    throw new \Exception('Nome do cliente é obrigatório para pagamento fiado');
+                }
+                if (empty($telefoneCliente)) {
+                    throw new \Exception('Telefone do cliente é obrigatório para pagamento fiado');
+                }
             }
 
             $db->beginTransaction();

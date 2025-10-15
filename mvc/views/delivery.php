@@ -9,6 +9,21 @@ $user = $session->getUser();
 $tenant = $session->getTenant();
 $filial = $session->getFilial();
 
+// Debug: Se não tem tenant/filial, usar valores padrão
+if (!$tenant) {
+    $tenant = $db->fetch("SELECT * FROM tenants WHERE id = 1");
+    if ($tenant) {
+        $session->setTenant($tenant);
+    }
+}
+
+if (!$filial) {
+    $filial = $db->fetch("SELECT * FROM filiais WHERE id = 1");
+    if ($filial) {
+        $session->setFilial($filial);
+    }
+}
+
 // Get delivery pedidos
 $pedidos = [];
 if ($tenant && $filial) {
@@ -171,17 +186,9 @@ foreach ($pedidos as $pedido) {
                             <i class="fas fa-tachometer-alt"></i>
                             <span>Dashboard</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('gerar_pedido'); ?>" data-tooltip="Novo Pedido">
-                            <i class="fas fa-plus-circle"></i>
-                            <span>Novo Pedido</span>
-                        </a>
                         <a class="nav-link" href="<?php echo $router->url('pedidos'); ?>" data-tooltip="Pedidos">
                             <i class="fas fa-list"></i>
                             <span>Pedidos</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('mesas'); ?>" data-tooltip="Mesas">
-                            <i class="fas fa-table"></i>
-                            <span>Mesas</span>
                         </a>
                         <a class="nav-link active" href="<?php echo $router->url('delivery'); ?>" data-tooltip="Delivery">
                             <i class="fas fa-motorcycle"></i>
@@ -290,6 +297,9 @@ foreach ($pedidos as $pedido) {
                                                         <i class="fas fa-check-circle"></i>
                                                     </button>
                                                 <?php endif; ?>
+                                                <button class="btn btn-sm btn-outline-success" onclick="event.stopPropagation(); imprimirPedidoDelivery(<?php echo $pedido['idpedido']; ?>)" title="Imprimir Pedido">
+                                                    <i class="fas fa-print"></i>
+                                                </button>
                                                 <button class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); atualizarStatus(<?php echo $pedido['idpedido']; ?>, '<?php echo $status; ?>')">
                                                     <i class="fas fa-arrow-right"></i>
                                                 </button>
@@ -400,6 +410,10 @@ foreach ($pedidos as $pedido) {
                                         ${pedido.observacao ? '<div class="mt-3"><strong>Observação:</strong> ' + pedido.observacao + '</div>' : ''}
                                     </div>
                                     <div class="modal-footer">
+                                        <button type="button" class="btn btn-success" onclick="imprimirPedidoDelivery(${pedido.idpedido})">
+                                            <i class="fas fa-print me-1"></i>
+                                            Imprimir
+                                        </button>
                                         <button type="button" class="btn btn-primary" onclick="editarPedido(${pedido.idpedido})">
                                             <i class="fas fa-edit me-1"></i>
                                             Editar Pedido
@@ -517,6 +531,143 @@ foreach ($pedidos as $pedido) {
 
         function atualizarDelivery() {
             location.reload();
+        }
+
+        function imprimirPedidoDelivery(pedidoId) {
+            console.log('Imprimindo pedido delivery:', pedidoId);
+            
+            // Create a new window for printing
+            const printWindow = window.open('', '_blank', 'width=800,height=600');
+            
+            // Fetch pedido data
+            fetch('mvc/ajax/pedidos.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: `action=buscar_pedido&pedido_id=${pedidoId}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const pedido = data.pedido;
+                    const itens = data.itens || [];
+                    
+                    // Generate print HTML using the same format as gerar_pedido.php
+                    let printHtml = `
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <meta charset="UTF-8">
+                            <title>Cupom Fiscal - Pedido Delivery #${pedido.idpedido}</title>
+                            <style>
+                                body { font-family: 'Courier New', monospace; font-size: 11px; margin: 0; padding: 8px; }
+                                .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
+                                .empresa { font-weight: bold; font-size: 13px; }
+                                .endereco { font-size: 9px; }
+                                .pedido-info { margin: 8px 0; font-size: 10px; }
+                                .item { margin: 3px 0; }
+                                .item-nome { font-weight: bold; font-size: 11px; }
+                                .item-detalhes { font-size: 10px; margin-left: 8px; }
+                                .modificacoes { margin-left: 15px; font-size: 10px; }
+                                .adicionado { color: green; }
+                                .removido { color: red; }
+                                .total { border-top: 1px dashed #000; padding-top: 8px; margin-top: 8px; font-weight: bold; font-size: 12px; }
+                                .footer { text-align: center; margin-top: 15px; font-size: 9px; }
+                                .delivery-info { background-color: #f0f8f0; padding: 8px; margin: 8px 0; border: 1px dashed #000; font-size: 10px; }
+                                @media print { body { margin: 0; padding: 5px; font-size: 10px; } }
+                            </style>
+                        </head>
+                        <body>
+                            <div class="header">
+                                <div class="empresa">DIVINO LANCHES</div>
+                                <div class="endereco">Rua das Flores, 123 - Centro</div>
+                                <div class="endereco">Tel: (11) 99999-9999</div>
+                            </div>
+                            
+                            <div class="pedido-info">
+                                <strong>PEDIDO #${pedido.idpedido}</strong><br>
+                                Data/Hora: ${pedido.data} ${pedido.hora_pedido}<br>
+                                <strong>DELIVERY</strong><br>
+                                ${pedido.cliente ? `Cliente: ${pedido.cliente}` : ''}
+                                ${pedido.telefone_cliente ? `<br>Telefone: ${pedido.telefone_cliente}` : ''}
+                                ${pedido.usuario_nome ? `<br>Atendente: ${pedido.usuario_nome}` : ''}
+                            </div>
+                            
+                            <div class="delivery-info">
+                                <strong>🚚 ENTREGA</strong><br>
+                                ${pedido.cliente || 'Cliente Delivery'}
+                            </div>
+                            
+                            <div class="itens">
+                                <strong>ITENS DO PEDIDO:</strong><br>`;
+                    
+                    itens.forEach(item => {
+                        printHtml += `
+                            <div class="item">
+                                <div class="item-nome">${item.quantidade}x ${item.nome_produto || 'Produto'}</div>
+                                <div class="item-detalhes">R$ ${parseFloat(item.valor_unitario).toFixed(2).replace('.', ',')}</div>`;
+                        
+                        if (item.ingredientes_com && item.ingredientes_com.length > 0) {
+                            printHtml += `<div class="modificacoes">`;
+                            item.ingredientes_com.forEach(ing => {
+                                printHtml += `<div class="adicionado">+ ${ing}</div>`;
+                            });
+                            printHtml += `</div>`;
+                        }
+                        
+                        if (item.ingredientes_sem && item.ingredientes_sem.length > 0) {
+                            printHtml += `<div class="modificacoes">`;
+                            item.ingredientes_sem.forEach(ing => {
+                                printHtml += `<div class="removido">- ${ing}</div>`;
+                            });
+                            printHtml += `</div>`;
+                        }
+                        
+                        if (item.observacao) {
+                            printHtml += `<div class="item-detalhes">Obs: ${item.observacao}</div>`;
+                        }
+                        
+                        printHtml += `</div>`;
+                    });
+                    
+                    printHtml += `
+                            </div>
+                            
+                            <div class="total">
+                                <strong>TOTAL: R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</strong>
+                            </div>
+                            
+                            ${pedido.observacao ? `<div class="pedido-info"><strong>Observação:</strong> ${pedido.observacao}</div>` : ''}
+                            
+                            <div class="footer">
+                                <strong>🚚 DELIVERY</strong><br>
+                                Obrigado pela preferência!<br>
+                                Volte sempre!<br>
+                                Impresso em: ${new Date().toLocaleString('pt-BR')}
+                            </div>
+                        </body>
+                        </html>`;
+                    
+                    // Write content to print window
+                    printWindow.document.write(printHtml);
+                    printWindow.document.close();
+                    
+                    // Print after content loads
+                    printWindow.onload = function() {
+                        printWindow.print();
+                        printWindow.close();
+                    };
+                    
+                } else {
+                    Swal.fire('Erro', 'Erro ao carregar dados do pedido para impressão', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao imprimir pedido:', error);
+                Swal.fire('Erro', 'Erro ao imprimir pedido', 'error');
+            });
         }
 
         // Auto-refresh every 30 seconds

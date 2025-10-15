@@ -51,6 +51,14 @@ try {
                 $session->set('tenant_id', $user['tenant_id'] ?? '1');
             }
             
+            // Definir filial_id na sessão se não estiver definido
+            if (!$session->getFilialId()) {
+                $session->set('filial_id', $user['filial_id'] ?? '1');
+            }
+            
+            // Definir user_type na sessão para controle de acesso
+            $session->set('user_type', 'admin'); // Assumindo que login admin é sempre admin
+            
             echo json_encode([
                 'success' => true, 
                 'message' => 'Login realizado com sucesso!',

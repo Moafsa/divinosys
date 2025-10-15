@@ -112,11 +112,20 @@ try {
                 throw new \Exception('Tabela pedido não existe');
             }
             
-            // Buscar todos os pedidos da mesa (excluindo quitados e entregues quitados)
-            $pedidos = $db->fetchAll(
-                "SELECT * FROM pedido WHERE idmesa::varchar = ? AND tenant_id = ? AND filial_id = ? AND status IN ('Pendente', 'Preparando', 'Pronto', 'Entregue') AND status_pagamento != 'quitado' AND NOT (status = 'Entregue' AND status_pagamento = 'quitado') ORDER BY created_at ASC",
-                [$mesa['id_mesa'], $tenantId, $filialId]
-            );
+        // Buscar todos os pedidos da mesa com dados do estabelecimento (excluindo quitados e entregues quitados)
+        $pedidos = $db->fetchAll(
+            "SELECT p.*, t.nome as tenant_nome, f.nome as filial_nome, u.login as usuario_nome
+             FROM pedido p 
+             LEFT JOIN tenants t ON p.tenant_id = t.id 
+             LEFT JOIN filiais f ON p.filial_id = f.id 
+             LEFT JOIN usuarios u ON p.usuario_id = u.id AND u.tenant_id = p.tenant_id
+             WHERE p.idmesa::varchar = ? AND p.tenant_id = ? AND p.filial_id = ? 
+             AND p.status IN ('Pendente', 'Preparando', 'Pronto', 'Entregue') 
+             AND p.status_pagamento != 'quitado' 
+             AND NOT (p.status = 'Entregue' AND p.status_pagamento = 'quitado') 
+             ORDER BY p.created_at ASC",
+            [$mesa['id_mesa'], $tenantId, $filialId]
+        );
             
             // Calcular saldo devedor total da mesa
             $saldoDevedorTotal = 0;
@@ -171,6 +180,7 @@ try {
                         [$pedido['idpedido'], $tenantId, $filialId]
                     );
                     
+                    
                     $html .= '
                         <div class="card mb-3">
                             <div class="card-header d-flex justify-content-between align-items-center">
@@ -181,8 +191,11 @@ try {
                                 <div class="text-end">
                                     <strong>R$ ' . number_format($pedido['valor_total'], 2, ',', '.') . '</strong>
                                     <br><small class="text-muted">' . $pedido['hora_pedido'] . '</small>
+                                    ' . (!empty($pedido['usuario_nome']) ? '<br><small class="text-info"><i class="fas fa-user"></i> ' . htmlspecialchars($pedido['usuario_nome']) . '</small>' : '') . '
+                                    ' . (!empty($pedido['tenant_nome']) ? '<br><small class="text-secondary"><i class="fas fa-building"></i> ' . htmlspecialchars($pedido['tenant_nome']) . '</small>' : '') . '
                                 </div>
-                            </div>';
+                            </div>
+';
                     
                     // Mostrar observação do pedido se existir
                     if (!empty($pedido['observacao'])) {
@@ -264,11 +277,17 @@ try {
                                         </table>
                                     </div>
                                 </div>
-                                
-                                <div class="actions">
+                            </div>
+                            
+                            <div class="card-footer">
+                                <div class="actions d-flex gap-2 flex-wrap">
                                     <button class="btn btn-primary btn-sm" onclick="editarPedido(' . $pedido['idpedido'] . ')">
                                         <i class="fas fa-edit"></i> Editar
+                                    </button>
+                                    <button class="btn btn-outline-success btn-sm" onclick="imprimirPedidoMesa(' . $pedido['idpedido'] . ')" title="Imprimir Pedido">
+                                        <i class="fas fa-print"></i> Imprimir
                                     </button>';
+                    
                     
                     // Adicionar botão de avançar status baseado no status atual
                     $statusAtual = $pedido['status'];
@@ -297,11 +316,6 @@ try {
                 $html .= '
                         </div>
                         
-                        <div class="actions-mesa mt-3">
-                            <button class="btn btn-success btn-lg" onclick="fecharMesaCompleta(' . $mesa['id_mesa'] . ')">
-                                <i class="fas fa-check-circle"></i> Fechar Mesa Completa
-                            </button>
-                        </div>
                     </div>
                 ';
             }
@@ -642,6 +656,160 @@ function avancarStatusPedido(pedidoId, novoStatus) {
     .catch(error => {
         console.error('Erro na requisição:', error);
         Swal.fire('Erro', 'Erro ao atualizar status do pedido', 'error');
+    });
+}
+
+function imprimirPedidoMesa(pedidoId) {
+    console.log('Imprimindo pedido:', pedidoId);
+    
+    // Show loading message
+    Swal.fire({
+        title: 'Preparando impressão...',
+        text: 'Aguarde enquanto carregamos os dados do pedido',
+        icon: 'info',
+        allowOutsideClick: false,
+        showConfirmButton: false,
+        timer: 2000
+    });
+    
+    // Create a new window for printing
+    const printWindow = window.open('', '_blank', 'width=800,height=600');
+    
+    // Fetch pedido data
+    fetch('index.php?action=pedidos', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: `action=buscar_pedido&pedido_id=${pedidoId}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const pedido = data.pedido;
+            const itens = data.itens || [];
+            
+            // Generate print HTML using the same format as gerar_pedido.php
+            let printHtml = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <title>Cupom Fiscal - Pedido #${pedido.idpedido}</title>
+                    <style>
+                        body { font-family: 'Courier New', monospace; font-size: 11px; margin: 0; padding: 8px; }
+                        .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
+                        .empresa { font-weight: bold; font-size: 13px; }
+                        .endereco { font-size: 9px; }
+                        .pedido-info { margin: 8px 0; font-size: 10px; }
+                        .item { margin: 3px 0; }
+                        .item-nome { font-weight: bold; font-size: 11px; }
+                        .item-detalhes { font-size: 10px; margin-left: 8px; }
+                        .modificacoes { margin-left: 15px; font-size: 10px; }
+                        .adicionado { color: green; }
+                        .removido { color: red; }
+                        .total { border-top: 1px dashed #000; padding-top: 8px; margin-top: 8px; font-weight: bold; font-size: 12px; }
+                        .footer { text-align: center; margin-top: 15px; font-size: 9px; }
+                        @media print { body { margin: 0; padding: 5px; font-size: 10px; } }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <div class="empresa">DIVINO LANCHES</div>
+                        <div class="endereco">Rua das Flores, 123 - Centro</div>
+                        <div class="endereco">Tel: (11) 99999-9999</div>
+                    </div>
+                    
+                    <div class="pedido-info">
+                        <strong>PEDIDO #${pedido.idpedido}</strong><br>
+                        Data/Hora: ${pedido.data} ${pedido.hora_pedido}<br>
+                        ${pedido.idmesa && pedido.idmesa !== '999' ? `Mesa: ${pedido.idmesa}` : 'DELIVERY'}<br>
+                        ${pedido.cliente ? `Cliente: ${pedido.cliente}` : ''}
+                        ${pedido.telefone_cliente ? `<br>Telefone: ${pedido.telefone_cliente}` : ''}
+                        ${pedido.usuario_nome ? `<br>Atendente: ${pedido.usuario_nome}` : ''}
+                    </div>
+                    
+                    <div class="itens">
+                        <strong>ITENS DO PEDIDO:</strong><br>`;
+            
+            itens.forEach(item => {
+                printHtml += `
+                    <div class="item">
+                        <div class="item-nome">${item.quantidade}x ${item.nome_produto || 'Produto'}</div>
+                        <div class="item-detalhes">R$ ${parseFloat(item.valor_unitario).toFixed(2).replace('.', ',')}</div>`;
+                
+                if (item.ingredientes_com && item.ingredientes_com.length > 0) {
+                    printHtml += `<div class="modificacoes">`;
+                    item.ingredientes_com.forEach(ing => {
+                        printHtml += `<div class="adicionado">+ ${ing}</div>`;
+                    });
+                    printHtml += `</div>`;
+                }
+                
+                if (item.ingredientes_sem && item.ingredientes_sem.length > 0) {
+                    printHtml += `<div class="modificacoes">`;
+                    item.ingredientes_sem.forEach(ing => {
+                        printHtml += `<div class="removido">- ${ing}</div>`;
+                    });
+                    printHtml += `</div>`;
+                }
+                
+                if (item.observacao) {
+                    printHtml += `<div class="item-detalhes">Obs: ${item.observacao}</div>`;
+                }
+                
+                printHtml += `</div>`;
+            });
+            
+            printHtml += `
+                    </div>
+                    
+                    <div class="total">
+                        <strong>TOTAL: R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</strong>
+                    </div>
+                    
+                    ${pedido.observacao ? `<div class="pedido-info"><strong>Observação:</strong> ${pedido.observacao}</div>` : ''}
+                    
+                    <div class="footer">
+                        Obrigado pela preferência!<br>
+                        Volte sempre!<br>
+                        Impresso em: ${new Date().toLocaleString('pt-BR')}
+                    </div>
+                </body>
+                </html>`;
+            
+            // Write content to print window
+            printWindow.document.write(printHtml);
+            printWindow.document.close();
+            
+            // Print after content loads
+            printWindow.onload = function() {
+                setTimeout(() => {
+                    printWindow.print();
+                    // Don't close immediately to allow user to see the print preview
+                    setTimeout(() => {
+                        printWindow.close();
+                    }, 1000);
+                }, 500);
+            };
+            
+            // Show success message
+            Swal.fire({
+                title: 'Sucesso!',
+                text: 'Pedido enviado para impressão',
+                icon: 'success',
+                timer: 2000,
+                showConfirmButton: false
+            });
+            
+        } else {
+            Swal.fire('Erro', 'Erro ao carregar dados do pedido para impressão', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Erro ao imprimir pedido:', error);
+        Swal.fire('Erro', 'Erro ao imprimir pedido: ' + error.message, 'error');
     });
 }
 </script>

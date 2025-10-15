@@ -2,6 +2,12 @@
 // Componente de menu de navegação baseado em permissões
 $navigationMenu = $GLOBALS['navigationMenu'] ?? [];
 $currentRoute = $_GET['view'] ?? 'dashboard';
+
+// Debug temporário
+if (empty($navigationMenu)) {
+    error_log("Navigation menu is empty. User type: " . ($_SESSION['user_type'] ?? 'not set'));
+    error_log("Global navigationMenu: " . print_r($GLOBALS['navigationMenu'] ?? 'not set', true));
+}
 ?>
 
 <nav class="nav flex-column">

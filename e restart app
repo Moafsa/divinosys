@@ -1,0 +1,32 @@
+[33mcommit 95c3a9882d5af1a63bf3ccd31f00d78178f177e7[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: moafsa <moafsa@gmail.com>
+Date:   Tue Oct 14 12:39:23 2025 -0300
+
+    feat: Implementar sistema completo de lançamentos financeiros
+    
+    - ✅ Criar página de lançamentos financeiros (entradas e saídas)
+    - ✅ Implementar CRUD completo de lançamentos (criar, editar, deletar)
+    - ✅ Adicionar funcionalidade de editar pedidos na página financeiro
+    - ✅ Criar AJAX endpoints para gerenciar lançamentos
+    - ✅ Adicionar filtros avançados (tipo, categoria, conta, status, período)
+    - ✅ Implementar atualização automática de saldos das contas
+    - ✅ Adicionar validações e tratamento de erros
+    - ✅ Interface responsiva com SweetAlert2 para modais
+    - ✅ Integração completa com sistema financeiro existente
+
+[1mdiff --git a/index.php b/index.php[m
+[1mindex 661df51..dfb2a72 100644[m
+[1m--- a/index.php[m
+[1m+++ b/index.php[m
+[36m@@ -10,6 +10,11 @@[m [mini_set('display_errors', 1);[m
+ // Set timezone[m
+ date_default_timezone_set('America/Sao_Paulo');[m
+ [m
+[32m+[m[32m// Start session[m
+[32m+[m[32mif (session_status() === PHP_SESSION_NONE) {[m
+[32m+[m[32m    session_start();[m
+[32m+[m[32m}[m
+[32m+[m
+ // Define application paths[m
+ define('APP_PATH', __DIR__);[m
+ define('SYSTEM_PATH', __DIR__ . '/system');[m

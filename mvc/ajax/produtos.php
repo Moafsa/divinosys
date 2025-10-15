@@ -85,7 +85,7 @@ try {
             
             if (empty($produtoId)) {
                 // Criar novo produto
-                $stmt = $db->prepare("
+                $stmt = $db->query("
                     INSERT INTO produtos (nome, descricao, preco_normal, preco_mini, categoria_id, ativo, tenant_id, filial_id) 
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ");
@@ -93,7 +93,7 @@ try {
                 $message = 'Produto criado com sucesso!';
             } else {
                 // Atualizar produto existente
-                $stmt = $db->prepare("
+                $stmt = $db->query("
                     UPDATE produtos 
                     SET nome = ?, descricao = ?, preco_normal = ?, preco_mini = ?, categoria_id = ?, ativo = ? 
                     WHERE id = ? AND tenant_id = ? AND filial_id = ?
@@ -108,36 +108,6 @@ try {
             ]);
             break;
             
-        case 'excluir_produto':
-            $produtoId = $_GET['id'] ?? $_POST['id'] ?? '';
-            
-            if (empty($produtoId)) {
-                throw new \Exception('ID do produto é obrigatório');
-            }
-            
-            $db = \System\Database::getInstance();
-            $session = \System\Session::getInstance();
-            $tenantId = $session->getTenantId() ?? 1;
-            $filialId = $session->getFilialId() ?? 1;
-            
-            // Verificar se há pedidos usando este produto
-            $stmt = $db->prepare("SELECT COUNT(*) FROM pedido_itens WHERE produto_id = ? AND tenant_id = ? AND filial_id = ?");
-            $stmt->execute([$produtoId, $tenantId, $filialId]);
-            $pedidosCount = $stmt->fetchColumn();
-            
-            if ($pedidosCount > 0) {
-                throw new \Exception('Não é possível excluir produto que possui pedidos associados');
-            }
-            
-            // Excluir produto
-            $stmt = $db->prepare("DELETE FROM produtos WHERE id = ? AND tenant_id = ? AND filial_id = ?");
-            $stmt->execute([$produtoId, $tenantId, $filialId]);
-            
-            echo json_encode([
-                'success' => true,
-                'message' => 'Produto excluído com sucesso'
-            ]);
-            break;
             
         case 'salvar_categoria':
             $categoriaId = $_POST['categoria_id'] ?? '';
@@ -157,7 +127,7 @@ try {
             
             if (empty($categoriaId)) {
                 // Criar nova categoria
-                $stmt = $db->prepare("
+                $stmt = $db->query("
                     INSERT INTO categorias (nome, descricao, parent_id, ativo, tenant_id, filial_id) 
                     VALUES (?, ?, ?, ?, ?, ?)
                 ");
@@ -165,7 +135,7 @@ try {
                 $message = 'Categoria criada com sucesso!';
             } else {
                 // Atualizar categoria existente
-                $stmt = $db->prepare("
+                $stmt = $db->query("
                     UPDATE categorias 
                     SET nome = ?, descricao = ?, parent_id = ?, ativo = ? 
                     WHERE id = ? AND tenant_id = ? AND filial_id = ?
@@ -192,7 +162,7 @@ try {
             $tenantId = $session->getTenantId() ?? 1;
             $filialId = $session->getFilialId() ?? 1;
             
-            $stmt = $db->prepare("SELECT * FROM categorias WHERE id = ? AND tenant_id = ? AND filial_id = ?");
+            $stmt = $db->query("SELECT * FROM categorias WHERE id = ? AND tenant_id = ? AND filial_id = ?");
             $stmt->execute([$categoriaId, $tenantId, $filialId]);
             $categoria = $stmt->fetch(\PDO::FETCH_ASSOC);
             
@@ -219,7 +189,7 @@ try {
             $filialId = $session->getFilialId() ?? 1;
             
             // Verificar se há produtos usando esta categoria
-            $stmt = $db->prepare("SELECT COUNT(*) FROM produtos WHERE categoria_id = ? AND tenant_id = ? AND filial_id = ?");
+            $stmt = $db->query("SELECT COUNT(*) FROM produtos WHERE categoria_id = ? AND tenant_id = ? AND filial_id = ?");
             $stmt->execute([$categoriaId, $tenantId, $filialId]);
             $produtosCount = $stmt->fetchColumn();
             
@@ -228,7 +198,7 @@ try {
             }
             
             // Excluir categoria
-            $stmt = $db->prepare("DELETE FROM categorias WHERE id = ? AND tenant_id = ? AND filial_id = ?");
+            $stmt = $db->query("DELETE FROM categorias WHERE id = ? AND tenant_id = ? AND filial_id = ?");
             $stmt->execute([$categoriaId, $tenantId, $filialId]);
             
             echo json_encode([
@@ -255,7 +225,7 @@ try {
             
             if (empty($ingredienteId)) {
                 // Criar novo ingrediente
-                $stmt = $db->prepare("
+                $stmt = $db->query("
                     INSERT INTO ingredientes (nome, descricao, preco_adicional, ativo, tenant_id, filial_id) 
                     VALUES (?, ?, ?, ?, ?, ?)
                 ");
@@ -263,7 +233,7 @@ try {
                 $message = 'Ingrediente criado com sucesso!';
             } else {
                 // Atualizar ingrediente existente
-                $stmt = $db->prepare("
+                $stmt = $db->query("
                     UPDATE ingredientes 
                     SET nome = ?, descricao = ?, preco_adicional = ?, ativo = ? 
                     WHERE id = ? AND tenant_id = ? AND filial_id = ?
@@ -290,7 +260,7 @@ try {
             $tenantId = $session->getTenantId() ?? 1;
             $filialId = $session->getFilialId() ?? 1;
             
-            $stmt = $db->prepare("SELECT * FROM ingredientes WHERE id = ? AND tenant_id = ? AND filial_id = ?");
+            $stmt = $db->query("SELECT * FROM ingredientes WHERE id = ? AND tenant_id = ? AND filial_id = ?");
             $stmt->execute([$ingredienteId, $tenantId, $filialId]);
             $ingrediente = $stmt->fetch(\PDO::FETCH_ASSOC);
             
@@ -317,7 +287,7 @@ try {
             $filialId = $session->getFilialId() ?? 1;
             
             // Verificar se há produtos usando este ingrediente
-            $stmt = $db->prepare("SELECT COUNT(*) FROM produto_ingredientes WHERE ingrediente_id = ? AND tenant_id = ? AND filial_id = ?");
+            $stmt = $db->query("SELECT COUNT(*) FROM produto_ingredientes WHERE ingrediente_id = ? AND tenant_id = ? AND filial_id = ?");
             $stmt->execute([$ingredienteId, $tenantId, $filialId]);
             $produtosCount = $stmt->fetchColumn();
             
@@ -326,12 +296,43 @@ try {
             }
             
             // Excluir ingrediente
-            $stmt = $db->prepare("DELETE FROM ingredientes WHERE id = ? AND tenant_id = ? AND filial_id = ?");
+            $stmt = $db->query("DELETE FROM ingredientes WHERE id = ? AND tenant_id = ? AND filial_id = ?");
             $stmt->execute([$ingredienteId, $tenantId, $filialId]);
             
             echo json_encode([
                 'success' => true,
                 'message' => 'Ingrediente excluído com sucesso'
+            ]);
+            break;
+            
+        case 'excluir_produto':
+            $produtoId = $_POST['id'] ?? $_GET['id'] ?? '';
+            
+            if (empty($produtoId)) {
+                throw new \Exception('ID do produto é obrigatório');
+            }
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId() ?? 1;
+            $filialId = $session->getFilialId() ?? 1;
+            
+            // Verificar se produto existe
+            $produto = $db->fetch(
+                "SELECT * FROM produtos WHERE id = ? AND tenant_id = ? AND filial_id = ?",
+                [$produtoId, $tenantId, $filialId]
+            );
+            
+            if (!$produto) {
+                throw new \Exception('Produto não encontrado');
+            }
+            
+            // Excluir produto
+            $stmt = $db->query("DELETE FROM produtos WHERE id = ? AND tenant_id = ? AND filial_id = ?", [$produtoId, $tenantId, $filialId]);
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Produto excluído com sucesso!'
             ]);
             break;
             

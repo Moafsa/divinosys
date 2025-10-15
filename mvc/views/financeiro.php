@@ -82,20 +82,26 @@ if ($tenant && $filial) {
         $params
     );
     
-    // Buscar pedidos com informações financeiras
+    // Buscar pedidos com informações financeiras incluindo dados do usuário e estabelecimento
     $pedidosFinanceiros = $db->fetchAll(
         "SELECT p.*, 
                 COALESCE(SUM(pp.valor_pago), 0) as total_pago,
                 COUNT(pp.id) as qtd_pagamentos,
                 STRING_AGG(DISTINCT pp.forma_pagamento, ', ') as formas_pagamento,
-                m.nome as mesa_nome
+                m.nome as mesa_nome,
+                u.login as usuario_nome,
+                t.nome as tenant_nome,
+                f.nome as filial_nome
          FROM pedido p
          LEFT JOIN pagamentos_pedido pp ON p.idpedido = pp.pedido_id AND pp.tenant_id = p.tenant_id AND pp.filial_id = p.filial_id
          LEFT JOIN mesas m ON p.idmesa::varchar = m.id_mesa AND m.tenant_id = p.tenant_id AND m.filial_id = p.filial_id
+         LEFT JOIN usuarios u ON p.usuario_id = u.id AND u.tenant_id = p.tenant_id
+         LEFT JOIN tenants t ON p.tenant_id = t.id
+         LEFT JOIN filiais f ON p.filial_id = f.id
          WHERE p.tenant_id = ? AND p.filial_id = ?
          AND p.data BETWEEN ? AND ?
          AND p.status_pagamento = 'quitado'
-         GROUP BY p.idpedido, m.nome
+         GROUP BY p.idpedido, m.nome, u.login, t.nome, f.nome
          ORDER BY p.data DESC, p.hora_pedido DESC",
         [$tenant['id'], $filial['id'], $dataInicio, $dataFim]
     );
@@ -311,17 +317,9 @@ $contas = $db->fetchAll(
                             <i class="fas fa-tachometer-alt"></i>
                             <span>Dashboard</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('gerar_pedido'); ?>" data-tooltip="Novo Pedido">
-                            <i class="fas fa-plus-circle"></i>
-                            <span>Novo Pedido</span>
-                        </a>
                         <a class="nav-link" href="<?php echo $router->url('pedidos'); ?>" data-tooltip="Pedidos">
                             <i class="fas fa-list"></i>
                             <span>Pedidos</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('mesas'); ?>" data-tooltip="Mesas">
-                            <i class="fas fa-table"></i>
-                            <span>Mesas</span>
                         </a>
                         <a class="nav-link" href="<?php echo $router->url('delivery'); ?>" data-tooltip="Delivery">
                             <i class="fas fa-motorcycle"></i>
@@ -366,26 +364,26 @@ $contas = $db->fetchAll(
             <!-- Main Content -->
             <div class="main-content" id="mainContent">
                 <div class="p-4">
-            <!-- Header -->
+                <!-- Header -->
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <div>
                     <h2 class="mb-1">
                         <i class="fas fa-chart-line text-primary me-2"></i>
                         Sistema Financeiro
-                    </h2>
+                            </h2>
                     <p class="text-muted mb-0">Gestão completa de receitas, despesas e relatórios</p>
-                </div>
+                        </div>
                 <div>
-                    <button class="btn btn-primary me-2" onclick="abrirModalLancamento()">
+                    <a href="<?php echo $router->url('novo_lancamento'); ?>" class="btn btn-primary me-2">
                         <i class="fas fa-plus me-1"></i>
                         Novo Lançamento
-                    </button>
-                    <button class="btn btn-success" onclick="abrirModalRelatorio()">
+                    </a>
+                    <a href="<?php echo $router->url('gerar_relatorios'); ?>" class="btn btn-success">
                         <i class="fas fa-chart-bar me-1"></i>
                         Gerar Relatório
-                    </button>
+                    </a>
+                    </div>
                 </div>
-            </div>
 
             <!-- Filtros -->
             <div class="filter-section">
@@ -464,6 +462,16 @@ $contas = $db->fetchAll(
                             <h5 class="card-title">Total Despesas</h5>
                             <h3 class="mb-0">R$ <?= number_format($resumoFinanceiro['total_despesas'] ?? 0, 2, ',', '.') ?></h3>
                         </div>
+                            </div>
+                        </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card" style="background: linear-gradient(135deg, #ffc107, #fd7e14); color: white;">
+                        <div class="card-body text-center">
+                            <i class="fas fa-credit-card fa-2x mb-2"></i>
+                            <h5 class="card-title">Recebíveis Fiado</h5>
+                            <h3 class="mb-0" id="totalFiado">R$ 0,00</h3>
+                            <small>Valores a receber</small>
+                        </div>
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -475,18 +483,18 @@ $contas = $db->fetchAll(
                                 R$ <?= number_format($resumoFinanceiro['saldo_liquido'] ?? 0, 2, ',', '.') ?>
                             </h3>
                         </div>
-                    </div>
-                </div>
+                            </div>
+                        </div>
                 <div class="col-md-3">
                     <div class="card financial-card">
                         <div class="card-body text-center">
                             <i class="fas fa-list fa-2x mb-2 text-primary"></i>
                             <h5 class="card-title">Total Lançamentos</h5>
                             <h3 class="mb-0"><?= $resumoFinanceiro['total_lancamentos'] ?? 0 ?></h3>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
             <!-- Tabs -->
             <ul class="nav nav-tabs" id="financeiroTabs" role="tablist">
@@ -500,6 +508,12 @@ $contas = $db->fetchAll(
                     <button class="nav-link" id="pedidos-tab" data-bs-toggle="tab" data-bs-target="#pedidos" type="button" role="tab">
                         <i class="fas fa-shopping-cart me-1"></i>
                         Pedidos Quitados
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="pedidos-fiado-tab" data-bs-toggle="tab" data-bs-target="#pedidos-fiado" type="button" role="tab">
+                        <i class="fas fa-credit-card me-1"></i>
+                        Pedidos Fiado
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
@@ -518,7 +532,7 @@ $contas = $db->fetchAll(
                             <h5 class="mb-0">
                                 <i class="fas fa-list me-2"></i>
                                 Lançamentos Financeiros
-                            </h5>
+                        </h5>
                             <span class="badge bg-primary"><?= count($lancamentos) ?> registros</span>
                         </div>
                         <div class="card-body p-0">
@@ -609,8 +623,8 @@ $contas = $db->fetchAll(
                                     </table>
                                 </div>
                             <?php endif; ?>
-                        </div>
-                    </div>
+                                    </div>
+                                </div>
                 </div>
 
                 <!-- Tab Pedidos -->
@@ -644,6 +658,12 @@ $contas = $db->fetchAll(
                                                                 <span class="badge bg-info ms-1"><?= htmlspecialchars($pedido['mesa_nome']) ?></span>
                                                             <?php else: ?>
                                                                 <span class="badge bg-warning ms-1">Delivery</span>
+                                                            <?php endif; ?>
+                                                            <?php if (!empty($pedido['tenant_nome'])): ?>
+                                                                <span class="badge bg-secondary ms-1" title="Estabelecimento">
+                                                                    <i class="fas fa-building me-1"></i>
+                                                                    <?= htmlspecialchars($pedido['tenant_nome']) ?>
+                                                                </span>
                                                             <?php endif; ?>
                                                         </div>
                                                         <div class="text-end">
@@ -683,9 +703,33 @@ $contas = $db->fetchAll(
                                                                     <td><strong>Formas de Pagamento:</strong></td>
                                                                     <td><?= htmlspecialchars($pedido['formas_pagamento']) ?></td>
                                                                 </tr>
+                                                                <?php if (!empty($pedido['usuario_nome'])): ?>
+                                                                <tr>
+                                                                    <td><strong>Atendente:</strong></td>
+                                                                    <td>
+                                                                        <i class="fas fa-user me-1"></i>
+                                                                        <?= htmlspecialchars($pedido['usuario_nome']) ?>
+                                                                    </td>
+                                                                </tr>
+                                                                <?php endif; ?>
+                                                                <?php if (!empty($pedido['tenant_nome']) || !empty($pedido['filial_nome'])): ?>
+                                                                <tr>
+                                                                    <td><strong>Estabelecimento:</strong></td>
+                                                                    <td>
+                                                                        <i class="fas fa-building me-1"></i>
+                                                                        <?= htmlspecialchars($pedido['tenant_nome'] ?? 'N/A') ?>
+                                                                        <?php if (!empty($pedido['filial_nome'])): ?>
+                                                                            <br><small class="text-muted">
+                                                                                <i class="fas fa-map-marker-alt me-1"></i>
+                                                                                Filial: <?= htmlspecialchars($pedido['filial_nome']) ?>
+                                                                            </small>
+                                                                        <?php endif; ?>
+                                                                    </td>
+                                                                </tr>
+                                                                <?php endif; ?>
                                                             </table>
-                                                        </div>
-                                                        <div class="col-md-6">
+                            </div>
+                            <div class="col-md-6">
                                                             <h6>Ações</h6>
                                                             <div class="d-grid gap-2">
                                                                 <button class="btn btn-outline-primary" onclick="verDetalhesPedido(<?= $pedido['idpedido'] ?>)">
@@ -708,15 +752,52 @@ $contas = $db->fetchAll(
                                                                     <i class="fas fa-trash me-1"></i>
                                                                     Excluir Pedido
                                                                 </button>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    <?php endforeach; ?>
+                                    </div>
                                 </div>
-                            <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                    </div>
+                                    <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+                </div>
+
+                <!-- Tab Pedidos Fiado -->
+                <div class="tab-pane fade" id="pedidos-fiado" role="tabpanel">
+                    <div class="card mt-3">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="fas fa-credit-card me-2"></i>
+                                Pedidos Fiado
+                            </h5>
+                            <button class="btn btn-primary btn-sm" onclick="atualizarPedidosFiado()">
+                                <i class="fas fa-sync-alt me-1"></i>
+                                Atualizar
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover" id="tabelaPedidosFiado">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Data/Hora</th>
+                                            <th>Cliente</th>
+                                            <th>Telefone</th>
+                                            <th>Mesa</th>
+                                            <th>Valor</th>
+                                            <th>Status</th>
+                                            <th>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Conteúdo será carregado via AJAX -->
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -782,22 +863,26 @@ $contas = $db->fetchAll(
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="assets/js/sidebar.js"></script>
+    <script src="assets/js/financeiro.js"></script>
     <script>
         // Inicializar Select2
         $(document).ready(function() {
             $('.form-select').select2({
                 theme: 'bootstrap-5'
             });
+            
+            // Carregar pedidos fiado quando a aba for ativada
+            $('#pedidos-fiado-tab').on('shown.bs.tab', function () {
+                atualizarPedidosFiado();
+            });
+            
+            // Carregar total de recebíveis fiado na inicialização
+            carregarTotalRecebiveisFiado();
         });
 
         // Funções para lançamentos
         function abrirModalLancamento() {
-            // Implementar modal de novo lançamento
-            Swal.fire({
-                title: 'Novo Lançamento',
-                text: 'Funcionalidade em desenvolvimento',
-                icon: 'info'
-            });
+            window.location.href = 'index.php?view=novo_lancamento';
         }
 
         function editarLancamento(id) {
@@ -831,7 +916,252 @@ $contas = $db->fetchAll(
         }
 
         function imprimirPedido(id) {
-            window.open(`index.php?view=imprimir_pedido&pedido_id=${id}`, '_blank');
+            console.log('Imprimindo pedido:', id);
+            
+            // Create a new window for printing
+            const printWindow = window.open('', '_blank', 'width=800,height=600');
+            
+            // Fetch pedido data
+            fetch(`mvc/ajax/pedidos.php?buscar_pedido=1&pedido_id=${id}`, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const pedido = data.pedido;
+                    const itens = data.itens || [];
+                    
+                    // Generate print HTML using the same format as gerar_pedido.php
+                    let printHtml = `
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <meta charset="UTF-8">
+                            <title>Cupom Fiscal - Pedido #${pedido.idpedido}</title>
+                            <style>
+                                body { font-family: 'Courier New', monospace; font-size: 11px; margin: 0; padding: 8px; }
+                                .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
+                                .empresa { font-weight: bold; font-size: 13px; }
+                                .endereco { font-size: 9px; }
+                                .pedido-info { margin: 8px 0; font-size: 10px; }
+                                .item { margin: 3px 0; }
+                                .item-nome { font-weight: bold; font-size: 11px; }
+                                .item-detalhes { font-size: 10px; margin-left: 8px; }
+                                .modificacoes { margin-left: 15px; font-size: 10px; }
+                                .adicionado { color: green; }
+                                .removido { color: red; }
+                                .total { border-top: 1px dashed #000; padding-top: 8px; margin-top: 8px; font-weight: bold; font-size: 12px; }
+                                .footer { text-align: center; margin-top: 15px; font-size: 9px; }
+                                @media print { body { margin: 0; padding: 5px; font-size: 10px; } }
+                            </style>
+                        </head>
+                        <body>
+                            <div class="header">
+                                <div class="empresa">DIVINO LANCHES</div>
+                                <div class="endereco">Rua das Flores, 123 - Centro</div>
+                                <div class="endereco">Tel: (11) 99999-9999</div>
+                            </div>
+                            
+                            <div class="pedido-info">
+                                <strong>PEDIDO #${pedido.idpedido}</strong><br>
+                                Data/Hora: ${pedido.data} ${pedido.hora_pedido}<br>
+                                ${pedido.idmesa && pedido.idmesa !== '999' ? `Mesa: ${pedido.idmesa}` : 'DELIVERY'}<br>
+                                ${pedido.cliente ? `Cliente: ${pedido.cliente}` : ''}
+                                ${pedido.telefone_cliente ? `<br>Telefone: ${pedido.telefone_cliente}` : ''}
+                                ${pedido.usuario_nome ? `<br>Atendente: ${pedido.usuario_nome}` : ''}
+                            </div>
+                            
+                            <div class="itens">
+                                <strong>ITENS DO PEDIDO:</strong><br>`;
+                    
+                    itens.forEach(item => {
+                        printHtml += `
+                            <div class="item">
+                                <div class="item-nome">${item.quantidade}x ${item.nome_produto || 'Produto'}</div>
+                                <div class="item-detalhes">R$ ${parseFloat(item.valor_unitario).toFixed(2).replace('.', ',')}</div>`;
+                        
+                        if (item.ingredientes_com && item.ingredientes_com.length > 0) {
+                            printHtml += `<div class="modificacoes">`;
+                            item.ingredientes_com.forEach(ing => {
+                                printHtml += `<div class="adicionado">+ ${ing}</div>`;
+                            });
+                            printHtml += `</div>`;
+                        }
+                        
+                        if (item.ingredientes_sem && item.ingredientes_sem.length > 0) {
+                            printHtml += `<div class="modificacoes">`;
+                            item.ingredientes_sem.forEach(ing => {
+                                printHtml += `<div class="removido">- ${ing}</div>`;
+                            });
+                            printHtml += `</div>`;
+                        }
+                        
+                        if (item.observacao) {
+                            printHtml += `<div class="item-detalhes">Obs: ${item.observacao}</div>`;
+                        }
+                        
+                        printHtml += `</div>`;
+                    });
+                    
+                    printHtml += `
+                            </div>
+                            
+                            <div class="total">
+                                <strong>TOTAL: R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</strong>
+                            </div>
+                            
+                            ${pedido.observacao ? `<div class="pedido-info"><strong>Observação:</strong> ${pedido.observacao}</div>` : ''}
+                            
+                            <div class="footer">
+                                Obrigado pela preferência!<br>
+                                Volte sempre!<br>
+                                Impresso em: ${new Date().toLocaleString('pt-BR')}
+                            </div>
+                        </body>
+                        </html>`;
+                    
+                    // Write content to print window
+                    printWindow.document.write(printHtml);
+                    printWindow.document.close();
+                    
+                    // Print after content loads
+                    printWindow.onload = function() {
+                        printWindow.print();
+                        printWindow.close();
+                    };
+                    
+                } else {
+                    Swal.fire('Erro', 'Erro ao carregar dados do pedido para impressão', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao imprimir pedido:', error);
+                Swal.fire('Erro', 'Erro ao imprimir pedido', 'error');
+            });
+        }
+
+        function atualizarPedidosFiado() {
+            fetch('mvc/ajax/financeiro.php?action=buscar_pedidos_fiado', {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const tbody = document.querySelector('#tabelaPedidosFiado tbody');
+                    tbody.innerHTML = '';
+                    
+                    let totalRecebiveis = 0;
+                    
+                    data.pedidos.forEach(pedido => {
+                        const row = document.createElement('tr');
+                        const saldoDevedorReal = parseFloat(pedido.saldo_devedor_real) || 0;
+                        const totalPagoNaoFiado = parseFloat(pedido.total_pago_nao_fiado) || 0;
+                        const totalPagoFiado = parseFloat(pedido.total_pago_fiado) || 0;
+                        const totalPago = parseFloat(pedido.total_pago) || 0;
+                        
+                        // Status baseado no status_pagamento do pedido
+                        const statusBadge = pedido.status_pagamento === 'quitado' ? 'bg-success' : 'bg-warning';
+                        const statusText = pedido.status_pagamento === 'quitado' ? 'Quitado' : 'Pendente';
+                        
+                        // Somar TODOS os valores FIADO ao total de recebíveis
+                        totalRecebiveis += totalPagoFiado;
+                        
+                        row.innerHTML = `
+                            <td>#${pedido.idpedido}</td>
+                            <td>${pedido.data} ${pedido.hora_pedido}</td>
+                            <td>${pedido.cliente || 'N/A'}</td>
+                            <td>${pedido.telefone_cliente || 'N/A'}</td>
+                            <td>${pedido.idmesa == '999' ? 'Delivery' : `Mesa ${pedido.idmesa}`}</td>
+                            <td>
+                                <div>Total: R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</div>
+                                <small class="text-success">Pago Real: R$ ${totalPagoNaoFiado.toFixed(2).replace('.', ',')}</small>
+                                <small class="text-warning">Fiado: R$ ${totalPagoFiado.toFixed(2).replace('.', ',')}</small>
+                                ${saldoDevedorReal > 0 ? `<div class="text-danger">Saldo: R$ ${saldoDevedorReal.toFixed(2).replace('.', ',')}</div>` : ''}
+                            </td>
+                            <td><span class="badge ${statusBadge}">${statusText}</span></td>
+                            <td>
+                                <button class="btn btn-outline-primary btn-sm" onclick="verDetalhesPedido(${pedido.idpedido})" title="Ver Detalhes">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                ${pedido.status_pagamento !== 'quitado' ? `<button class="btn btn-outline-success btn-sm" onclick="quitarPedidoFiado(${pedido.idpedido})" title="Quitar Fiado">
+                                    <i class="fas fa-check"></i>
+                                </button>` : ''}
+                                <button class="btn btn-outline-info btn-sm" onclick="imprimirPedido(${pedido.idpedido})" title="Imprimir">
+                                    <i class="fas fa-print"></i>
+                                </button>
+                            </td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                    
+                    // Atualizar o card de recebíveis fiado
+                    document.getElementById('totalFiado').textContent = `R$ ${totalRecebiveis.toFixed(2).replace('.', ',')}`;
+                    
+                } else {
+                    Swal.fire('Erro', 'Erro ao carregar pedidos fiado', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                Swal.fire('Erro', 'Erro ao carregar pedidos fiado', 'error');
+            });
+        }
+
+        function carregarTotalRecebiveisFiado() {
+            fetch('mvc/ajax/financeiro.php?action=buscar_total_recebiveis_fiado', {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('totalFiado').textContent = `R$ ${parseFloat(data.total_recebiveis).toFixed(2).replace('.', ',')}`;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        }
+
+        function quitarPedidoFiado(pedidoId) {
+            Swal.fire({
+                title: 'Quitar Pedido Fiado',
+                text: 'Deseja realmente quitar este pedido fiado?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Sim, quitar',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    fetch('mvc/ajax/financeiro.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: `action=quitar_pedido_fiado&pedido_id=${pedidoId}`
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Sucesso', 'Pedido quitado com sucesso!', 'success');
+                            atualizarPedidosFiado();
+                            carregarTotalRecebiveisFiado(); // Atualizar o card também
+                        } else {
+                            Swal.fire('Erro', data.message, 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        Swal.fire('Erro', 'Erro ao quitar pedido', 'error');
+                    });
+                }
+            });
         }
 
         function exportarPedido(id) {
@@ -1016,11 +1346,7 @@ $contas = $db->fetchAll(
 
         // Funções para relatórios
         function abrirModalRelatorio() {
-            Swal.fire({
-                title: 'Gerar Relatório',
-                text: 'Funcionalidade em desenvolvimento',
-                icon: 'info'
-            });
+            window.location.href = 'index.php?view=gerar_relatorios';
         }
 
         function gerarRelatorio(tipo) {
