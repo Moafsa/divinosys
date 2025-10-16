@@ -120,10 +120,11 @@ if ($tenant && $filial) {
         [$tenant['id'], $filial['id'], $dataInicio . ' 00:00:00', $dataFim . ' 23:59:59']
     );
     
-    // Adicionar receitas dos pedidos quitados (somar apenas o campo valor_pago de cada pedido)
+    // Buscar valores dos pedidos quitados
     $receitasPedidos = $db->fetch(
         "SELECT 
-            COALESCE(SUM(p.valor_pago), 0) as total_vendas_pedidos,
+            COALESCE(SUM(p.valor_total), 0) as total_faturamento,
+            COALESCE(SUM(p.valor_pago), 0) as total_pago,
             COUNT(DISTINCT p.idpedido) as total_pedidos_quitados
          FROM pedido p
          WHERE p.tenant_id = ? AND p.filial_id = ?
@@ -132,10 +133,13 @@ if ($tenant && $filial) {
         [$tenant['id'], $filial['id'], $dataInicio, $dataFim]
     );
     
-    // Somar receitas dos pedidos aos lançamentos
-    $resumoFinanceiro['total_receitas'] += $receitasPedidos['total_vendas_pedidos'];
+    // Faturamento = valor_total dos pedidos
+    $resumoFinanceiro['total_receitas'] += $receitasPedidos['total_faturamento'];
     
-    $resumoFinanceiro['saldo_liquido'] = $resumoFinanceiro['total_receitas'] - $resumoFinanceiro['total_despesas'];
+    // Saldo Líquido = valor_pago dos pedidos - despesas
+    $saldoPedidos = $receitasPedidos['total_pago'];
+    $resumoFinanceiro['saldo_liquido'] = $saldoPedidos + ($resumoFinanceiro['total_receitas'] - $receitasPedidos['total_faturamento']) - $resumoFinanceiro['total_despesas'];
+    
     $resumoFinanceiro['total_lancamentos'] += $receitasPedidos['total_pedidos_quitados'];
 }
 
