@@ -83,9 +83,6 @@ try {
     require_once 'system/Database.php';
     require_once 'system/Config.php';
     
-    use System\Database;
-    use System\Config;
-    
     $db = Database::getInstance();
     showMessage("✅ Conectado ao banco de dados com sucesso!", 'success');
     updateProgress(10);
