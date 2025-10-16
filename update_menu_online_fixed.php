@@ -84,9 +84,9 @@ try {
     // Configuração do banco de dados - usando variáveis de ambiente
     $host = $_ENV['DB_HOST'] ?? 'postgres';
     $port = $_ENV['DB_PORT'] ?? '5432';
-    $dbname = $_ENV['DB_NAME'] ?? 'divino_db';
+    $dbname = $_ENV['DB_NAME'] ?? 'divino_lanches';
     $user = $_ENV['DB_USER'] ?? 'postgres';
-    $password = $_ENV['DB_PASSWORD'] ?? 'postgres';
+    $password = $_ENV['DB_PASSWORD'] ?? 'divino_password';
     
     // Debug das credenciais
     showMessage("🔍 Debug - Host: $host, Port: $port, DB: $dbname, User: $user", 'info');
