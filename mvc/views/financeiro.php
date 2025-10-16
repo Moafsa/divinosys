@@ -120,7 +120,7 @@ if ($tenant && $filial) {
         [$tenant['id'], $filial['id'], $dataInicio . ' 00:00:00', $dataFim . ' 23:59:59']
     );
     
-    // Adicionar receitas dos pedidos quitados (apenas valores pagos, incluindo fiado)
+    // Adicionar receitas dos pedidos quitados (apenas valores pagos NÃO-FIADO)
     $receitasPedidos = $db->fetch(
         "SELECT 
             COALESCE(SUM(pp.valor_pago), 0) as total_vendas_pedidos,
@@ -130,12 +130,31 @@ if ($tenant && $filial) {
          WHERE pp.tenant_id = ? AND pp.filial_id = ?
          AND p.data BETWEEN ? AND ?
          AND p.status_pagamento = 'quitado'
+         AND pp.forma_pagamento != 'FIADO'
          AND pp.created_at BETWEEN ? AND ?",
         [$tenant['id'], $filial['id'], $dataInicio, $dataFim, $dataInicio . ' 00:00:00', $dataFim . ' 23:59:59']
     );
     
-    // Somar receitas dos pedidos aos lançamentos (incluindo pagamentos fiado)
+    // Somar receitas dos pedidos aos lançamentos (apenas pagamentos não-fiado)
     $resumoFinanceiro['total_receitas'] += $receitasPedidos['total_vendas_pedidos'];
+    
+    // Adicionar valores fiado que foram QUITADOS (pagamentos fiado quitados com dinheiro/cartão)
+    $receitasFiadoQuitado = $db->fetch(
+        "SELECT 
+            COALESCE(SUM(pp.valor_pago), 0) as total_fiado_quitado
+         FROM pagamentos_pedido pp
+         INNER JOIN pedido p ON pp.pedido_id = p.idpedido
+         WHERE pp.tenant_id = ? AND pp.filial_id = ?
+         AND p.data BETWEEN ? AND ?
+         AND p.status_pagamento = 'quitado'
+         AND pp.forma_pagamento != 'FIADO'
+         AND pp.descricao LIKE '%fiado%'
+         AND pp.created_at BETWEEN ? AND ?",
+        [$tenant['id'], $filial['id'], $dataInicio, $dataFim, $dataInicio . ' 00:00:00', $dataFim . ' 23:59:59']
+    );
+    
+    // Somar valores fiado quitados ao faturamento
+    $resumoFinanceiro['total_receitas'] += $receitasFiadoQuitado['total_fiado_quitado'];
     
     $resumoFinanceiro['saldo_liquido'] = $resumoFinanceiro['total_receitas'] - $resumoFinanceiro['total_despesas'];
     $resumoFinanceiro['total_lancamentos'] += $receitasPedidos['total_pedidos_quitados'];
