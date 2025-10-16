@@ -81,12 +81,15 @@ function updateProgress($percent) {
 try {
     showMessage("🔌 Conectando ao banco de dados...", 'info');
     
-    // Configuração do banco de dados
-    $host = 'postgres';
-    $port = '5432';
-    $dbname = 'divino_db';
-    $user = 'divino_user';
-    $password = 'divino_password';
+    // Configuração do banco de dados - usando variáveis de ambiente
+    $host = $_ENV['DB_HOST'] ?? 'postgres';
+    $port = $_ENV['DB_PORT'] ?? '5432';
+    $dbname = $_ENV['DB_NAME'] ?? 'divino_db';
+    $user = $_ENV['DB_USER'] ?? 'postgres';
+    $password = $_ENV['DB_PASSWORD'] ?? 'postgres';
+    
+    // Debug das credenciais
+    showMessage("🔍 Debug - Host: $host, Port: $port, DB: $dbname, User: $user", 'info');
     
     $dsn = "pgsql:host=$host;port=$port;dbname=$dbname";
     
