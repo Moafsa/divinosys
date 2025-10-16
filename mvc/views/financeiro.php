@@ -82,12 +82,12 @@ if ($tenant && $filial) {
         $params
     );
     
-    // Buscar pedidos com informações financeiras incluindo dados do usuário e estabelecimento
+    // Buscar TODOS os pedidos quitados (com e sem pagamentos fiado)
     $pedidosFinanceiros = $db->fetchAll(
         "SELECT p.*, 
-                COALESCE(SUM(pp.valor_pago), 0) as total_pago,
-                COUNT(pp.id) as qtd_pagamentos,
-                STRING_AGG(DISTINCT pp.forma_pagamento, ', ') as formas_pagamento,
+                COALESCE(SUM(CASE WHEN pp.forma_pagamento != 'FIADO' THEN pp.valor_pago ELSE 0 END), 0) as total_pago,
+                COUNT(CASE WHEN pp.forma_pagamento != 'FIADO' THEN pp.id END) as qtd_pagamentos,
+                STRING_AGG(DISTINCT CASE WHEN pp.forma_pagamento != 'FIADO' THEN pp.forma_pagamento END, ', ') as formas_pagamento,
                 m.nome as mesa_nome,
                 u.login as usuario_nome,
                 t.nome as tenant_nome,
@@ -120,20 +120,23 @@ if ($tenant && $filial) {
         [$tenant['id'], $filial['id'], $dataInicio . ' 00:00:00', $dataFim . ' 23:59:59']
     );
     
-    // Adicionar receitas dos pedidos quitados
+    // Adicionar receitas dos pedidos quitados (apenas valores pagos, incluindo fiado)
     $receitasPedidos = $db->fetch(
         "SELECT 
-            COALESCE(SUM(valor_total), 0) as total_vendas_pedidos,
-            COUNT(*) as total_pedidos_quitados
-         FROM pedido 
-         WHERE tenant_id = ? AND filial_id = ?
-         AND data BETWEEN ? AND ?
-         AND status_pagamento = 'quitado'",
-        [$tenant['id'], $filial['id'], $dataInicio, $dataFim]
+            COALESCE(SUM(pp.valor_pago), 0) as total_vendas_pedidos,
+            COUNT(DISTINCT p.idpedido) as total_pedidos_quitados
+         FROM pagamentos_pedido pp
+         INNER JOIN pedido p ON pp.pedido_id = p.idpedido
+         WHERE pp.tenant_id = ? AND pp.filial_id = ?
+         AND p.data BETWEEN ? AND ?
+         AND p.status_pagamento = 'quitado'
+         AND pp.created_at BETWEEN ? AND ?",
+        [$tenant['id'], $filial['id'], $dataInicio, $dataFim, $dataInicio . ' 00:00:00', $dataFim . ' 23:59:59']
     );
     
-    // Somar receitas dos pedidos aos lançamentos
+    // Somar receitas dos pedidos aos lançamentos (incluindo pagamentos fiado)
     $resumoFinanceiro['total_receitas'] += $receitasPedidos['total_vendas_pedidos'];
+    
     $resumoFinanceiro['saldo_liquido'] = $resumoFinanceiro['total_receitas'] - $resumoFinanceiro['total_despesas'];
     $resumoFinanceiro['total_lancamentos'] += $receitasPedidos['total_pedidos_quitados'];
 }
@@ -631,10 +634,13 @@ $contas = $db->fetchAll(
                 <div class="tab-pane fade" id="pedidos" role="tabpanel">
                     <div class="card mt-3">
                         <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">
-                                <i class="fas fa-shopping-cart me-2"></i>
-                                Pedidos Quitados
-                            </h5>
+                            <div>
+                                <h5 class="mb-0">
+                                    <i class="fas fa-shopping-cart me-2"></i>
+                                    Pedidos Quitados
+                                </h5>
+                                <small class="text-muted">Mostra apenas pedidos quitados com pagamentos reais (sem fiado)</small>
+                            </div>
                             <span class="badge bg-success"><?= count($pedidosFinanceiros) ?> pedidos</span>
                         </div>
                         <div class="card-body p-0">
@@ -769,18 +775,27 @@ $contas = $db->fetchAll(
                 <div class="tab-pane fade" id="pedidos-fiado" role="tabpanel">
                     <div class="card mt-3">
                         <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">
-                                <i class="fas fa-credit-card me-2"></i>
-                                Pedidos Fiado
-                            </h5>
-                   <button class="btn btn-primary btn-sm" onclick="atualizarPedidosFiado()">
-                       <i class="fas fa-sync-alt me-1"></i>
-                       Atualizar
-                   </button>
-                   <button class="btn btn-warning btn-sm" onclick="console.log('🔍 Teste manual'); atualizarPedidosFiado();">
-                       <i class="fas fa-bug me-1"></i>
-                       Debug
-                   </button>
+                            <div>
+                                <h5 class="mb-0">
+                                    <i class="fas fa-credit-card me-2"></i>
+                                    Pedidos Fiado
+                                </h5>
+                                <small class="text-muted">Mostra todos os pedidos com pagamentos fiado (quitados e pendentes)</small>
+                            </div>
+                            <div>
+                                <button class="btn btn-success btn-sm" onclick="forcarCarregamentoFiado()">
+                                    <i class="fas fa-play me-1"></i>
+                                    Carregar Agora
+                                </button>
+                                <button class="btn btn-primary btn-sm" onclick="atualizarPedidosFiado()">
+                                    <i class="fas fa-sync-alt me-1"></i>
+                                    Atualizar
+                                </button>
+                                <button class="btn btn-warning btn-sm" onclick="console.log('🔍 Teste manual'); atualizarPedidosFiado();">
+                                    <i class="fas fa-bug me-1"></i>
+                                    Debug
+                                </button>
+                            </div>
                         </div>
                         <div class="card-body">
                             <div class="table-responsive">
@@ -875,22 +890,19 @@ $contas = $db->fetchAll(
                 theme: 'bootstrap-5'
             });
             
-        // Carregar pedidos fiado quando a aba for ativada
-        $('#pedidos-fiado-tab').on('shown.bs.tab', function () {
-            console.log('🔍 Aba Pedidos Fiado ativada!');
-            atualizarPedidosFiado();
-        });
-        
-        // Também carregar quando clicar diretamente na aba
-        $('#pedidos-fiado-tab').on('click', function () {
-            console.log('🖱️ Clique na aba Pedidos Fiado!');
-            setTimeout(() => {
+            // Carregar pedidos fiado quando a aba for ativada
+            $('#pedidos-fiado-tab').on('shown.bs.tab', function () {
+                console.log('🔍 Aba Pedidos Fiado ativada!');
                 atualizarPedidosFiado();
-            }, 100);
-        });
+            });
             
-            // Carregar total de recebíveis fiado na inicialização
-            carregarTotalRecebiveisFiado();
+            // Também carregar quando clicar diretamente na aba
+            $('#pedidos-fiado-tab').on('click', function () {
+                console.log('🖱️ Clique na aba Pedidos Fiado!');
+                setTimeout(() => {
+                    atualizarPedidosFiado();
+                }, 100);
+            });
         });
 
         // Funções para lançamentos
@@ -1057,9 +1069,29 @@ $contas = $db->fetchAll(
 
         function atualizarPedidosFiado() {
             console.log('🔄 Iniciando atualização de pedidos fiado...');
+            
+            // Verificar se a tabela existe antes de tentar atualizar
+            const tabela = document.querySelector('#tabelaPedidosFiado');
+            if (!tabela) {
+                console.log('⚠️ Tabela de pedidos fiado não encontrada ainda, aguardando...');
+                return;
+            }
+            
+            console.log('📋 Iniciando atualização de pedidos fiado...');
+            
+            // Mostrar indicador de carregamento
+            const tbody = tabela.querySelector('tbody');
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center"><i class="fas fa-spinner fa-spin me-2"></i>Carregando pedidos fiado...</td></tr>';
+            }
+            
+            console.log('🌐 Fazendo requisição para: mvc/ajax/financeiro.php?action=buscar_pedidos_fiado');
+            
             fetch('mvc/ajax/financeiro.php?action=buscar_pedidos_fiado', {
+                method: 'GET',
                 headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/json'
                 }
             })
             .then(response => {
@@ -1071,8 +1103,15 @@ $contas = $db->fetchAll(
                 if (data.success) {
                     console.log('✅ Sucesso! Processando', data.pedidos.length, 'pedidos');
                     const tbody = document.querySelector('#tabelaPedidosFiado tbody');
-                    tbody.innerHTML = '';
                     
+                    // Verificar se há pedidos
+                    if (data.pedidos.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted"><i class="fas fa-info-circle me-2"></i>Nenhum pedido fiado encontrado</td></tr>';
+                        document.getElementById('totalFiado').textContent = 'R$ 0,00';
+                        return;
+                    }
+                    
+                    tbody.innerHTML = '';
                     let totalRecebiveis = 0;
                     
                     data.pedidos.forEach(pedido => {
@@ -1086,8 +1125,10 @@ $contas = $db->fetchAll(
                         const statusBadge = pedido.status_pagamento === 'quitado' ? 'bg-success' : 'bg-warning';
                         const statusText = pedido.status_pagamento === 'quitado' ? 'Quitado' : 'Pendente';
                         
-                        // Somar TODOS os valores FIADO ao total de recebíveis
-                        totalRecebiveis += totalPagoFiado;
+                        // Somar apenas valores FIADO de pedidos NÃO quitados ao total de recebíveis
+                        if (pedido.status_pagamento !== 'quitado') {
+                            totalRecebiveis += totalPagoFiado;
+                        }
                         
                         row.innerHTML = `
                             <td>#${pedido.idpedido}</td>
@@ -1106,11 +1147,14 @@ $contas = $db->fetchAll(
                                 <button class="btn btn-outline-primary btn-sm" onclick="verDetalhesPedido(${pedido.idpedido})" title="Ver Detalhes">
                                     <i class="fas fa-eye"></i>
                                 </button>
-                                ${pedido.status_pagamento !== 'quitado' ? `<button class="btn btn-outline-success btn-sm" onclick="quitarPedidoFiado(${pedido.idpedido})" title="Quitar Fiado">
-                                    <i class="fas fa-check"></i>
-                                </button>` : ''}
+                                <button class="btn btn-outline-success btn-sm" onclick="quitarPedidoFiado(${pedido.idpedido})" title="Quitar Saldo Fiado">
+                                    <i class="fas fa-check me-1"></i>Quitar
+                                </button>
                                 <button class="btn btn-outline-info btn-sm" onclick="imprimirPedido(${pedido.idpedido})" title="Imprimir">
                                     <i class="fas fa-print"></i>
+                                </button>
+                                <button class="btn btn-outline-danger btn-sm" onclick="excluirPedidoFiado(${pedido.idpedido})" title="Excluir Pedido">
+                                    <i class="fas fa-trash"></i>
                                 </button>
                             </td>
                         `;
@@ -1135,63 +1179,201 @@ $contas = $db->fetchAll(
 
         function carregarTotalRecebiveisFiado() {
             console.log('🔄 Carregando total de recebíveis fiado...');
+            
+            // Verificar se o elemento existe
+            const elemento = document.getElementById('totalFiado');
+            if (!elemento) {
+                console.error('❌ Elemento totalFiado não encontrado!');
+                return;
+            }
+            
+            console.log('🌐 Fazendo requisição para: mvc/ajax/financeiro.php?action=buscar_total_recebiveis_fiado');
+            
             fetch('mvc/ajax/financeiro.php?action=buscar_total_recebiveis_fiado', {
+                method: 'GET',
                 headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/json'
                 }
             })
             .then(response => {
                 console.log('📡 Resposta recebíveis:', response.status);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 return response.json();
             })
             .then(data => {
-                console.log('💰 Dados recebíveis:', data);
+                console.log('💰 Dados recebíveis recebidos:', data);
                 if (data.success) {
-                    const total = parseFloat(data.total_recebiveis).toFixed(2).replace('.', ',');
+                    const total = parseFloat(data.total_recebiveis || 0).toFixed(2).replace('.', ',');
                     console.log('💰 Atualizando card com total:', total);
-                    document.getElementById('totalFiado').textContent = `R$ ${total}`;
+                    elemento.textContent = `R$ ${total}`;
+                    console.log('✅ Card atualizado com sucesso!');
                 } else {
                     console.error('❌ Erro ao carregar recebíveis:', data);
+                    elemento.textContent = 'R$ 0,00';
                 }
             })
             .catch(error => {
                 console.error('❌ Erro na requisição recebíveis:', error);
+                elemento.textContent = 'R$ 0,00';
             });
         }
 
         function quitarPedidoFiado(pedidoId) {
+            // Buscar dados do pedido usando o endpoint que já funciona
+            fetch('mvc/ajax/financeiro.php?action=buscar_pedidos_fiado', {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Encontrar o pedido específico
+                    const pedido = data.pedidos.find(p => p.idpedido == pedidoId);
+                    
+                    if (!pedido) {
+                        Swal.fire('Erro', 'Pedido não encontrado', 'error');
+                        return;
+                    }
+                    
+                    const saldoFiado = parseFloat(pedido.saldo_fiado_pendente) || 0;
+                    
+                    // Verificar se há saldo fiado para quitar
+                    if (saldoFiado <= 0.01) {
+                        Swal.fire('Aviso', 'Este pedido não possui valores fiado para quitar!', 'info');
+                        return;
+                    }
+                    
+                    abrirModalQuitarFiado(pedidoId, saldoFiado, pedido);
+                } else {
+                    Swal.fire('Erro', 'Erro ao buscar dados do pedido', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao buscar pedido:', error);
+                Swal.fire('Erro', 'Erro ao buscar dados do pedido', 'error');
+            });
+        }
+
+        function abrirModalQuitarFiado(pedidoId, saldoDevedor, pedido) {
             Swal.fire({
                 title: 'Quitar Pedido Fiado',
-                text: 'Deseja realmente quitar este pedido fiado?',
-                icon: 'question',
+                html: `
+                    <div class="mb-3">
+                        <p><strong>Pedido:</strong> #${pedidoId}</p>
+                        <p><strong>Cliente:</strong> ${pedido.cliente || 'N/A'}</p>
+                        <p><strong>Valor Total:</strong> R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</p>
+                        <p><strong>Pago (não fiado):</strong> R$ ${parseFloat(pedido.total_pago_nao_fiado || 0).toFixed(2).replace('.', ',')}</p>
+                        <p><strong>Valor Fiado:</strong> R$ ${parseFloat(pedido.total_pago_fiado || 0).toFixed(2).replace('.', ',')}</p>
+                        <p class="text-warning"><strong>Saldo Fiado a Quitar:</strong> R$ ${saldoDevedor.toFixed(2).replace('.', ',')}</p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Forma de Pagamento</label>
+                        <select class="form-select" id="formaPagamento" required>
+                            <option value="">Selecione a forma de pagamento</option>
+                            <option value="Dinheiro">Dinheiro</option>
+                            <option value="Cartão Débito">Cartão Débito</option>
+                            <option value="Cartão Crédito">Cartão Crédito</option>
+                            <option value="PIX">PIX</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Valor a Pagar</label>
+                        <input type="number" class="form-control" id="valorPagar" step="0.01" min="0.01" max="${saldoDevedor}" value="${saldoDevedor}" required>
+                        <small class="form-text text-muted">Você pode pagar parcialmente ou o valor total do saldo</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Descrição (Opcional)</label>
+                        <input type="text" class="form-control" id="descricao" placeholder="Ex: Pagamento parcial do pedido fiado">
+                    </div>
+                `,
                 showCancelButton: true,
-                confirmButtonText: 'Sim, quitar',
-                cancelButtonText: 'Cancelar'
+                confirmButtonText: 'Registrar Pagamento',
+                cancelButtonText: 'Cancelar',
+                width: '500px',
+                didOpen: () => {
+                    setTimeout(() => {
+                        const valorInput = document.getElementById('valorPagar');
+                        if (valorInput) {
+                            valorInput.focus();
+                            valorInput.select();
+                        }
+                    }, 300);
+                },
+                preConfirm: () => {
+                    const formaPagamento = document.getElementById('formaPagamento').value;
+                    const valorPagar = parseFloat(document.getElementById('valorPagar').value) || 0;
+                    const descricao = document.getElementById('descricao').value;
+                    
+                    if (!formaPagamento) {
+                        Swal.showValidationMessage('Forma de pagamento é obrigatória');
+                        return false;
+                    }
+                    
+                    if (valorPagar <= 0) {
+                        Swal.showValidationMessage('Valor deve ser maior que zero');
+                        return false;
+                    }
+                    
+                    // Limitar valor ao saldo devedor
+                    if (valorPagar > saldoDevedor + 0.01) {
+                        Swal.showValidationMessage('Valor não pode ser maior que o saldo devedor');
+                        return false;
+                    }
+                    
+                    return {
+                        formaPagamento: formaPagamento,
+                        valorPagar: valorPagar,
+                        descricao: descricao
+                    };
+                }
             }).then((result) => {
                 if (result.isConfirmed) {
-                    fetch('mvc/ajax/financeiro.php', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                            'X-Requested-With': 'XMLHttpRequest'
-                        },
-                        body: `action=quitar_pedido_fiado&pedido_id=${pedidoId}`
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            Swal.fire('Sucesso', 'Pedido quitado com sucesso!', 'success');
-                            atualizarPedidosFiado();
-                            carregarTotalRecebiveisFiado(); // Atualizar o card também
-                        } else {
-                            Swal.fire('Erro', data.message, 'error');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        Swal.fire('Erro', 'Erro ao quitar pedido', 'error');
-                    });
+                    registrarPagamentoFiado(pedidoId, result.value);
                 }
+            });
+        }
+
+        function registrarPagamentoFiado(pedidoId, dados) {
+            const formData = new URLSearchParams();
+            formData.append('action', 'registrar_pagamento_fiado');
+            formData.append('pedido_id', pedidoId);
+            formData.append('forma_pagamento', dados.formaPagamento);
+            formData.append('valor_pago', dados.valorPagar);
+            formData.append('descricao', dados.descricao);
+            
+            fetch('mvc/ajax/financeiro.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                credentials: 'same-origin',
+                body: formData.toString()
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire('Sucesso', 'Pagamento registrado com sucesso!', 'success');
+                    
+                    // Atualizar dados
+                    atualizarPedidosFiado();
+                    carregarTotalRecebiveisFiado();
+                    
+                    // Recarregar página para atualizar todas as abas
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    Swal.fire('Erro', data.message, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao registrar pagamento:', error);
+                Swal.fire('Erro', 'Erro ao registrar pagamento', 'error');
             });
         }
 
@@ -1201,6 +1383,136 @@ $contas = $db->fetchAll(
                 title: 'Exportar Pedido',
                 text: 'Funcionalidade em desenvolvimento',
                 icon: 'info'
+            });
+        }
+
+        // Função para excluir pedido fiado
+        function excluirPedidoFiado(pedidoId) {
+            Swal.fire({
+                title: 'Excluir Pedido',
+                text: `Tem certeza que deseja excluir o pedido #${pedidoId}? Esta ação não pode ser desfeita!`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Sim, excluir!',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Fazer requisição para excluir
+                    fetch('mvc/ajax/financeiro.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: `action=excluir_pedido_fiado&pedido_id=${pedidoId}`
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Sucesso', 'Pedido excluído com sucesso!', 'success');
+                            
+                            // Atualizar dados
+                            atualizarPedidosFiado();
+                            carregarTotalRecebiveisFiado();
+                            
+                            // Recarregar página para atualizar todas as abas
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 1500);
+                        } else {
+                            Swal.fire('Erro', data.message || 'Erro ao excluir pedido', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro ao excluir pedido:', error);
+                        Swal.fire('Erro', 'Erro ao excluir pedido', 'error');
+                    });
+                }
+            });
+        }
+
+        function forcarCarregamentoFiado() {
+            console.log('🚀 FORÇANDO CARREGAMENTO FIADO...');
+            
+            // Carregar recebíveis
+            fetch('mvc/ajax/financeiro.php', {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: 'action=buscar_total_recebiveis_fiado'
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('💰 Dados recebíveis:', data);
+                if (data.success) {
+                    const elemento = document.getElementById('totalFiado');
+                    if (elemento) {
+                        const total = parseFloat(data.total_recebiveis || 0).toFixed(2).replace('.', ',');
+                        elemento.textContent = `R$ ${total}`;
+                        console.log('✅ Card atualizado: R$ ' + total);
+                    }
+                }
+            });
+            
+            // Carregar pedidos
+            fetch('mvc/ajax/financeiro.php', {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: 'action=buscar_pedidos_fiado'
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('📋 Dados pedidos:', data);
+                if (data.success) {
+                    const tabela = document.querySelector('#tabelaPedidosFiado tbody');
+                    if (tabela) {
+                        if (data.pedidos.length === 0) {
+                            tabela.innerHTML = '<tr><td colspan="8" class="text-center text-muted"><i class="fas fa-info-circle me-2"></i>Nenhum pedido fiado encontrado</td></tr>';
+                        } else {
+                            tabela.innerHTML = '';
+                            data.pedidos.forEach(pedido => {
+                                const saldoDevedorReal = parseFloat(pedido.saldo_fiado_pendente) || 0;
+                                const totalFiado = parseFloat(pedido.total_pago_fiado) || 0;
+                                
+                                const row = `
+                                    <tr>
+                                        <td><strong>#${pedido.idpedido}</strong></td>
+                                        <td>${pedido.data} ${pedido.hora_pedido}</td>
+                                        <td>${pedido.cliente || 'N/A'}</td>
+                                        <td>${pedido.telefone_cliente || 'N/A'}</td>
+                                        <td>Mesa ${pedido.idmesa}</td>
+                                        <td>
+                                            <strong>R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</strong>
+                                            ${saldoDevedorReal > 0.01 ? `<br><small class="text-warning">Fiado: R$ ${saldoDevedorReal.toFixed(2).replace('.', ',')}</small>` : ''}
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-${pedido.status_pagamento === 'quitado' ? 'success' : 'warning'}">
+                                                ${pedido.status_pagamento === 'quitado' ? 'Quitado' : 'Pendente'}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-outline-success btn-sm" onclick="quitarPedidoFiado(${pedido.idpedido})" title="Quitar Saldo Fiado">
+                                                <i class="fas fa-check me-1"></i>Quitar
+                                            </button>
+                                            <button class="btn btn-outline-danger btn-sm" onclick="excluirPedidoFiado(${pedido.idpedido})" title="Excluir Pedido">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                `;
+                                tabela.innerHTML += row;
+                            });
+                            console.log('✅ Tabela atualizada com ' + data.pedidos.length + ' pedidos');
+                        }
+                    }
+                }
             });
         }
 
@@ -1398,6 +1710,128 @@ $contas = $db->fetchAll(
                 });
             }, 2000);
         }
+    </script>
+
+    <!-- CARREGAMENTO AUTOMÁTICO - EXECUTA APÓS TODO HTML ESTAR PRONTO -->
+    <script>
+        console.log('🚀 INICIANDO CARREGAMENTO AUTOMÁTICO...');
+        
+        // Aguardar um pouco para garantir que tudo esteja carregado
+        setTimeout(function() {
+            console.log('💰 Carregando card recebíveis fiado automaticamente...');
+            
+            // Carregar card recebíveis fiado
+            fetch('mvc/ajax/financeiro.php', {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: 'action=buscar_total_recebiveis_fiado'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const elemento = document.getElementById('totalFiado');
+                    if (elemento) {
+                        const total = parseFloat(data.total_recebiveis || 0).toFixed(2).replace('.', ',');
+                        elemento.textContent = `R$ ${total}`;
+                        console.log('✅ Card recebíveis fiado atualizado: R$ ' + total);
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('❌ Erro ao carregar recebíveis:', error);
+            });
+            
+            // Carregar pedidos fiado automaticamente
+            console.log('📋 Carregando pedidos fiado automaticamente...');
+            fetch('mvc/ajax/financeiro.php', {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: 'action=buscar_pedidos_fiado'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const tabela = document.querySelector('#tabelaPedidosFiado tbody');
+                    if (tabela) {
+                        if (data.pedidos.length === 0) {
+                            tabela.innerHTML = '<tr><td colspan="8" class="text-center text-muted"><i class="fas fa-info-circle me-2"></i>Nenhum pedido fiado encontrado</td></tr>';
+                        } else {
+                            tabela.innerHTML = '';
+                            let totalRecebiveis = 0;
+                            
+                            data.pedidos.forEach(pedido => {
+                                const row = document.createElement('tr');
+                                const saldoFiadoPendente = parseFloat(pedido.saldo_fiado_pendente) || 0;
+                                const totalPagoNaoFiado = parseFloat(pedido.total_pago_nao_fiado) || 0;
+                                const totalPagoFiado = parseFloat(pedido.total_pago_fiado) || 0;
+                                
+                                // Status baseado no status_pagamento do pedido
+                                const statusBadge = pedido.status_pagamento === 'quitado' ? 'bg-success' : 'bg-warning';
+                                const statusText = pedido.status_pagamento === 'quitado' ? 'Quitado' : 'Pendente';
+                                
+                                // Somar apenas valores FIADO pendentes ao total de recebíveis
+                                if (saldoFiadoPendente > 0.01) {
+                                    totalRecebiveis += saldoFiadoPendente;
+                                }
+                                
+                                row.innerHTML = `
+                                    <td>#${pedido.idpedido}</td>
+                                    <td>${pedido.data} ${pedido.hora_pedido}</td>
+                                    <td>${pedido.cliente || 'N/A'}</td>
+                                    <td>${pedido.telefone_cliente || 'N/A'}</td>
+                                    <td>${pedido.idmesa == '999' ? 'Delivery' : `Mesa ${pedido.idmesa}`}</td>
+                                    <td>
+                                        <div>Total: R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</div>
+                                        <small class="text-success">Pago Real: R$ ${totalPagoNaoFiado.toFixed(2).replace('.', ',')}</small>
+                                        ${saldoFiadoPendente > 0.01 ? `<small class="text-warning">Fiado: R$ ${saldoFiadoPendente.toFixed(2).replace('.', ',')}</small>` : ''}
+                                    </td>
+                                    <td><span class="badge ${statusBadge}">${statusText}</span></td>
+                                    <td>
+                                        <button class="btn btn-outline-primary btn-sm" onclick="verDetalhesPedido(${pedido.idpedido})" title="Ver Detalhes">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        ${saldoFiadoPendente > 0.01 ? 
+                                            `<button class="btn btn-outline-success btn-sm" onclick="quitarPedidoFiado(${pedido.idpedido})" title="Quitar Fiado">
+                                                <i class="fas fa-check me-1"></i>Quitar
+                                            </button>` : 
+                                            `<button class="btn btn-outline-secondary btn-sm" disabled title="Fiado já quitado">
+                                                <i class="fas fa-check-circle me-1"></i>Quitado
+                                            </button>`
+                                        }
+                                            <button class="btn btn-outline-info btn-sm" onclick="imprimirPedido(${pedido.idpedido})" title="Imprimir">
+                                                <i class="fas fa-print"></i>
+                                            </button>
+                                            <button class="btn btn-outline-danger btn-sm" onclick="excluirPedidoFiado(${pedido.idpedido})" title="Excluir Pedido">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                    `;
+                                tabela.appendChild(row);
+                            });
+                            
+                            // Atualizar o card de recebíveis fiado com valores pendentes
+                            const elemento = document.getElementById('totalFiado');
+                            if (elemento) {
+                                elemento.textContent = `R$ ${totalRecebiveis.toFixed(2).replace('.', ',')}`;
+                            }
+                        }
+                        
+                        console.log('✅ Pedidos fiado carregados automaticamente: ' + data.pedidos.length + ' pedidos');
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('❌ Erro ao carregar pedidos fiado:', error);
+            });
+        }, 3000); // Aguardar 3 segundos para garantir que tudo esteja carregado
+        
+        console.log('✅ Script de carregamento automático configurado!');
     </script>
 </body>
 </html>

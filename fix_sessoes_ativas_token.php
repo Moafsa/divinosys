@@ -115,3 +115,5 @@ try {
     error_log("Erro crítico em fix_sessoes_ativas_token.php: " . $e->getMessage() . "\n" . $e->getTraceAsString());
 }
 ?>
+
+

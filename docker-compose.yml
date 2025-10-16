@@ -28,6 +28,7 @@ services:
       - redis
       - mcp-server
     volumes:
+      - .:/var/www/html
       - ./uploads:/var/www/html/uploads
       - ./logs:/var/www/html/logs
     networks:
