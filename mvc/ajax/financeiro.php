@@ -321,13 +321,9 @@ try {
                 $novoValorPagoNaoFiado = $novoTotalPagoNaoFiado['total'] ?? 0;
                 $novoSaldoDevedor = $pedido['valor_total'] - $novoValorPagoNaoFiado;
                 
-                // Determinar novo status (baseado no saldo total)
-                $novoStatusPagamento = 'pendente';
-                if ($novoSaldoDevedor <= 0.01) {
-                    $novoStatusPagamento = 'quitado';
-                } elseif ($novoValorPagoNaoFiado > 0) {
-                    $novoStatusPagamento = 'parcial';
-                }
+                // Manter status como 'quitado' se já estava quitado
+                // (pagamentos parciais de fiado não devem alterar o status)
+                $novoStatusPagamento = $pedido['status_pagamento'];
                 
                 // Atualizar pedido
                 $db->update(

@@ -691,6 +691,12 @@ if ($tenant && $filial) {
                                                     <i class="fas fa-eye me-1"></i>
                                                     Ver Detalhes
                                                 </button>
+                                                <?php if ($pedido['status'] === 'Entregue'): ?>
+                                                    <button class="btn btn-sm btn-success" onclick="fecharPedidoDelivery(<?php echo $pedido['idpedido']; ?>)" title="Fechar Pedido">
+                                                        <i class="fas fa-check-circle me-1"></i>
+                                                        Fechar Pedido
+                                                    </button>
+                                                <?php endif; ?>
                                                 <select class="form-select form-select-sm status-select" onchange="alterarStatusDelivery(<?php echo $pedido['idpedido']; ?>, this.value, '<?php echo $pedido['status']; ?>', this)">
                                                     <option value="">Alterar Status</option>
                                                     <option value="Pendente" <?php echo $pedido['status'] == 'Pendente' ? 'selected' : ''; ?>>Pendente</option>
@@ -1236,6 +1242,11 @@ if ($tenant && $filial) {
         function fecharPedido(pedidoId) {
             // Use the new partial payment system
             abrirModalPagamento(pedidoId);
+        }
+
+        function fecharPedidoDelivery(pedidoId) {
+            // Redirecionar para a página de fechar pedido (mesmo modelo da mesa)
+            window.location.href = `index.php?view=fechar_pedido&pedido_id=${pedidoId}`;
         }
 
         function excluirPedido(pedidoId) {

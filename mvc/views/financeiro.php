@@ -136,9 +136,8 @@ if ($tenant && $filial) {
     // Faturamento = valor_total dos pedidos
     $resumoFinanceiro['total_receitas'] += $receitasPedidos['total_faturamento'];
     
-    // Saldo Líquido = Total Receitas - Recebíveis Fiado
-    // (Valor total dos pedidos - valores fiado pendentes)
-    $resumoFinanceiro['saldo_liquido'] = $resumoFinanceiro['total_receitas'] - $resumoFinanceiro['recebiveis_fiado'];
+    // Saldo Líquido = SOMA DO CAMPO valor_pago dos pedidos quitados
+    $resumoFinanceiro['saldo_liquido'] = $receitasPedidos['total_pago'];
     
     $resumoFinanceiro['total_lancamentos'] += $receitasPedidos['total_pedidos_quitados'];
 }
