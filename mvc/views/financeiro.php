@@ -120,48 +120,20 @@ if ($tenant && $filial) {
         [$tenant['id'], $filial['id'], $dataInicio . ' 00:00:00', $dataFim . ' 23:59:59']
     );
     
-    // Adicionar receitas dos pedidos (apenas pedidos totalmente quitados, sem fiado pendente)
+    // Adicionar receitas dos pedidos quitados (somar apenas o campo valor_pago de cada pedido)
     $receitasPedidos = $db->fetch(
         "SELECT 
-            COALESCE(SUM(pp.valor_pago), 0) as total_vendas_pedidos,
+            COALESCE(SUM(p.valor_pago), 0) as total_vendas_pedidos,
             COUNT(DISTINCT p.idpedido) as total_pedidos_quitados
-         FROM pagamentos_pedido pp
-         INNER JOIN pedido p ON pp.pedido_id = p.idpedido
-         WHERE pp.tenant_id = ? AND pp.filial_id = ?
+         FROM pedido p
+         WHERE p.tenant_id = ? AND p.filial_id = ?
          AND p.data BETWEEN ? AND ?
-         AND p.status_pagamento = 'quitado'
-         AND pp.forma_pagamento != 'FIADO'
-         AND pp.created_at BETWEEN ? AND ?
-         AND NOT EXISTS (
-             SELECT 1 FROM pagamentos_pedido pp2 
-             WHERE pp2.pedido_id = p.idpedido 
-             AND pp2.forma_pagamento = 'FIADO' 
-             AND pp2.tenant_id = p.tenant_id 
-             AND pp2.filial_id = p.filial_id
-         )",
-        [$tenant['id'], $filial['id'], $dataInicio, $dataFim, $dataInicio . ' 00:00:00', $dataFim . ' 23:59:59']
+         AND p.status_pagamento = 'quitado'",
+        [$tenant['id'], $filial['id'], $dataInicio, $dataFim]
     );
     
-    // Somar receitas dos pedidos aos lançamentos (apenas pagamentos não-fiado)
+    // Somar receitas dos pedidos aos lançamentos
     $resumoFinanceiro['total_receitas'] += $receitasPedidos['total_vendas_pedidos'];
-    
-    // Adicionar valores fiado que foram QUITADOS (pagamentos fiado quitados com dinheiro/cartão)
-    $receitasFiadoQuitado = $db->fetch(
-        "SELECT 
-            COALESCE(SUM(pp.valor_pago), 0) as total_fiado_quitado
-         FROM pagamentos_pedido pp
-         INNER JOIN pedido p ON pp.pedido_id = p.idpedido
-         WHERE pp.tenant_id = ? AND pp.filial_id = ?
-         AND p.data BETWEEN ? AND ?
-         AND p.status_pagamento = 'quitado'
-         AND pp.forma_pagamento != 'FIADO'
-         AND pp.descricao LIKE '%fiado%'
-         AND pp.created_at BETWEEN ? AND ?",
-        [$tenant['id'], $filial['id'], $dataInicio, $dataFim, $dataInicio . ' 00:00:00', $dataFim . ' 23:59:59']
-    );
-    
-    // Somar valores fiado quitados ao faturamento
-    $resumoFinanceiro['total_receitas'] += $receitasFiadoQuitado['total_fiado_quitado'];
     
     $resumoFinanceiro['saldo_liquido'] = $resumoFinanceiro['total_receitas'] - $resumoFinanceiro['total_despesas'];
     $resumoFinanceiro['total_lancamentos'] += $receitasPedidos['total_pedidos_quitados'];
