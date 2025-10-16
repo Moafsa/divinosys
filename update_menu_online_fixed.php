@@ -109,34 +109,20 @@ try {
     // Limpar dados existentes
     showMessage("🧹 Limpando dados existentes...", 'info');
     
-    // Verificar quais tabelas existem antes de tentar deletar
-    $tablesToClean = [
-        'pedido_item_ingredientes',
-        'pedido_itens', 
-        'pedido',
-        'mesa_pedidos',
-        'log_pedidos',
-        'pagamentos_pedido',
-        'historico_pedidos_financeiros',
-        'produto_ingredientes',
-        'produtos',
-        'ingredientes',
-        'categorias'
+    // Limpar dados das tabelas (manter estrutura, apenas remover dados)
+    $cleanQueries = [
+        "DELETE FROM pedido_item_ingredientes",
+        "DELETE FROM pedido_itens", 
+        "DELETE FROM pedido",
+        "DELETE FROM mesa_pedidos",
+        "DELETE FROM log_pedidos",
+        "DELETE FROM pagamentos_pedido",
+        "DELETE FROM historico_pedidos_financeiros",
+        "DELETE FROM produto_ingredientes",
+        "DELETE FROM produtos",
+        "DELETE FROM ingredientes",
+        "DELETE FROM categorias"
     ];
-    
-    $cleanQueries = [];
-    foreach ($tablesToClean as $table) {
-        // Verificar se a tabela existe
-        $checkTable = $pdo->prepare("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = ?)");
-        $checkTable->execute([$table]);
-        $tableExists = $checkTable->fetchColumn();
-        
-        if ($tableExists) {
-            $cleanQueries[] = "DELETE FROM $table";
-        } else {
-            showMessage("⚠️ Tabela $table não existe, pulando...", 'warning');
-        }
-    }
     
     foreach ($cleanQueries as $query) {
         $pdo->exec($query);
