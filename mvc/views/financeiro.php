@@ -120,16 +120,15 @@ if ($tenant && $filial) {
         [$tenant['id'], $filial['id'], $dataInicio . ' 00:00:00', $dataFim . ' 23:59:59']
     );
     
-    // Adicionar receitas dos pedidos quitados (apenas valores pagos NÃO-FIADO)
+    // Adicionar receitas dos pedidos (apenas valores pagos NÃO-FIADO)
     $receitasPedidos = $db->fetch(
         "SELECT 
             COALESCE(SUM(pp.valor_pago), 0) as total_vendas_pedidos,
-            COUNT(DISTINCT p.idpedido) as total_pedidos_quitados
+            COUNT(DISTINCT CASE WHEN p.status_pagamento = 'quitado' THEN p.idpedido END) as total_pedidos_quitados
          FROM pagamentos_pedido pp
          INNER JOIN pedido p ON pp.pedido_id = p.idpedido
          WHERE pp.tenant_id = ? AND pp.filial_id = ?
          AND p.data BETWEEN ? AND ?
-         AND p.status_pagamento = 'quitado'
          AND pp.forma_pagamento != 'FIADO'
          AND pp.created_at BETWEEN ? AND ?",
         [$tenant['id'], $filial['id'], $dataInicio, $dataFim, $dataInicio . ' 00:00:00', $dataFim . ' 23:59:59']
@@ -146,7 +145,6 @@ if ($tenant && $filial) {
          INNER JOIN pedido p ON pp.pedido_id = p.idpedido
          WHERE pp.tenant_id = ? AND pp.filial_id = ?
          AND p.data BETWEEN ? AND ?
-         AND p.status_pagamento = 'quitado'
          AND pp.forma_pagamento != 'FIADO'
          AND pp.descricao LIKE '%fiado%'
          AND pp.created_at BETWEEN ? AND ?",
