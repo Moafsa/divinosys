@@ -261,9 +261,19 @@ html, body {
         font-size: 0.8rem !important;
     }
     
-    /* Apenas ajustar tamanho das mesas - deixar Bootstrap funcionar */
+    /* Ajustar tamanho das mesas para mais colunas */
     .mesa-card {
-        padding: 8px !important;
-        font-size: 0.8rem !important;
+        padding: 5px !important;
+        font-size: 0.75rem !important;
+        min-height: 60px !important;
+    }
+    
+    .mesa-numero {
+        font-size: 0.7rem !important;
+        font-weight: bold !important;
+    }
+    
+    .mesa-info {
+        font-size: 0.65rem !important;
     }
 }
