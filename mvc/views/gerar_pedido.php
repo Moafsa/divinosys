@@ -1177,20 +1177,92 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                     <meta charset="UTF-8">
                     <title>Cupom Fiscal - Pedido #${pedidoData.id}</title>
                     <style>
-                        body { font-family: 'Courier New', monospace; font-size: 12px; margin: 0; padding: 10px; }
-                        .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
-                        .empresa { font-weight: bold; font-size: 14px; }
-                        .endereco { font-size: 10px; }
-                        .pedido-info { margin: 10px 0; }
-                        .item { margin: 5px 0; }
-                        .item-nome { font-weight: bold; font-size: 14px; }
-                        .item-detalhes { font-size: 13px; margin-left: 10px; }
-                        .modificacoes { margin-left: 20px; font-size: 13px; }
-                        .adicionado { color: green; }
-                        .removido { color: red; }
-                        .total { border-top: 1px dashed #000; padding-top: 10px; margin-top: 10px; font-weight: bold; }
-                        .footer { text-align: center; margin-top: 20px; font-size: 10px; }
-                        @media print { body { margin: 0; } }
+                        body { 
+                            font-family: 'Courier New', monospace; 
+                            font-size: 16px; 
+                            margin: 0; 
+                            padding: 15px; 
+                            line-height: 1.4;
+                        }
+                        .header { 
+                            text-align: center; 
+                            border-bottom: 2px solid #000; 
+                            padding-bottom: 15px; 
+                            margin-bottom: 15px; 
+                        }
+                        .empresa { 
+                            font-weight: bold; 
+                            font-size: 20px; 
+                            margin-bottom: 5px;
+                        }
+                        .endereco { 
+                            font-size: 14px; 
+                            margin-bottom: 10px;
+                        }
+                        .pedido-info { 
+                            margin: 15px 0; 
+                            font-size: 16px;
+                            font-weight: bold;
+                        }
+                        .item { 
+                            margin: 8px 0; 
+                            padding: 5px 0;
+                            border-bottom: 1px dotted #ccc;
+                        }
+                        .item-nome { 
+                            font-weight: bold; 
+                            font-size: 18px; 
+                            color: #000;
+                        }
+                        .item-detalhes { 
+                            font-size: 16px; 
+                            margin-left: 15px; 
+                            margin-top: 5px;
+                        }
+                        .modificacoes { 
+                            margin-left: 25px; 
+                            font-size: 15px; 
+                            margin-top: 8px;
+                        }
+                        .adicionado { 
+                            color: #006400; 
+                            font-weight: bold;
+                        }
+                        .removido { 
+                            color: #DC143C; 
+                            font-weight: bold;
+                        }
+                        .total { 
+                            border-top: 2px solid #000; 
+                            padding-top: 15px; 
+                            margin-top: 20px; 
+                            font-weight: bold; 
+                            font-size: 20px;
+                            text-align: center;
+                        }
+                        .footer { 
+                            text-align: center; 
+                            margin-top: 25px; 
+                            font-size: 14px; 
+                            font-weight: bold;
+                        }
+                        .observacao {
+                            margin-top: 15px;
+                            padding: 10px;
+                            background-color: #f0f0f0;
+                            border: 1px solid #000;
+                            font-size: 16px;
+                            font-weight: bold;
+                        }
+                        @media print { 
+                            body { 
+                                margin: 0; 
+                                padding: 10px;
+                                font-size: 14px;
+                            }
+                            .item-nome { font-size: 16px; }
+                            .total { font-size: 18px; }
+                        }
                     </style>
                 </head>
                 <body>
@@ -1253,7 +1325,7 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                         <strong>TOTAL: R$ ${pedidoData.valor_total.toFixed(2).replace('.', ',')}</strong>
                     </div>
                     
-                    ${pedidoData.observacao ? `<div class="pedido-info"><strong>Observação:</strong> ${pedidoData.observacao}</div>` : ''}
+                    ${pedidoData.observacao ? `<div class="observacao"><strong>OBSERVAÇÃO:</strong> ${pedidoData.observacao}</div>` : ''}
                     
                     <div class="footer">
                         Obrigado pela preferência!<br>
