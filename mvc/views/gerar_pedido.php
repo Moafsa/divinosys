@@ -140,6 +140,26 @@ foreach ($produtos as &$produto) {
     }
 }
 
+// Buscar TODOS os ingredientes disponíveis para personalização (igual desktop)
+$todosIngredientes = [];
+if ($tenant && $filial) {
+    try {
+        $todosIngredientes = $db->fetchAll(
+            "SELECT * FROM ingredientes 
+             WHERE tenant_id = ? AND filial_id = ? AND disponivel = true
+             ORDER BY nome",
+            [$tenant['id'], $filial['id']]
+        );
+    } catch (Exception $e) {
+        // Se der erro, buscar sem filtro de tenant/filial
+        $todosIngredientes = $db->fetchAll(
+            "SELECT * FROM ingredientes 
+             WHERE disponivel = true
+             ORDER BY nome"
+        );
+    }
+}
+
 // Get categorias
 $categorias = [];
 if ($tenant && $filial) {
@@ -1482,6 +1502,7 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
         window.mesasData = <?php echo json_encode($mesas); ?>;
         window.tenantData = <?php echo json_encode($tenant); ?>;
         window.filialData = <?php echo json_encode($filial); ?>;
+        window.todosIngredientes = <?php echo json_encode($todosIngredientes); ?>;
     </script>
     <script src="assets/js/mobile-pedido.js"></script>
     

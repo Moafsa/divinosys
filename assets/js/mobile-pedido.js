@@ -367,12 +367,14 @@ class MobilePedidoInterface {
     }
     
     showPersonalizacaoModal(produtoId, nome, preco, ingredientes) {
-        // Usar ingredientes reais do produto
+        // Usar TODOS os ingredientes disponíveis (igual desktop)
+        const todosIngredientes = window.todosIngredientes || [];
         console.log('🍔 Ingredientes do produto:', ingredientes);
+        console.log('🍔 Todos os ingredientes disponíveis:', todosIngredientes);
         
-        if (!ingredientes || ingredientes.length === 0) {
+        if (!todosIngredientes || todosIngredientes.length === 0) {
             // Se não houver ingredientes, mostrar mensagem
-            alert('Este produto não possui ingredientes para personalizar.');
+            alert('Não há ingredientes disponíveis para personalizar.');
             return;
         }
         
@@ -391,21 +393,35 @@ class MobilePedidoInterface {
             align-items: flex-end;
         `;
         
-        const ingredientesHTML = ingredientes.map(ing => `
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee;">
-                <span style="font-weight: 500;">${ing.nome}</span>
-                <div style="display: flex; gap: 10px;">
-                    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                        <input type="radio" name="ing_${ing.id}" value="com" ${ing.padrao ? 'checked' : ''} style="margin: 0;">
-                        <span style="color: #28a745; font-weight: 600;">Com</span>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                        <input type="radio" name="ing_${ing.id}" value="sem" ${!ing.padrao ? 'checked' : ''} style="margin: 0;">
-                        <span style="color: #dc3545; font-weight: 600;">Sem</span>
-                    </label>
+        // Criar lista de ingredientes disponíveis com checkboxes (igual desktop)
+        const ingredientesHTML = todosIngredientes.map(ing => {
+            // Verificar se este ingrediente já está no produto
+            const jaEstaNoProduto = ingredientes.some(ingProduto => ingProduto.id === ing.id);
+            const precoAdicional = parseFloat(ing.preco_adicional || 0);
+            
+            return `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <input type="checkbox" id="ing_${ing.id}" name="ingredientes" value="${ing.id}" 
+                               ${jaEstaNoProduto ? 'checked' : ''} style="margin: 0;">
+                        <label for="ing_${ing.id}" style="font-weight: 500; cursor: pointer; margin: 0;">
+                            ${ing.nome}
+                            ${precoAdicional > 0 ? ` (+R$ ${precoAdicional.toFixed(2)})` : ''}
+                        </label>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                            <input type="radio" name="ing_${ing.id}_tipo" value="com" ${jaEstaNoProduto ? 'checked' : ''} style="margin: 0;">
+                            <span style="color: #28a745; font-weight: 600;">Com</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                            <input type="radio" name="ing_${ing.id}_tipo" value="sem" ${!jaEstaNoProduto ? 'checked' : ''} style="margin: 0;">
+                            <span style="color: #dc3545; font-weight: 600;">Sem</span>
+                        </label>
+                    </div>
                 </div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
         
         modal.innerHTML = `
             <div style="background: white; width: 100%; border-radius: 20px 20px 0 0; padding: 20px; max-height: 80vh; overflow-y: auto;">
@@ -454,33 +470,45 @@ class MobilePedidoInterface {
         const quantidade = parseInt(modal.querySelector('.qty-value').textContent);
         const observacoes = modal.querySelector('#observacoes').value;
         
-        // Capturar apenas as modificações (igual ao desktop)
+        // Capturar modificações (igual ao desktop)
         const modificacoes = [];
+        const checkboxes = modal.querySelectorAll('input[type="checkbox"]:checked');
         const radioButtons = modal.querySelectorAll('input[type="radio"]:checked');
         
-        radioButtons.forEach(radio => {
-            const ingredienteId = radio.name.replace('ing_', '');
-            const escolha = radio.value;
-            const ingredienteNome = radio.closest('div').querySelector('span').textContent;
+        // Buscar ingredientes originais do produto
+        const produtoOriginal = this.produtos.find(p => p.id === produtoId);
+        const ingredientesOriginais = produtoOriginal?.ingredientes || [];
+        
+        // Verificar cada ingrediente selecionado
+        checkboxes.forEach(checkbox => {
+            const ingredienteId = parseInt(checkbox.value);
+            const ingredienteNome = checkbox.nextElementSibling.textContent.split(' (+')[0]; // Remove preço adicional
+            const radioTipo = modal.querySelector(`input[name="ing_${ingredienteId}_tipo"]:checked`);
+            const escolha = radioTipo ? radioTipo.value : 'com';
             
-            // Verificar se é diferente do padrão
-            const ingredienteOriginal = this.produtos.find(p => p.id === produtoId)?.ingredientes?.find(i => i.id == ingredienteId);
-            if (ingredienteOriginal) {
-                const ehPadrao = ingredienteOriginal.padrao;
-                const escolhido = escolha === 'com';
-                
-                // Se a escolha for diferente do padrão, adicionar à lista
-                if (ehPadrao !== escolhido) {
-                    if (escolhido) {
-                        modificacoes.push(`+ ${ingredienteNome}`);
-                    } else {
-                        modificacoes.push(`- ${ingredienteNome}`);
-                    }
+            // Verificar se este ingrediente estava no produto original
+            const estavaNoProduto = ingredientesOriginais.some(ing => ing.id === ingredienteId);
+            const escolhido = escolha === 'com';
+            
+            // Se mudou de estado, adicionar à lista de modificações
+            if (estavaNoProduto !== escolhido) {
+                if (escolhido) {
+                    modificacoes.push(`+ ${ingredienteNome}`);
+                } else {
+                    modificacoes.push(`- ${ingredienteNome}`);
                 }
             }
         });
         
-        // Combinar apenas as modificações com observações
+        // Verificar ingredientes que foram desmarcados (estavam no produto original)
+        ingredientesOriginais.forEach(ingOriginal => {
+            const checkbox = modal.querySelector(`input[value="${ingOriginal.id}"]`);
+            if (!checkbox || !checkbox.checked) {
+                modificacoes.push(`- ${ingOriginal.nome}`);
+            }
+        });
+        
+        // Combinar modificações com observações
         const observacoesCompletas = [
             ...modificacoes,
             observacoes
@@ -527,25 +555,41 @@ class MobilePedidoInterface {
             return;
         }
         
-        const carrinhoHTML = this.carrinho.map(item => `
-            <div class="mobile-carrinho-item">
-                <div class="mobile-carrinho-item-info">
-                    <p class="mobile-carrinho-item-nome">${item.nome}</p>
-                    ${item.observacoes ? `<p style="font-size: 12px; color: #666; margin: 2px 0;">${item.observacoes}</p>` : ''}
-                    <p class="mobile-carrinho-item-preco">R$ ${(item.preco * item.quantidade).toFixed(2)}</p>
-                </div>
-                <div class="mobile-carrinho-item-controls">
-                    <div class="mobile-carrinho-qty">
-                        <button class="mobile-carrinho-btn-qty" onclick="mobilePedido.alterarQuantidade(${item.produtoId}, -1)">-</button>
-                        <span class="mobile-carrinho-qty-value">${item.quantidade}</span>
-                        <button class="mobile-carrinho-btn-qty" onclick="mobilePedido.alterarQuantidade(${item.produtoId}, 1)">+</button>
+        const carrinhoHTML = this.carrinho.map(item => {
+            // Separar modificações das observações
+            const observacoes = item.observacoes || '';
+            const modificacoes = observacoes.split(' | ').filter(obs => obs.trim() && (obs.startsWith('+ ') || obs.startsWith('- ')));
+            const obsAdicionais = observacoes.split(' | ').filter(obs => obs.trim() && !obs.startsWith('+ ') && !obs.startsWith('- '));
+            
+            return `
+                <div class="mobile-carrinho-item">
+                    <div class="mobile-carrinho-item-info">
+                        <p class="mobile-carrinho-item-nome">${item.nome}</p>
+                        ${modificacoes.length > 0 ? `
+                            <div style="font-size: 12px; margin: 2px 0;">
+                                ${modificacoes.map(mod => `
+                                    <span style="display: inline-block; margin: 1px 2px; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; ${mod.startsWith('+') ? 'background: #d4edda; color: #155724;' : 'background: #f8d7da; color: #721c24;'}">
+                                        ${mod}
+                                    </span>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                        ${obsAdicionais.length > 0 ? `<p style="font-size: 12px; color: #666; margin: 2px 0;">${obsAdicionais.join(' | ')}</p>` : ''}
+                        <p class="mobile-carrinho-item-preco">R$ ${(item.preco * item.quantidade).toFixed(2)}</p>
                     </div>
-                    <button class="mobile-carrinho-remove" onclick="mobilePedido.removerItem(${item.produtoId})">
-                        <i class="fas fa-trash"></i>
-                    </button>
+                    <div class="mobile-carrinho-item-controls">
+                        <div class="mobile-carrinho-qty">
+                            <button class="mobile-carrinho-btn-qty" onclick="mobilePedido.alterarQuantidade(${item.produtoId}, -1)">-</button>
+                            <span class="mobile-carrinho-qty-value">${item.quantidade}</span>
+                            <button class="mobile-carrinho-btn-qty" onclick="mobilePedido.alterarQuantidade(${item.produtoId}, 1)">+</button>
+                        </div>
+                        <button class="mobile-carrinho-remove" onclick="mobilePedido.removerItem(${item.produtoId})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
                 </div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
         
         content.innerHTML = carrinhoHTML;
         modalContent.innerHTML = carrinhoHTML;
