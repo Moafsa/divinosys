@@ -31,35 +31,30 @@ html, body {
     box-sizing: border-box;
 }
 
-/* Main Content Responsivo */
-.main-content {
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
-    margin: 0 auto;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
+/* Main Content Responsivo - Apenas para mobile */
+@media (max-width: 768px) {
+    .main-content {
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+    }
+
+    /* Centralizar conteúdo dentro do main-content */
+    .main-content .container-fluid {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+        max-width: 100%;
+    }
 }
 
-/* Centralizar conteúdo dentro do main-content */
-.main-content .container-fluid {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    width: 100%;
-    max-width: 100%;
-}
-
-.main-content .row {
-    width: 100%;
-    justify-content: center;
-}
-
-.main-content .card {
-    margin: 0 auto;
-}
+/* Estilos globais removidos - movidos para media queries específicas */
 
 /* Mobile First (até 768px) */
 @media (max-width: 768px) {
@@ -69,6 +64,15 @@ html, body {
         width: 100% !important;
         max-width: 100% !important;
         display: block !important;
+    }
+    
+    .main-content .row {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .main-content .card {
+        margin: 0 auto;
     }
     
     .container-fluid {
