@@ -1,4 +1,7 @@
 <?php
+// Incluir configuração do sistema
+require_once __DIR__ . '/../config/database.php';
+
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
@@ -15,17 +18,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 try {
-    $config = \System\Config::getInstance();
-    $db = \System\Database::getInstance();
-    $session = \System\Session::getInstance();
-    
-    $tenant = $session->getTenant();
-    $filial = $session->getFilial();
-    $user = $session->getUser();
-    
-    if (!$tenant || !$filial || !$user) {
-        throw new Exception('Sessão inválida');
-    }
+    // Conectar ao banco
+    $pdo = new PDO(
+        "pgsql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME,
+        DB_USER,
+        DB_PASS,
+        [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+    );
     
     $input = json_decode(file_get_contents('php://input'), true);
     
@@ -41,19 +40,17 @@ try {
     }
     
     // Iniciar transação
-    $db->beginTransaction();
+    $pdo->beginTransaction();
     
     try {
         // Criar pedido
-        $pedidoId = $db->insert('pedido', [
-            'tenant_id' => $tenant['id'],
-            'filial_id' => $filial['id'],
-            'idmesa' => $mesa === 'delivery' ? '999' : $mesa,
-            'status' => 'aberto',
-            'total' => 0,
-            'created_at' => date('Y-m-d H:i:s'),
-            'user_id' => $user['id']
-        ]);
+        $stmt = $pdo->prepare("
+            INSERT INTO pedido (tenant_id, filial_id, idmesa, status, total, created_at, user_id) 
+            VALUES (1, 1, ?, 'aberto', 0, NOW(), 1)
+            RETURNING idpedido
+        ");
+        $stmt->execute([$mesa === 'delivery' ? '999' : $mesa]);
+        $pedidoId = $stmt->fetchColumn();
         
         $totalPedido = 0;
         
@@ -62,19 +59,24 @@ try {
             $subtotal = $item['preco'] * $item['quantidade'];
             $totalPedido += $subtotal;
             
-            $db->insert('pedido_itens', [
-                'pedido_id' => $pedidoId,
-                'produto_id' => $item['produtoId'],
-                'quantidade' => $item['quantidade'],
-                'preco_unitario' => $item['preco'],
-                'subtotal' => $subtotal
+            $stmt = $pdo->prepare("
+                INSERT INTO pedido_itens (pedido_id, produto_id, quantidade, preco_unitario, subtotal) 
+                VALUES (?, ?, ?, ?, ?)
+            ");
+            $stmt->execute([
+                $pedidoId,
+                $item['produtoId'],
+                $item['quantidade'],
+                $item['preco'],
+                $subtotal
             ]);
         }
         
         // Atualizar total do pedido
-        $db->update('pedido', ['total' => $totalPedido], ['idpedido' => $pedidoId]);
+        $stmt = $pdo->prepare("UPDATE pedido SET total = ? WHERE idpedido = ?");
+        $stmt->execute([$totalPedido, $pedidoId]);
         
-        $db->commit();
+        $pdo->commit();
         
         echo json_encode([
             'success' => true,
@@ -83,7 +85,7 @@ try {
         ]);
         
     } catch (Exception $e) {
-        $db->rollback();
+        $pdo->rollback();
         throw $e;
     }
     

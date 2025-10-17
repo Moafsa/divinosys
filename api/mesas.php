@@ -1,4 +1,7 @@
 <?php
+// Incluir configuração do sistema
+require_once __DIR__ . '/../config/database.php';
+
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
@@ -9,19 +12,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 try {
-    $config = \System\Config::getInstance();
-    $db = \System\Database::getInstance();
-    $session = \System\Session::getInstance();
+    // Conectar ao banco
+    $pdo = new PDO(
+        "pgsql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME,
+        DB_USER,
+        DB_PASS,
+        [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+    );
     
-    $tenant = $session->getTenant();
-    $filial = $session->getFilial();
-    
-    if (!$tenant || !$filial) {
-        throw new Exception('Sessão inválida');
-    }
-    
-    // Buscar mesas
-    $mesas = $db->fetchAll("
+    // Buscar mesas (usando tenant_id = 1 e filial_id = 1 como padrão)
+    $stmt = $pdo->prepare("
         SELECT 
             id_mesa,
             nome,
@@ -30,9 +30,11 @@ try {
                 ELSE 'ocupada'
             END as status
         FROM mesas 
-        WHERE tenant_id = ? AND filial_id = ? 
+        WHERE tenant_id = 1 AND filial_id = 1 
         ORDER BY id_mesa
-    ", [$tenant['id'], $filial['id']]);
+    ");
+    $stmt->execute();
+    $mesas = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
     // Adicionar opção de delivery
     $mesas[] = [
