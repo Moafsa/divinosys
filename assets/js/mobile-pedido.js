@@ -399,6 +399,12 @@ class MobilePedidoInterface {
             const jaEstaNoProduto = ingredientes.some(ingProduto => ingProduto.id === ing.id);
             const precoAdicional = parseFloat(ing.preco_adicional || 0);
             
+            console.log(`🔍 Inicializando ingrediente: ${ing.nome}`, {
+                id: ing.id,
+                jaEstaNoProduto,
+                ingredientesDoProduto: ingredientes.map(i => ({ id: i.id, nome: i.nome }))
+            });
+            
             return `
                 <div class="mobile-ingrediente-item" 
                      data-ingrediente-id="${ing.id}" 
@@ -524,10 +530,12 @@ class MobilePedidoInterface {
             const tipoDiv = item.querySelector('.mobile-ingrediente-tipo');
             const atualmenteCom = tipoDiv.textContent === 'COM';
             
-            console.log(`🔍 Ingrediente: ${ingredienteNome}`, {
+            console.log(`🔍 Verificando modificação: ${ingredienteNome}`, {
+                ingredienteId,
                 jaEstava,
                 atualmenteCom,
-                mudou: jaEstava !== atualmenteCom
+                mudou: jaEstava !== atualmenteCom,
+                tipoDivText: tipoDiv.textContent
             });
             
             // Só adicionar modificação se mudou de estado
@@ -541,6 +549,8 @@ class MobilePedidoInterface {
                     modificacoes.push(`- ${ingredienteNome}`);
                     console.log(`❌ Removido: - ${ingredienteNome}`);
                 }
+            } else {
+                console.log(`➡️ Sem mudança: ${ingredienteNome} (${jaEstava ? 'estava COM' : 'estava SEM'}, continua ${atualmenteCom ? 'COM' : 'SEM'})`);
             }
         });
         
