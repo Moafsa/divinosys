@@ -11,10 +11,16 @@ class MobilePedidoInterface {
     }
     
     init() {
+        console.log('🚀 Inicializando MobilePedidoInterface...');
+        console.log('📱 Largura da tela:', window.innerWidth);
+        
         if (window.innerWidth <= 768) {
+            console.log('📱 Modo mobile detectado, criando interface...');
             this.createMobileInterface();
             this.loadData();
             this.bindEvents();
+        } else {
+            console.log('🖥️ Modo desktop detectado, interface mobile não será criada');
         }
     }
     
@@ -112,10 +118,14 @@ class MobilePedidoInterface {
     }
     
     loadData() {
+        console.log('📊 Carregando dados...');
+        
         // Carregar mesas
+        console.log('🏢 Carregando mesas...');
         this.loadMesas();
         
         // Carregar produtos
+        console.log('🍔 Carregando produtos...');
         this.loadProdutos();
     }
     
@@ -147,12 +157,21 @@ class MobilePedidoInterface {
     
     async loadProdutos() {
         try {
+            console.log('🔄 Carregando produtos...');
             const response = await fetch('api/produtos.php');
+            console.log('📡 Resposta da API:', response);
+            
             const data = await response.json();
+            console.log('📦 Dados recebidos:', data);
+            
             this.produtos = data.produtos || [];
+            console.log('🍔 Produtos carregados:', this.produtos.length);
+            
             this.renderProdutos();
         } catch (error) {
-            console.error('Erro ao carregar produtos:', error);
+            console.error('❌ Erro ao carregar produtos:', error);
+            console.log('🔄 Usando produtos de fallback...');
+            
             // Fallback para produtos padrão
             this.produtos = [
                 { id: 1, nome: 'Hambúrguer Clássico', preco: 25.90, categoria: 'Lanches' },
@@ -181,10 +200,24 @@ class MobilePedidoInterface {
     }
     
     renderProdutos() {
+        console.log('🎨 Renderizando produtos...');
         const grid = document.getElementById('mobile-produtos-grid');
-        if (!grid) return;
+        console.log('📋 Grid encontrado:', grid);
         
-        grid.innerHTML = this.produtos.map(produto => `
+        if (!grid) {
+            console.error('❌ Grid mobile-produtos-grid não encontrado!');
+            return;
+        }
+        
+        console.log('🍔 Produtos para renderizar:', this.produtos);
+        
+        if (this.produtos.length === 0) {
+            console.log('⚠️ Nenhum produto para renderizar');
+            grid.innerHTML = '<p style="text-align: center; color: #666; margin-top: 50px;">Nenhum produto encontrado</p>';
+            return;
+        }
+        
+        const html = this.produtos.map(produto => `
             <div class="mobile-produto-card" 
                  onclick="mobilePedido.adicionarProduto(${produto.id}, '${produto.nome}', ${produto.preco})">
                 <div class="mobile-produto-categoria">${produto.categoria}</div>
@@ -192,6 +225,10 @@ class MobilePedidoInterface {
                 <div class="mobile-produto-preco">R$ ${produto.preco.toFixed(2)}</div>
             </div>
         `).join('');
+        
+        console.log('📝 HTML gerado:', html);
+        grid.innerHTML = html;
+        console.log('✅ Produtos renderizados com sucesso!');
     }
     
     selecionarMesa(mesaId, mesaNome) {
