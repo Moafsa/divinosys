@@ -20,7 +20,7 @@ try {
         [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
     );
     
-    // Buscar produtos (usando tenant_id = 1 e filial_id = 1 como padrão)
+    // Buscar produtos (primeiro tentar com tenant_id = 1, depois sem filtro)
     $stmt = $pdo->prepare("
         SELECT 
             id,
@@ -34,6 +34,23 @@ try {
     ");
     $stmt->execute();
     $produtos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Se não encontrou produtos com tenant_id = 1, buscar todos
+    if (empty($produtos)) {
+        $stmt = $pdo->prepare("
+            SELECT 
+                id,
+                nome,
+                preco,
+                categoria,
+                ativo
+            FROM produtos 
+            WHERE ativo = 1
+            ORDER BY categoria, nome
+        ");
+        $stmt->execute();
+        $produtos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
     
     echo json_encode([
         'success' => true,

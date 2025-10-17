@@ -20,21 +20,54 @@ try {
         [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
     );
     
-    // Buscar mesas (usando tenant_id = 1 e filial_id = 1 como padrão)
+    // Buscar mesas (primeiro tentar com tenant_id = 1, depois sem filtro)
     $stmt = $pdo->prepare("
         SELECT 
             id_mesa,
             nome,
-            CASE 
-                WHEN status = 'livre' THEN 'livre'
-                ELSE 'ocupada'
-            END as status
+            status
         FROM mesas 
         WHERE tenant_id = 1 AND filial_id = 1 
         ORDER BY id_mesa
     ");
     $stmt->execute();
     $mesas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Se não encontrou mesas com tenant_id = 1, buscar todas
+    if (empty($mesas)) {
+        $stmt = $pdo->prepare("
+            SELECT 
+                id_mesa,
+                nome,
+                status
+            FROM mesas 
+            ORDER BY id_mesa
+        ");
+        $stmt->execute();
+        $mesas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+    
+    // Verificar status real das mesas baseado nos pedidos ativos
+    foreach ($mesas as &$mesa) {
+        // Verificar se há pedidos ativos para esta mesa
+        $stmt = $pdo->prepare("
+            SELECT COUNT(*) 
+            FROM pedido 
+            WHERE idmesa = ? 
+            AND status IN ('aberto', 'preparando', 'pronto')
+            AND tenant_id = 1 
+            AND filial_id = 1
+        ");
+        $stmt->execute([$mesa['id_mesa']]);
+        $pedidosAtivos = $stmt->fetchColumn();
+        
+        // Atualizar status baseado nos pedidos
+        if ($pedidosAtivos > 0) {
+            $mesa['status'] = 'ocupada';
+        } else {
+            $mesa['status'] = 'livre';
+        }
+    }
     
     // Adicionar opção de delivery
     $mesas[] = [
