@@ -127,10 +127,10 @@ if (empty($produtos)) {
 foreach ($produtos as &$produto) {
     try {
         $ingredientes = $db->fetchAll(
-            "SELECT i.id, i.nome, i.tipo, i.preco_adicional, pi.padrao
+            "SELECT i.id, i.nome, i.tipo, i.preco_adicional, COALESCE(pi.padrao, true) as padrao
              FROM ingredientes i
              INNER JOIN produto_ingredientes pi ON i.id = pi.ingrediente_id
-             WHERE pi.produto_id = ? AND i.disponivel = true
+             WHERE pi.produto_id = ? AND COALESCE(i.disponivel, true) = true
              ORDER BY i.tipo, i.nome",
             [$produto['id']]
         );
@@ -146,7 +146,7 @@ if ($tenant && $filial) {
     try {
         $todosIngredientes = $db->fetchAll(
             "SELECT * FROM ingredientes 
-             WHERE tenant_id = ? AND filial_id = ? AND disponivel = true
+             WHERE COALESCE(tenant_id, 1) = ? AND COALESCE(filial_id, 1) = ? AND COALESCE(disponivel, true) = true
              ORDER BY nome",
             [$tenant['id'], $filial['id']]
         );
@@ -154,7 +154,7 @@ if ($tenant && $filial) {
         // Se der erro, buscar sem filtro de tenant/filial
         $todosIngredientes = $db->fetchAll(
             "SELECT * FROM ingredientes 
-             WHERE disponivel = true
+             WHERE COALESCE(disponivel, true) = true
              ORDER BY nome"
         );
     }
