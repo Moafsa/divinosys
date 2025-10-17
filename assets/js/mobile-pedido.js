@@ -781,6 +781,11 @@ class MobilePedidoInterface {
         document.getElementById('mesa-info').textContent = 'Selecione uma mesa';
     }
     
+    getUsuarioNome() {
+        // Usar nome do usuário passado pelo PHP
+        return window.usuarioNome || 'Garçom';
+    }
+    
     imprimirPedido(pedidoId, mesaSelecionada, carrinho) {
         console.log('🖨️ Imprimindo pedido:', pedidoId);
         
@@ -802,57 +807,81 @@ class MobilePedidoInterface {
                 <style>
                     body { 
                         font-family: 'Courier New', monospace; 
-                        font-size: 14px; 
-                        margin: 10px; 
-                        padding: 10px;
-                        line-height: 1.4;
+                        font-size: 18px; 
+                        margin: 15px; 
+                        padding: 15px;
+                        line-height: 1.5;
+                        font-weight: bold;
                     }
                     .header { 
                         text-align: center; 
-                        border-bottom: 2px solid #000; 
-                        padding-bottom: 10px; 
-                        margin-bottom: 15px; 
+                        border-bottom: 3px solid #000; 
+                        padding-bottom: 15px; 
+                        margin-bottom: 20px; 
                     }
                     .empresa { 
                         font-weight: bold; 
-                        font-size: 18px; 
-                        margin-bottom: 5px;
+                        font-size: 24px; 
+                        margin-bottom: 8px;
                     }
-                    .pedido-info { 
-                        margin: 10px 0; 
-                        font-size: 14px;
+                    .endereco {
+                        font-size: 18px;
                         font-weight: bold;
                     }
+                    .pedido-info { 
+                        margin: 15px 0; 
+                        font-size: 18px;
+                        font-weight: bold;
+                        background: #f0f0f0;
+                        padding: 10px;
+                        border-radius: 5px;
+                    }
                     .item { 
-                        margin: 5px 0; 
-                        padding: 3px 0;
-                        border-bottom: 1px dotted #ccc;
+                        margin: 8px 0; 
+                        padding: 5px 0;
+                        border-bottom: 2px dotted #ccc;
                     }
                     .item-nome { 
                         font-weight: bold; 
-                        font-size: 16px; 
+                        font-size: 20px; 
                     }
                     .item-detalhes { 
-                        font-size: 14px; 
-                        margin-left: 10px; 
-                        margin-top: 3px;
+                        font-size: 18px; 
+                        margin-left: 15px; 
+                        margin-top: 5px;
+                        font-weight: bold;
                     }
                     .total { 
-                        border-top: 2px solid #000; 
-                        padding-top: 10px; 
-                        margin-top: 15px; 
+                        border-top: 3px solid #000; 
+                        padding-top: 15px; 
+                        margin-top: 20px; 
                         font-weight: bold; 
-                        font-size: 16px;
+                        font-size: 22px;
                         text-align: center;
+                        background: #f0f0f0;
+                        padding: 15px;
+                        border-radius: 5px;
                     }
                     .footer { 
                         text-align: center; 
-                        margin-top: 20px; 
-                        font-size: 12px; 
+                        margin-top: 25px; 
+                        font-size: 16px; 
                         font-weight: bold;
                     }
+                    .usuario {
+                        font-size: 16px;
+                        font-weight: bold;
+                        color: #333;
+                        margin-top: 10px;
+                    }
                     @media print { 
-                        body { margin: 0; padding: 5px; }
+                        body { 
+                            margin: 0; 
+                            padding: 10px; 
+                            font-size: 16px;
+                        }
+                        .empresa { font-size: 20px; }
+                        .total { font-size: 18px; }
                     }
                 </style>
             </head>
@@ -865,7 +894,8 @@ class MobilePedidoInterface {
                 <div class="pedido-info">
                     <strong>Pedido #${pedidoId}</strong><br>
                     Mesa: ${mesaSelecionada.nome}<br>
-                    Data: ${new Date().toLocaleString('pt-BR')}
+                    Data: ${new Date().toLocaleString('pt-BR')}<br>
+                    <div class="usuario">Atendente: ${this.getUsuarioNome()}</div>
                 </div>
                 
                 <div class="items">
