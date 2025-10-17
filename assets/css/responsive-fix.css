@@ -261,19 +261,9 @@ html, body {
         font-size: 0.8rem !important;
     }
     
-    /* Ajustar tamanho das mesas apenas no desktop */
+    /* Apenas ajustes básicos - deixar Bootstrap funcionar naturalmente */
     .mesa-card {
-        padding: 8px !important;
-        font-size: 0.8rem !important;
-        min-height: 70px !important;
-    }
-    
-    .mesa-numero {
-        font-size: 0.75rem !important;
-        font-weight: bold !important;
-    }
-    
-    .mesa-info {
-        font-size: 0.7rem !important;
+        padding: 10px !important;
+        font-size: 0.9rem !important;
     }
 }
