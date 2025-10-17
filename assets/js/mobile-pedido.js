@@ -272,13 +272,14 @@ class MobilePedidoInterface {
         }
         
         const html = this.produtos.map(produto => {
-            // Verificar e corrigir dados do produto
-            const preco = produto.preco || produto.valor || 0;
+            // Verificar e corrigir dados do produto - usar preco_normal
+            const preco = produto.preco_normal || produto.preco || produto.valor || 0;
             const nome = produto.nome || 'Produto';
             const categoria = produto.categoria || produto.categoria_nome || 'Geral';
             const id = produto.id || Math.random();
+            const ingredientes = produto.ingredientes || [];
             
-            console.log('🔍 Produto:', { id, nome, preco, categoria });
+            console.log('🔍 Produto:', { id, nome, preco, categoria, ingredientes });
             
             return `
                 <div class="mobile-produto-card">
@@ -286,7 +287,7 @@ class MobilePedidoInterface {
                     <div class="mobile-produto-nome">${nome}</div>
                     <div class="mobile-produto-preco">R$ ${parseFloat(preco).toFixed(2)}</div>
                     <div class="mobile-produto-botoes">
-                        <button class="mobile-btn-personalizar" onclick="mobilePedido.personalizarProduto(${id}, '${nome}', ${preco})">
+                        <button class="mobile-btn-personalizar" onclick="mobilePedido.personalizarProduto(${id}, '${nome}', ${preco}, ${JSON.stringify(ingredientes).replace(/"/g, '&quot;')})">
                             <i class="fas fa-cog"></i> Personalizar
                         </button>
                         <button class="mobile-btn-adicionar" onclick="mobilePedido.adicionarProdutoRapido(${id}, '${nome}', ${preco})">
@@ -328,15 +329,15 @@ class MobilePedidoInterface {
         this.switchTab('produtos');
     }
     
-    personalizarProduto(produtoId, nome, preco) {
+    personalizarProduto(produtoId, nome, preco, ingredientes) {
         if (!this.mesaSelecionada) {
             alert('Selecione uma mesa primeiro!');
             this.switchTab('mesas');
             return;
         }
         
-        // Mostrar modal de personalização com ingredientes
-        this.showPersonalizacaoModal(produtoId, nome, preco);
+        // Mostrar modal de personalização com ingredientes reais
+        this.showPersonalizacaoModal(produtoId, nome, preco, ingredientes);
     }
     
     adicionarProdutoRapido(produtoId, nome, preco) {
@@ -365,20 +366,15 @@ class MobilePedidoInterface {
         this.showFeedback('Produto adicionado!');
     }
     
-    showPersonalizacaoModal(produtoId, nome, preco) {
-        // Ingredientes padrão para lanches (você pode personalizar conforme necessário)
-        const ingredientes = [
-            { nome: 'Cebola', padrao: true },
-            { nome: 'Tomate', padrao: true },
-            { nome: 'Alface', padrao: true },
-            { nome: 'Queijo', padrao: true },
-            { nome: 'Bacon', padrao: false },
-            { nome: 'Ovo', padrao: false },
-            { nome: 'Picles', padrao: false },
-            { nome: 'Maionese', padrao: true },
-            { nome: 'Ketchup', padrao: true },
-            { nome: 'Mostarda', padrao: false }
-        ];
+    showPersonalizacaoModal(produtoId, nome, preco, ingredientes) {
+        // Usar ingredientes reais do produto
+        console.log('🍔 Ingredientes do produto:', ingredientes);
+        
+        if (!ingredientes || ingredientes.length === 0) {
+            // Se não houver ingredientes, mostrar mensagem
+            alert('Este produto não possui ingredientes para personalizar.');
+            return;
+        }
         
         // Criar modal de personalização
         const modal = document.createElement('div');
@@ -400,11 +396,11 @@ class MobilePedidoInterface {
                 <span style="font-weight: 500;">${ing.nome}</span>
                 <div style="display: flex; gap: 10px;">
                     <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                        <input type="radio" name="ing_${ing.nome}" value="com" ${ing.padrao ? 'checked' : ''} style="margin: 0;">
+                        <input type="radio" name="ing_${ing.id}" value="com" ${ing.padrao ? 'checked' : ''} style="margin: 0;">
                         <span style="color: #28a745; font-weight: 600;">Com</span>
                     </label>
                     <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                        <input type="radio" name="ing_${ing.nome}" value="sem" ${!ing.padrao ? 'checked' : ''} style="margin: 0;">
+                        <input type="radio" name="ing_${ing.id}" value="sem" ${!ing.padrao ? 'checked' : ''} style="margin: 0;">
                         <span style="color: #dc3545; font-weight: 600;">Sem</span>
                     </label>
                 </div>
@@ -458,19 +454,35 @@ class MobilePedidoInterface {
         const quantidade = parseInt(modal.querySelector('.qty-value').textContent);
         const observacoes = modal.querySelector('#observacoes').value;
         
-        // Capturar escolhas dos ingredientes
-        const ingredientesEscolhidos = [];
+        // Capturar apenas as modificações (igual ao desktop)
+        const modificacoes = [];
         const radioButtons = modal.querySelectorAll('input[type="radio"]:checked');
         
         radioButtons.forEach(radio => {
-            const ingrediente = radio.name.replace('ing_', '');
+            const ingredienteId = radio.name.replace('ing_', '');
             const escolha = radio.value;
-            ingredientesEscolhidos.push(`${ingrediente}: ${escolha}`);
+            const ingredienteNome = radio.closest('div').querySelector('span').textContent;
+            
+            // Verificar se é diferente do padrão
+            const ingredienteOriginal = this.produtos.find(p => p.id === produtoId)?.ingredientes?.find(i => i.id == ingredienteId);
+            if (ingredienteOriginal) {
+                const ehPadrao = ingredienteOriginal.padrao;
+                const escolhido = escolha === 'com';
+                
+                // Se a escolha for diferente do padrão, adicionar à lista
+                if (ehPadrao !== escolhido) {
+                    if (escolhido) {
+                        modificacoes.push(`+ ${ingredienteNome}`);
+                    } else {
+                        modificacoes.push(`- ${ingredienteNome}`);
+                    }
+                }
+            }
         });
         
-        // Combinar observações com ingredientes
+        // Combinar apenas as modificações com observações
         const observacoesCompletas = [
-            ...ingredientesEscolhidos,
+            ...modificacoes,
             observacoes
         ].filter(obs => obs.trim()).join(' | ');
         

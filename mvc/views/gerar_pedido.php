@@ -77,7 +77,7 @@ if ($tenant && $filial) {
     );
 }
 
-// Get produtos data
+// Get produtos data with ingredients
 $produtos = [];
 if ($tenant && $filial) {
     try {
@@ -120,6 +120,23 @@ if (empty($produtos)) {
              LEFT JOIN categorias c ON p.categoria_id = c.id 
              ORDER BY c.nome, p.nome"
         );
+    }
+}
+
+// Buscar ingredientes para cada produto
+foreach ($produtos as &$produto) {
+    try {
+        $ingredientes = $db->fetchAll(
+            "SELECT i.id, i.nome, i.tipo, i.preco_adicional, pi.padrao
+             FROM ingredientes i
+             INNER JOIN produto_ingredientes pi ON i.id = pi.ingrediente_id
+             WHERE pi.produto_id = ? AND i.disponivel = true
+             ORDER BY i.tipo, i.nome",
+            [$produto['id']]
+        );
+        $produto['ingredientes'] = $ingredientes;
+    } catch (Exception $e) {
+        $produto['ingredientes'] = [];
     }
 }
 
