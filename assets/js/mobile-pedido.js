@@ -138,6 +138,13 @@ class MobilePedidoInterface {
             console.log('🔄 Dados PHP não encontrados, carregando via API...');
             this.loadMesas();
         }
+        
+        // Limpar seleção de mesa ao carregar
+        this.mesaSelecionada = null;
+        const mesaInfo = document.getElementById('mesa-info');
+        if (mesaInfo) {
+            mesaInfo.textContent = 'Nenhuma mesa selecionada';
+        }
     }
     
     async loadMesas() {
@@ -704,29 +711,48 @@ class MobilePedidoInterface {
     
     async enviarPedido() {
         try {
+            console.log('📤 Enviando pedido...', {
+                mesa: this.mesaSelecionada,
+                carrinho: this.carrinho
+            });
+            
             const pedidoData = {
                 mesa: this.mesaSelecionada.id,
-                itens: this.carrinho
+                itens: this.carrinho,
+                observacao: document.getElementById('observacaoPedido')?.value || ''
             };
+            
+            console.log('📋 Dados do pedido:', pedidoData);
             
             // Integrar com a API existente
             const response = await fetch('api/criar-pedido.php', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
                 },
                 body: JSON.stringify(pedidoData)
             });
             
-            if (response.ok) {
+            console.log('📡 Resposta da API:', response.status, response.statusText);
+            
+            const result = await response.json();
+            console.log('📄 Resultado:', result);
+            
+            if (result.success) {
                 this.showFeedback('Pedido criado com sucesso!');
                 this.limparCarrinho();
+                
+                // Perguntar se quer imprimir
+                if (confirm('Pedido criado! Deseja imprimir o cupom?')) {
+                    this.imprimirPedido(result.pedido_id);
+                }
             } else {
-                throw new Error('Erro ao criar pedido');
+                throw new Error(result.error || 'Erro ao criar pedido');
             }
         } catch (error) {
-            console.error('Erro:', error);
-            alert('Erro ao criar pedido. Tente novamente.');
+            console.error('❌ Erro ao enviar pedido:', error);
+            alert('Erro ao criar pedido: ' + error.message);
         }
     }
     
@@ -742,6 +768,134 @@ class MobilePedidoInterface {
         });
         
         document.getElementById('mesa-info').textContent = 'Selecione uma mesa';
+    }
+    
+    imprimirPedido(pedidoId) {
+        console.log('🖨️ Imprimindo pedido:', pedidoId);
+        
+        // Criar janela de impressão
+        const printWindow = window.open('', '_blank', 'width=400,height=600');
+        
+        if (!printWindow) {
+            alert('Erro: Não foi possível abrir janela de impressão. Verifique se o popup está bloqueado.');
+            return;
+        }
+        
+        // HTML do cupom (versão simplificada para mobile)
+        const cupomHtml = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>Cupom - Pedido #${pedidoId}</title>
+                <style>
+                    body { 
+                        font-family: 'Courier New', monospace; 
+                        font-size: 14px; 
+                        margin: 10px; 
+                        padding: 10px;
+                        line-height: 1.4;
+                    }
+                    .header { 
+                        text-align: center; 
+                        border-bottom: 2px solid #000; 
+                        padding-bottom: 10px; 
+                        margin-bottom: 15px; 
+                    }
+                    .empresa { 
+                        font-weight: bold; 
+                        font-size: 18px; 
+                        margin-bottom: 5px;
+                    }
+                    .pedido-info { 
+                        margin: 10px 0; 
+                        font-size: 14px;
+                        font-weight: bold;
+                    }
+                    .item { 
+                        margin: 5px 0; 
+                        padding: 3px 0;
+                        border-bottom: 1px dotted #ccc;
+                    }
+                    .item-nome { 
+                        font-weight: bold; 
+                        font-size: 16px; 
+                    }
+                    .item-detalhes { 
+                        font-size: 14px; 
+                        margin-left: 10px; 
+                        margin-top: 3px;
+                    }
+                    .total { 
+                        border-top: 2px solid #000; 
+                        padding-top: 10px; 
+                        margin-top: 15px; 
+                        font-weight: bold; 
+                        font-size: 16px;
+                        text-align: center;
+                    }
+                    .footer { 
+                        text-align: center; 
+                        margin-top: 20px; 
+                        font-size: 12px; 
+                        font-weight: bold;
+                    }
+                    @media print { 
+                        body { margin: 0; padding: 5px; }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <div class="empresa">DIVINO LANCHES</div>
+                    <div>Rua das Flores, 123 - Centro</div>
+                </div>
+                
+                <div class="pedido-info">
+                    <strong>Pedido #${pedidoId}</strong><br>
+                    Mesa: ${this.mesaSelecionada.nome}<br>
+                    Data: ${new Date().toLocaleString('pt-BR')}
+                </div>
+                
+                <div class="items">
+                    ${this.carrinho.map(item => `
+                        <div class="item">
+                            <div class="item-nome">${item.nome} x${item.quantidade}</div>
+                            <div class="item-detalhes">
+                                R$ ${(item.preco * item.quantidade).toFixed(2).replace('.', ',')}
+                                ${item.observacoes ? `<br><small>${item.observacoes}</small>` : ''}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+                
+                <div class="total">
+                    <strong>TOTAL: R$ ${this.carrinho.reduce((total, item) => total + (item.preco * item.quantidade), 0).toFixed(2).replace('.', ',')}</strong>
+                </div>
+                
+                <div class="footer">
+                    Obrigado pela preferência!<br>
+                    Volte sempre!
+                </div>
+            </body>
+            </html>
+        `;
+        
+        printWindow.document.write(cupomHtml);
+        printWindow.document.close();
+        
+        // Aguardar carregamento e imprimir
+        printWindow.addEventListener('load', function() {
+            setTimeout(() => {
+                printWindow.focus();
+                printWindow.print();
+                
+                // Fechar janela após impressão
+                setTimeout(() => {
+                    printWindow.close();
+                }, 3000);
+            }, 500);
+        });
     }
     
     scrollToTop() {

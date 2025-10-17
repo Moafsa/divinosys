@@ -34,6 +34,7 @@ try {
     
     $mesa = $input['mesa'];
     $itens = $input['itens'];
+    $observacao = $input['observacao'] ?? '';
     
     if (empty($itens)) {
         throw new Exception('Carrinho vazio');
@@ -45,11 +46,11 @@ try {
     try {
         // Criar pedido
         $stmt = $pdo->prepare("
-            INSERT INTO pedido (tenant_id, filial_id, idmesa, status, total, created_at, user_id) 
-            VALUES (1, 1, ?, 'aberto', 0, NOW(), 1)
+            INSERT INTO pedido (tenant_id, filial_id, idmesa, status, total, observacao, created_at, user_id) 
+            VALUES (1, 1, ?, 'aberto', 0, ?, NOW(), 1)
             RETURNING idpedido
         ");
-        $stmt->execute([$mesa === 'delivery' ? '999' : $mesa]);
+        $stmt->execute([$mesa === 'delivery' ? '999' : $mesa, $observacao]);
         $pedidoId = $stmt->fetchColumn();
         
         $totalPedido = 0;
@@ -60,15 +61,16 @@ try {
             $totalPedido += $subtotal;
             
             $stmt = $pdo->prepare("
-                INSERT INTO pedido_itens (pedido_id, produto_id, quantidade, preco_unitario, subtotal) 
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO pedido_itens (pedido_id, produto_id, quantidade, preco_unitario, subtotal, observacoes) 
+                VALUES (?, ?, ?, ?, ?, ?)
             ");
             $stmt->execute([
                 $pedidoId,
                 $item['produtoId'],
                 $item['quantidade'],
                 $item['preco'],
-                $subtotal
+                $subtotal,
+                $item['observacoes'] ?? ''
             ]);
         }
         
