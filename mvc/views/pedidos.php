@@ -94,6 +94,7 @@ $stats = [
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="assets/css/sidebar.css" rel="stylesheet">
+    <link href="assets/css/responsive.css" rel="stylesheet">
     <style>
         :root {
             --primary-color: <?php echo $tenant['cor_primaria'] ?? '#007bff'; ?>;
@@ -306,28 +307,9 @@ $stats = [
     </style>
 </head>
 <body>
-    <!-- Sidebar Toggle Button -->
-    <button class="sidebar-toggle" onclick="toggleSidebar()">
-        <i class="fas fa-bars"></i>
-    </button>
-    
     <div class="container-fluid">
         <div class="row">
-            <!-- Sidebar -->
-            <div class="col-md-3 col-lg-2 sidebar collapsed" id="sidebar">
-                <div class="p-3">
-                    <div class="sidebar-brand">
-                        <h4 class="text-white mb-4">
-                            <i class="fas fa-utensils me-2"></i>
-                            <?php echo $tenant['nome'] ?? 'Divino Lanches'; ?>
-                        </h4>
-                        <div class="brand-icon text-white">
-                            <i class="fas fa-utensils"></i>
-                        </div>
-                    </div>
-                    <?php include __DIR__ . '/components/navigation_menu.php'; ?>
-                </div>
-            </div>
+            <?php include __DIR__ . '/components/sidebar.php'; ?>
 
             <!-- Main Content -->
             <div class="main-content expanded">
@@ -1115,6 +1097,9 @@ $stats = [
     
     <!-- Include sidebar JavaScript -->
     <script src="assets/js/sidebar.js"></script>
+    
+    <!-- Mobile Menu Component -->
+    <?php include __DIR__ . '/components/mobile_menu.php'; ?>
                 </div>
             </div>
         </div>

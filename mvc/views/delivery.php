@@ -66,6 +66,7 @@ foreach ($pedidos as $pedido) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="assets/css/sidebar.css" rel="stylesheet">
+    <link href="assets/css/responsive.css" rel="stylesheet">
     <style>
         :root {
             --primary-color: <?php echo $tenant['cor_primaria'] ?? '#007bff'; ?>;
@@ -170,62 +171,7 @@ foreach ($pedidos as $pedido) {
 <body>
     <div class="container-fluid">
         <div class="row">
-            <!-- Sidebar -->
-            <div class="sidebar collapsed" id="sidebar">
-                <button class="sidebar-toggle" id="sidebarToggle">
-                    <i class="fas fa-bars"></i>
-                </button>
-                <div class="sidebar-content">
-                    <div class="sidebar-brand">
-                        <div class="brand-icon text-white">
-                            <i class="fas fa-utensils"></i>
-                        </div>
-                    </div>
-                    <nav class="nav flex-column">
-                        <a class="nav-link" href="<?php echo $router->url('dashboard'); ?>" data-tooltip="Dashboard">
-                            <i class="fas fa-tachometer-alt"></i>
-                            <span>Dashboard</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('pedidos'); ?>" data-tooltip="Pedidos">
-                            <i class="fas fa-list"></i>
-                            <span>Pedidos</span>
-                        </a>
-                        <a class="nav-link active" href="<?php echo $router->url('delivery'); ?>" data-tooltip="Delivery">
-                            <i class="fas fa-motorcycle"></i>
-                            <span>Delivery</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('gerenciar_produtos'); ?>" data-tooltip="Produtos">
-                            <i class="fas fa-box"></i>
-                            <span>Produtos</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('estoque'); ?>" data-tooltip="Estoque">
-                            <i class="fas fa-warehouse"></i>
-                            <span>Estoque</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('financeiro'); ?>" data-tooltip="Financeiro">
-                            <i class="fas fa-chart-line"></i>
-                            <span>Financeiro</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('relatorios'); ?>" data-tooltip="Relatórios">
-                            <i class="fas fa-chart-bar"></i>
-                            <span>Relatórios</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('clientes'); ?>" data-tooltip="Clientes">
-                            <i class="fas fa-users"></i>
-                            <span>Clientes</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('configuracoes'); ?>" data-tooltip="Configurações">
-                            <i class="fas fa-cog"></i>
-                            <span>Configurações</span>
-                        </a>
-                        <hr class="text-white-50">
-                        <a class="nav-link" href="<?php echo $router->url('logout'); ?>" data-tooltip="Sair">
-                            <i class="fas fa-sign-out-alt"></i>
-                            <span>Sair</span>
-                        </a>
-                    </nav>
-                </div>
-            </div>
+            <?php include __DIR__ . '/components/sidebar.php'; ?>
 
             <!-- Main Content -->
             <div class="main-content expanded">
@@ -678,6 +624,9 @@ foreach ($pedidos as $pedido) {
     
     <!-- Sidebar JavaScript -->
     <script src="assets/js/sidebar.js"></script>
+    
+    <!-- Mobile Menu Component -->
+    <?php include __DIR__ . '/components/mobile_menu.php'; ?>
                 </div>
             </div>
         </div>

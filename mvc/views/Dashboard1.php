@@ -119,6 +119,7 @@ if ($tenant && $filial) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="assets/css/sidebar.css" rel="stylesheet">
+    <link href="assets/css/responsive.css" rel="stylesheet">
     <style>
         :root {
             --primary-color: <?php echo $tenant['cor_primaria'] ?? '#007bff'; ?>;
@@ -128,123 +129,111 @@ if ($tenant && $filial) {
         body {
             background-color: #f8f9fa;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
         }
         
-        .sidebar {
-            background: linear-gradient(135deg, var(--primary-color), #6c757d);
-            min-height: 100vh;
-            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
-            transition: all 0.3s ease;
-            position: fixed;
-            top: 0;
-            left: 0;
-            z-index: 1000;
+        /* Responsive Container */
+        .container-fluid {
+            width: 100%;
+            max-width: 100%;
+            padding-left: 15px;
+            padding-right: 15px;
+            margin-left: auto;
+            margin-right: auto;
         }
         
-        .sidebar.collapsed {
-            width: 70px !important;
+        /* Responsive Cards */
+        .card {
+            width: 100%;
+            max-width: 100%;
+            margin-bottom: 20px;
+            box-sizing: border-box;
         }
         
-        .sidebar.collapsed .nav-link span {
-            display: none;
-        }
-        
-        .sidebar.collapsed .nav-link {
-            text-align: center;
-            padding: 0.75rem 0.5rem;
-        }
-        
-        .sidebar.collapsed .nav-link i {
-            margin-right: 0;
-        }
-        
-        .sidebar.collapsed .sidebar-brand {
-            text-align: center;
-        }
-        
-        .sidebar.collapsed .sidebar-brand h4 {
-            display: none;
-        }
-        
-        .sidebar.collapsed .sidebar-brand .brand-icon {
-            display: block !important;
-            font-size: 1.5rem;
-        }
-        
-        .sidebar-brand .brand-icon {
-            display: none;
-        }
-        
-        .main-content {
-            margin-left: 250px;
-            transition: all 0.3s ease;
-        }
-        
-        .main-content.expanded {
-            margin-left: 70px;
-        }
-        
-        .sidebar-toggle {
-            position: fixed;
-            top: 20px;
-            left: 20px;
-            z-index: 1001;
-            background: var(--primary-color);
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-        }
-        
+        /* Mobile Responsive */
         @media (max-width: 768px) {
-            .sidebar {
-                width: 250px;
-                transform: translateX(-100%);
-            }
-            
-            .sidebar.show {
-                transform: translateX(0);
-            }
-            
             .main-content {
-                margin-left: 0;
+                padding: 15px;
+                margin: 0;
+                width: 100%;
+                max-width: 100%;
             }
             
-            .sidebar-toggle {
-                display: flex;
+            .container-fluid {
+                padding-left: 10px;
+                padding-right: 10px;
+            }
+            
+            .card {
+                margin-bottom: 15px;
+            }
+            
+            /* Ensure content doesn't overflow */
+            * {
+                box-sizing: border-box;
+            }
+            
+            /* Prevent horizontal scroll */
+            html, body {
+                overflow-x: hidden;
+                width: 100%;
             }
         }
         
-        @media (min-width: 769px) {
-            .sidebar-toggle {
-                display: none;
+        /* Tablet Responsive */
+        @media (min-width: 769px) and (max-width: 1024px) {
+            .main-content {
+                padding: 20px;
+                max-width: 100%;
+            }
+            
+            .container-fluid {
+                max-width: 100%;
             }
         }
         
-        .sidebar .nav-link {
-            color: rgba(255,255,255,0.8);
-            padding: 0.75rem 1rem;
-            border-radius: 0.5rem;
-            margin: 0.25rem 0;
-            transition: all 0.3s ease;
+        /* Desktop Responsive */
+        @media (min-width: 1025px) {
+            .main-content {
+                padding: 2rem;
+                max-width: 1400px;
+                margin: 0 auto;
+            }
         }
         
-        .sidebar .nav-link:hover,
-        .sidebar .nav-link.active {
-            color: white;
-            background-color: rgba(255,255,255,0.1);
-            transform: translateX(5px);
+        /* Mobile Menu Fix */
+        @media (max-width: 768px) {
+            #sidebar {
+                transform: translateX(-100%) !important;
+                transition: transform 0.3s ease !important;
+            }
+            
+            #sidebar.show {
+                transform: translateX(0) !important;
+            }
+            
+            #sidebar-overlay {
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100vw !important;
+                height: 100vh !important;
+                background: rgba(0,0,0,0.5) !important;
+                z-index: 1049 !important;
+                opacity: 0 !important;
+                visibility: hidden !important;
+                transition: all 0.3s ease !important;
+            }
+            
+            #sidebar-overlay.show {
+                opacity: 1 !important;
+                visibility: visible !important;
+            }
         }
         
-        .sidebar .nav-link i {
-            width: 20px;
-            margin-right: 0.5rem;
-        }
+        
         
         .main-content {
             padding: 2rem;
@@ -527,20 +516,7 @@ if ($tenant && $filial) {
 <body>
     <div class="container-fluid">
         <div class="row">
-            <!-- Sidebar -->
-            <div class="sidebar collapsed" id="sidebar">
-                <button class="sidebar-toggle" id="sidebarToggle">
-                    <i class="fas fa-bars"></i>
-                </button>
-                <div class="sidebar-content">
-                    <div class="sidebar-brand">
-                        <div class="brand-icon text-white">
-                            <i class="fas fa-utensils"></i>
-                        </div>
-                    </div>
-                    <?php include __DIR__ . '/components/navigation_menu.php'; ?>
-                </div>
-            </div>
+            <?php include __DIR__ . '/components/sidebar.php'; ?>
 
             <!-- Main Content -->
             <div class="main-content expanded">
@@ -820,45 +796,6 @@ if ($tenant && $filial) {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
-        // Sidebar functionality
-        function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const mainContent = document.getElementById('mainContent');
-            
-            if (sidebar.classList.contains('collapsed')) {
-                sidebar.classList.remove('collapsed');
-                mainContent.classList.remove('expanded');
-            } else {
-                sidebar.classList.add('collapsed');
-                mainContent.classList.add('expanded');
-            }
-        }
-        
-        // Mobile sidebar functionality
-        function toggleMobileSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            sidebar.classList.toggle('show');
-        }
-        
-        // Close sidebar when clicking outside on mobile
-        document.addEventListener('click', function(event) {
-            const sidebar = document.getElementById('sidebar');
-            const toggleButton = document.querySelector('.sidebar-toggle');
-            
-            if (window.innerWidth <= 768) {
-                if (!sidebar.contains(event.target) && !toggleButton.contains(event.target)) {
-                    sidebar.classList.remove('show');
-                }
-            }
-        });
-        
-        // Handle window resize
-        window.addEventListener('resize', function() {
-            const sidebar = document.getElementById('sidebar');
-            if (window.innerWidth > 768) {
-                sidebar.classList.remove('show');
-            }
-        });
         function verMesa(mesaId, mesaNumero) {
             document.getElementById('mesaNumero').textContent = mesaNumero;
             
@@ -2232,6 +2169,9 @@ if ($tenant && $filial) {
 
     <!-- Sidebar JavaScript -->
     <script src="assets/js/sidebar.js"></script>
+    
+    <!-- Mobile Menu Component -->
+    <?php include __DIR__ . '/components/mobile_menu.php'; ?>
                 </div>
             </div>
         </div>
