@@ -526,9 +526,9 @@ class MobilePedidoInterface {
             const ingredienteNome = item.dataset.ingredienteNome;
             const jaEstava = item.dataset.jaEstava === 'true';
             
-            // Verificar estado atual (COM ou SEM)
+            // Verificar estado atual (COM ou SEM) - remover quebras de linha
             const tipoDiv = item.querySelector('.mobile-ingrediente-tipo');
-            const atualmenteCom = tipoDiv.textContent === 'COM';
+            const atualmenteCom = tipoDiv.textContent.trim() === 'COM';
             
             console.log(`🔍 Verificando modificação: ${ingredienteNome}`, {
                 ingredienteId,
