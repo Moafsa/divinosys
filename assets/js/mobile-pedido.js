@@ -296,6 +296,13 @@ class MobilePedidoInterface {
     }
     
     selecionarMesa(mesaId, mesaNome) {
+        // Verificar se a mesa está ocupada
+        const mesaCard = document.querySelector(`[data-mesa-id="${mesaId}"]`);
+        if (mesaCard && mesaCard.classList.contains('ocupada')) {
+            alert('Esta mesa está ocupada! Selecione uma mesa livre.');
+            return;
+        }
+        
         this.mesaSelecionada = { id: mesaId, nome: mesaNome };
         
         // Atualizar visual
@@ -303,7 +310,9 @@ class MobilePedidoInterface {
             card.classList.remove('selected');
         });
         
-        document.querySelector(`[data-mesa-id="${mesaId}"]`).classList.add('selected');
+        if (mesaCard) {
+            mesaCard.classList.add('selected');
+        }
         
         // Atualizar header
         document.getElementById('mesa-info').textContent = mesaNome;
@@ -319,21 +328,85 @@ class MobilePedidoInterface {
             return;
         }
         
-        const itemExistente = this.carrinho.find(item => item.produtoId === produtoId);
+        // Mostrar modal de personalização
+        this.showPersonalizacaoModal(produtoId, nome, preco);
+    }
+    
+    showPersonalizacaoModal(produtoId, nome, preco) {
+        // Criar modal de personalização
+        const modal = document.createElement('div');
+        modal.className = 'mobile-personalizacao-modal';
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 3000;
+            display: flex;
+            align-items: flex-end;
+        `;
+        
+        modal.innerHTML = `
+            <div style="background: white; width: 100%; border-radius: 20px 20px 0 0; padding: 20px; max-height: 80vh; overflow-y: auto;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3 style="margin: 0; font-size: 18px;">Personalizar Produto</h3>
+                    <button onclick="this.closest('.mobile-personalizacao-modal').remove()" style="background: none; border: none; font-size: 24px; color: #666; cursor: pointer;">×</button>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <h4 style="margin: 0 0 10px 0; color: #333;">${nome}</h4>
+                    <p style="margin: 0; color: #666; font-size: 16px;">R$ ${parseFloat(preco).toFixed(2)}</p>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 600;">Quantidade:</label>
+                    <div style="display: flex; align-items: center; gap: 15px; background: #f8f9fa; border-radius: 8px; padding: 10px;">
+                        <button onclick="this.parentElement.querySelector('.qty-value').textContent = Math.max(1, parseInt(this.parentElement.querySelector('.qty-value').textContent) - 1)" style="background: #6f42c1; color: white; border: none; border-radius: 50%; width: 30px; height: 30px; cursor: pointer;">-</button>
+                        <span class="qty-value" style="font-size: 18px; font-weight: 600; min-width: 30px; text-align: center;">1</span>
+                        <button onclick="this.parentElement.querySelector('.qty-value').textContent = parseInt(this.parentElement.querySelector('.qty-value').textContent) + 1" style="background: #6f42c1; color: white; border: none; border-radius: 50%; width: 30px; height: 30px; cursor: pointer;">+</button>
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 600;">Observações:</label>
+                    <textarea id="observacoes" placeholder="Ex: Sem cebola, bem assado..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; resize: vertical; min-height: 60px;"></textarea>
+                </div>
+                
+                <div style="display: flex; gap: 10px;">
+                    <button onclick="this.closest('.mobile-personalizacao-modal').remove()" style="flex: 1; padding: 12px; background: #6c757d; color: white; border: none; border-radius: 8px; cursor: pointer;">Cancelar</button>
+                    <button onclick="mobilePedido.confirmarPersonalizacao(${produtoId}, '${nome}', ${preco}, this.closest('.mobile-personalizacao-modal'))" style="flex: 1; padding: 12px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer;">Adicionar</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+    }
+    
+    confirmarPersonalizacao(produtoId, nome, preco, modal) {
+        const quantidade = parseInt(modal.querySelector('.qty-value').textContent);
+        const observacoes = modal.querySelector('#observacoes').value;
+        
+        const itemExistente = this.carrinho.find(item => 
+            item.produtoId === produtoId && item.observacoes === observacoes
+        );
         
         if (itemExistente) {
-            itemExistente.quantidade++;
+            itemExistente.quantidade += quantidade;
         } else {
             this.carrinho.push({
                 produtoId,
                 nome,
                 preco,
-                quantidade: 1
+                quantidade,
+                observacoes
             });
         }
         
         this.updateCarrinho();
         this.showFeedback('Produto adicionado!');
+        modal.remove();
     }
     
     updateCarrinho() {
@@ -360,6 +433,7 @@ class MobilePedidoInterface {
             <div class="mobile-carrinho-item">
                 <div class="mobile-carrinho-item-info">
                     <p class="mobile-carrinho-item-nome">${item.nome}</p>
+                    ${item.observacoes ? `<p style="font-size: 12px; color: #666; margin: 2px 0;">${item.observacoes}</p>` : ''}
                     <p class="mobile-carrinho-item-preco">R$ ${(item.preco * item.quantidade).toFixed(2)}</p>
                 </div>
                 <div class="mobile-carrinho-item-controls">
