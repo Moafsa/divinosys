@@ -678,7 +678,7 @@ if ($tenant && $filial) {
                         $pedidoMesa = isset($pedidoPorMesa[$mesa['id_mesa']]) ? $pedidoPorMesa[$mesa['id_mesa']] : null;
                         $status = $pedidoMesa ? 'ocupada' : 'livre';
                         ?>
-                        <div class="col-lg-2 col-md-3 col-sm-4 col-6 mb-3">
+                        <div class="col-lg-1 col-md-2 col-sm-3 col-4 mb-3">
                             <div class="mesa-card <?php echo $status; ?>" onclick="verMesa(<?php echo $mesa['id']; ?>, <?php echo $mesa['id_mesa']; ?>)">
                                 <div class="d-flex align-items-center mb-2">
                                     <span class="mesa-status <?php echo $status; ?>"></span>
