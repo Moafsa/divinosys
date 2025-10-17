@@ -1,0 +1,202 @@
+/* Responsive Fix - CSS que funciona tanto no desktop quanto mobile */
+
+/* Estilos base - aplicados em todas as telas */
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    overflow-x: hidden;
+    box-sizing: border-box;
+}
+
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+/* Container responsivo - apenas ajustes básicos */
+.container-fluid {
+    width: 100%;
+    max-width: 100%;
+    padding-left: 15px;
+    padding-right: 15px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Cards responsivos - apenas ajustes básicos */
+.card {
+    width: 100%;
+    max-width: 100%;
+    margin-bottom: 20px;
+    box-sizing: border-box;
+}
+
+/* Mobile First (até 768px) - Apenas para mobile */
+@media (max-width: 768px) {
+    
+    /* Ajustar padding do main-content apenas no mobile */
+    .main-content {
+        padding: 5px !important;
+        margin: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    
+    /* Ajustar container apenas no mobile */
+    .container-fluid {
+        padding-left: 2px !important;
+        padding-right: 2px !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    
+    /* Ajustar cards apenas no mobile */
+    .card {
+        margin: 0 0 10px 0 !important;
+        padding: 10px !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    
+    /* Ajustar texto em mobile */
+    h1 { font-size: 1.8rem; }
+    h2 { font-size: 1.5rem; }
+    h3 { font-size: 1.3rem; }
+    h4 { font-size: 1.1rem; }
+    h5 { font-size: 1rem; }
+    h6 { font-size: 0.9rem; }
+    
+    /* Ajustar botões em mobile */
+    .btn {
+        padding: 8px 12px !important;
+        font-size: 0.9rem !important;
+        margin: 2px !important;
+    }
+    
+    /* Ajustar formulários em mobile */
+    .form-control, .form-select {
+        padding: 8px 12px !important;
+        font-size: 0.9rem !important;
+        margin-bottom: 10px !important;
+    }
+    
+    /* Ajustar tabelas em mobile */
+    .table-responsive {
+        font-size: 0.8rem !important;
+    }
+    
+    /* Ajustar grid de mesas em mobile */
+    .mesas-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 5px;
+        width: 100%;
+        padding: 0 2px;
+    }
+    
+    .mesa-card {
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 8px !important;
+        min-height: 100px !important;
+        max-width: 100% !important;
+    }
+    
+    /* Ajustar colunas em mobile */
+    .col-6 {
+        padding-left: 2px !important;
+        padding-right: 2px !important;
+        width: 50% !important;
+        max-width: 50% !important;
+    }
+    
+    .row .col-6 {
+        flex: 0 0 50% !important;
+        max-width: 50% !important;
+    }
+    
+    /* Container das mesas em mobile */
+    .mesas-container {
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: 0 2px !important;
+        margin: 0 !important;
+    }
+    
+    /* Ajustar status cards em mobile */
+    .status-card {
+        padding: 8px !important;
+        margin: 2px !important;
+        font-size: 0.8rem !important;
+    }
+    
+    /* Ajustar acoes-rapidas em mobile */
+    .acoes-rapidas {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 5px !important;
+        padding: 5px !important;
+    }
+    
+    .acoes-rapidas .btn {
+        padding: 10px 5px !important;
+        font-size: 0.8rem !important;
+        text-align: center !important;
+    }
+}
+
+/* Desktop (769px+) - Garantir que desktop não seja afetado */
+@media (min-width: 769px) {
+    
+    /* Garantir que desktop mantenha layout original */
+    .main-content {
+        display: block !important;
+        align-items: stretch !important;
+        justify-content: flex-start !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: 2rem !important;
+    }
+    
+    .main-content .container-fluid {
+        display: block !important;
+        align-items: stretch !important;
+        justify-content: flex-start !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    
+    .main-content .row {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        margin: 0 -15px !important;
+        width: 100% !important;
+    }
+    
+    .main-content .col-6 {
+        flex: 0 0 50% !important;
+        max-width: 50% !important;
+        padding: 0 15px !important;
+    }
+    
+    .main-content .col-12 {
+        flex: 0 0 100% !important;
+        max-width: 100% !important;
+        padding: 0 15px !important;
+    }
+    
+    /* Garantir que os cards ocupem o espaço disponível no desktop */
+    .card {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 0 20px 0 !important;
+    }
+    
+    /* Container das mesas deve ocupar toda a largura no desktop */
+    .mesas-container {
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: 0 15px !important;
+        margin: 0 !important;
+    }
+}
