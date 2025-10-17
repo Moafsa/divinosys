@@ -751,7 +751,7 @@ class MobilePedidoInterface {
                 
                 // Perguntar se quer imprimir
                 if (confirm('Pedido criado! Deseja imprimir o cupom?')) {
-                    this.imprimirPedido(result.pedido_id);
+                    this.imprimirPedido(result.pedido_id, this.mesaSelecionada, this.carrinho);
                 }
             } else {
                 throw new Error(result.error || 'Erro ao criar pedido');
@@ -776,7 +776,7 @@ class MobilePedidoInterface {
         document.getElementById('mesa-info').textContent = 'Selecione uma mesa';
     }
     
-    imprimirPedido(pedidoId) {
+    imprimirPedido(pedidoId, mesaSelecionada, carrinho) {
         console.log('🖨️ Imprimindo pedido:', pedidoId);
         
         // Criar janela de impressão
@@ -859,24 +859,24 @@ class MobilePedidoInterface {
                 
                 <div class="pedido-info">
                     <strong>Pedido #${pedidoId}</strong><br>
-                    Mesa: ${this.mesaSelecionada.nome}<br>
+                    Mesa: ${mesaSelecionada.nome}<br>
                     Data: ${new Date().toLocaleString('pt-BR')}
                 </div>
                 
                 <div class="items">
-                    ${this.carrinho.map(item => `
+                    ${carrinho.map(item => `
                         <div class="item">
                             <div class="item-nome">${item.nome} x${item.quantidade}</div>
                             <div class="item-detalhes">
                                 R$ ${(item.preco * item.quantidade).toFixed(2).replace('.', ',')}
-                                ${item.observacoes ? `<br><small>${item.observacoes}</small>` : ''}
+                                ${item.observacao ? `<br><small>${item.observacao}</small>` : ''}
                             </div>
                         </div>
                     `).join('')}
                 </div>
                 
                 <div class="total">
-                    <strong>TOTAL: R$ ${this.carrinho.reduce((total, item) => total + (item.preco * item.quantidade), 0).toFixed(2).replace('.', ',')}</strong>
+                    <strong>TOTAL: R$ ${carrinho.reduce((total, item) => total + (item.preco * item.quantidade), 0).toFixed(2).replace('.', ',')}</strong>
                 </div>
                 
                 <div class="footer">
