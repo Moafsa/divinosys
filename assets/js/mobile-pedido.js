@@ -355,17 +355,17 @@ class MobilePedidoInterface {
         }
         
         // Adicionar diretamente sem personalização
-        const itemExistente = this.carrinho.find(item => item.produtoId === produtoId);
+        const itemExistente = this.carrinho.find(item => item.id === produtoId);
         
         if (itemExistente) {
             itemExistente.quantidade++;
         } else {
             this.carrinho.push({
-                produtoId,
+                id: produtoId,  // Usar 'id' como o desktop
                 nome,
                 preco,
                 quantidade: 1,
-                observacoes: ''
+                observacao: ''  // Usar 'observacao' como o desktop
             });
         }
         
@@ -570,18 +570,18 @@ class MobilePedidoInterface {
         ].filter(obs => obs.trim()).join(' | ');
         
         const itemExistente = this.carrinho.find(item => 
-            item.produtoId === produtoId && item.observacoes === observacoesCompletas
+            item.id === produtoId && item.observacao === observacoesCompletas
         );
         
         if (itemExistente) {
             itemExistente.quantidade += quantidade;
         } else {
             this.carrinho.push({
-                produtoId,
+                id: produtoId,  // Usar 'id' como o desktop
                 nome,
                 preco,
                 quantidade,
-                observacoes: observacoesCompletas
+                observacao: observacoesCompletas  // Usar 'observacao' como o desktop
             });
         }
         
@@ -612,7 +612,7 @@ class MobilePedidoInterface {
         
         const carrinhoHTML = this.carrinho.map(item => {
             // Separar modificações das observações
-            const observacoes = item.observacoes || '';
+            const observacoes = item.observacao || '';
             const modificacoes = observacoes.split(' | ').filter(obs => obs.trim() && (obs.startsWith('+ ') || obs.startsWith('- ')));
             const obsAdicionais = observacoes.split(' | ').filter(obs => obs.trim() && !obs.startsWith('+ ') && !obs.startsWith('- '));
             
@@ -634,11 +634,11 @@ class MobilePedidoInterface {
                     </div>
                     <div class="mobile-carrinho-item-controls">
                         <div class="mobile-carrinho-qty">
-                            <button class="mobile-carrinho-btn-qty" onclick="mobilePedido.alterarQuantidade(${item.produtoId}, -1)">-</button>
+                            <button class="mobile-carrinho-btn-qty" onclick="mobilePedido.alterarQuantidade(${item.id}, -1)">-</button>
                             <span class="mobile-carrinho-qty-value">${item.quantidade}</span>
-                            <button class="mobile-carrinho-btn-qty" onclick="mobilePedido.alterarQuantidade(${item.produtoId}, 1)">+</button>
+                            <button class="mobile-carrinho-btn-qty" onclick="mobilePedido.alterarQuantidade(${item.id}, 1)">+</button>
                         </div>
-                        <button class="mobile-carrinho-remove" onclick="mobilePedido.removerItem(${item.produtoId})">
+                        <button class="mobile-carrinho-remove" onclick="mobilePedido.removerItem(${item.id})">
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
@@ -651,7 +651,7 @@ class MobilePedidoInterface {
     }
     
     alterarQuantidade(produtoId, delta) {
-        const item = this.carrinho.find(item => item.produtoId === produtoId);
+        const item = this.carrinho.find(item => item.id === produtoId);
         if (!item) return;
         
         item.quantidade += delta;
@@ -664,7 +664,7 @@ class MobilePedidoInterface {
     }
     
     removerItem(produtoId) {
-        this.carrinho = this.carrinho.filter(item => item.produtoId !== produtoId);
+        this.carrinho = this.carrinho.filter(item => item.id !== produtoId);
         this.updateCarrinho();
     }
     
