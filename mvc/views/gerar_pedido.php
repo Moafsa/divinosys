@@ -692,6 +692,23 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                         </div>
                     </div>
                     <div class="row mt-3">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="tamanhoItem" class="form-label">Tamanho</label>
+                                <select class="form-select" id="tamanhoItem">
+                                    <option value="normal">Normal</option>
+                                    <option value="mini">Mini</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="quantidadeItem" class="form-label">Quantidade</label>
+                                <input type="number" class="form-control" id="quantidadeItem" value="1" min="1">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
                         <div class="col-12">
                             <div class="mb-3">
                                 <label for="observacaoItem" class="form-label">Observação do Item</label>
@@ -765,7 +782,7 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
             });
         }
 
-        // Add product to cart
+
         function adicionarProduto(produtoId) {
             if (!mesaSelecionada) {
                 Swal.fire('Atenção', 'Selecione uma mesa primeiro!', 'warning');
@@ -825,6 +842,8 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                         id: data.produto.id,
                         nome: data.produto.nome,
                         preco: parseFloat(data.produto.preco_normal),
+                        preco_normal: parseFloat(data.produto.preco_normal),
+                        preco_mini: parseFloat(data.produto.preco_mini || 0),
                         quantidade: 1,
                         tamanho: 'normal',
                         observacao: '',
@@ -858,6 +877,22 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
             // Atualizar título do modal
             document.getElementById('modalIngredientesTitulo').textContent = `Personalizar ${produto.nome}`;
             
+            // Preencher campos de tamanho e quantidade
+            document.getElementById('tamanhoItem').value = produto.tamanho;
+            document.getElementById('quantidadeItem').value = produto.quantidade;
+            
+            // Adicionar event listener para mudança de tamanho
+            document.getElementById('tamanhoItem').addEventListener('change', function() {
+                produtoAtual.tamanho = this.value;
+                atualizarPrecoProduto();
+            });
+            
+            // Adicionar event listener para mudança de quantidade
+            document.getElementById('quantidadeItem').addEventListener('change', function() {
+                produtoAtual.quantidade = parseInt(this.value);
+                atualizarPrecoProduto();
+            });
+            
             // Carregar ingredientes disponíveis
             carregarIngredientesDisponiveis();
             
@@ -869,6 +904,20 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
             
             // Abrir modal
             new bootstrap.Modal(document.getElementById('modalIngredientes')).show();
+        }
+
+        function atualizarPrecoProduto() {
+            if (!produtoAtual) return;
+            
+            let precoBase = 0;
+            if (produtoAtual.tamanho === 'mini' && produtoAtual.preco_mini > 0) {
+                precoBase = produtoAtual.preco_mini;
+            } else {
+                precoBase = produtoAtual.preco_normal;
+            }
+            
+            // Atualizar preço do produto
+            produtoAtual.preco = precoBase;
         }
 
         function carregarIngredientesDisponiveis() {
@@ -941,6 +990,17 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                 produtoAtual.ingredientes_removidos = ingredientesRemovidos;
                 produtoAtual.observacao = document.getElementById('observacaoItem').value;
                 
+                // Atualizar tamanho e quantidade
+                produtoAtual.tamanho = document.getElementById('tamanhoItem').value;
+                produtoAtual.quantidade = parseInt(document.getElementById('quantidadeItem').value);
+                
+                // Atualizar preço baseado no tamanho selecionado
+                if (produtoAtual.tamanho === 'mini' && produtoAtual.preco_mini > 0) {
+                    produtoAtual.preco = produtoAtual.preco_mini;
+                } else {
+                    produtoAtual.preco = produtoAtual.preco_normal;
+                }
+                
                 // Calcular preço total (produto + ingredientes adicionados - ingredientes removidos)
                 let precoTotal = produtoAtual.preco;
                 ingredientesAdicionados.forEach(ingrediente => {
@@ -958,6 +1018,7 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                 bootstrap.Modal.getInstance(document.getElementById('modalIngredientes')).hide();
             }
         }
+
 
         function adicionarAoCarrinhoComProduto(produto) {
             console.log('Adicionando produto ao carrinho:', produto);
