@@ -724,14 +724,20 @@ class MobilePedidoInterface {
             
             console.log('📋 Dados do pedido:', pedidoData);
             
-            // Integrar com a API existente
-            const response = await fetch('api/criar-pedido.php', {
+            // Usar a mesma API do desktop
+            const formData = new URLSearchParams();
+            formData.append('action', 'criar_pedido');
+            formData.append('mesa_id', this.mesaSelecionada.id);
+            formData.append('itens', JSON.stringify(this.carrinho));
+            formData.append('observacao', document.getElementById('observacaoPedido')?.value || '');
+            
+            const response = await fetch('index.php?action=pedidos', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Content-Type': 'application/x-www-form-urlencoded',
                     'X-Requested-With': 'XMLHttpRequest'
                 },
-                body: JSON.stringify(pedidoData)
+                body: formData
             });
             
             console.log('📡 Resposta da API:', response.status, response.statusText);
