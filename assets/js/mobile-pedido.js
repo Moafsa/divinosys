@@ -281,11 +281,18 @@ class MobilePedidoInterface {
             console.log('🔍 Produto:', { id, nome, preco, categoria });
             
             return `
-                <div class="mobile-produto-card" 
-                     onclick="mobilePedido.adicionarProduto(${id}, '${nome}', ${preco})">
+                <div class="mobile-produto-card">
                     <div class="mobile-produto-categoria">${categoria}</div>
                     <div class="mobile-produto-nome">${nome}</div>
                     <div class="mobile-produto-preco">R$ ${parseFloat(preco).toFixed(2)}</div>
+                    <div class="mobile-produto-botoes">
+                        <button class="mobile-btn-personalizar" onclick="mobilePedido.personalizarProduto(${id}, '${nome}', ${preco})">
+                            <i class="fas fa-cog"></i> Personalizar
+                        </button>
+                        <button class="mobile-btn-adicionar" onclick="mobilePedido.adicionarProdutoRapido(${id}, '${nome}', ${preco})">
+                            <i class="fas fa-plus"></i> Adicionar
+                        </button>
+                    </div>
                 </div>
             `;
         }).join('');
@@ -321,18 +328,58 @@ class MobilePedidoInterface {
         this.switchTab('produtos');
     }
     
-    adicionarProduto(produtoId, nome, preco) {
+    personalizarProduto(produtoId, nome, preco) {
         if (!this.mesaSelecionada) {
             alert('Selecione uma mesa primeiro!');
             this.switchTab('mesas');
             return;
         }
         
-        // Mostrar modal de personalização
+        // Mostrar modal de personalização com ingredientes
         this.showPersonalizacaoModal(produtoId, nome, preco);
     }
     
+    adicionarProdutoRapido(produtoId, nome, preco) {
+        if (!this.mesaSelecionada) {
+            alert('Selecione uma mesa primeiro!');
+            this.switchTab('mesas');
+            return;
+        }
+        
+        // Adicionar diretamente sem personalização
+        const itemExistente = this.carrinho.find(item => item.produtoId === produtoId);
+        
+        if (itemExistente) {
+            itemExistente.quantidade++;
+        } else {
+            this.carrinho.push({
+                produtoId,
+                nome,
+                preco,
+                quantidade: 1,
+                observacoes: ''
+            });
+        }
+        
+        this.updateCarrinho();
+        this.showFeedback('Produto adicionado!');
+    }
+    
     showPersonalizacaoModal(produtoId, nome, preco) {
+        // Ingredientes padrão para lanches (você pode personalizar conforme necessário)
+        const ingredientes = [
+            { nome: 'Cebola', padrao: true },
+            { nome: 'Tomate', padrao: true },
+            { nome: 'Alface', padrao: true },
+            { nome: 'Queijo', padrao: true },
+            { nome: 'Bacon', padrao: false },
+            { nome: 'Ovo', padrao: false },
+            { nome: 'Picles', padrao: false },
+            { nome: 'Maionese', padrao: true },
+            { nome: 'Ketchup', padrao: true },
+            { nome: 'Mostarda', padrao: false }
+        ];
+        
         // Criar modal de personalização
         const modal = document.createElement('div');
         modal.className = 'mobile-personalizacao-modal';
@@ -348,16 +395,39 @@ class MobilePedidoInterface {
             align-items: flex-end;
         `;
         
+        const ingredientesHTML = ingredientes.map(ing => `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee;">
+                <span style="font-weight: 500;">${ing.nome}</span>
+                <div style="display: flex; gap: 10px;">
+                    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                        <input type="radio" name="ing_${ing.nome}" value="com" ${ing.padrao ? 'checked' : ''} style="margin: 0;">
+                        <span style="color: #28a745; font-weight: 600;">Com</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                        <input type="radio" name="ing_${ing.nome}" value="sem" ${!ing.padrao ? 'checked' : ''} style="margin: 0;">
+                        <span style="color: #dc3545; font-weight: 600;">Sem</span>
+                    </label>
+                </div>
+            </div>
+        `).join('');
+        
         modal.innerHTML = `
             <div style="background: white; width: 100%; border-radius: 20px 20px 0 0; padding: 20px; max-height: 80vh; overflow-y: auto;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h3 style="margin: 0; font-size: 18px;">Personalizar Produto</h3>
+                    <h3 style="margin: 0; font-size: 18px;">Personalizar ${nome}</h3>
                     <button onclick="this.closest('.mobile-personalizacao-modal').remove()" style="background: none; border: none; font-size: 24px; color: #666; cursor: pointer;">×</button>
                 </div>
                 
                 <div style="margin-bottom: 20px;">
                     <h4 style="margin: 0 0 10px 0; color: #333;">${nome}</h4>
                     <p style="margin: 0; color: #666; font-size: 16px;">R$ ${parseFloat(preco).toFixed(2)}</p>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <h5 style="margin: 0 0 15px 0; color: #333; font-size: 16px;">Ingredientes:</h5>
+                    <div style="background: #f8f9fa; border-radius: 8px; overflow: hidden;">
+                        ${ingredientesHTML}
+                    </div>
                 </div>
                 
                 <div style="margin-bottom: 20px;">
@@ -370,8 +440,8 @@ class MobilePedidoInterface {
                 </div>
                 
                 <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 600;">Observações:</label>
-                    <textarea id="observacoes" placeholder="Ex: Sem cebola, bem assado..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; resize: vertical; min-height: 60px;"></textarea>
+                    <label style="display: block; margin-bottom: 8px; font-weight: 600;">Observações adicionais:</label>
+                    <textarea id="observacoes" placeholder="Ex: Bem assado, sem sal..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; resize: vertical; min-height: 60px;"></textarea>
                 </div>
                 
                 <div style="display: flex; gap: 10px;">
@@ -388,8 +458,24 @@ class MobilePedidoInterface {
         const quantidade = parseInt(modal.querySelector('.qty-value').textContent);
         const observacoes = modal.querySelector('#observacoes').value;
         
+        // Capturar escolhas dos ingredientes
+        const ingredientesEscolhidos = [];
+        const radioButtons = modal.querySelectorAll('input[type="radio"]:checked');
+        
+        radioButtons.forEach(radio => {
+            const ingrediente = radio.name.replace('ing_', '');
+            const escolha = radio.value;
+            ingredientesEscolhidos.push(`${ingrediente}: ${escolha}`);
+        });
+        
+        // Combinar observações com ingredientes
+        const observacoesCompletas = [
+            ...ingredientesEscolhidos,
+            observacoes
+        ].filter(obs => obs.trim()).join(' | ');
+        
         const itemExistente = this.carrinho.find(item => 
-            item.produtoId === produtoId && item.observacoes === observacoes
+            item.produtoId === produtoId && item.observacoes === observacoesCompletas
         );
         
         if (itemExistente) {
@@ -400,12 +486,12 @@ class MobilePedidoInterface {
                 nome,
                 preco,
                 quantidade,
-                observacoes
+                observacoes: observacoesCompletas
             });
         }
         
         this.updateCarrinho();
-        this.showFeedback('Produto adicionado!');
+        this.showFeedback('Produto personalizado adicionado!');
         modal.remove();
     }
     

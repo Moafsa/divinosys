@@ -186,6 +186,56 @@
         color: #6f42c1;
     }
     
+    .mobile-produto-botoes {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+    }
+    
+    .mobile-btn-personalizar {
+        flex: 1;
+        background: #6f42c1;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        padding: 8px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        transition: all 0.3s;
+    }
+    
+    .mobile-btn-personalizar:hover {
+        background: #5a359a;
+        transform: translateY(-1px);
+    }
+    
+    .mobile-btn-adicionar {
+        flex: 1;
+        background: #28a745;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        padding: 8px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        transition: all 0.3s;
+    }
+    
+    .mobile-btn-adicionar:hover {
+        background: #218838;
+        transform: translateY(-1px);
+    }
+    
     .mobile-produto-categoria {
         font-size: 12px;
         color: #666;
