@@ -261,6 +261,33 @@ html, body {
         font-size: 0.8rem !important;
     }
     
+    /* Forçar layout das mesas no desktop - sobrescrever Bootstrap */
+    .row {
+        display: grid !important;
+        grid-template-columns: repeat(8, 1fr) !important;
+        gap: 10px !important;
+        margin: 0 !important;
+        padding: 10px !important;
+        width: 100% !important;
+    }
+    
+    .col-lg-2, .col-md-3, .col-sm-4, .col-6 {
+        width: 100% !important;
+        max-width: 100% !important;
+        flex: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    
+    .mesa-card {
+        width: 100% !important;
+        max-width: 120px !important;
+        min-height: 80px !important;
+        margin: 0 auto !important;
+        padding: 8px !important;
+        font-size: 0.8rem !important;
+    }
+    
     /* Forçar que qualquer grid de mesas tenha muitas colunas */
     [class*="mesas"] {
         display: grid !important;
