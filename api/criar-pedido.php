@@ -44,10 +44,10 @@ try {
     $pdo->beginTransaction();
     
     try {
-        // Criar pedido
+        // Criar pedido (usando mesma estrutura do desktop)
         $stmt = $pdo->prepare("
-            INSERT INTO pedido (tenant_id, filial_id, idmesa, status, total, observacao, created_at, user_id) 
-            VALUES (1, 1, ?, 'aberto', 0, ?, NOW(), 1)
+            INSERT INTO pedido (tenant_id, filial_id, idmesa, status, valor_total, observacao, data, hora_pedido, usuario_id, created_at) 
+            VALUES (1, 1, ?, 'Pendente', 0, ?, CURRENT_DATE, CURRENT_TIME, 1, NOW())
             RETURNING idpedido
         ");
         $stmt->execute([$mesa === 'delivery' ? '999' : $mesa, $observacao]);
@@ -74,8 +74,8 @@ try {
             ]);
         }
         
-        // Atualizar total do pedido
-        $stmt = $pdo->prepare("UPDATE pedido SET total = ? WHERE idpedido = ?");
+        // Atualizar total do pedido (usando valor_total como no desktop)
+        $stmt = $pdo->prepare("UPDATE pedido SET valor_total = ? WHERE idpedido = ?");
         $stmt->execute([$totalPedido, $pedidoId]);
         
         $pdo->commit();
