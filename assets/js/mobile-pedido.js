@@ -271,14 +271,24 @@ class MobilePedidoInterface {
             return;
         }
         
-        const html = this.produtos.map(produto => `
-            <div class="mobile-produto-card" 
-                 onclick="mobilePedido.adicionarProduto(${produto.id}, '${produto.nome}', ${produto.preco})">
-                <div class="mobile-produto-categoria">${produto.categoria}</div>
-                <div class="mobile-produto-nome">${produto.nome}</div>
-                <div class="mobile-produto-preco">R$ ${produto.preco.toFixed(2)}</div>
-            </div>
-        `).join('');
+        const html = this.produtos.map(produto => {
+            // Verificar e corrigir dados do produto
+            const preco = produto.preco || produto.valor || 0;
+            const nome = produto.nome || 'Produto';
+            const categoria = produto.categoria || produto.categoria_nome || 'Geral';
+            const id = produto.id || Math.random();
+            
+            console.log('🔍 Produto:', { id, nome, preco, categoria });
+            
+            return `
+                <div class="mobile-produto-card" 
+                     onclick="mobilePedido.adicionarProduto(${id}, '${nome}', ${preco})">
+                    <div class="mobile-produto-categoria">${categoria}</div>
+                    <div class="mobile-produto-nome">${nome}</div>
+                    <div class="mobile-produto-preco">R$ ${parseFloat(preco).toFixed(2)}</div>
+                </div>
+            `;
+        }).join('');
         
         console.log('📝 HTML gerado:', html);
         grid.innerHTML = html;
