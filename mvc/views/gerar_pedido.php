@@ -183,6 +183,7 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
     <link href="assets/css/sidebar.css" rel="stylesheet">
     <link href="assets/css/responsive.css" rel="stylesheet">
     <link href="assets/css/mobile-pedido.css" rel="stylesheet">
+    <link href="assets/css/desktop-pedido.css" rel="stylesheet">
     <style>
         :root {
             --primary-color: <?php echo $tenant['cor_primaria'] ?? '#007bff'; ?>;
