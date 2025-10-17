@@ -261,49 +261,30 @@ html, body {
         font-size: 0.8rem !important;
     }
     
-    /* Forçar layout das mesas no desktop - sobrescrever Bootstrap */
-    .row {
-        display: grid !important;
-        grid-template-columns: repeat(8, 1fr) !important;
-        gap: 10px !important;
-        margin: 0 !important;
-        padding: 10px !important;
-        width: 100% !important;
+    /* Ajustar apenas as colunas Bootstrap para mais colunas */
+    .col-lg-2 {
+        flex: 0 0 12.5% !important; /* 8 colunas em vez de 6 */
+        max-width: 12.5% !important;
     }
     
-    .col-lg-2, .col-md-3, .col-sm-4, .col-6 {
-        width: 100% !important;
-        max-width: 100% !important;
-        flex: none !important;
-        padding: 0 !important;
-        margin: 0 !important;
+    .col-md-3 {
+        flex: 0 0 12.5% !important; /* 8 colunas em vez de 4 */
+        max-width: 12.5% !important;
     }
     
+    .col-sm-4 {
+        flex: 0 0 12.5% !important; /* 8 colunas em vez de 3 */
+        max-width: 12.5% !important;
+    }
+    
+    .col-6 {
+        flex: 0 0 12.5% !important; /* 8 colunas em vez de 2 */
+        max-width: 12.5% !important;
+    }
+    
+    /* Ajustar tamanho das mesas */
     .mesa-card {
-        width: 100% !important;
-        max-width: 120px !important;
-        min-height: 80px !important;
-        margin: 0 auto !important;
-        padding: 8px !important;
-        font-size: 0.8rem !important;
-    }
-    
-    /* Forçar que qualquer grid de mesas tenha muitas colunas */
-    [class*="mesas"] {
-        display: grid !important;
-        grid-template-columns: repeat(8, 1fr) !important;
-        gap: 8px !important;
         padding: 10px !important;
-        width: 100% !important;
-        max-width: 100% !important;
-    }
-    
-    [class*="mesa-card"] {
-        width: 100% !important;
-        max-width: 120px !important;
-        min-height: 70px !important;
-        margin: 0 !important;
-        padding: 5px !important;
-        font-size: 0.8rem !important;
+        font-size: 0.85rem !important;
     }
 }
