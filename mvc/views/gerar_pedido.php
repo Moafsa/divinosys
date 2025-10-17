@@ -91,14 +91,14 @@ if ($tenant && $filial) {
         );
     } catch (Exception $e) {
         // Se der erro, buscar sem filtro de ativo
-        $produtos = $db->fetchAll(
-            "SELECT p.*, c.nome as categoria_nome 
-             FROM produtos p 
-             LEFT JOIN categorias c ON p.categoria_id = c.id 
-             WHERE p.tenant_id = ? AND p.filial_id = ?
-             ORDER BY c.nome, p.nome",
-            [$tenant['id'], $filial['id']]
-        );
+    $produtos = $db->fetchAll(
+        "SELECT p.*, c.nome as categoria_nome 
+         FROM produtos p 
+         LEFT JOIN categorias c ON p.categoria_id = c.id 
+         WHERE p.tenant_id = ? AND p.filial_id = ? 
+         ORDER BY c.nome, p.nome",
+        [$tenant['id'], $filial['id']]
+    );
     }
 }
 
