@@ -112,6 +112,7 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="assets/css/sidebar.css" rel="stylesheet">
     <link href="assets/css/responsive.css" rel="stylesheet">
+    <link href="assets/css/mobile-pedido.css" rel="stylesheet">
     <style>
         :root {
             --primary-color: <?php echo $tenant['cor_primaria'] ?? '#007bff'; ?>;
@@ -1423,6 +1424,9 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
     
     <!-- Sidebar JavaScript -->
     <script src="assets/js/sidebar.js"></script>
+    
+    <!-- Mobile Interface JavaScript -->
+    <script src="assets/js/mobile-pedido.js"></script>
     
     <!-- Mobile Menu -->
     <?php include __DIR__ . '/components/mobile_menu.php'; ?>
