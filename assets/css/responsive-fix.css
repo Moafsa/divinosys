@@ -203,8 +203,8 @@ html, body {
     /* Grid das mesas no desktop - layout original */
     .mesas-grid {
         display: grid !important;
-        grid-template-columns: repeat(4, 1fr) !important;
-        gap: 15px !important;
+        grid-template-columns: repeat(6, 1fr) !important;
+        gap: 10px !important;
         padding: 15px !important;
         width: 100% !important;
         max-width: 100% !important;
@@ -212,10 +212,10 @@ html, body {
     
     .mesa-card {
         width: 100% !important;
-        max-width: 200px !important;
-        min-height: 100px !important;
+        max-width: 150px !important;
+        min-height: 80px !important;
         margin: 0 auto !important;
-        padding: 10px !important;
+        padding: 8px !important;
         display: flex !important;
         flex-direction: column !important;
         align-items: center !important;
@@ -242,8 +242,8 @@ html, body {
     /* Forçar layout específico para dashboard */
     .dashboard .mesas-grid {
         display: grid !important;
-        grid-template-columns: repeat(4, 1fr) !important;
-        gap: 15px !important;
+        grid-template-columns: repeat(6, 1fr) !important;
+        gap: 10px !important;
         padding: 15px !important;
         width: 100% !important;
         max-width: 100% !important;
@@ -251,9 +251,9 @@ html, body {
     
     .dashboard .mesa-card {
         width: 100% !important;
-        max-width: 200px !important;
-        min-height: 100px !important;
+        max-width: 150px !important;
+        min-height: 80px !important;
         margin: 0 auto !important;
-        padding: 10px !important;
+        padding: 8px !important;
     }
 }
