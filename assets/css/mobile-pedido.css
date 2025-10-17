@@ -236,6 +236,32 @@
         transform: translateY(-1px);
     }
     
+    /* Ingredientes clicáveis */
+    .mobile-ingrediente-item {
+        transition: all 0.3s ease;
+        border-radius: 8px;
+        margin: 2px 0;
+    }
+    
+    .mobile-ingrediente-item:hover {
+        background: #f8f9fa;
+        transform: translateX(2px);
+    }
+    
+    .mobile-ingrediente-item:active {
+        transform: scale(0.98);
+    }
+    
+    .mobile-ingrediente-status {
+        transition: all 0.3s ease;
+    }
+    
+    .mobile-ingrediente-tipo {
+        transition: all 0.3s ease;
+        min-width: 40px;
+        text-align: center;
+    }
+    
     .mobile-produto-categoria {
         font-size: 12px;
         color: #666;

@@ -393,31 +393,30 @@ class MobilePedidoInterface {
             align-items: flex-end;
         `;
         
-        // Criar lista de ingredientes disponíveis com checkboxes (igual desktop)
+        // Criar lista de ingredientes clicáveis (igual desktop)
         const ingredientesHTML = todosIngredientes.map(ing => {
             // Verificar se este ingrediente já está no produto
             const jaEstaNoProduto = ingredientes.some(ingProduto => ingProduto.id === ing.id);
             const precoAdicional = parseFloat(ing.preco_adicional || 0);
             
             return `
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee;">
+                <div class="mobile-ingrediente-item" 
+                     data-ingrediente-id="${ing.id}" 
+                     data-ingrediente-nome="${ing.nome}"
+                     data-ja-estava="${jaEstaNoProduto}"
+                     style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #eee; cursor: pointer; transition: all 0.3s;"
+                     onclick="mobilePedido.toggleIngrediente(this)">
                     <div style="display: flex; align-items: center; gap: 10px;">
-                        <input type="checkbox" id="ing_${ing.id}" name="ingredientes" value="${ing.id}" 
-                               ${jaEstaNoProduto ? 'checked' : ''} style="margin: 0;">
-                        <label for="ing_${ing.id}" style="font-weight: 500; cursor: pointer; margin: 0;">
+                        <div class="mobile-ingrediente-status" style="width: 20px; height: 20px; border-radius: 50%; border: 2px solid #ddd; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;">
+                            <span class="status-icon">${jaEstaNoProduto ? '✓' : '○'}</span>
+                        </div>
+                        <span style="font-weight: 500; font-size: 14px;">
                             ${ing.nome}
                             ${precoAdicional > 0 ? ` (+R$ ${precoAdicional.toFixed(2)})` : ''}
-                        </label>
+                        </span>
                     </div>
-                    <div style="display: flex; gap: 10px;">
-                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                            <input type="radio" name="ing_${ing.id}_tipo" value="com" ${jaEstaNoProduto ? 'checked' : ''} style="margin: 0;">
-                            <span style="color: #28a745; font-weight: 600;">Com</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                            <input type="radio" name="ing_${ing.id}_tipo" value="sem" ${!jaEstaNoProduto ? 'checked' : ''} style="margin: 0;">
-                            <span style="color: #dc3545; font-weight: 600;">Sem</span>
-                        </label>
+                    <div class="mobile-ingrediente-tipo" style="padding: 4px 12px; border-radius: 15px; font-size: 12px; font-weight: 600; ${jaEstaNoProduto ? 'background: #d4edda; color: #155724;' : 'background: #f8d7da; color: #721c24;'}">
+                        ${jaEstaNoProduto ? 'COM' : 'SEM'}
                     </div>
                 </div>
             `;
@@ -466,45 +465,72 @@ class MobilePedidoInterface {
         document.body.appendChild(modal);
     }
     
+    toggleIngrediente(element) {
+        const ingredienteId = parseInt(element.dataset.ingredienteId);
+        const ingredienteNome = element.dataset.ingredienteNome;
+        const jaEstava = element.dataset.jaEstava === 'true';
+        
+        // Alternar estado
+        const statusIcon = element.querySelector('.status-icon');
+        const tipoDiv = element.querySelector('.mobile-ingrediente-tipo');
+        const statusDiv = element.querySelector('.mobile-ingrediente-status');
+        
+        // Verificar estado atual
+        const atualmenteCom = tipoDiv.textContent === 'COM';
+        const novoEstado = !atualmenteCom;
+        
+        // Atualizar visual
+        if (novoEstado) {
+            statusIcon.textContent = '✓';
+            tipoDiv.textContent = 'COM';
+            tipoDiv.style.background = '#d4edda';
+            tipoDiv.style.color = '#155724';
+            statusDiv.style.borderColor = '#28a745';
+            statusDiv.style.backgroundColor = '#d4edda';
+        } else {
+            statusIcon.textContent = '○';
+            tipoDiv.textContent = 'SEM';
+            tipoDiv.style.background = '#f8d7da';
+            tipoDiv.style.color = '#721c24';
+            statusDiv.style.borderColor = '#dc3545';
+            statusDiv.style.backgroundColor = '#f8d7da';
+        }
+        
+        // Adicionar efeito visual
+        element.style.transform = 'scale(0.98)';
+        setTimeout(() => {
+            element.style.transform = 'scale(1)';
+        }, 150);
+    }
+    
     confirmarPersonalizacao(produtoId, nome, preco, modal) {
         const quantidade = parseInt(modal.querySelector('.qty-value').textContent);
         const observacoes = modal.querySelector('#observacoes').value;
         
-        // Capturar modificações (igual ao desktop)
+        // Capturar modificações dos ingredientes clicáveis
         const modificacoes = [];
-        const checkboxes = modal.querySelectorAll('input[type="checkbox"]:checked');
-        const radioButtons = modal.querySelectorAll('input[type="radio"]:checked');
+        const ingredientesItems = modal.querySelectorAll('.mobile-ingrediente-item');
         
         // Buscar ingredientes originais do produto
         const produtoOriginal = this.produtos.find(p => p.id === produtoId);
         const ingredientesOriginais = produtoOriginal?.ingredientes || [];
         
-        // Verificar cada ingrediente selecionado
-        checkboxes.forEach(checkbox => {
-            const ingredienteId = parseInt(checkbox.value);
-            const ingredienteNome = checkbox.nextElementSibling.textContent.split(' (+')[0]; // Remove preço adicional
-            const radioTipo = modal.querySelector(`input[name="ing_${ingredienteId}_tipo"]:checked`);
-            const escolha = radioTipo ? radioTipo.value : 'com';
+        ingredientesItems.forEach(item => {
+            const ingredienteId = parseInt(item.dataset.ingredienteId);
+            const ingredienteNome = item.dataset.ingredienteNome;
+            const jaEstava = item.dataset.jaEstava === 'true';
             
-            // Verificar se este ingrediente estava no produto original
-            const estavaNoProduto = ingredientesOriginais.some(ing => ing.id === ingredienteId);
-            const escolhido = escolha === 'com';
+            // Verificar estado atual (COM ou SEM)
+            const tipoDiv = item.querySelector('.mobile-ingrediente-tipo');
+            const atualmenteCom = tipoDiv.textContent === 'COM';
             
             // Se mudou de estado, adicionar à lista de modificações
-            if (estavaNoProduto !== escolhido) {
-                if (escolhido) {
+            if (jaEstava !== atualmenteCom) {
+                if (atualmenteCom) {
                     modificacoes.push(`+ ${ingredienteNome}`);
                 } else {
                     modificacoes.push(`- ${ingredienteNome}`);
                 }
-            }
-        });
-        
-        // Verificar ingredientes que foram desmarcados (estavam no produto original)
-        ingredientesOriginais.forEach(ingOriginal => {
-            const checkbox = modal.querySelector(`input[value="${ingOriginal.id}"]`);
-            if (!checkbox || !checkbox.checked) {
-                modificacoes.push(`- ${ingOriginal.nome}`);
             }
         });
         
