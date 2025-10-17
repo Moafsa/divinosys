@@ -1426,6 +1426,13 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
     <script src="assets/js/sidebar.js"></script>
     
     <!-- Mobile Interface JavaScript -->
+    <script>
+        // Passar dados PHP para JavaScript (mesmo método da página desktop)
+        window.produtosData = <?php echo json_encode($produtos); ?>;
+        window.mesasData = <?php echo json_encode($mesas); ?>;
+        window.tenantData = <?php echo json_encode($tenant); ?>;
+        window.filialData = <?php echo json_encode($filial); ?>;
+    </script>
     <script src="assets/js/mobile-pedido.js"></script>
     
     <!-- Mobile Menu -->

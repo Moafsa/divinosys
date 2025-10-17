@@ -120,13 +120,24 @@ class MobilePedidoInterface {
     loadData() {
         console.log('📊 Carregando dados...');
         
-        // Carregar mesas
-        console.log('🏢 Carregando mesas...');
-        this.loadMesas();
+        // Usar dados PHP diretamente (mesmo método da página desktop)
+        if (window.produtosData) {
+            console.log('🍔 Usando dados PHP para produtos:', window.produtosData.length);
+            this.produtos = window.produtosData;
+            this.renderProdutos();
+        } else {
+            console.log('🔄 Dados PHP não encontrados, carregando via API...');
+            this.loadProdutos();
+        }
         
-        // Carregar produtos
-        console.log('🍔 Carregando produtos...');
-        this.loadProdutos();
+        if (window.mesasData) {
+            console.log('🏢 Usando dados PHP para mesas:', window.mesasData.length);
+            this.mesas = window.mesasData;
+            this.renderMesas();
+        } else {
+            console.log('🔄 Dados PHP não encontrados, carregando via API...');
+            this.loadMesas();
+        }
     }
     
     async loadMesas() {
@@ -158,30 +169,73 @@ class MobilePedidoInterface {
     async loadProdutos() {
         try {
             console.log('🔄 Carregando produtos...');
-            const response = await fetch('api/produtos.php');
+            
+            // Tentar buscar produtos da página desktop (mesmo método)
+            const response = await fetch('index.php?action=produtos&buscar_todos=1', {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+            
             console.log('📡 Resposta da API:', response);
             
-            const data = await response.json();
-            console.log('📦 Dados recebidos:', data);
-            
-            this.produtos = data.produtos || [];
-            console.log('🍔 Produtos carregados:', this.produtos.length);
+            if (response.ok) {
+                const data = await response.json();
+                console.log('📦 Dados recebidos:', data);
+                
+                this.produtos = data.produtos || [];
+                console.log('🍔 Produtos carregados:', this.produtos.length);
+            } else {
+                throw new Error('Erro na resposta da API');
+            }
             
             this.renderProdutos();
         } catch (error) {
             console.error('❌ Erro ao carregar produtos:', error);
-            console.log('🔄 Usando produtos de fallback...');
+            console.log('🔄 Tentando método alternativo...');
             
-            // Fallback para produtos padrão
-            this.produtos = [
-                { id: 1, nome: 'Hambúrguer Clássico', preco: 25.90, categoria: 'Lanches' },
-                { id: 2, nome: 'Batata Frita', preco: 12.90, categoria: 'Acompanhamentos' },
-                { id: 3, nome: 'Refrigerante', preco: 5.90, categoria: 'Bebidas' },
-                { id: 4, nome: 'Pizza Margherita', preco: 35.90, categoria: 'Pizzas' },
-                { id: 5, nome: 'Salada Caesar', preco: 18.90, categoria: 'Saladas' },
-                { id: 6, nome: 'Suco Natural', preco: 8.90, categoria: 'Bebidas' }
-            ];
-            this.renderProdutos();
+            // Tentar método alternativo - buscar da página atual
+            try {
+                const response = await fetch(window.location.href);
+                const html = await response.text();
+                
+                // Extrair produtos do HTML (mesmo que a página desktop)
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const produtoItems = doc.querySelectorAll('.produto-item');
+                
+                this.produtos = Array.from(produtoItems).map(item => {
+                    const nome = item.querySelector('.produto-nome')?.textContent || 'Produto';
+                    const preco = item.querySelector('.produto-preco')?.textContent || '0,00';
+                    const categoria = item.querySelector('.produto-categoria')?.textContent || 'Geral';
+                    const id = item.getAttribute('data-produto-id') || Math.random();
+                    
+                    return {
+                        id: id,
+                        nome: nome,
+                        preco: parseFloat(preco.replace('R$', '').replace(',', '.')),
+                        categoria: categoria
+                    };
+                });
+                
+                console.log('🍔 Produtos extraídos do HTML:', this.produtos.length);
+                this.renderProdutos();
+                
+            } catch (fallbackError) {
+                console.error('❌ Erro no fallback:', fallbackError);
+                console.log('🔄 Usando produtos de fallback...');
+                
+                // Fallback para produtos padrão
+                this.produtos = [
+                    { id: 1, nome: 'Hambúrguer Clássico', preco: 25.90, categoria: 'Lanches' },
+                    { id: 2, nome: 'Batata Frita', preco: 12.90, categoria: 'Acompanhamentos' },
+                    { id: 3, nome: 'Refrigerante', preco: 5.90, categoria: 'Bebidas' },
+                    { id: 4, nome: 'Pizza Margherita', preco: 35.90, categoria: 'Pizzas' },
+                    { id: 5, nome: 'Salada Caesar', preco: 18.90, categoria: 'Saladas' },
+                    { id: 6, nome: 'Suco Natural', preco: 8.90, categoria: 'Bebidas' }
+                ];
+                this.renderProdutos();
+            }
         }
     }
     
