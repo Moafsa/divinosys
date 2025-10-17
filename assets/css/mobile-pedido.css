@@ -20,7 +20,7 @@
         left: 0;
         right: 0;
         height: 60px;
-        background: #6f42c1;
+        background: var(--primary-color, #6f42c1);
         color: white;
         display: flex;
         align-items: center;
@@ -71,8 +71,8 @@
     }
     
     .mobile-tab.active {
-        color: #6f42c1;
-        border-bottom-color: #6f42c1;
+        color: var(--primary-color, #6f42c1);
+        border-bottom-color: var(--primary-color, #6f42c1);
         background: #f8f9fa;
     }
     
@@ -194,7 +194,7 @@
     
     .mobile-btn-personalizar {
         flex: 1;
-        background: #6f42c1;
+        background: var(--primary-color, #6f42c1);
         color: white;
         border: none;
         border-radius: 6px;
@@ -210,7 +210,8 @@
     }
     
     .mobile-btn-personalizar:hover {
-        background: #5a359a;
+        background: var(--primary-color, #6f42c1);
+        opacity: 0.8;
         transform: translateY(-1px);
     }
     
@@ -317,7 +318,7 @@
     }
     
     .mobile-btn-ver-carrinho {
-        background: #6f42c1;
+        background: var(--primary-color, #6f42c1);
         color: white;
     }
     

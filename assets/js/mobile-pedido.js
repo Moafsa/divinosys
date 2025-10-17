@@ -747,11 +747,16 @@ class MobilePedidoInterface {
             
             if (result.success) {
                 this.showFeedback('Pedido criado com sucesso!');
+                
+                // CAPTURAR DADOS ANTES DE LIMPAR
+                const mesaParaImprimir = this.mesaSelecionada;
+                const carrinhoParaImprimir = [...this.carrinho];
+                
                 this.limparCarrinho();
                 
                 // Perguntar se quer imprimir
                 if (confirm('Pedido criado! Deseja imprimir o cupom?')) {
-                    this.imprimirPedido(result.pedido_id, this.mesaSelecionada, this.carrinho);
+                    this.imprimirPedido(result.pedido_id, mesaParaImprimir, carrinhoParaImprimir);
                 }
             } else {
                 throw new Error(result.error || 'Erro ao criar pedido');
