@@ -80,25 +80,47 @@ if ($tenant && $filial) {
 // Get produtos data
 $produtos = [];
 if ($tenant && $filial) {
-    $produtos = $db->fetchAll(
-        "SELECT p.*, c.nome as categoria_nome 
-         FROM produtos p 
-         LEFT JOIN categorias c ON p.categoria_id = c.id 
-         WHERE p.tenant_id = ? AND p.filial_id = ? AND p.ativo = 1
-         ORDER BY c.nome, p.nome",
-        [$tenant['id'], $filial['id']]
-    );
+    try {
+        $produtos = $db->fetchAll(
+            "SELECT p.*, c.nome as categoria_nome 
+             FROM produtos p 
+             LEFT JOIN categorias c ON p.categoria_id = c.id 
+             WHERE p.tenant_id = ? AND p.filial_id = ? AND p.ativo = 1
+             ORDER BY c.nome, p.nome",
+            [$tenant['id'], $filial['id']]
+        );
+    } catch (Exception $e) {
+        // Se der erro, buscar sem filtro de ativo
+        $produtos = $db->fetchAll(
+            "SELECT p.*, c.nome as categoria_nome 
+             FROM produtos p 
+             LEFT JOIN categorias c ON p.categoria_id = c.id 
+             WHERE p.tenant_id = ? AND p.filial_id = ?
+             ORDER BY c.nome, p.nome",
+            [$tenant['id'], $filial['id']]
+        );
+    }
 }
 
 // Se não encontrou produtos com tenant/filial específicos, buscar todos
 if (empty($produtos)) {
-    $produtos = $db->fetchAll(
-        "SELECT p.*, c.nome as categoria_nome 
-         FROM produtos p 
-         LEFT JOIN categorias c ON p.categoria_id = c.id 
-         WHERE p.ativo = 1
-         ORDER BY c.nome, p.nome"
-    );
+    try {
+        $produtos = $db->fetchAll(
+            "SELECT p.*, c.nome as categoria_nome 
+             FROM produtos p 
+             LEFT JOIN categorias c ON p.categoria_id = c.id 
+             WHERE p.ativo = 1
+             ORDER BY c.nome, p.nome"
+        );
+    } catch (Exception $e) {
+        // Se der erro, buscar sem filtro de ativo
+        $produtos = $db->fetchAll(
+            "SELECT p.*, c.nome as categoria_nome 
+             FROM produtos p 
+             LEFT JOIN categorias c ON p.categoria_id = c.id 
+             ORDER BY c.nome, p.nome"
+        );
+    }
 }
 
 // Get categorias
