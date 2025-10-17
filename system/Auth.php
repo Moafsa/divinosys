@@ -160,6 +160,10 @@ class Auth
      */
     public static function createSession($usuarioGlobalId, $tenantId, $filialId = null)
     {
+        // Primeiro, limpar sessões antigas do mesmo usuário
+        self::$db->delete('sessoes_ativas', 'usuario_global_id = ? AND tenant_id = ? AND filial_id = ?', 
+            [$usuarioGlobalId, $tenantId, $filialId]);
+
         $tokenSessao = bin2hex(random_bytes(32));
         $expiraEm = date('Y-m-d H:i:s', strtotime('+8 hours'));
 
