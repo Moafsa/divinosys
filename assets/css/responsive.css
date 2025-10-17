@@ -307,21 +307,13 @@ img {
     h5 { font-size: 1rem; }
     h6 { font-size: 0.9rem; }
     
-    /* Melhorar layout das mesas em mobile */
+    /* Melhorar layout das mesas em mobile - apenas mobile */
     .mesas-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 5px;
         width: 100%;
         padding: 0 2px;
-    }
-    
-    .mesa-card {
-        width: 100% !important;
-        margin: 0 !important;
-        padding: 8px !important;
-        min-height: 100px !important;
-        max-width: 100% !important;
     }
     
     /* Específico para página de novo pedido */
@@ -346,11 +338,13 @@ img {
         margin: 0 !important;
     }
     
-    /* Forçar cards das mesas a se expandirem */
+    /* Ajustar cards das mesas apenas em mobile */
     .mesa-card {
         box-sizing: border-box !important;
         border: 1px solid #ddd !important;
         border-radius: 8px !important;
+        padding: 8px !important;
+        min-height: 100px !important;
     }
     
     /* Melhorar layout das ações rápidas */

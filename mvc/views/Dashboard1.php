@@ -209,56 +209,167 @@ if ($tenant && $filial) {
             letter-spacing: 1px;
         }
         
-        .mesa-card {
+        /* Layout Desktop das Mesas - Simples e Funcional */
+        .mesas-creative-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 8px;
+            padding: 10px 0;
+            max-width: 100%;
+        }
+        
+        .mesa-floating-card {
             background: white;
-            border-radius: 15px;
-            padding: 1.5rem;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
-            transition: all 0.3s ease;
+            border-radius: 8px;
+            padding: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: all 0.2s ease;
             cursor: pointer;
             border: 2px solid transparent;
+            min-height: 80px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
         }
         
-        .mesa-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+        .mesa-floating-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
         }
         
-        .mesa-card.livre {
+        .mesa-floating-card.livre {
             border-color: #28a745;
         }
         
-        .mesa-card.ocupada {
+        .mesa-floating-card.ocupada {
             border-color: #dc3545;
         }
         
-        .mesa-status {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 0.5rem;
+        .mesa-content {
+            width: 100%;
         }
         
-        .mesa-status.livre {
-            background-color: #28a745;
+        .mesa-icon {
+            font-size: 1rem;
+            margin-bottom: 4px;
         }
         
-        .mesa-status.ocupada {
-            background-color: #dc3545;
+        .mesa-floating-card.livre .mesa-icon {
+            color: #28a745;
         }
         
-        .mesa-numero {
-            font-size: 1.5rem;
-            font-weight: 700;
+        .mesa-floating-card.ocupada .mesa-icon {
+            color: #dc3545;
+        }
+        
+        .mesa-number {
+            font-size: 1rem;
+            font-weight: 600;
             color: #333;
-            display: inline-block;
-            margin-left: 0.5rem;
+            margin-bottom: 2px;
         }
         
-        .mesa-info {
-            font-size: 0.9rem;
-            color: #6c757d;
+        .mesa-status-text {
+            font-size: 0.7rem;
+            font-weight: 500;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+        }
+        
+        .mesa-floating-card.livre .mesa-status-text {
+            color: #28a745;
+        }
+        
+        .mesa-floating-card.ocupada .mesa-status-text {
+            color: #dc3545;
+        }
+        
+        .mesa-details {
+            background: #f8f9fa;
+            border-radius: 4px;
+            padding: 4px;
+            margin-top: 4px;
+        }
+        
+        .mesa-pedido {
+            font-size: 0.6rem;
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 2px;
+        }
+        
+        .mesa-valor {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 2px;
+        }
+        
+        .mesa-tempo {
+            font-size: 0.6rem;
+            color: #666;
+        }
+        
+        .mesa-disponivel {
+            font-size: 0.6rem;
+            color: #28a745;
+            font-weight: 500;
+        }
+        
+        /* Responsivo - Manter mobile como estava */
+        @media (max-width: 768px) {
+            .mesas-creative-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 5px;
+                width: 100%;
+                padding: 0 2px;
+            }
+            
+            .mesa-floating-card {
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 8px !important;
+                min-height: 100px !important;
+                max-width: 100% !important;
+                border-radius: 8px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            }
+            
+            .mesa-icon {
+                font-size: 1.2rem;
+                margin-bottom: 4px;
+            }
+            
+            .mesa-number {
+                font-size: 1rem;
+                margin-bottom: 2px;
+            }
+            
+            .mesa-status-text {
+                font-size: 0.7rem;
+                margin-bottom: 4px;
+            }
+            
+            .mesa-details {
+                padding: 5px;
+                margin-top: 5px;
+            }
+            
+            .mesa-pedido, .mesa-valor {
+                font-size: 0.7rem;
+                margin-bottom: 2px;
+            }
+            
+            .mesa-tempo {
+                font-size: 0.6rem;
+            }
+            
+            .mesa-disponivel {
+                font-size: 0.7rem;
+            }
         }
         
         .quick-actions {
@@ -672,33 +783,37 @@ if ($tenant && $filial) {
                     </div>
                 </div>
 
-                <div class="row" id="mesasGrid">
+                <!-- Layout Criativo das Mesas -->
+                <div class="mesas-creative-grid" id="mesasGrid">
                     <?php foreach ($mesas as $mesa): ?>
                         <?php
                         $pedidoMesa = isset($pedidoPorMesa[$mesa['id_mesa']]) ? $pedidoPorMesa[$mesa['id_mesa']] : null;
                         $status = $pedidoMesa ? 'ocupada' : 'livre';
                         ?>
-                        <div class="col-lg-2 col-md-3 col-sm-4 col-6 mb-3">
-                            <div class="mesa-card <?php echo $status; ?>" onclick="verMesa(<?php echo $mesa['id']; ?>, <?php echo $mesa['id_mesa']; ?>)">
-                                <div class="d-flex align-items-center mb-2">
-                                    <span class="mesa-status <?php echo $status; ?>"></span>
-                                    <span class="mesa-numero">Mesa <?php echo $mesa['id_mesa']; ?></span>
-                                </div>
-                                <div class="mesa-info">
-                                    <?php if ($pedidoMesa): ?>
-                                        <div class="fw-bold text-danger">Ocupada</div>
-                                        <?php if ($pedidoMesa['total_pedido'] > 1): ?>
-                                            <div><?php echo $pedidoMesa['total_pedido']; ?> Pedidos</div>
-                                        <?php else: ?>
-                                            <div>Pedido #<?php echo $pedidoMesa['pedido'][0]['idpedido']; ?></div>
-                                        <?php endif; ?>
-                                        <div>R$ <?php echo number_format($pedidoMesa['valor_total'], 2, ',', '.'); ?></div>
-                                        <div class="small"><?php echo $pedidoMesa['pedido'][0]['hora_pedido']; ?></div>
+                        <div class="mesa-floating-card <?php echo $status; ?>" onclick="verMesa(<?php echo $mesa['id']; ?>, <?php echo $mesa['id_mesa']; ?>)">
+                            <div class="mesa-glow-effect"></div>
+                            <div class="mesa-content">
+                                <div class="mesa-icon">
+                                    <?php if ($status == 'livre'): ?>
+                                        <i class="fas fa-check-circle"></i>
                                     <?php else: ?>
-                                        <div class="fw-bold text-success">Livre</div>
-                                        <div>Disponível</div>
+                                        <i class="fas fa-exclamation-circle"></i>
                                     <?php endif; ?>
                                 </div>
+                                <div class="mesa-number"><?php echo $mesa['id_mesa']; ?></div>
+                                <div class="mesa-status-text"><?php echo ucfirst($status); ?></div>
+                                <?php if ($pedidoMesa): ?>
+                                    <div class="mesa-details">
+                                        <div class="mesa-pedido">#<?php echo $pedidoMesa['pedido'][0]['idpedido']; ?></div>
+                                        <div class="mesa-valor">R$ <?php echo number_format($pedidoMesa['valor_total'], 2, ',', '.'); ?></div>
+                                        <div class="mesa-tempo"><?php echo $pedidoMesa['pedido'][0]['hora_pedido']; ?></div>
+                                    </div>
+                                <?php else: ?>
+                                    <div class="mesa-disponivel">
+                                        <i class="fas fa-coffee"></i>
+                                        <span>Pronta para uso</span>
+                                    </div>
+                                <?php endif; ?>
                             </div>
                         </div>
                     <?php endforeach; ?>

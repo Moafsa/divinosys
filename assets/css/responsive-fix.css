@@ -200,28 +200,12 @@ html, body {
         margin: 0 !important;
     }
     
-    /* Grid das mesas no desktop - layout original */
+    /* Deixar Bootstrap gerenciar o layout das mesas no desktop */
     .mesas-grid {
-        display: grid !important;
-        grid-template-columns: repeat(8, 1fr) !important;
-        gap: 8px !important;
-        padding: 10px !important;
+        display: block !important;
         width: 100% !important;
         max-width: 100% !important;
         margin: 0 !important;
-    }
-    
-    .mesa-card {
-        width: 100% !important;
-        max-width: 120px !important;
-        min-height: 70px !important;
-        margin: 0 !important;
-        padding: 5px !important;
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: center !important;
-        justify-content: center !important;
-        font-size: 0.8rem !important;
     }
     
     /* Ações rápidas no desktop */
@@ -241,29 +225,9 @@ html, body {
         min-width: 150px !important;
     }
     
-    /* Forçar layout específico para dashboard */
-    .dashboard .mesas-grid {
-        display: grid !important;
-        grid-template-columns: repeat(8, 1fr) !important;
-        gap: 8px !important;
-        padding: 10px !important;
-        width: 100% !important;
-        max-width: 100% !important;
-        margin: 0 !important;
-    }
-    
-    .dashboard .mesa-card {
-        width: 100% !important;
-        max-width: 120px !important;
-        min-height: 70px !important;
-        margin: 0 !important;
-        padding: 5px !important;
-        font-size: 0.8rem !important;
-    }
-    
     /* Apenas ajustes básicos - deixar Bootstrap funcionar naturalmente */
     .mesa-card {
-        padding: 10px !important;
+        padding: 1.5rem !important;
         font-size: 0.9rem !important;
     }
 }

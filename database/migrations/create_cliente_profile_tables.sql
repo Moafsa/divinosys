@@ -87,3 +87,4 @@ CREATE INDEX IF NOT EXISTS idx_pedido_usuario ON pedido(usuario_global_id);
 
 
 
+
