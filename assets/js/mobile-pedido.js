@@ -507,7 +507,7 @@ class MobilePedidoInterface {
         const quantidade = parseInt(modal.querySelector('.qty-value').textContent);
         const observacoes = modal.querySelector('#observacoes').value;
         
-        // Capturar modificações dos ingredientes clicáveis
+        // Capturar apenas as modificações (ingredientes que mudaram)
         const modificacoes = [];
         const ingredientesItems = modal.querySelectorAll('.mobile-ingrediente-item');
         
@@ -524,17 +524,29 @@ class MobilePedidoInterface {
             const tipoDiv = item.querySelector('.mobile-ingrediente-tipo');
             const atualmenteCom = tipoDiv.textContent === 'COM';
             
-            // Se mudou de estado, adicionar à lista de modificações
+            console.log(`🔍 Ingrediente: ${ingredienteNome}`, {
+                jaEstava,
+                atualmenteCom,
+                mudou: jaEstava !== atualmenteCom
+            });
+            
+            // Só adicionar modificação se mudou de estado
             if (jaEstava !== atualmenteCom) {
                 if (atualmenteCom) {
+                    // Estava SEM, agora está COM = adicionado
                     modificacoes.push(`+ ${ingredienteNome}`);
+                    console.log(`✅ Adicionado: + ${ingredienteNome}`);
                 } else {
+                    // Estava COM, agora está SEM = removido
                     modificacoes.push(`- ${ingredienteNome}`);
+                    console.log(`❌ Removido: - ${ingredienteNome}`);
                 }
             }
         });
         
-        // Combinar modificações com observações
+        console.log('📝 Modificações finais:', modificacoes);
+        
+        // Se não houve modificações, não adicionar observações vazias
         const observacoesCompletas = [
             ...modificacoes,
             observacoes
