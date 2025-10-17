@@ -64,25 +64,40 @@ html, body {
 /* Mobile First (até 768px) */
 @media (max-width: 768px) {
     .main-content {
-        padding: 5px;
-        margin: 0;
-        width: 100%;
-        max-width: 100%;
-        display: block;
+        padding: 5px !important;
+        margin: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        display: block !important;
     }
     
     .container-fluid {
-        padding-left: 2px;
-        padding-right: 2px;
-        width: 100%;
-        max-width: 100%;
+        padding-left: 2px !important;
+        padding-right: 2px !important;
+        width: 100% !important;
+        max-width: 100% !important;
     }
     
     .card {
-        margin: 0 0 10px 0;
-        padding: 10px;
-        width: 100%;
-        max-width: 100%;
+        margin: 0 0 10px 0 !important;
+        padding: 10px !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    
+    /* Forçar margens consistentes em todas as páginas */
+    .row {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        width: 100% !important;
+    }
+    
+    .col, .col-1, .col-2, .col-3, .col-4, .col-5, .col-6,
+    .col-7, .col-8, .col-9, .col-10, .col-11, .col-12 {
+        padding-left: 2px !important;
+        padding-right: 2px !important;
+        width: 100% !important;
+        max-width: 100% !important;
     }
     
     /* Expandir cards em mobile */
@@ -90,25 +105,31 @@ html, body {
         padding: 10px;
     }
     
-    /* Ajustar grid em mobile */
-    .row {
-        margin-left: 0;
-        margin-right: 0;
-        width: 100%;
-    }
-    
-    .col, .col-1, .col-2, .col-3, .col-4, .col-5, .col-6,
-    .col-7, .col-8, .col-9, .col-10, .col-11, .col-12 {
-        padding-left: 2px;
-        padding-right: 2px;
-        width: 100%;
-        max-width: 100%;
-    }
     
     /* Prevenir overflow horizontal */
     html, body {
         overflow-x: hidden;
         width: 100%;
+    }
+    
+    /* Forçar comportamento consistente em todas as páginas */
+    body {
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    
+    /* Garantir que todas as páginas usem o mesmo padding */
+    .page-header {
+        padding: 10px 5px !important;
+        margin: 0 0 15px 0 !important;
+    }
+    
+    /* Forçar cards a ocuparem toda a largura */
+    .card, .card-body {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
     }
     
     /* Ajustar tabelas em mobile */
