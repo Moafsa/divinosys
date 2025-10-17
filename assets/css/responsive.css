@@ -64,30 +64,45 @@ html, body {
 /* Mobile First (até 768px) */
 @media (max-width: 768px) {
     .main-content {
-        padding: 15px;
-        margin: 0 auto;
+        padding: 10px;
+        margin: 0;
         width: 100%;
         max-width: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: flex-start;
+        display: block;
     }
     
     .container-fluid {
-        padding-left: 10px;
-        padding-right: 10px;
+        padding-left: 5px;
+        padding-right: 5px;
         width: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
+        max-width: 100%;
     }
     
     .card {
-        margin: 0 auto 15px auto;
+        margin: 0 0 15px 0;
         padding: 15px;
         width: 100%;
-        max-width: 500px;
+        max-width: 100%;
+    }
+    
+    /* Expandir cards em mobile */
+    .card-body {
+        padding: 15px;
+    }
+    
+    /* Ajustar grid em mobile */
+    .row {
+        margin-left: 0;
+        margin-right: 0;
+        width: 100%;
+    }
+    
+    .col, .col-1, .col-2, .col-3, .col-4, .col-5, .col-6,
+    .col-7, .col-8, .col-9, .col-10, .col-11, .col-12 {
+        padding-left: 5px;
+        padding-right: 5px;
+        width: 100%;
+        max-width: 100%;
     }
     
     /* Prevenir overflow horizontal */
@@ -106,12 +121,50 @@ html, body {
     .btn {
         width: 100%;
         margin-bottom: 10px;
+        padding: 12px 20px;
+        font-size: 16px;
     }
     
     /* Ajustar formulários em mobile */
     .form-control, .form-select {
         width: 100%;
         margin-bottom: 10px;
+        padding: 12px;
+        font-size: 16px;
+    }
+    
+    /* Expandir tabelas em mobile */
+    .table-responsive {
+        width: 100%;
+        margin: 0;
+        padding: 0;
+    }
+    
+    /* Ajustar grid de mesas em mobile */
+    .row .col-md-3, .row .col-sm-6 {
+        width: 50%;
+        flex: 0 0 50%;
+        max-width: 50%;
+        padding: 5px;
+    }
+    
+    /* Ajustar cards de mesa */
+    .card.mesa-card {
+        margin: 5px 0;
+        padding: 10px;
+        width: 100%;
+    }
+    
+    /* Ajustar seções de ações rápidas */
+    .acoes-rapidas .row {
+        margin: 0;
+    }
+    
+    .acoes-rapidas .col {
+        padding: 5px;
+        width: 100%;
+        flex: 0 0 100%;
+        max-width: 100%;
     }
 }
 
@@ -228,4 +281,53 @@ img {
     h4 { font-size: 1.1rem; }
     h5 { font-size: 1rem; }
     h6 { font-size: 0.9rem; }
+    
+    /* Melhorar layout das mesas em mobile */
+    .mesas-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        width: 100%;
+        padding: 0 5px;
+    }
+    
+    .mesa-card {
+        width: 100%;
+        margin: 0;
+        padding: 15px;
+        min-height: 120px;
+    }
+    
+    /* Melhorar layout das ações rápidas */
+    .acoes-rapidas {
+        width: 100%;
+        padding: 0 5px;
+    }
+    
+    .acoes-rapidas .btn {
+        width: 100%;
+        margin-bottom: 10px;
+        padding: 15px;
+        font-size: 16px;
+        height: auto;
+        min-height: 50px;
+    }
+    
+    /* Ajustar cards de status */
+    .status-card {
+        width: 100%;
+        margin: 0 0 15px 0;
+        padding: 20px;
+    }
+    
+    /* Melhorar espaçamento geral */
+    .main-content > .container-fluid {
+        padding: 0 5px;
+    }
+    
+    /* Ajustar headers */
+    .page-header {
+        padding: 15px 10px;
+        margin: 0 0 20px 0;
+    }
 }
