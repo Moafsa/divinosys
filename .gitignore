@@ -1,42 +1,175 @@
-# Sistema operacional
-AppData/
-*.log
-*.tmp
+# ========================================
+# ARQUIVOS SENSÍVEIS - NÃO ENVIAR PARA GIT
+# ========================================
 
-# Arquivos de teste
+# Configurações de ambiente (CRÍTICO!)
+.env
+.env.*
+!.env.example
+*.env
+!*.env.example
+
+# Credenciais e senhas
+CREDENCIAIS_ACESSO.md
+*senha*
+*password*
+*credentials*
+
+# Backups de banco de dados (CRÍTICO!)
+*.sql
+*.dump
+*.backup
+backup_*.sql
+dump_*.sql
+restore_*.sql
+*_backup_*.sql
+
+# Scripts de backup/restore (podem conter senhas)
+backup_*.php
+backup_*.sh
+restore_*.sh
+deploy_fix_*.sql
+fix_*.sql
+
+# ========================================
+# ARQUIVOS DE DESENVOLVIMENTO
+# ========================================
+
+# Testes
 test_*.php
+test_*.html
 *_test.php
+tests/temp/
 
-# Arquivos temporários
+# Debug
+debug_*.php
+check_*.php
+verificar_*.php
+diagnostico_*.php
+
+# Fix scripts (já aplicados)
+fix_*.php
+corrigir_*.php
+force_*.php
+simular_*.php
+investigar_*.php
+apply_*.php
+ultra_*.php
+simple_*.php
+
+# Temporários
 *.tmp
 *.temp
+temp_*.txt
+
+# ========================================
+# LOGS E DADOS RUNTIME
+# ========================================
 
 # Logs
 logs/
 *.log
+error_log
+access_log
 
 # Sessões
 sessions/
+*.session
 
-# Uploads (manter estrutura mas não os arquivos)
+# Cache
+cache/
+*.cache
+
+# Uploads (arquivos do usuário)
 uploads/*
 !uploads/.gitkeep
 
-# Arquivos de configuração local
-.env
-.env.local
-.env.development
+# Backups automáticos
+backups/
+*.gz
 
-# Arquivos de IDE
+# ========================================
+# IDE E FERRAMENTAS
+# ========================================
+
+# VS Code / Cursor
 .vscode/
-.idea/
 .cursor/
+*.code-workspace
+
+# PHPStorm / IntelliJ
+.idea/
+*.iml
+
+# Vim
 *.swp
 *.swo
+*.swn
 
-# Node modules (se houver)
+# ========================================
+# DEPENDÊNCIAS
+# ========================================
+
+# PHP
+vendor/
+composer.phar
+
+# Node.js
 node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
 
-# Arquivos de backup
-*.bak
-*.backup
+# ========================================
+# SISTEMA OPERACIONAL
+# ========================================
+
+# Windows
+Thumbs.db
+desktop.ini
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+.directory
+
+# ========================================
+# DOCKER (Dados locais)
+# ========================================
+
+# Dados dos volumes
+postgres_data/
+redis_data/
+wuzapi_data/
+wuzapi_sessions/
+
+# Arquivos temporários do Docker
+.dockerignore.bak
+
+# ========================================
+# ARQUIVOS ESPECÍFICOS DO PROJETO
+# ========================================
+
+# Consolidação e limpeza (já feitos)
+LIMPEZA_CONCLUIDA.md
+TESTE_INSTALACAO_LIMPA_RESULTADO.md
+limpar_arquivos_desnecessarios.ps1
+
+# Scripts temporários PowerShell
+temp_logs.txt
+*.ps1
+
+# Arquivos de análise (debug)
+analyze_*.php
+investigate_*.php
+
+# Migrations antigas executadas (manter apenas as essenciais)
+# (Comentado - migrations devem ir para o Git)
+# database/migrations/fix_*.sql
+# database/migrations/add_*.sql

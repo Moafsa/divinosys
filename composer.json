@@ -1,12 +1,12 @@
 {
-    "name": "divino-lanches/sistema",
+    "name": "divinosys/sistema",
     "description": "Sistema de gestão para lanchonetes e restaurantes",
     "type": "project",
     "license": "MIT",
     "authors": [
         {
-            "name": "Divino Lanches",
-            "email": "contato@divinolanches.com"
+    "name": "DivinoSYS",
+"email": "contato@divinosys.conext.click"
         }
     ],
     "require": {
