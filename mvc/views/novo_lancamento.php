@@ -174,10 +174,6 @@ $pedidos = $db->fetchAll(
                             <i class="fas fa-list"></i>
                             <span>Pedidos</span>
                         </a>
-                        <a class="nav-link" href="<?php echo $router->url('mesas'); ?>" data-tooltip="Mesas">
-                            <i class="fas fa-table"></i>
-                            <span>Mesas</span>
-                        </a>
                         <a class="nav-link" href="<?php echo $router->url('delivery'); ?>" data-tooltip="Delivery">
                             <i class="fas fa-motorcycle"></i>
                             <span>Delivery</span>
@@ -246,21 +242,25 @@ $pedidos = $db->fetchAll(
                                 <div class="form-section">
                                     <h6><i class="fas fa-info-circle me-2"></i>Informações Básicas</h6>
                                     <div class="row">
-                                        <div class="col-md-6">
+                                        <div class="col-md-4">
                                             <label class="form-label">Tipo de Lançamento <span class="text-danger">*</span></label>
-                                            <select class="form-select" name="tipo" id="tipo" required>
+                                            <select class="form-select" name="tipo_lancamento" id="tipo" required>
                                                 <option value="">Selecione o tipo</option>
                                                 <option value="receita">Receita</option>
                                                 <option value="despesa">Despesa</option>
                                                 <option value="transferencia">Transferência</option>
                                             </select>
                                         </div>
-                                        <div class="col-md-6">
+                                        <div class="col-md-4">
                                             <label class="form-label">Valor <span class="text-danger">*</span></label>
                                             <div class="input-group">
                                                 <span class="input-group-text">R$</span>
                                                 <input type="number" class="form-control" name="valor" id="valor" step="0.01" min="0" required>
                                             </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">Data <span class="text-danger">*</span></label>
+                                            <input type="date" class="form-control" name="data_lancamento" id="data_lancamento" value="<?= date('Y-m-d') ?>" required>
                                         </div>
                                     </div>
                                     <div class="row mt-3">
@@ -350,10 +350,8 @@ $pedidos = $db->fetchAll(
                                         <div class="col-md-4">
                                             <label class="form-label">Status</label>
                                             <select class="form-select" name="status" id="status">
+                                                <option value="confirmado">Confirmado</option>
                                                 <option value="pendente">Pendente</option>
-                                                <option value="pago">Pago</option>
-                                                <option value="vencido">Vencido</option>
-                                                <option value="cancelado">Cancelado</option>
                                             </select>
                                         </div>
                                     </div>
@@ -486,6 +484,10 @@ $pedidos = $db->fetchAll(
                 theme: 'bootstrap-5'
             });
             
+            // Definir data atual por padrão
+            const hoje = new Date().toISOString().split('T')[0];
+            document.getElementById('data_lancamento').value = hoje;
+            
             // Atualizar resumo quando campos mudarem
             $('#tipo, #valor, #conta_id, #categoria_id').on('change', atualizarResumo);
             $('#valor').on('input', atualizarResumo);
@@ -613,8 +615,52 @@ $pedidos = $db->fetchAll(
         }
 
         // Salvar lançamento
-        $('#lancamentoForm').on('submit', function(e) {
+        $('#lancamentoForm').off('submit').on('submit', function(e) {
+            console.log('Formulário submetido!');
             e.preventDefault();
+            e.stopImmediatePropagation();
+            
+            // Validação dos campos obrigatórios
+            const tipoLancamento = $('#tipo').val();
+            const valor = $('#valor').val();
+            const dataLancamento = $('#data_lancamento').val();
+            const descricao = $('#descricao').val();
+            const contaId = $('#conta_id').val();
+            const categoriaId = $('#categoria_id').val();
+            
+            console.log('Validação:', {
+                tipoLancamento, valor, dataLancamento, descricao, contaId, categoriaId
+            });
+            
+            if (!tipoLancamento || !valor || !dataLancamento || !descricao || !contaId) {
+                console.log('Campos obrigatórios não preenchidos:', {
+                    tipoLancamento: !tipoLancamento,
+                    valor: !valor,
+                    dataLancamento: !dataLancamento,
+                    descricao: !descricao,
+                    contaId: !contaId
+                });
+                Swal.fire('Erro!', 'Todos os campos obrigatórios devem ser preenchidos', 'error');
+                return;
+            }
+            
+            // Validação específica para transferências
+            if (tipoLancamento === 'transferencia') {
+                const contaDestinoId = $('#conta_destino_id').val();
+                if (!contaDestinoId) {
+                    Swal.fire('Erro!', 'Para transferências, a conta destino é obrigatória', 'error');
+                    return;
+                }
+                if (contaId === contaDestinoId) {
+                    Swal.fire('Erro!', 'A conta origem e destino devem ser diferentes', 'error');
+                    return;
+                }
+            }
+            
+            if (parseFloat(valor) <= 0) {
+                Swal.fire('Erro!', 'O valor deve ser maior que zero', 'error');
+                return;
+            }
             
             const formData = new FormData(this);
             formData.append('action', 'criar_lancamento');
@@ -628,27 +674,51 @@ $pedidos = $db->fetchAll(
                 showConfirmButton: false
             });
 
-            fetch('mvc/ajax/financeiro.php', {
+            console.log('Enviando dados para o servidor...');
+            fetch('mvc/ajax/lancamentos_simple.php', {
                 method: 'POST',
                 body: formData
             })
-            .then(response => response.json())
+            .then(response => {
+                console.log('Resposta recebida:', response.status);
+                console.log('Headers da resposta:', response.headers);
+                if (!response.ok) {
+                    console.error('Erro HTTP:', response.status, response.statusText);
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.text().then(text => {
+                    console.log('Resposta em texto:', text);
+                    try {
+                        return JSON.parse(text);
+                    } catch (e) {
+                        console.error('Erro ao fazer parse do JSON:', e);
+                        console.error('Texto da resposta:', text);
+                        throw new Error('Resposta não é um JSON válido: ' + text);
+                    }
+                });
+            })
             .then(data => {
+                console.log('Dados recebidos:', data);
                 if (data.success) {
+                    console.log('Lançamento criado com sucesso, redirecionando...');
                     Swal.fire({
                         title: 'Sucesso!',
                         text: 'Lançamento criado com sucesso!',
                         icon: 'success'
                     }).then(() => {
+                        console.log('Redirecionando para página financeira...');
                         window.location.href = 'index.php?view=financeiro';
                     });
                 } else {
+                    console.error('Erro ao criar lançamento:', data.message);
+                    console.error('Dados completos da resposta:', data);
                     Swal.fire('Erro!', data.message || 'Erro ao criar lançamento', 'error');
                 }
             })
             .catch(error => {
-                console.error('Erro:', error);
-                Swal.fire('Erro!', 'Erro ao processar solicitação', 'error');
+                console.error('Erro na requisição:', error);
+                console.error('Stack trace:', error.stack);
+                Swal.fire('Erro!', 'Erro ao processar solicitação: ' + error.message, 'error');
             });
         });
 
@@ -665,7 +735,7 @@ $pedidos = $db->fetchAll(
                 showConfirmButton: false
             });
 
-            fetch('mvc/ajax/financeiro.php', {
+            fetch('mvc/ajax/lancamentos_simple.php', {
                 method: 'POST',
                 body: formData
             })
@@ -701,6 +771,27 @@ $pedidos = $db->fetchAll(
                 }
             });
         }
+        
+        // Inicializar página
+        $(document).ready(function() {
+            console.log('Inicializando página de lançamento financeiro');
+            
+            // Definir data padrão
+            const hoje = new Date().toISOString().split('T')[0];
+            $('#data_lancamento').val(hoje);
+            
+            // Inicializar resumo
+            atualizarResumo();
+            
+            // Adicionar event handler direto para o botão
+            $('button[type="submit"]').on('click', function(e) {
+                console.log('Botão clicado!');
+                e.preventDefault();
+                $('#lancamentoForm').trigger('submit');
+            });
+            
+            console.log('Página inicializada com sucesso');
+        });
     </script>
 </body>
 </html>

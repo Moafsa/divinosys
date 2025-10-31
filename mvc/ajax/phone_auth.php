@@ -1,5 +1,12 @@
 <?php
 
+// Disable error reporting to prevent HTML output
+error_reporting(0);
+ini_set('display_errors', 0);
+
+// Start output buffering to catch any unwanted output
+ob_start();
+
 require_once __DIR__ . '/../../system/Config.php';
 require_once __DIR__ . '/../../system/Database.php';
 require_once __DIR__ . '/../../system/Auth.php';
@@ -8,6 +15,9 @@ require_once __DIR__ . '/../../system/Session.php';
 use System\Auth;
 use System\Database;
 use System\Session;
+
+// Clear any output that might have been generated
+ob_clean();
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
@@ -51,11 +61,13 @@ try {
     }
 
 } catch (Exception $e) {
+    ob_clean();
     http_response_code(400);
     echo json_encode([
         'success' => false,
         'message' => $e->getMessage()
     ]);
+    exit;
 }
 
 /**
@@ -79,7 +91,10 @@ function handleRequestCode() {
     // Generate and send access code
     $result = Auth::generateAndSendAccessCode($telefone, $tenantId, $filialId);
     
+    // Ensure clean output
+    ob_clean();
     echo json_encode($result);
+    exit;
 }
 
 /**
@@ -101,32 +116,85 @@ function handleValidateCode() {
     $filialId = $_SESSION['filial_id'] ?? null;
     
     // Validate access code
+    error_log("phone_auth.php - Validating code for phone: $telefone, code: $codigo, tenant: $tenantId, filial: $filialId");
     $result = Auth::validateAccessCode($telefone, $codigo, $tenantId, $filialId);
+    error_log("phone_auth.php - Validation result: " . json_encode($result));
     
     if ($result['success']) {
+        // Get tenant and filial data from database
+        $tenant = $db->fetch("SELECT * FROM tenants WHERE id = ?", [$tenantId]);
+        $filial = null;
+        if ($filialId) {
+            $filial = $db->fetch("SELECT * FROM filiais WHERE id = ?", [$filialId]);
+        }
+        
         // Set session data in the format expected by the main system
         $_SESSION['auth_token'] = $result['session_token'];
         $_SESSION['usuario_global_id'] = $result['user']['usuario_global_id'];
         $_SESSION['tenant_id'] = $tenantId;
-        $_SESSION['filial_id'] = $filialId;
-        $_SESSION['user_type'] = $result['establishment']['tipo_usuario'];
-        $_SESSION['permissions'] = $result['permissions'];
-        $_SESSION['user_name'] = $result['user']['nome'];
+        $_SESSION['filial_id'] = $filialId ?? null;
+        $_SESSION['user_type'] = $result['establishment']['tipo_usuario'] ?? 'cliente';
+        $_SESSION['permissions'] = $result['permissions'] ?? [];
+        $_SESSION['user_name'] = $result['user']['nome'] ?? 'Usuário';
+        
+        // Set tenant and filial objects in session (required by views)
+        if ($tenant) {
+            $_SESSION['tenant'] = $tenant;
+        }
+        if ($filial) {
+            $_SESSION['filial'] = $filial;
+        }
+        
+        // Determine user level based on tipo_usuario
+        $userLevel = 2; // Default user level
+        if (isset($result['establishment']['tipo_usuario'])) {
+            switch (strtolower($result['establishment']['tipo_usuario'])) {
+                case 'admin':
+                case 'administrador':
+                    $userLevel = 1;
+                    break;
+                case 'cliente':
+                    $userLevel = 3;
+                    break;
+                default:
+                    $userLevel = 2;
+            }
+        }
         
         // Set session data in the format expected by Session class
         $_SESSION['user'] = [
             'id' => $result['user']['usuario_global_id'],
-            'login' => $result['user']['nome'],
-            'nivel' => $result['establishment']['tipo_usuario'] === 'admin' ? 1 : 2,
+            'login' => $result['user']['nome'] ?? 'Usuário',
+            'nivel' => $userLevel,
             'tenant_id' => $tenantId,
-            'filial_id' => $filialId
+            'filial_id' => $filialId ?? null
         ];
         $_SESSION['user_id'] = $result['user']['usuario_global_id'];
-        $_SESSION['user_login'] = $result['user']['nome'];
-        $_SESSION['user_nivel'] = $result['establishment']['tipo_usuario'] === 'admin' ? 1 : 2;
+        $_SESSION['user_login'] = $result['user']['nome'] ?? 'Usuário';
+        $_SESSION['user_nivel'] = $userLevel;
+        
+        // PHP automatically saves session data when script ends
+        // No need to explicitly save - just ensure all data is set correctly
+        
+        // Add debug info to response (helpful for troubleshooting)
+        $result['debug'] = [
+            'user_id_set' => isset($_SESSION['user_id']),
+            'user_id_value' => $_SESSION['user_id'] ?? null,
+            'user_type' => $_SESSION['user_type'] ?? null,
+            'tenant_id' => $tenantId,
+            'filial_id' => $filialId,
+            'tenant_set' => isset($_SESSION['tenant']),
+            'filial_set' => isset($_SESSION['filial']),
+            'establishment_tipo' => $result['establishment']['tipo_usuario'] ?? 'not_set'
+        ];
+        
+        error_log("phone_auth.php - Session data set: user_id=" . ($_SESSION['user_id'] ?? 'null') . ", tipo=" . ($_SESSION['user_type'] ?? 'null') . ", tenant_set=" . (isset($_SESSION['tenant']) ? 'yes' : 'no'));
     }
     
+    // Ensure clean output
+    ob_clean();
     echo json_encode($result);
+    exit;
 }
 
 /**
@@ -146,6 +214,7 @@ function handleCheckSession() {
         if ($userEstablishment) {
             $permissions = Auth::getUserPermissions($userEstablishment['tipo_usuario']);
             
+            ob_clean();
             echo json_encode([
                 'success' => true,
                 'authenticated' => true,
@@ -153,19 +222,24 @@ function handleCheckSession() {
                 'user_type' => $userEstablishment['tipo_usuario'],
                 'permissions' => $permissions
             ]);
+            exit;
         } else {
+            ob_clean();
             echo json_encode([
                 'success' => false,
                 'authenticated' => false,
                 'message' => 'Sessão inválida'
             ]);
+            exit;
         }
     } else {
+        ob_clean();
         echo json_encode([
             'success' => false,
             'authenticated' => false,
             'message' => 'Sessão expirada'
         ]);
+        exit;
     }
 }
 
@@ -175,8 +249,10 @@ function handleCheckSession() {
 function handleLogout() {
     Auth::logout();
     
+    ob_clean();
     echo json_encode([
         'success' => true,
         'message' => 'Logout realizado com sucesso'
     ]);
+    exit;
 }

@@ -1,81 +1,139 @@
 <?php
 /**
- * AUTO FIX SEQUENCES - Roda automaticamente
- * Este script deve ser chamado no início da aplicação
+ * AUTO FIX SEQUENCES - ROBUST VERSION
+ * 
+ * This script automatically fixes sequence issues when called from index.php
+ * It runs silently and handles all errors gracefully to prevent HTTP 500 errors
  */
 
-// Função para corrigir sequências automaticamente
 function autoFixSequences() {
+    // Check if we're in a web context and if session is already fixed
+    if (isset($_SESSION['sequences_fixed']) && $_SESSION['sequences_fixed'] === true) {
+        return true;
+    }
+    
     try {
-        // Carregar configuração do banco
-        require_once __DIR__ . '/vendor/autoload.php';
-        $config = \System\Config::getInstance();
-        $dbConfig = $config->get('database');
+        // Check if System classes are available
+        if (!class_exists('System\Database') || !class_exists('System\Config')) {
+            error_log('Auto-fix sequences: System classes not available');
+            return false;
+        }
         
-        $pdo = new PDO(
-            "pgsql:host={$dbConfig['host']};port={$dbConfig['port']};dbname={$dbConfig['name']}", 
-            $dbConfig['user'], 
-            $dbConfig['password']
-        );
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        // Get database connection from system
+        $db = \System\Database::getInstance();
+        $pdo = $db->getConnection();
         
-        // Lista de sequências para corrigir
-        $sequences = [
+        // Verify database connection
+        if (!$pdo) {
+            error_log('Auto-fix sequences: Database connection failed');
+            return false;
+        }
+        
+        // List of tables and their sequences with error handling
+        $tables = [
             'produtos' => ['seq' => 'produtos_id_seq', 'id' => 'id'],
             'categorias' => ['seq' => 'categorias_id_seq', 'id' => 'id'],
             'ingredientes' => ['seq' => 'ingredientes_id_seq', 'id' => 'id'],
+            'mesas' => ['seq' => 'mesas_id_seq', 'id' => 'id'],
             'pedido' => ['seq' => 'pedido_idpedido_seq', 'id' => 'idpedido'],
             'pedido_itens' => ['seq' => 'pedido_itens_id_seq', 'id' => 'id'],
             'usuarios_globais' => ['seq' => 'usuarios_globais_id_seq', 'id' => 'id'],
             'usuarios_estabelecimento' => ['seq' => 'usuarios_estabelecimento_id_seq', 'id' => 'id'],
         ];
         
-        $fixed = 0;
-        foreach ($sequences as $table => $config) {
+        $fixedCount = 0;
+        $errorCount = 0;
+        
+        // Sync all sequences with comprehensive error handling
+        foreach ($tables as $table => $config) {
             try {
-                // Verificar se a tabela existe
-                $stmt = $pdo->query("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name = '$table')");
-                if (!$stmt->fetchColumn()) {
-                    continue; // Pular se tabela não existir
+                // Check if table exists
+                $stmt = $pdo->query("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = '$table')");
+                $tableExists = $stmt->fetchColumn();
+                
+                if (!$tableExists) {
+                    error_log("Auto-fix sequences: Table '$table' does not exist, skipping");
+                    continue;
                 }
                 
-                // Obter valor atual da sequência
-                $stmt = $pdo->query("SELECT last_value FROM {$config['seq']}");
-                $seqValue = $stmt->fetchColumn();
+                // Check if sequence exists
+                $stmt = $pdo->query("SELECT EXISTS (SELECT FROM pg_sequences WHERE sequencename = '{$config['seq']}')");
+                $sequenceExists = $stmt->fetchColumn();
                 
-                // Obter MAX ID da tabela
+                if (!$sequenceExists) {
+                    error_log("Auto-fix sequences: Sequence '{$config['seq']}' does not exist, skipping");
+                    continue;
+                }
+                
+                // Get current sequence value safely
+                $stmt = $pdo->query("SELECT last_value FROM {$config['seq']}");
+                if (!$stmt) {
+                    error_log("Auto-fix sequences: Failed to get sequence value for {$config['seq']}");
+                    $errorCount++;
+                    continue;
+                }
+                $currentValue = $stmt->fetchColumn();
+                
+                // Get max ID from table safely
                 $stmt = $pdo->query("SELECT COALESCE(MAX({$config['id']}), 0) FROM $table");
+                if (!$stmt) {
+                    error_log("Auto-fix sequences: Failed to get max ID for table $table");
+                    $errorCount++;
+                    continue;
+                }
                 $maxId = $stmt->fetchColumn();
                 
-                // Corrigir se necessário
-                if ($seqValue <= $maxId) {
+                // If sequence is behind, sync it
+                if ($currentValue <= $maxId) {
                     $newValue = $maxId + 1;
-                    $pdo->exec("SELECT setval('{$config['seq']}', $newValue, false)");
-                    $fixed++;
-                    error_log("Auto-fixed sequence {$config['seq']}: $seqValue → $newValue (MAX ID: $maxId)");
+                    $result = $pdo->exec("SELECT setval('{$config['seq']}', $newValue, false)");
+                    if ($result !== false) {
+                        $fixedCount++;
+                        error_log("Auto-fix sequences: Fixed sequence {$config['seq']} from $currentValue to $newValue (max ID: $maxId)");
+                    } else {
+                        error_log("Auto-fix sequences: Failed to set sequence value for {$config['seq']}");
+                        $errorCount++;
+                    }
                 }
+                
             } catch (Exception $e) {
-                // Log erro mas continua com outras sequências
-                error_log("Error fixing sequence for $table: " . $e->getMessage());
+                // Log error but don't break the application
+                error_log("Auto-fix sequences error for $table: " . $e->getMessage());
+                $errorCount++;
             }
         }
         
-        if ($fixed > 0) {
-            error_log("Auto-fix sequences: $fixed sequences corrected");
+        // Log summary
+        if ($fixedCount > 0) {
+            error_log("Auto-fix sequences: Fixed $fixedCount sequences, $errorCount errors");
+        }
+        
+        // Mark as fixed in session
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $_SESSION['sequences_fixed'] = true;
         }
         
         return true;
         
     } catch (Exception $e) {
-        error_log("Auto-fix sequences error: " . $e->getMessage());
+        // Log error but don't break the application
+        error_log("Auto-fix sequences critical error: " . $e->getMessage());
         return false;
     }
 }
 
-// Executar apenas se chamado diretamente
-if (basename($_SERVER['PHP_SELF']) === 'auto_fix_sequences.php') {
-    echo "<h1>🔧 Auto Fix Sequences</h1>";
-    $result = autoFixSequences();
-    echo $result ? "<p style='color: green;'>✅ Sequences auto-fixed successfully!</p>" : "<p style='color: red;'>❌ Error fixing sequences</p>";
+// Function to check if auto-fix is needed
+function isAutoFixNeeded() {
+    // Only run if not already fixed in this session
+    if (isset($_SESSION['sequences_fixed']) && $_SESSION['sequences_fixed'] === true) {
+        return false;
+    }
+    
+    // Check if we're in a web context
+    if (php_sapi_name() === 'cli') {
+        return false;
+    }
+    
+    return true;
 }
 ?>

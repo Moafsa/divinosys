@@ -4,41 +4,88 @@
  * Gerencia assinaturas de tenants no sistema SaaS
  */
 
+use System\Database;
+
 class Subscription {
-    private $conn;
+    private $db;
     
     public function __construct() {
-        $this->conn = Database::getInstance()->getConnection();
+        $this->db = Database::getInstance();
     }
     
     /**
      * Criar nova assinatura
      */
     public function create($data) {
-        $query = "INSERT INTO assinaturas 
-                  (tenant_id, plano_id, status, data_inicio, data_proxima_cobranca, valor, periodicidade, trial_ate) 
-                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
-                  RETURNING id";
+        $insertData = [
+            'tenant_id' => $data['tenant_id'],
+            'plano_id' => $data['plano_id'],
+            'status' => $data['status'] ?? 'trial',
+            'data_inicio' => $data['data_inicio'] ?? date('Y-m-d'),
+            'data_proxima_cobranca' => $data['data_proxima_cobranca'] ?? date('Y-m-d', strtotime('+30 days')),
+            'valor' => $data['valor'],
+            'periodicidade' => $data['periodicidade'] ?? 'mensal',
+            'trial_ate' => $data['trial_ate'] ?? date('Y-m-d', strtotime('+14 days'))
+        ];
         
-        $result = pg_query_params($this->conn, $query, [
-            $data['tenant_id'],
-            $data['plano_id'],
-            $data['status'] ?? 'trial',
-            $data['data_inicio'] ?? date('Y-m-d'),
-            $data['data_proxima_cobranca'] ?? date('Y-m-d', strtotime('+30 days')),
-            $data['valor'],
-            $data['periodicidade'] ?? 'mensal',
-            $data['trial_ate'] ?? date('Y-m-d', strtotime('+14 days'))
-        ]);
-        
-        if ($result) {
-            $row = pg_fetch_assoc($result);
-            return $row['id'];
-        }
-        
-        return false;
+        return $this->db->insert('assinaturas', $insertData);
     }
     
+    /**
+     * Buscar assinatura por ID
+     */
+    public function getById($id) {
+        $query = "SELECT a.*, t.nome as tenant_nome, t.subdomain,
+                  p.nome as plano_nome, p.recursos
+                  FROM assinaturas a
+                  INNER JOIN tenants t ON a.tenant_id = t.id
+                  INNER JOIN planos p ON a.plano_id = p.id
+                  WHERE a.id = " . intval($id);
+        
+        return $this->db->fetch($query);
+    }
+    
+    /**
+     * Atualizar assinatura
+     */
+    public function update($id, $data) {
+        // Apenas incluir campos que foram fornecidos
+        $allowed_fields = ['tenant_id', 'plano_id', 'status', 'data_inicio', 'data_proxima_cobranca', 'valor', 'periodicidade', 'trial_ate', 'asaas_subscription_id'];
+        
+        $updateData = [];
+        foreach ($allowed_fields as $field) {
+            if (isset($data[$field])) {
+                $updateData[$field] = $data[$field];
+            }
+        }
+        
+        if (empty($updateData)) {
+            return false;
+        }
+        
+        $updateData['updated_at'] = date('Y-m-d H:i:s');
+        
+        return $this->db->update('assinaturas', $updateData, 'id = ?', [$id]);
+    }
+    
+    /**
+     * Deletar assinatura
+     */
+    public function delete($id) {
+        // Verificar se há pagamentos associados
+        $checkQuery = "SELECT COUNT(*) as count FROM pagamentos WHERE assinatura_id = " . intval($id);
+        $check = $this->db->fetch($checkQuery);
+        
+        if ($check['count'] > 0) {
+            return false; // Não pode deletar se há pagamentos
+        }
+        
+        $query = "DELETE FROM assinaturas WHERE id = " . intval($id);
+        $result = $this->db->query($query);
+        
+        return $result !== false;
+    }
+
     /**
      * Buscar assinatura por tenant
      */
@@ -46,16 +93,10 @@ class Subscription {
         $query = "SELECT a.*, p.nome as plano_nome, p.recursos 
                   FROM assinaturas a
                   INNER JOIN planos p ON a.plano_id = p.id
-                  WHERE a.tenant_id = $1 AND a.status IN ('ativa', 'trial')
+                  WHERE a.tenant_id = ? AND a.status IN ('ativa', 'trial')
                   ORDER BY a.created_at DESC LIMIT 1";
         
-        $result = pg_query_params($this->conn, $query, [$tenant_id]);
-        
-        if ($result && pg_num_rows($result) > 0) {
-            return pg_fetch_assoc($result);
-        }
-        
-        return null;
+        return $this->db->fetch($query, [$tenant_id]);
     }
     
     /**
@@ -83,23 +124,19 @@ class Subscription {
      * Atualizar status da assinatura
      */
     public function updateStatus($id, $status, $motivo = null) {
-        $query = "UPDATE assinaturas SET status = $1, updated_at = CURRENT_TIMESTAMP";
-        $params = [$status];
-        $paramCount = 2;
+        $updateData = [
+            'status' => $status,
+            'updated_at' => date('Y-m-d H:i:s')
+        ];
         
         if ($status == 'cancelada') {
-            $query .= ", cancelada_em = CURRENT_TIMESTAMP";
+            $updateData['cancelada_em'] = date('Y-m-d H:i:s');
             if ($motivo) {
-                $query .= ", motivo_cancelamento = $$paramCount";
-                $params[] = $motivo;
-                $paramCount++;
+                $updateData['motivo_cancelamento'] = $motivo;
             }
         }
         
-        $query .= " WHERE id = $$paramCount";
-        $params[] = $id;
-        
-        return pg_query_params($this->conn, $query, $params);
+        return $this->db->update('assinaturas', $updateData, 'id = ?', [$id]);
     }
     
     /**
@@ -133,33 +170,27 @@ class Subscription {
             $query .= " LIMIT " . intval($filters['limit']);
         }
         
-        $result = pg_query_params($this->conn, $query, $params);
-        
-        if ($result) {
-            return pg_fetch_all($result) ?: [];
-        }
-        
-        return [];
+        return $this->db->fetchAll($query, $params);
     }
     
     /**
      * Renovar assinatura
      */
     public function renew($subscription_id) {
-        $query = "UPDATE assinaturas 
-                  SET data_proxima_cobranca = data_proxima_cobranca + INTERVAL '1 month',
-                      status = 'ativa',
-                      updated_at = CURRENT_TIMESTAMP
-                  WHERE id = $1";
+        $updateData = [
+            'data_proxima_cobranca' => date('Y-m-d', strtotime('+1 month')),
+            'status' => 'ativa',
+            'updated_at' => date('Y-m-d H:i:s')
+        ];
         
-        return pg_query_params($this->conn, $query, [$subscription_id]);
+        return $this->db->update('assinaturas', $updateData, 'id = ?', [$subscription_id]);
     }
     
     /**
      * Estatísticas de assinaturas
      */
     public function getStats() {
-        $query = "SELECT 
+        return $this->db->fetch("SELECT 
                     COUNT(*) as total,
                     COUNT(CASE WHEN status = 'ativa' THEN 1 END) as ativas,
                     COUNT(CASE WHEN status = 'trial' THEN 1 END) as trial,
@@ -167,15 +198,7 @@ class Subscription {
                     COUNT(CASE WHEN status = 'cancelada' THEN 1 END) as canceladas,
                     SUM(valor) as receita_mensal
                   FROM assinaturas
-                  WHERE status IN ('ativa', 'trial')";
-        
-        $result = pg_query($this->conn, $query);
-        
-        if ($result && pg_num_rows($result) > 0) {
-            return pg_fetch_assoc($result);
-        }
-        
-        return null;
+                  WHERE status IN ('ativa', 'trial')");
     }
 }
 

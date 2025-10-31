@@ -4,24 +4,59 @@ $session = \System\Session::getInstance();
 $router = \System\Router::getInstance();
 $db = \System\Database::getInstance();
 
-// Get current user, tenant and filial
+// Ensure tenant and filial context
+$context = \System\TenantHelper::ensureTenantContext();
+$tenant = $context['tenant'];
+$filial = $context['filial'];
 $user = $session->getUser();
-$tenant = $session->getTenant();
-$filial = $session->getFilial();
 
-// Debug: Se não tem tenant/filial, usar valores padrão
-if (!$tenant) {
-    $tenant = $db->fetch("SELECT * FROM tenants WHERE id = 1");
-    if ($tenant) {
-        $session->setTenant($tenant);
+// Debug: Log session data
+error_log("Pedidos: User data: " . json_encode($user));
+error_log("Pedidos: Tenant data: " . json_encode($tenant));
+error_log("Pedidos: Filial data: " . json_encode($filial));
+
+// Get tenant and filial from user session
+if (!$tenant && $user) {
+    $tenantId = $user['tenant_id'] ?? null;
+    if ($tenantId) {
+        $tenant = $db->fetch("SELECT * FROM tenants WHERE id = ?", [$tenantId]);
+        if ($tenant) {
+            $session->setTenant($tenant);
+        }
     }
 }
 
-if (!$filial) {
-    $filial = $db->fetch("SELECT * FROM filiais WHERE id = 1");
-    if ($filial) {
-        $session->setFilial($filial);
+if (!$filial && $user) {
+    $filialId = $user['filial_id'] ?? null;
+    if ($filialId) {
+        $filial = $db->fetch("SELECT * FROM filiais WHERE id = ?", [$filialId]);
+        if ($filial) {
+            $session->setFilial($filial);
+        }
     }
+}
+
+// If no filial but we have tenant, use tenant as default filial
+if (!$filial && $tenant) {
+    $filial = [
+        'id' => $tenant['id'],
+        'tenant_id' => $tenant['id'],
+        'nome' => $tenant['nome'],
+        'endereco' => $tenant['endereco'],
+        'telefone' => $tenant['telefone'],
+        'email' => $tenant['email'],
+        'cnpj' => $tenant['cnpj'],
+        'logo_url' => $tenant['logo_url'],
+        'status' => $tenant['status']
+    ];
+    $session->setFilial($filial);
+    error_log("Pedidos: Using tenant as default filial for user {$user['id']}");
+}
+
+if (!$tenant || !$filial) {
+    error_log("Pedidos: User {$user['id']} has no valid tenant/filial context");
+    header('Location: index.php?view=login');
+    exit;
 }
 
 // Get pedidos data
@@ -481,7 +516,7 @@ $stats = [
                                             <i class="fas fa-print"></i> Imprimir
                                         </button>
                                         <button type="button" class="btn btn-outline-danger btn-sm" onclick="excluirPedido(${pedido.idpedido})">
-                                            <i class="fas fa-trash"></i> Excluir
+                                            <i class="fas fa-trash"></i> <?php echo $_SESSION['user_type'] === 'cozinha' ? 'Cancelar' : 'Excluir'; ?>
                                         </button>
                                     </div>
                                 </div>
@@ -666,12 +701,17 @@ $stats = [
         }
 
         function excluirPedido(pedidoId) {
+            const userType = <?php echo json_encode($_SESSION['user_type'] ?? 'admin'); ?>;
+            const actionText = userType === 'cozinha' ? 'cancelar' : 'excluir';
+            const titleText = userType === 'cozinha' ? 'Cancelar Pedido' : 'Excluir Pedido';
+            const confirmText = userType === 'cozinha' ? 'Sim, cancelar' : 'Sim, excluir';
+            
             Swal.fire({
-                title: 'Excluir Pedido',
-                text: `Deseja realmente excluir o pedido #${pedidoId}?`,
+                title: titleText,
+                text: `Deseja realmente ${actionText} o pedido #${pedidoId}?`,
                 icon: 'warning',
                 showCancelButton: true,
-                confirmButtonText: 'Sim, excluir',
+                confirmButtonText: confirmText,
                 cancelButtonText: 'Cancelar',
                 confirmButtonColor: '#dc3545'
             }).then((result) => {

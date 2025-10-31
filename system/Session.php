@@ -127,6 +127,7 @@ class Session
 
     public function setTenant($tenant)
     {
+        error_log("Session::setTenant - Setting tenant: " . ($tenant['id'] ?? 'NULL') . " - " . ($tenant['nome'] ?? 'N/A'));
         $this->set('tenant', $tenant);
         $this->set('tenant_id', $tenant['id']);
         $this->set('tenant_nome', $tenant['nome']);
@@ -150,6 +151,7 @@ class Session
 
     public function setFilial($filial)
     {
+        error_log("Session::setFilial - Setting filial: " . ($filial['id'] ?? 'NULL') . " - " . ($filial['nome'] ?? 'N/A'));
         $this->set('filial', $filial);
         $this->set('filial_id', $filial['id']);
         $this->set('filial_nome', $filial['nome']);

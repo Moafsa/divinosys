@@ -24,17 +24,15 @@ echo "Redis is ready!"
 echo "Waiting for PostgreSQL to finish table creation..."
 sleep 10
 
-# Run database migration automatically
-echo "Running database migration..."
-php migrate.php
+# Run consolidated database migration
+# This script handles: init scripts, migrations, seeds, and sequence fixes
+echo "Running consolidated database migration..."
+php database_migrate.php
 
-# Run database schema fix
-echo "Running database schema fix..."
-php fix_database_schema.php
-
-# Auto-fix sequences (prevents duplicate key errors)
-echo "Auto-fixing sequences..."
-php auto_fix_sequences.php
+if [ $? -ne 0 ]; then
+  echo "⚠️  Warning: Database migration completed with errors"
+  echo "⚠️  The application will start anyway, but please check the logs"
+fi
 
 # Start Apache
 echo "Starting Apache..."

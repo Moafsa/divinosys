@@ -2,6 +2,7 @@
 // Incluir classes necessárias
 require_once __DIR__ . '/../../system/Database.php';
 require_once __DIR__ . '/../../system/Config.php';
+require_once __DIR__ . '/../../system/Session.php';
 
 header('Content-Type: application/json');
 
@@ -46,14 +47,32 @@ try {
             $session = \System\Session::getInstance();
             $session->setUser($user);
             
-            // Definir tenant_id na sessão se não estiver definido
-            if (!$session->getTenantId()) {
-                $session->set('tenant_id', $user['tenant_id'] ?? '1');
+            // Definir tenant_id na sessão
+            $tenantId = $user['tenant_id'] ?? 1;
+            $session->set('tenant_id', $tenantId);
+            
+            // Definir filial_id na sessão
+            $filialId = $user['filial_id'] ?? null;
+            
+            // Se não há filial específica, usar filial padrão do tenant
+            if ($filialId === null) {
+                $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+                $filialId = $filial_padrao ? $filial_padrao['id'] : null;
             }
             
-            // Definir filial_id na sessão se não estiver definido
-            if (!$session->getFilialId()) {
-                $session->set('filial_id', $user['filial_id'] ?? '1');
+            $session->set('filial_id', $filialId);
+            
+            // Buscar e definir dados completos do tenant e filial
+            $tenant = $db->fetch("SELECT * FROM tenants WHERE id = ?", [$tenantId]);
+            if ($tenant) {
+                $session->setTenant($tenant);
+            }
+            
+            if ($filialId) {
+                $filial = $db->fetch("SELECT * FROM filiais WHERE id = ? AND tenant_id = ?", [$filialId, $tenantId]);
+                if ($filial) {
+                    $session->setFilial($filial);
+                }
             }
             
             // Definir user_type na sessão para controle de acesso

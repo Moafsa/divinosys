@@ -14,7 +14,7 @@ class Database
 
     private function __construct()
     {
-        $this->config = Config::getInstance();
+        $this->config = \System\Config::getInstance();
         $this->connect();
     }
 
@@ -94,8 +94,31 @@ class Database
         return $stmt->fetchAll();
     }
 
+    /**
+     * Sanitize data before database operations
+     * Converts empty strings to NULL for date/datetime fields
+     */
+    private function sanitizeData($data)
+    {
+        foreach ($data as $key => $value) {
+            // Convert empty strings to NULL for date/datetime/timestamp fields
+            if (is_string($value) && empty($value) && 
+                (stripos($key, 'data_') === 0 || 
+                 stripos($key, '_date') !== false || 
+                 stripos($key, '_at') !== false ||
+                 in_array($key, ['data_nascimento', 'data_admissao', 'data_demissao', 
+                                'data_vencimento', 'data_inicio', 'data_fim', 'dueDate']))) {
+                $data[$key] = null;
+            }
+        }
+        return $data;
+    }
+
     public function insert($table, $data)
     {
+        // Sanitize data before insert
+        $data = $this->sanitizeData($data);
+        
         $columns = implode(',', array_keys($data));
         $placeholders = ':' . implode(', :', array_keys($data));
         
@@ -107,6 +130,9 @@ class Database
 
     public function update($table, $data, $where, $whereParams = [])
     {
+        // Sanitize data before update
+        $data = $this->sanitizeData($data);
+        
         $set = [];
         $params = [];
         $paramIndex = 1;

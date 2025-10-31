@@ -28,6 +28,7 @@ spl_autoload_register(function ($class) {
 require_once __DIR__ . '/../../system/Config.php';
 require_once __DIR__ . '/../../system/Database.php';
 require_once __DIR__ . '/../../system/Session.php';
+require_once __DIR__ . '/../../system/Middleware/SubscriptionCheck.php';
 
 try {
     $action = $_POST['action'] ?? $_GET['action'] ?? '';
@@ -63,9 +64,16 @@ try {
     
     switch ($action) {
         case 'criar_pedido':
+            // VERIFICAÇÃO DE ASSINATURA - Bloquear se trial expirado ou fatura vencida
+            if (!\System\Middleware\SubscriptionCheck::canPerformCriticalAction()) {
+                $status = \System\Middleware\SubscriptionCheck::checkSubscriptionStatus();
+                throw new \Exception($status['message'] . ' Para criar pedidos, regularize sua situação.');
+            }
+            
             $mesaId = $_POST['mesa_id'] ?? '';
             $itens = json_decode($_POST['itens'] ?? '[]', true);
             $observacao = $_POST['observacao'] ?? '';
+            $dadosCliente = json_decode($_POST['dados_cliente'] ?? '{}', true);
             
             if (empty($mesaId) || empty($itens)) {
                 throw new \Exception('Mesa e itens são obrigatórios');
@@ -85,6 +93,24 @@ try {
             $tenantId = $session->getTenantId() ?? 1;
             $filialId = $session->getFilialId() ?? 1;
             $usuarioId = $session->getUserId();
+            
+            // Process customer data if provided
+            $clienteId = null;
+            if (!empty($dadosCliente) && !empty($dadosCliente['nome'])) {
+                try {
+                    // Load ClienteController
+                    require_once __DIR__ . '/../../mvc/controller/ClienteController.php';
+                    $clienteController = new \MVC\Controller\ClienteController();
+                    
+                    // Create or find client
+                    $result = $clienteController->criarOuBuscarCliente($dadosCliente);
+                    if ($result['success'] && $result['cliente']) {
+                        $clienteId = $result['cliente']['id'];
+                    }
+                } catch (Exception $e) {
+                    error_log("Erro ao processar cliente: " . $e->getMessage());
+                }
+            }
             
         // Verificar se o usuário existe na tabela usuarios
         if ($usuarioId) {
@@ -165,7 +191,8 @@ try {
             // Criar pedido
             $pedidoId = $db->insert('pedido', [
                 'idmesa' => $mesaId,
-                'cliente' => 'Cliente Mesa',
+                'cliente' => $clienteId ? 'Cliente Cadastrado' : 'Cliente Mesa',
+                'usuario_global_id' => $clienteId,
                 'data' => date('Y-m-d'),
                 'hora_pedido' => date('H:i:s'),
                 'valor_total' => $valorTotal,
@@ -179,6 +206,17 @@ try {
                 'filial_id' => $filialId,
                 'delivery' => ($mesaId === '999') ? 1 : 0
             ]);
+            
+            // Register client interaction if client exists
+            if ($clienteId) {
+                try {
+                    require_once __DIR__ . '/../../mvc/controller/ClienteController.php';
+                    $clienteController = new \MVC\Controller\ClienteController();
+                    $clienteController->registrarInteracaoPedido($clienteId, $pedidoId, $valorTotal);
+                } catch (Exception $e) {
+                    error_log("Erro ao registrar interação do cliente: " . $e->getMessage());
+                }
+            }
             
             // Criar itens do pedido
             foreach ($itens as $item) {
@@ -256,7 +294,13 @@ try {
                 $db = \System\Database::getInstance();
                 $session = \System\Session::getInstance();
                 $tenantId = $session->getTenantId() ?? 1;
-                $filialId = $session->getFilialId() ?? 1;
+                $filialId = $session->getFilialId();
+                
+                // Se não há filial específica, usar filial padrão do tenant
+                if ($filialId === null) {
+                    $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+                    $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+                }
                 
                 error_log("Buscando pedido ID: $pedidoId, Tenant: $tenantId, Filial: $filialId");
             
@@ -432,7 +476,7 @@ try {
             ]);
             break;
             
-        case 'buscar_pedido':
+        case 'buscar_pedido_simples':
             $pedidoId = $_GET['pedido_id'] ?? $_POST['pedido_id'] ?? '';
             
             if (empty($pedidoId)) {
@@ -442,7 +486,13 @@ try {
             $db = \System\Database::getInstance();
             $session = \System\Session::getInstance();
             $tenantId = $session->getTenantId() ?? 1;
-            $filialId = $session->getFilialId() ?? 1;
+            $filialId = $session->getFilialId();
+            
+            // Se não há filial específica, usar filial padrão do tenant
+            if ($filialId === null) {
+                $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+                $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+            }
             
             // Buscar pedido
             $pedido = $db->fetch(
@@ -531,9 +581,12 @@ try {
             $tenantId = $session->getTenantId() ?? 1;
             $filialId = $session->getFilialId() ?? 1;
             
-            // Buscar dados do pedido para liberar a mesa
+            // Verificar tipo de usuário
+            $userType = $_SESSION['user_type'] ?? 'admin';
+            
+            // Buscar dados do pedido
             $pedido = $db->fetch(
-                "SELECT idmesa FROM pedido WHERE idpedido = ? AND tenant_id = ? AND filial_id = ?",
+                "SELECT idmesa, status FROM pedido WHERE idpedido = ? AND tenant_id = ? AND filial_id = ?",
                 [$pedidoId, $tenantId, $filialId]
             );
             
@@ -541,26 +594,56 @@ try {
                 throw new \Exception('Pedido não encontrado');
             }
             
-            // Excluir itens do pedido (cascade)
-            $db->delete('pedido_itens', 'pedido_id = ? AND tenant_id = ?', [$pedidoId, $tenantId]);
-            
-            // Excluir pedido
-            $db->delete('pedido', 'idpedido = ? AND tenant_id = ? AND filial_id = ?', [$pedidoId, $tenantId, $filialId]);
-            
-            // Liberar mesa se existir
-            if ($pedido['idmesa']) {
+            // Se for cozinha, apenas cancelar o pedido (não excluir)
+            if ($userType === 'cozinha') {
+                // Marcar pedido como cancelado
                 $db->update(
-                    'mesas',
-                    ['status' => '1'],
-                    'id_mesa = ? AND tenant_id = ? AND filial_id = ?',
-                    [$pedido['idmesa'], $tenantId, $filialId]
+                    'pedido',
+                    [
+                        'status' => 'Cancelado',
+                        'updated_at' => date('Y-m-d H:i:s')
+                    ],
+                    'idpedido = ? AND tenant_id = ? AND filial_id = ?',
+                    [$pedidoId, $tenantId, $filialId]
                 );
+                
+                // Liberar mesa se existir
+                if ($pedido['idmesa']) {
+                    $db->update(
+                        'mesas',
+                        ['status' => '1'],
+                        'id_mesa = ? AND tenant_id = ? AND filial_id = ?',
+                        [$pedido['idmesa'], $tenantId, $filialId]
+                    );
+                }
+                
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Pedido cancelado com sucesso!'
+                ]);
+            } else {
+                // Para outros tipos de usuário, excluir o pedido
+                // Excluir itens do pedido (cascade)
+                $db->delete('pedido_itens', 'pedido_id = ? AND tenant_id = ?', [$pedidoId, $tenantId]);
+                
+                // Excluir pedido
+                $db->delete('pedido', 'idpedido = ? AND tenant_id = ? AND filial_id = ?', [$pedidoId, $tenantId, $filialId]);
+                
+                // Liberar mesa se existir
+                if ($pedido['idmesa']) {
+                    $db->update(
+                        'mesas',
+                        ['status' => '1'],
+                        'id_mesa = ? AND tenant_id = ? AND filial_id = ?',
+                        [$pedido['idmesa'], $tenantId, $filialId]
+                    );
+                }
+                
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Pedido excluído com sucesso!'
+                ]);
             }
-            
-            echo json_encode([
-                'success' => true,
-                'message' => 'Pedido excluído com sucesso!'
-            ]);
             break;
             
         case 'atualizar_observacao':
@@ -857,7 +940,13 @@ try {
         $db = \System\Database::getInstance();
         $session = \System\Session::getInstance();
         $tenantId = $session->getTenantId() ?? 1;
-        $filialId = $session->getFilialId() ?? 1;
+        $filialId = $session->getFilialId();
+        
+        // Se não há filial específica, usar filial padrão do tenant
+        if ($filialId === null) {
+            $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+            $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+        }
         
         // Buscar pedidos ativos da mesa (excluindo quitados)
         $pedidos = $db->fetchAll(
@@ -908,7 +997,13 @@ try {
         $db = \System\Database::getInstance();
         $session = \System\Session::getInstance();
         $tenantId = $session->getTenantId() ?? 1;
-        $filialId = $session->getFilialId() ?? 1;
+        $filialId = $session->getFilialId();
+        
+        // Se não há filial específica, usar filial padrão do tenant
+        if ($filialId === null) {
+            $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+            $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+        }
         
         // Buscar pedido
         $pedido = $db->fetch(
@@ -917,7 +1012,18 @@ try {
         );
         
         if (!$pedido) {
-            throw new \Exception('Pedido não encontrado');
+            // Debug: verificar se o pedido existe sem filtro de filial
+            $pedido_debug = $db->fetch(
+                "SELECT * FROM pedido WHERE idpedido = ? AND tenant_id = ?",
+                [$pedidoId, $tenantId]
+            );
+            
+            if ($pedido_debug) {
+                error_log("Pedido encontrado mas com filial diferente: " . json_encode($pedido_debug));
+                throw new \Exception('Pedido encontrado mas pertence a outra filial. Filial do pedido: ' . ($pedido_debug['filial_id'] ?? 'NULL') . ', Filial atual: ' . ($filialId ?? 'NULL'));
+            } else {
+                throw new \Exception('Pedido não encontrado para este tenant');
+            }
         }
         
         // Atualizar pedido
@@ -962,7 +1068,13 @@ try {
         $db = \System\Database::getInstance();
         $session = \System\Session::getInstance();
         $tenantId = $session->getTenantId() ?? 1;
-        $filialId = $session->getFilialId() ?? 1;
+        $filialId = $session->getFilialId();
+        
+        // Se não há filial específica, usar filial padrão do tenant
+        if ($filialId === null) {
+            $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+            $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+        }
 
         // Buscar pedido de delivery
         $pedido = $db->fetch(

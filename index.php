@@ -1,5 +1,7 @@
 <?php
 
+
+
 // Start output buffering
 ob_start();
 
@@ -14,6 +16,9 @@ date_default_timezone_set('America/Sao_Paulo');
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+
+// Run database migrations automatically (after system is loaded)
+// This will be moved to a better location after system initialization
 
 // Define application paths
 define('APP_PATH', __DIR__);
@@ -30,12 +35,7 @@ if (!is_dir(LOGS_PATH)) {
     mkdir(LOGS_PATH, 0755, true);
 }
 
-// Auto-fix sequences on application start (only once per session)
-if (!isset($_SESSION['sequences_fixed'])) {
-    require_once __DIR__ . '/auto_fix_sequences.php';
-    autoFixSequences();
-    $_SESSION['sequences_fixed'] = true;
-}
+// Auto-fix sequences will be called after system initialization
 
 // Autoloader
 spl_autoload_register(function ($class) {
@@ -57,6 +57,30 @@ spl_autoload_register(function ($class) {
             require $file;
         }
     }
+    
+    // Carregar classes MVC sem namespace
+    $mvcClasses = [
+        'Tenant' => MVC_PATH . '/model/Tenant.php',
+        'Subscription' => MVC_PATH . '/model/Subscription.php',
+        'Payment' => MVC_PATH . '/model/Payment.php',
+        'Plan' => MVC_PATH . '/model/Plan.php',
+        'AsaasPayment' => MVC_PATH . '/model/AsaasPayment.php',
+        'SuperAdminController' => MVC_PATH . '/controller/SuperAdminController.php',
+    ];
+    
+    // Carregar classes System
+    $systemClasses = [
+        'System\\Cache' => SYSTEM_PATH . '/Cache.php',
+        'System\\Logger' => SYSTEM_PATH . '/Logger.php',
+    ];
+    
+    $allClasses = array_merge($mvcClasses, $systemClasses);
+    
+    if (isset($allClasses[$class])) {
+        if (file_exists($allClasses[$class])) {
+            require $allClasses[$class];
+        }
+    }
 });
 
 // Load Composer autoloader if exists
@@ -76,6 +100,34 @@ try {
     
     error_log('INDEX: Sistema inicializado');
     
+    // Auto-fix sequences after system initialization (only once per session)
+    if (!isset($_SESSION['sequences_fixed'])) {
+        $autoFixFile = __DIR__ . '/auto_fix_sequences.php';
+        
+        // Check if auto-fix file exists and is readable
+        if (file_exists($autoFixFile) && is_readable($autoFixFile)) {
+            try {
+                require_once $autoFixFile;
+                
+                // Check if function exists before calling
+                if (function_exists('autoFixSequences')) {
+                    autoFixSequences();
+                } else {
+                    error_log('Auto-fix sequences: Function autoFixSequences not found');
+                }
+            } catch (Exception $e) {
+                // Log error but don't break the application
+                error_log('Auto-fix sequences: Error loading or executing - ' . $e->getMessage());
+            }
+        } else {
+            // File doesn't exist or isn't readable - log but don't break
+            error_log('Auto-fix sequences: File not found or not readable: ' . $autoFixFile);
+        }
+        
+        // Mark as processed regardless of success/failure to prevent repeated attempts
+        $_SESSION['sequences_fixed'] = true;
+    }
+    
     // Handle AJAX requests
     if (!empty($_GET['action']) || !empty($_POST['action'])) {
         
@@ -89,6 +141,7 @@ try {
         
     // Mapear ações para arquivos AJAX
     $ajaxMap = [
+        'logout' => 'auth.php',
         'login' => 'login.php',
         'criar_usuario' => 'auth.php',
         'listar_usuarios' => 'auth.php',
@@ -103,6 +156,7 @@ try {
         'fechar_mesa_completa' => 'mesa_multiplos_pedidos_simples.php',
         'pagamentos_parciais' => 'pagamentos_parciais.php',
         'pedidos' => 'pedidos.php',
+        'clientes' => 'clientes.php',
         'produtos' => 'produtos.php',
         'excluir_produto' => 'produtos.php',
         // WhatsApp/Baileys actions
@@ -125,6 +179,37 @@ try {
         'search_products' => 'ai_chat.php',
         'search_ingredients' => 'ai_chat.php',
         'search_categories' => 'ai_chat.php',
+        // SuperAdmin actions
+        'getDashboardStats' => 'superadmin.php',
+        'listTenants' => 'superadmin.php',
+        'getTenant' => 'superadmin.php',
+        'getTenantSubscription' => 'superadmin.php',
+        'updateTenant' => 'superadmin.php',
+        'deleteTenant' => 'superadmin.php',
+        'toggleTenantStatus' => 'superadmin.php',
+        'listPlans' => 'superadmin.php',
+        'getPlan' => 'superadmin.php',
+        'createPlan' => 'superadmin.php',
+        'updatePlan' => 'superadmin.php',
+        'deletePlan' => 'superadmin.php',
+        'listPayments' => 'superadmin.php',
+        'markPaymentAsPaid' => 'superadmin.php',
+        'testAsaasConnection' => 'superadmin.php',
+        'getAsaasStats' => 'superadmin.php',
+        'createAsaasCharge' => 'superadmin.php',
+            'listSubscriptions' => 'superadmin.php',
+            'getSubscription' => 'superadmin.php',
+            'updateSubscription' => 'superadmin.php',
+            'deleteSubscription' => 'superadmin.php',
+        // WhatsApp instances
+        'listWhatsAppInstances' => 'superadmin.php',
+        'createWhatsAppInstance' => 'superadmin.php',
+        'getWhatsAppQRCode' => 'superadmin.php',
+        'deleteWhatsAppInstance' => 'superadmin.php',
+        'getFiliais' => 'superadmin.php',
+        // Tenant actions
+        'mudarPlano' => 'tenant_subscription.php',
+        'syncAsaasInvoices' => 'tenant_subscription.php',
     ];
         
         $ajaxFile = $ajaxMap[$action] ?? $action . '.php';

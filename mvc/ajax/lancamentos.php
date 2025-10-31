@@ -50,6 +50,10 @@ try {
     
     switch ($action) {
         case 'criar_lancamento':
+            // Debug log
+            error_log("LANÇAMENTOS: Creating financial entry");
+            error_log("LANÇAMENTOS: POST data: " . json_encode($_POST));
+            
             $tipoLancamento = $_POST['tipo_lancamento'] ?? '';
             $descricao = $_POST['descricao'] ?? '';
             $valor = $_POST['valor'] ?? '';
@@ -58,6 +62,8 @@ try {
             $contaId = $_POST['conta_id'] ?? '';
             $status = $_POST['status'] ?? 'confirmado';
             $observacoes = $_POST['observacoes'] ?? '';
+            
+            error_log("LANÇAMENTOS: Parsed values - tipo: $tipoLancamento, descricao: $descricao, valor: $valor, data: $dataLancamento, categoria: $categoriaId, conta: $contaId, status: $status");
             
             // Validações
             if (empty($tipoLancamento) || empty($descricao) || empty($valor) || empty($dataLancamento) || empty($categoriaId) || empty($contaId)) {

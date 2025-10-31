@@ -1,6 +1,11 @@
 <?php
 header('Content-Type: application/json');
 
+// Autoloader
+require_once __DIR__ . '/../../system/Config.php';
+require_once __DIR__ . '/../../system/Database.php';
+require_once __DIR__ . '/../../system/Session.php';
+
 try {
     $action = $_POST['action'] ?? '';
     

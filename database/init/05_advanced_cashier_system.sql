@@ -123,36 +123,13 @@ CREATE TABLE IF NOT EXISTS transacoes_pagamento (
 
 -- 8. TABELA DE CATEGORIAS FINANCEIRAS
 -- =====================================================
-CREATE TABLE IF NOT EXISTS categorias_financeiras (
-    id SERIAL PRIMARY KEY,
-    nome VARCHAR(100) NOT NULL,
-    tipo VARCHAR(20) NOT NULL CHECK (tipo IN ('receita', 'despesa')),
-    descricao TEXT,
-    cor VARCHAR(7) DEFAULT '#007bff',
-    ativo BOOLEAN DEFAULT true,
-    tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    filial_id INTEGER REFERENCES filiais(id) ON DELETE SET NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+-- NOTE: categorias_financeiras table is created in 02_create_missing_tables.sql
+-- Adding missing columns if they don't exist (none needed for now)
 
 -- 9. TABELA DE CONTAS FINANCEIRAS
 -- =====================================================
-CREATE TABLE IF NOT EXISTS contas_financeiras (
-    id SERIAL PRIMARY KEY,
-    nome VARCHAR(100) NOT NULL,
-    tipo VARCHAR(20) NOT NULL CHECK (tipo IN ('caixa', 'banco', 'cartao', 'pix', 'outros')),
-    saldo_inicial DECIMAL(10,2) DEFAULT 0.00,
-    saldo_atual DECIMAL(10,2) DEFAULT 0.00,
-    banco VARCHAR(100),
-    agencia VARCHAR(20),
-    conta VARCHAR(20),
-    ativo BOOLEAN DEFAULT true,
-    tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    filial_id INTEGER REFERENCES filiais(id) ON DELETE SET NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+-- NOTE: contas_financeiras table is created in 02_create_missing_tables.sql
+-- Adding missing columns if they don't exist (none needed for now)
 
 -- 10. TABELA DE MOVIMENTAÇÕES FINANCEIRAS DETALHADAS
 -- =====================================================

@@ -282,11 +282,98 @@ class WuzAPIManager
     }
     
     /**
+     * Format phone number to E.164 format for Brazil
+     * Handles cases like:
+     * - 5497092223 → +555497092223 (Brazil, DDD 54)
+     * - 54997092223 → +555497092223 (Brazil, DDD 54, removes extra 9)
+     * - 5541991710017 → +5541991710017 (Brazil, already with country code)
+     * - 5554997092223 → +555497092223 (Brazil, removes extra 9 after DDD)
+     * - +555497092223 → +555497092223 (already formatted)
+     */
+    private function formatPhoneNumber($phoneNumber) 
+    {
+        // Remove all non-numeric characters except +
+        $cleaned = preg_replace('/[^0-9+]/', '', $phoneNumber);
+        
+        // If already starts with +, remove it temporarily to process
+        $hasPlus = str_starts_with($cleaned, '+');
+        if ($hasPlus) {
+            $cleaned = substr($cleaned, 1);
+        }
+        
+        // Fix numbers with extra 9: If starts with 55 + DDD + 9 + number (like 5554997092223)
+        // Pattern: 55 + DD + 9 + 8 digits = 13 digits total (should be 55 + DD + 8 digits = 12 digits)
+        if (preg_match('/^55(\d{2})9(\d{8})$/', $cleaned, $matches)) {
+            $ddd = $matches[1];
+            $number = $matches[2];
+            // Validate DDD (Brazilian area codes are 11-99)
+            if ($ddd >= 11 && $ddd <= 99) {
+                $cleaned = '55' . $ddd . $number;
+                error_log("WuzAPIManager::formatPhoneNumber - Removed extra 9 from: $phoneNumber → 55$ddd$number");
+            }
+        }
+        
+        // Fix numbers with extra 9: If starts with DDD + 9 + number (like 54997092223)
+        // Pattern: DD + 9 + 8 digits = 11 digits total (should be DD + 8 digits = 10 digits)
+        if (preg_match('/^(\d{2})9(\d{8})$/', $cleaned, $matches)) {
+            $ddd = $matches[1];
+            $number = $matches[2];
+            // Validate DDD (Brazilian area codes are 11-99)
+            if ($ddd >= 11 && $ddd <= 99) {
+                $cleaned = $ddd . $number;
+                error_log("WuzAPIManager::formatPhoneNumber - Removed extra 9 from: $phoneNumber → $cleaned");
+            }
+        }
+        
+        // Now format to E.164
+        // If starts with 55 (Brazil country code), add +
+        if (str_starts_with($cleaned, '55')) {
+            return '+' . $cleaned;
+        }
+        
+        // If starts with 0 (Brazilian local format), remove 0 and add +55
+        if (str_starts_with($cleaned, '0')) {
+            $cleaned = substr($cleaned, 1);
+            return '+55' . $cleaned;
+        }
+        
+        // If it's a Brazilian DDD (2 digits) + 8 digits, add +55
+        // Brazilian mobile: DDD (2 digits) + 8 digits = 10 digits total
+        if (preg_match('/^(\d{2})(\d{8})$/', $cleaned, $matches)) {
+            $ddd = $matches[1];
+            $number = $matches[2];
+            // Validate DDD (Brazilian area codes are 11-99)
+            if ($ddd >= 11 && $ddd <= 99) {
+                return '+55' . $ddd . $number;
+            }
+        }
+        
+        // If it's a Brazilian DDD (2 digits) + 9 digits, add +55
+        // Brazilian mobile: DDD (2 digits) + 9 digits = 11 digits total
+        if (preg_match('/^(\d{2})(\d{9})$/', $cleaned, $matches)) {
+            $ddd = $matches[1];
+            $number = $matches[2];
+            // Validate DDD (Brazilian area codes are 11-99)
+            if ($ddd >= 11 && $ddd <= 99) {
+                return '+55' . $ddd . $number;
+            }
+        }
+        
+        // Default: assume Brazil and add +55
+        error_log("WuzAPIManager::formatPhoneNumber - Unrecognized format for: $phoneNumber, assuming Brazil (+55)");
+        return '+55' . $cleaned;
+    }
+
+    /**
      * Enviar mensagem via WuzAPI
      */
     public function sendMessage($instanceId, $phoneNumber, $message) 
     {
         try {
+            // Format phone number to E.164 before sending
+            $formattedPhone = $this->formatPhoneNumber($phoneNumber);
+            error_log("WuzAPIManager::sendMessage - Formatting: $phoneNumber → $formattedPhone");
+            
             // Buscar token da instância
             $db = \System\Database::getInstance();
             $instance = $db->query("SELECT wuzapi_token FROM whatsapp_instances WHERE id = ?", [$instanceId])->fetch();
@@ -299,20 +386,28 @@ class WuzAPIManager
             }
             
             // Formato correto para WuzAPI: Phone e Body (com maiúsculas)
+            // Remove o + para evitar truncamento na WuzAPI
+            $phoneForWuzAPI = ltrim($formattedPhone, '+');
             $data = [
-                'Phone' => $phoneNumber,
+                'Phone' => $phoneForWuzAPI,
                 'Body' => $message
             ];
+            
+            // Log the exact data being sent
+            error_log("WuzAPIManager::sendMessage - Data being sent: " . json_encode($data));
+            error_log("WuzAPIManager::sendMessage - Phone length: " . strlen($phoneForWuzAPI));
+            error_log("WuzAPIManager::sendMessage - Original: $formattedPhone, For WuzAPI: $phoneForWuzAPI");
             
             $response = $this->makeApiCall('POST', "/chat/send/text", json_encode($data), $instance['wuzapi_token']);
             
             if ($response && isset($response['success']) && $response['success']) {
-                error_log("WuzAPIManager::sendMessage - Mensagem enviada com sucesso para $phoneNumber");
+                error_log("WuzAPIManager::sendMessage - Mensagem enviada com sucesso para $formattedPhone (original: $phoneNumber)");
                 return [
                     'success' => true,
                     'message' => 'Mensagem enviada com sucesso',
                     'message_id' => $response['data']['Id'] ?? null,
-                    'response' => $response
+                    'response' => $response,
+                    'formatted_phone' => $formattedPhone
                 ];
             }
             
@@ -326,6 +421,81 @@ class WuzAPIManager
             return [
                 'success' => false,
                 'message' => 'Erro ao enviar mensagem: ' . $e->getMessage()
+            ];
+        }
+    }
+    
+    /**
+     * Enviar arquivo via WuzAPI
+     */
+    public function sendFile($instanceId, $phoneNumber, $fileUrl, $fileName, $caption = '') 
+    {
+        try {
+            // Format phone number to E.164 before sending
+            $formattedPhone = $this->formatPhoneNumber($phoneNumber);
+            error_log("WuzAPIManager::sendFile - Formatting: $phoneNumber → $formattedPhone");
+            
+            // Buscar token da instância
+            $db = \System\Database::getInstance();
+            $instance = $db->query("SELECT wuzapi_token FROM whatsapp_instances WHERE id = ?", [$instanceId])->fetch();
+            
+            if (!$instance || !$instance['wuzapi_token']) {
+                return [
+                    'success' => false,
+                    'message' => 'Token da instância não encontrado'
+                ];
+            }
+            
+            // Remove o + para evitar truncamento na WuzAPI
+            $phoneForWuzAPI = ltrim($formattedPhone, '+');
+            
+            // Determine file type based on extension
+            $fileExtension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+            $fileType = 'document'; // Default
+            
+            if (in_array($fileExtension, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
+                $fileType = 'image';
+            } elseif (in_array($fileExtension, ['mp4', 'avi', 'mov', 'wmv'])) {
+                $fileType = 'video';
+            } elseif (in_array($fileExtension, ['mp3', 'wav', 'ogg', 'm4a'])) {
+                $fileType = 'audio';
+            }
+            
+            $data = [
+                'Phone' => $phoneForWuzAPI,
+                'Body' => $fileUrl,
+                'Type' => $fileType,
+                'Caption' => $caption
+            ];
+            
+            // Log the exact data being sent
+            error_log("WuzAPIManager::sendFile - Data being sent: " . json_encode($data));
+            error_log("WuzAPIManager::sendFile - File URL: $fileUrl");
+            error_log("WuzAPIManager::sendFile - File Type: $fileType");
+            
+            $response = $this->makeApiCall('POST', "/chat/send/{$fileType}", json_encode($data), $instance['wuzapi_token']);
+            
+            if ($response && isset($response['success']) && $response['success']) {
+                error_log("WuzAPIManager::sendFile - Arquivo enviado com sucesso para $formattedPhone");
+                return [
+                    'success' => true,
+                    'message' => 'Arquivo enviado com sucesso',
+                    'message_id' => $response['data']['Id'] ?? null,
+                    'response' => $response,
+                    'formatted_phone' => $formattedPhone
+                ];
+            }
+            
+            return [
+                'success' => false,
+                'message' => 'Falha ao enviar arquivo: ' . ($response['error'] ?? 'Erro desconhecido')
+            ];
+            
+        } catch (Exception $e) {
+            error_log("WuzAPIManager::sendFile - Error: " . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'Erro ao enviar arquivo: ' . $e->getMessage()
             ];
         }
     }
@@ -354,6 +524,47 @@ class WuzAPIManager
         } catch (Exception $e) {
             error_log("WuzAPIManager::startSession - Error: " . $e->getMessage());
             return false;
+        }
+    }
+    
+    /**
+     * Obter QR Code de uma instância
+     */
+    public function getQRCode($token) 
+    {
+        try {
+            error_log("WuzAPIManager::getQRCode - Buscando QR Code para token: $token");
+            
+            // Buscar QR Code via API
+            $response = $this->makeApiCall('GET', "/session/qr", null, $token);
+            
+            error_log("WuzAPIManager::getQRCode - Resposta da API: " . json_encode($response));
+            
+            if ($response && isset($response['success']) && $response['success']) {
+                if (isset($response['data']['qrcode'])) {
+                    return [
+                        'success' => true,
+                        'qr_code' => $response['data']['qrcode']
+                    ];
+                } else {
+                    return [
+                        'success' => false,
+                        'message' => 'QR Code não disponível. A instância pode já estar conectada.'
+                    ];
+                }
+            }
+            
+            return [
+                'success' => false,
+                'message' => 'Erro ao buscar QR Code: ' . ($response['error'] ?? 'Erro desconhecido')
+            ];
+            
+        } catch (Exception $e) {
+            error_log("WuzAPIManager::getQRCode - Error: " . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'Erro ao buscar QR Code: ' . $e->getMessage()
+            ];
         }
     }
     

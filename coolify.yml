@@ -22,10 +22,15 @@ services:
       - USE_N8N_AI=${USE_N8N_AI:-false}
       - AI_N8N_WEBHOOK_URL=${AI_N8N_WEBHOOK_URL}
       - AI_N8N_TIMEOUT=${AI_N8N_TIMEOUT:-30}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # Asaas Payment Gateway
+      - ASAAS_API_KEY=${ASAAS_API_KEY:-}
+      - ASAAS_API_URL=${ASAAS_API_URL:-https://sandbox.asaas.com/api/v3}
+      - ASAAS_WEBHOOK_URL=${ASAAS_WEBHOOK_URL:-}
     volumes:
       - uploads:/var/www/html/uploads
       - logs:/var/www/html/logs
+      - backups:/var/www/html/backups
     depends_on:
       - postgres
       - redis
@@ -162,6 +167,8 @@ volumes:
   uploads:
     driver: local
   logs:
+    driver: local
+  backups:
     driver: local
   wuzapi_sessions:
     driver: local

@@ -18,6 +18,10 @@ return [
         'path' => 'mvc/views/onboarding.php',
         'auth_required' => false
     ],
+    'planos' => [
+        'path' => 'mvc/views/planos.php',
+        'auth_required' => false
+    ],
     
     // Views do SuperAdmin
     'superadmin_dashboard' => [
@@ -71,6 +75,10 @@ return [
     ],
     'estoque' => [
         'path' => 'mvc/views/estoque.php',
+        'auth_required' => true
+    ],
+    'asaas_config' => [
+        'path' => 'mvc/views/asaas_config.php',
         'auth_required' => true
     ],
     'configuracoes' => [

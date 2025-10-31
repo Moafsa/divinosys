@@ -1,11 +1,11 @@
 -- Insert essential data for Coolify deployment
 -- This creates the default tenant, user, and basic data
 
--- Insert plans
-INSERT INTO planos (id, nome, max_mesas, max_usuarios, max_produtos, max_pedidos_mes, recursos, preco_mensal, created_at) VALUES 
-(1, 'Plano Básico', 10, 3, 100, 1000, '{"delivery": true, "relatorios": false, "multi_filiais": false}', 49.90, CURRENT_TIMESTAMP),
-(2, 'Plano Profissional', 50, 10, 500, 5000, '{"delivery": true, "relatorios": true, "multi_filiais": true}', 99.90, CURRENT_TIMESTAMP),
-(3, 'Plano Empresarial', 200, 50, 2000, 20000, '{"delivery": true, "relatorios": true, "multi_filiais": true, "api": true}', 199.90, CURRENT_TIMESTAMP)
+-- Insert plans (com max_filiais e updated_at)
+INSERT INTO planos (id, nome, max_mesas, max_usuarios, max_produtos, max_pedidos_mes, max_filiais, recursos, preco_mensal, created_at, updated_at) VALUES 
+(1, 'Plano Básico', 10, 3, 100, 1000, 1, '{"delivery": true, "relatorios": false, "multi_filiais": false}', 49.90, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(2, 'Plano Profissional', 50, 10, 500, 5000, 3, '{"delivery": true, "relatorios": true, "multi_filiais": true}', 99.90, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(3, 'Plano Empresarial', 200, 50, 2000, 20000, 10, '{"delivery": true, "relatorios": true, "multi_filiais": true, "api": true}', 199.90, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 ON CONFLICT (id) DO NOTHING;
 
 -- Insert default tenant
@@ -58,31 +58,31 @@ INSERT INTO produtos (id, codigo, categoria_id, nome, descricao, preco_normal, p
 ON CONFLICT (id) DO NOTHING;
 
 -- Insert product ingredients
-INSERT INTO produto_ingredientes (id, produto_id, ingrediente_id, obrigatorio, created_at) VALUES 
-(1, 1, 2, false, CURRENT_TIMESTAMP),
-(2, 1, 3, false, CURRENT_TIMESTAMP),
-(3, 1, 5, false, CURRENT_TIMESTAMP),
-(4, 1, 7, false, CURRENT_TIMESTAMP),
-(5, 1, 9, false, CURRENT_TIMESTAMP)
+INSERT INTO produto_ingredientes (id, produto_id, ingrediente_id, obrigatorio, preco_adicional, padrao, tenant_id, filial_id, created_at) VALUES 
+(1, 1, 2, false, 0.00, true, 1, 1, CURRENT_TIMESTAMP),
+(2, 1, 3, false, 0.00, true, 1, 1, CURRENT_TIMESTAMP),
+(3, 1, 5, false, 0.00, true, 1, 1, CURRENT_TIMESTAMP),
+(4, 1, 7, false, 0.00, true, 1, 1, CURRENT_TIMESTAMP),
+(5, 1, 9, false, 0.00, true, 1, 1, CURRENT_TIMESTAMP)
 ON CONFLICT (id) DO NOTHING;
 
 -- Insert default tables
-INSERT INTO mesas (id, numero, capacidade, status, tenant_id, filial_id, created_at, updated_at) VALUES 
-(1, 1, 4, 'livre', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-(2, 2, 4, 'livre', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-(3, 3, 6, 'livre', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-(4, 4, 4, 'livre', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-(5, 5, 2, 'livre', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+INSERT INTO mesas (id, id_mesa, numero, nome, capacidade, status, tenant_id, filial_id, created_at, updated_at) VALUES 
+(1, '1', 1, '', 4, '1', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(2, '2', 2, '', 4, '1', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(3, '3', 3, '', 6, '1', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(4, '4', 4, '', 4, '1', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(5, '5', 5, '', 2, '1', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 ON CONFLICT (id) DO NOTHING;
 
--- Reset sequences to correct values
-SELECT setval('tenants_id_seq', 1, true);
-SELECT setval('planos_id_seq', 3, true);
-SELECT setval('filiais_id_seq', 1, true);
-SELECT setval('usuarios_id_seq', 1, true);
-SELECT setval('categorias_id_seq', 3, true);
-SELECT setval('ingredientes_id_seq', 12, true);
-SELECT setval('produtos_id_seq', 7, true);
-SELECT setval('mesas_id_seq', 5, true);
-SELECT setval('pedidos_idpedido_seq', 1, true);
-SELECT setval('pedido_itens_id_seq', 1, true);
+-- Reset sequences to correct values (using false parameter to avoid conflicts)
+SELECT setval('tenants_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM tenants), false);
+SELECT setval('planos_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM planos), false);
+SELECT setval('filiais_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM filiais), false);
+SELECT setval('usuarios_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM usuarios), false);
+SELECT setval('categorias_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM categorias), false);
+SELECT setval('ingredientes_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM ingredientes), false);
+SELECT setval('produtos_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM produtos), false);
+SELECT setval('mesas_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM mesas), false);
+SELECT setval('pedido_idpedido_seq', (SELECT COALESCE(MAX(idpedido), 0) + 1 FROM pedido), false);
+SELECT setval('pedido_itens_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM pedido_itens), false);

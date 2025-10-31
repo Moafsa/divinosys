@@ -28,7 +28,7 @@ class BaileysManager {
         try {
             // Garantir valores padrão válidos
             $tenantId = $tenantId ?: 1;
-            $filialId = $filialId ?: 1;
+            $filialId = $filialId ?: null;
             
             error_log("BaileysManager::createInstance - Tenant: $tenantId, Filial: $filialId, Webhook: $webhookUrl");
             
@@ -91,14 +91,21 @@ class BaileysManager {
     /**
      * Listar instâncias
      */
-    public function getInstances($tenantId) {
+    public function getInstances($tenantId, $filialId = null) {
         try {
-            error_log("BaileysManager::getInstances - Tenant ID: " . $tenantId);
+            error_log("BaileysManager::getInstances - Tenant ID: " . $tenantId . ", Filial ID: " . ($filialId ?? 'NULL'));
             
-            $instances = $this->db->fetchAll(
-                "SELECT * FROM whatsapp_instances WHERE tenant_id = ? AND ativo = true ORDER BY created_at DESC",
-                [$tenantId]
-            );
+            if ($filialId !== null) {
+                $instances = $this->db->fetchAll(
+                    "SELECT * FROM whatsapp_instances WHERE tenant_id = ? AND filial_id = ? AND ativo = true ORDER BY created_at DESC",
+                    [$tenantId, $filialId]
+                );
+            } else {
+                $instances = $this->db->fetchAll(
+                    "SELECT * FROM whatsapp_instances WHERE tenant_id = ? AND ativo = true ORDER BY created_at DESC",
+                    [$tenantId]
+                );
+            }
             
             error_log("BaileysManager::getInstances - Instâncias encontradas no DB: " . count($instances));
 

@@ -42,7 +42,15 @@ try {
     $db = \System\Database::getInstance();
     $session = \System\Session::getInstance();
     
-    $userId = $session->get('user_id') ?? 1;
+    // Debug session data
+    error_log("FINANCEIRO: Session data - " . json_encode([
+        'user_id' => $session->getUserId(),
+        'tenant_id' => $session->getTenantId(),
+        'filial_id' => $session->getFilialId(),
+        'is_logged_in' => $session->isLoggedIn()
+    ]));
+    
+    $userId = $session->getUserId() ?? 1;
     $tenantId = $session->getTenantId() ?? 1;
     $filialId = $session->getFilialId() ?? 1;
     
@@ -57,7 +65,7 @@ try {
             
             // Buscar dados completos do pedido
             $pedido = $db->fetch(
-                "SELECT DISTINCT p.idpedido, p.data, p.hora_pedido, p.cliente, p.telefone_cliente, 
+                "SELECT DISTINCT p.idpedido, p.data, p.hora_pedido, p.cliente, 
                         p.idmesa, p.valor_total, p.status_pagamento, p.status, p.observacao,
                         (SELECT SUM(CASE WHEN pp.forma_pagamento != 'FIADO' THEN pp.valor_pago ELSE 0 END) FROM pagamentos_pedido pp WHERE pp.pedido_id = p.idpedido AND pp.tenant_id = p.tenant_id AND pp.filial_id = p.filial_id) as total_pago_nao_fiado,
                         (SELECT SUM(CASE WHEN pp.forma_pagamento = 'FIADO' THEN pp.valor_pago ELSE 0 END) FROM pagamentos_pedido pp WHERE pp.pedido_id = p.idpedido AND pp.tenant_id = p.tenant_id AND pp.filial_id = p.filial_id) as total_pago_fiado,
@@ -88,9 +96,11 @@ try {
             break;
         
         case 'buscar_pedidos_fiado':
+            error_log("financeiro.php - buscar_pedidos_fiado - Tenant: $tenantId, Filial: $filialId");
+            
             // Buscar pedidos que tenham valores FIADO pendentes (não quitados)
             $pedidos = $db->fetchAll(
-                "SELECT DISTINCT p.idpedido, p.data, p.hora_pedido, p.cliente, p.telefone_cliente, 
+                "SELECT DISTINCT p.idpedido, p.data, p.hora_pedido, p.cliente, 
                         p.idmesa, p.valor_total, p.status_pagamento, p.status, p.observacao,
                         (SELECT SUM(CASE WHEN pp.forma_pagamento != 'FIADO' THEN pp.valor_pago ELSE 0 END) FROM pagamentos_pedido pp WHERE pp.pedido_id = p.idpedido AND pp.tenant_id = p.tenant_id AND pp.filial_id = p.filial_id) as total_pago_nao_fiado,
                         (SELECT SUM(CASE WHEN pp.forma_pagamento = 'FIADO' THEN pp.valor_pago ELSE 0 END) FROM pagamentos_pedido pp WHERE pp.pedido_id = p.idpedido AND pp.tenant_id = p.tenant_id AND pp.filial_id = p.filial_id) as total_pago_fiado,
@@ -109,6 +119,17 @@ try {
                  ORDER BY p.data DESC, p.hora_pedido DESC",
                 [$tenantId, $filialId, $tenantId, $filialId]
             );
+            
+            error_log("financeiro.php - buscar_pedidos_fiado - Encontrados: " . count($pedidos) . " pedidos");
+            
+            if (empty($pedidos)) {
+                error_log("financeiro.php - buscar_pedidos_fiado - NENHUM pedido encontrado. Verificando se existem pagamentos fiado...");
+                $checkFiado = $db->fetch(
+                    "SELECT COUNT(*) as total FROM pagamentos_pedido WHERE forma_pagamento = 'FIADO' AND tenant_id = ? AND filial_id = ?",
+                    [$tenantId, $filialId]
+                );
+                error_log("financeiro.php - buscar_pedidos_fiado - Total de pagamentos FIADO no banco: " . ($checkFiado['total'] ?? 0));
+            }
             
             // Filtrar apenas pedidos com saldo fiado real pendente
             $pedidosFiltrados = [];
@@ -129,13 +150,17 @@ try {
                 
                 $saldoFiadoReal = ($fiadoOriginal['total'] ?? 0) - ($fiadoQuitado['total'] ?? 0);
                 
-                if ($saldoFiadoReal > 0.01) {
-                    $pedido['saldo_fiado_pendente'] = $saldoFiadoReal;
-                    $pedidosFiltrados[] = $pedido;
-                }
+                error_log("financeiro.php - Pedido #{$pedido['idpedido']}: Fiado Original = " . ($fiadoOriginal['total'] ?? 0) . ", Fiado Quitado = " . ($fiadoQuitado['total'] ?? 0) . ", Saldo = $saldoFiadoReal");
+                
+                // Incluir todos os pedidos que tiveram FIADO (mesmo se já quitados)
+                // O frontend mostrará o status correto
+                $pedido['saldo_fiado_pendente'] = $saldoFiadoReal;
+                $pedidosFiltrados[] = $pedido;
             }
             
             $pedidos = $pedidosFiltrados;
+            
+            error_log("financeiro.php - buscar_pedidos_fiado - Retornando " . count($pedidos) . " pedidos após filtragem");
             
             echo json_encode([
                 'success' => true,
@@ -375,6 +400,191 @@ try {
                 $db->rollback();
                 throw $e;
             }
+            break;
+            
+        case 'criar_lancamento':
+            // Get form data
+            $tipoLancamento = $_POST['tipo_lancamento'] ?? '';
+            $descricao = $_POST['descricao'] ?? '';
+            $valor = $_POST['valor'] ?? '';
+            $dataLancamento = $_POST['data_lancamento'] ?? '';
+            $categoriaId = $_POST['categoria_id'] ?? '';
+            $contaId = $_POST['conta_id'] ?? '';
+            $status = $_POST['status'] ?? 'confirmado';
+            $observacoes = $_POST['observacoes'] ?? '';
+            
+            // Validate required fields
+            if (empty($tipoLancamento) || empty($descricao) || empty($valor) || empty($dataLancamento) || empty($contaId)) {
+                throw new \Exception('Todos os campos obrigatórios devem ser preenchidos');
+            }
+            
+            if (!in_array($tipoLancamento, ['receita', 'despesa', 'transferencia'])) {
+                throw new \Exception('Tipo de lançamento inválido');
+            }
+            
+            if (!in_array($status, ['pendente', 'confirmado'])) {
+                throw new \Exception('Status inválido');
+            }
+            
+            $valor = (float) $valor;
+            if ($valor <= 0) {
+                throw new \Exception('Valor deve ser maior que zero');
+            }
+            
+            // Create tables if they don't exist
+            $db->query("
+                CREATE TABLE IF NOT EXISTS categorias_financeiras (
+                    id SERIAL PRIMARY KEY,
+                    nome VARCHAR(255) NOT NULL,
+                    tipo VARCHAR(20) NOT NULL CHECK (tipo IN ('receita', 'despesa')),
+                    descricao TEXT,
+                    cor VARCHAR(7) DEFAULT '#007bff',
+                    ativo BOOLEAN DEFAULT true,
+                    tenant_id INTEGER NOT NULL,
+                    filial_id INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ");
+            
+            $db->query("
+                CREATE TABLE IF NOT EXISTS contas_financeiras (
+                    id SERIAL PRIMARY KEY,
+                    nome VARCHAR(255) NOT NULL,
+                    tipo VARCHAR(20) NOT NULL CHECK (tipo IN ('caixa', 'banco', 'cartao', 'outros')),
+                    saldo_atual DECIMAL(10,2) DEFAULT 0.00,
+                    descricao TEXT,
+                    ativo BOOLEAN DEFAULT true,
+                    tenant_id INTEGER NOT NULL,
+                    filial_id INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ");
+            
+            $db->query("
+                CREATE TABLE IF NOT EXISTS lancamentos_financeiros (
+                    id SERIAL PRIMARY KEY,
+                    tenant_id INTEGER NOT NULL,
+                    filial_id INTEGER,
+                    tipo_lancamento VARCHAR(20) NOT NULL CHECK (tipo_lancamento IN ('receita', 'despesa', 'transferencia')),
+                    categoria_id INTEGER,
+                    conta_id INTEGER NOT NULL,
+                    valor DECIMAL(10,2) NOT NULL,
+                    data_lancamento DATE NOT NULL,
+                    descricao TEXT NOT NULL,
+                    observacoes TEXT,
+                    status VARCHAR(20) DEFAULT 'confirmado' CHECK (status IN ('pendente', 'confirmado', 'cancelado')),
+                    usuario_id INTEGER,
+                    pedido_id INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ");
+            
+            // Insert default data if needed
+            $categorias = $db->fetchAll("SELECT * FROM categorias_financeiras WHERE tenant_id = ? AND filial_id = ?", [$tenantId, $filialId]);
+            if (empty($categorias)) {
+                $db->insert('categorias_financeiras', [
+                    'nome' => 'Vendas',
+                    'tipo' => 'receita',
+                    'cor' => '#28a745',
+                    'tenant_id' => $tenantId,
+                    'filial_id' => $filialId
+                ]);
+            }
+            
+            $contas = $db->fetchAll("SELECT * FROM contas_financeiras WHERE tenant_id = ? AND filial_id = ?", [$tenantId, $filialId]);
+            if (empty($contas)) {
+                $db->insert('contas_financeiras', [
+                    'nome' => 'Caixa',
+                    'tipo' => 'caixa',
+                    'saldo_atual' => 0.00,
+                    'tenant_id' => $tenantId,
+                    'filial_id' => $filialId
+                ]);
+            }
+            
+            // If no categoria_id provided, use first available
+            if (empty($categoriaId)) {
+                $categoria = $db->fetch("SELECT id FROM categorias_financeiras WHERE tenant_id = ? AND filial_id = ? LIMIT 1", [$tenantId, $filialId]);
+                $categoriaId = $categoria['id'] ?? null;
+            }
+            
+            // If no conta_id provided, use first available
+            if (empty($contaId)) {
+                $conta = $db->fetch("SELECT id FROM contas_financeiras WHERE tenant_id = ? AND filial_id = ? LIMIT 1", [$tenantId, $filialId]);
+                $contaId = $conta['id'] ?? null;
+            }
+            
+            if (!$contaId) {
+                throw new \Exception('Nenhuma conta disponível');
+            }
+            
+            // Handle transfer logic
+            if ($tipoLancamento === 'transferencia') {
+                $contaDestinoId = $_POST['conta_destino_id'] ?? '';
+                if (empty($contaDestinoId)) {
+                    throw new \Exception('Conta destino é obrigatória para transferências');
+                }
+                if ($contaId === $contaDestinoId) {
+                    throw new \Exception('Conta origem e destino devem ser diferentes');
+                }
+                
+                // Create two entries for transfer: debit and credit
+                $lancamentoId = $db->insert('lancamentos_financeiros', [
+                    'tenant_id' => $tenantId,
+                    'filial_id' => $filialId,
+                    'tipo_lancamento' => 'despesa',
+                    'categoria_id' => $categoriaId,
+                    'conta_id' => $contaId,
+                    'valor' => $valor,
+                    'data_lancamento' => $dataLancamento,
+                    'descricao' => 'Transferência: ' . $descricao,
+                    'observacoes' => $observacoes,
+                    'status' => $status,
+                    'usuario_id' => $userId
+                ]);
+                
+                $lancamentoId2 = $db->insert('lancamentos_financeiros', [
+                    'tenant_id' => $tenantId,
+                    'filial_id' => $filialId,
+                    'tipo_lancamento' => 'receita',
+                    'categoria_id' => $categoriaId,
+                    'conta_id' => $contaDestinoId,
+                    'valor' => $valor,
+                    'data_lancamento' => $dataLancamento,
+                    'descricao' => 'Transferência: ' . $descricao,
+                    'observacoes' => $observacoes,
+                    'status' => $status,
+                    'usuario_id' => $userId
+                ]);
+            } else {
+                // Create single entry for revenue/expense
+                $lancamentoId = $db->insert('lancamentos_financeiros', [
+                    'tenant_id' => $tenantId,
+                    'filial_id' => $filialId,
+                    'tipo_lancamento' => $tipoLancamento,
+                    'categoria_id' => $categoriaId,
+                    'conta_id' => $contaId,
+                    'valor' => $valor,
+                    'data_lancamento' => $dataLancamento,
+                    'descricao' => $descricao,
+                    'observacoes' => $observacoes,
+                    'status' => $status,
+                    'usuario_id' => $userId
+                ]);
+            }
+            
+            if (!$lancamentoId) {
+                throw new \Exception('Erro ao criar lançamento');
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Lançamento criado com sucesso!',
+                'lancamento_id' => $lancamentoId
+            ]);
             break;
             
         default:

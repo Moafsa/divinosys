@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS whatsapp_instances (
     session_data JSONB,
     webhook_url VARCHAR(500),
     n8n_webhook_url VARCHAR(500), -- Para assistente IA
+    wuzapi_instance_id VARCHAR(255), -- ID da instância na WuzAPI
+    wuzapi_token TEXT, -- Token de autenticação da WuzAPI
     ativo BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

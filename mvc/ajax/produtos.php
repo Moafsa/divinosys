@@ -225,11 +225,24 @@ try {
             
             if (empty($ingredienteId)) {
                 // Criar novo ingrediente
-                $stmt = $db->query("
-                    INSERT INTO ingredientes (nome, descricao, preco_adicional, ativo, tenant_id, filial_id) 
-                    VALUES (?, ?, ?, ?, ?, ?)
-                ");
-                $stmt->execute([$nome, $descricao, $precoAdicional, $ativo, $tenantId, $filialId]);
+                // Normalizar filial: se ausente ou inválida, usar filial padrão do tenant
+                $filialIdToUse = $filialId;
+                if ($filialIdToUse === null) {
+                    $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? ORDER BY id LIMIT 1", [$tenantId]);
+                    $filialIdToUse = $filial_padrao['id'] ?? null;
+                } else {
+                    $filial_valida = $db->fetch("SELECT id FROM filiais WHERE id = ? AND tenant_id = ?", [$filialIdToUse, $tenantId]);
+                    if (!$filial_valida) {
+                        $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? ORDER BY id LIMIT 1", [$tenantId]);
+                        $filialIdToUse = $filial_padrao['id'] ?? null;
+                    }
+                }
+                if ($filialIdToUse === null) {
+                    echo json_encode(['success' => false, 'message' => 'Nenhuma filial encontrada para este estabelecimento. Crie uma filial antes de cadastrar ingredientes.']);
+                    break;
+                }
+                $stmt = $db->query("INSERT INTO ingredientes (nome, descricao, preco_adicional, ativo, tenant_id, filial_id) VALUES (?, ?, ?, ?, ?, ?)");
+                $stmt->execute([$nome, $descricao, $precoAdicional, $ativo, $tenantId, $filialIdToUse]);
                 $message = 'Ingrediente criado com sucesso!';
             } else {
                 // Atualizar ingrediente existente

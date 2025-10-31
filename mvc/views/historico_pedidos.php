@@ -7,7 +7,7 @@ $db = \System\Database::getInstance();
 
 // Get current user
 $user = $session->getUser();
-$userId = $user['id'] ?? $_SESSION['usuario_global_id'] ?? null;
+$userId = $_SESSION['usuario_global_id'] ?? $_SESSION['user_id'] ?? $user['id'] ?? null;
 
 if (!$userId) {
     header('Location: index.php?view=login');
@@ -24,14 +24,11 @@ $filterDateTo = $_GET['data_ate'] ?? null;
 $query = "SELECT p.*, 
           t.nome as tenant_nome, 
           f.nome as filial_nome,
-          COALESCE(
-              (SELECT SUM(pg.valor) FROM pagamentos pg WHERE pg.pedido_id = p.id AND pg.status = 'confirmado'),
-              0
-          ) as total_pago
+          COALESCE(p.valor_pago, 0) as total_pago
           FROM pedido p
           LEFT JOIN tenants t ON p.tenant_id = t.id
           LEFT JOIN filiais f ON p.filial_id = f.id
-          WHERE p.usuario_global_id = ?";
+          WHERE p.usuario_id = ?";
 
 $params = [$userId];
 
@@ -46,16 +43,16 @@ if ($filterStatus) {
 }
 
 if ($filterDateFrom) {
-    $query .= " AND DATE(p.data_pedido) >= ?";
+    $query .= " AND DATE(p.data) >= ?";
     $params[] = $filterDateFrom;
 }
 
 if ($filterDateTo) {
-    $query .= " AND DATE(p.data_pedido) <= ?";
+    $query .= " AND DATE(p.data) <= ?";
     $params[] = $filterDateTo;
 }
 
-$query .= " ORDER BY p.data_pedido DESC LIMIT 50";
+$query .= " ORDER BY p.data DESC, p.hora_pedido DESC LIMIT 50";
 
 // Get orders
 $orders = $db->fetchAll($query, $params);
@@ -389,6 +386,7 @@ foreach ($orders as $order) {
     </script>
 </body>
 </html>
+
 
 
 

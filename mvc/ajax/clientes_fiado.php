@@ -5,6 +5,11 @@
 
 header('Content-Type: application/json');
 
+// Autoloader
+require_once __DIR__ . '/../../system/Config.php';
+require_once __DIR__ . '/../../system/Database.php';
+require_once __DIR__ . '/../../system/Session.php';
+
 try {
     $db = \System\Database::getInstance();
     $session = \System\Session::getInstance();

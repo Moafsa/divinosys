@@ -4,10 +4,11 @@ $session = \System\Session::getInstance();
 $router = \System\Router::getInstance();
 $db = \System\Database::getInstance();
 
-// Get current user, tenant and filial
+// Ensure tenant and filial context
+$context = \System\TenantHelper::ensureTenantContext();
+$tenant = $context['tenant'];
+$filial = $context['filial'];
 $user = $session->getUser();
-$tenant = $session->getTenant();
-$filial = $session->getFilial();
 
 // Get current mesa configuration
 $numeroMesasAtual = 25; // default
@@ -297,7 +298,7 @@ if ($tenant && $filial) {
                         <i class="fas fa-users me-2"></i>
                         Gerenciar Usuários
                     </h5>
-                    <p class="text-muted mb-3">Gerencie usuários internos e clientes do sistema</p>
+                    <p class="text-muted mb-3">Gerencie usuários internos do estabelecimento</p>
                     
                     <!-- Lista de Usuários -->
                     <div id="usuariosList" class="mb-3">
@@ -310,12 +311,56 @@ if ($tenant && $filial) {
                             <i class="fas fa-plus me-2"></i>
                             Novo Usuário
                         </button>
-                        <button class="btn btn-outline-info" onclick="abrirModalBuscarCliente()">
-                            <i class="fas fa-search me-2"></i>
-                            Buscar Cliente
+                    </div>
+                </div>
+
+                <!-- Configurações de Filiais - Apenas para filial principal (matriz) -->
+                <?php 
+                // Apenas a primeira filial (matriz) pode gerenciar outras filiais
+                $isFilialPrincipal = false;
+                if ($filial && $tenant) {
+                    // Buscar a primeira filial deste tenant (matriz)
+                    $primeiraFilial = $db->fetch(
+                        "SELECT id FROM filiais WHERE tenant_id = ? ORDER BY id LIMIT 1", 
+                        [$tenant['id']]
+                    );
+                    
+                    error_log("configuracoes.php - Filial atual: {$filial['id']}, Primeira filial: " . ($primeiraFilial['id'] ?? 'NULL'));
+                    
+                    // Se a filial atual é a primeira do tenant, é a matriz
+                    if ($primeiraFilial && $filial['id'] == $primeiraFilial['id']) {
+                        $isFilialPrincipal = true;
+                        error_log("configuracoes.php - É filial principal! Mostrando seção Gerenciar Filiais.");
+                    }
+                } else if ($tenant && !$filial) {
+                    // Se não há filial na sessão, assumir que é a matriz
+                    $isFilialPrincipal = true;
+                    error_log("configuracoes.php - Sem filial na sessão, assumindo matriz.");
+                }
+                ?>
+                
+                <?php if ($isFilialPrincipal): ?>
+                <div class="config-card">
+                    <h5 class="mb-3">
+                        <i class="fas fa-store me-2"></i>
+                        Gerenciar Filiais
+                    </h5>
+                    <p class="text-muted mb-3">Crie filiais como estabelecimentos independentes</p>
+                    
+                    <!-- Lista de Filiais -->
+                    <div id="filiaisList" class="mb-3">
+                        <!-- Filiais serão carregadas aqui via AJAX -->
+                    </div>
+                    
+                    <!-- Botões de Ação -->
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-primary" onclick="abrirModalNovaFilial()">
+                            <i class="fas fa-plus me-2"></i>
+                            Nova Filial
                         </button>
                     </div>
                 </div>
+                <?php endif; ?>
 
                 <!-- Configurações WhatsApp -->
                 <div class="config-card">
@@ -331,6 +376,181 @@ if ($tenant && $filial) {
                     <!-- Lista de Instâncias -->
                     <div id="caixasEntradaList" class="mt-3">
                         <!-- Instâncias serão carregadas aqui via AJAX -->
+                    </div>
+                </div>
+
+                <!-- Configurações Asaas -->
+                <div class="config-card">
+                    <h5 class="mb-3">
+                        <i class="fas fa-credit-card me-2"></i>
+                        Integração Asaas
+                    </h5>
+                    <p class="text-muted mb-3">Configure sua integração com o Asaas para emissão de notas fiscais e cobrança de pedidos</p>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Status da Integração</label>
+                                <div class="d-flex align-items-center">
+                                    <span class="badge bg-success me-2" id="asaas-status-badge">
+                                        <i class="fas fa-check-circle me-1"></i>
+                                        Configurado
+                                    </span>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="testarConexaoAsaas()">
+                                        <i class="fas fa-plug me-1"></i>
+                                        Testar Conexão
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Ambiente</label>
+                                <select class="form-select" id="asaas-environment" onchange="atualizarConfiguracaoAsaas()">
+                                    <option value="sandbox">Sandbox (Teste)</option>
+                                    <option value="production">Produção</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Chave API</label>
+                                <div class="input-group">
+                                    <input type="password" class="form-control" id="asaas-api-key" placeholder="Digite sua chave API do Asaas">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordVisibility('asaas-api-key')">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                                <small class="form-text text-muted">
+                                    Obtenha sua chave API em <a href="https://www.asaas.com/" target="_blank">www.asaas.com</a>
+                                </small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">ID do Cliente</label>
+                                <input type="text" class="form-control" id="asaas-customer-id" placeholder="ID do cliente no Asaas">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="asaas-enabled" onchange="atualizarConfiguracaoAsaas()">
+                                    <label class="form-check-label" for="asaas-enabled">
+                                        Habilitar integração com Asaas
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <button class="btn btn-success" onclick="salvarConfiguracaoAsaas()">
+                                    <i class="fas fa-save me-2"></i>
+                                    Salvar Configuração
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Informações Fiscais -->
+                    <hr class="my-4">
+                    <h6 class="mb-3">
+                        <i class="fas fa-file-invoice me-2"></i>
+                        Informações Fiscais
+                    </h6>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">CNPJ</label>
+                                <input type="text" class="form-control" id="fiscal-cnpj" placeholder="00.000.000/0000-00" maxlength="18">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Razão Social</label>
+                                <input type="text" class="form-control" id="fiscal-razao-social" placeholder="Nome da empresa">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Nome Fantasia</label>
+                                <input type="text" class="form-control" id="fiscal-nome-fantasia" placeholder="Nome comercial">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Inscrição Estadual</label>
+                                <input type="text" class="form-control" id="fiscal-inscricao-estadual" placeholder="Inscrição estadual">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">ID do Serviço Municipal</label>
+                                <input type="text" class="form-control" id="fiscal-municipal-service-id" placeholder="ID do serviço municipal">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Código do Serviço Municipal</label>
+                                <input type="text" class="form-control" id="fiscal-municipal-service-code" placeholder="Código do serviço municipal">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <button class="btn btn-info" onclick="salvarInformacoesFiscais()">
+                                <i class="fas fa-save me-2"></i>
+                                Salvar Informações Fiscais
+                            </button>
+                        </div>
+                        <div class="col-md-6">
+                            <button class="btn btn-outline-info" onclick="carregarOpcoesMunicipais()">
+                                <i class="fas fa-download me-2"></i>
+                                Carregar Opções Municipais
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Gestão de Notas Fiscais -->
+                    <hr class="my-4">
+                    <h6 class="mb-3">
+                        <i class="fas fa-receipt me-2"></i>
+                        Gestão de Notas Fiscais
+                    </h6>
+                    
+                    <div class="row">
+                        <div class="col-md-4">
+                            <button class="btn btn-primary" onclick="abrirGestaoNotasFiscais()">
+                                <i class="fas fa-list me-2"></i>
+                                Ver Notas Fiscais
+                            </button>
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-success" onclick="criarNotaFiscalPedido()">
+                                <i class="fas fa-plus me-2"></i>
+                                Criar Nota de Pedido
+                            </button>
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-outline-primary" onclick="abrirConfiguracaoAvancada()">
+                                <i class="fas fa-cog me-2"></i>
+                                Configuração Avançada
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -1485,6 +1705,514 @@ if ($tenant && $filial) {
                 }
             });
         }
+
+        // ===== FUNÇÕES PARA GERENCIAR FILIAIS =====
+        
+        // Carregar filiais ao carregar a página
+        document.addEventListener('DOMContentLoaded', function() {
+            carregarFiliais();
+        });
+
+        function carregarFiliais() {
+            fetch('mvc/ajax/filiais.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: 'action=listar_filiais'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    preencherFiliais(data.filiais);
+                } else {
+                    document.getElementById('filiaisList').innerHTML = '<p class="text-danger">Erro ao carregar filiais.</p>';
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                document.getElementById('filiaisList').innerHTML = '<p class="text-danger">Erro ao carregar filiais.</p>';
+            });
+        }
+
+        function preencherFiliais(filiais) {
+            const container = document.getElementById('filiaisList');
+            
+            if (filiais.length === 0) {
+                container.innerHTML = '<p class="text-muted">Nenhuma filial cadastrada.</p>';
+                return;
+            }
+
+            let html = '<div class="table-responsive"><table class="table table-sm">';
+            html += '<thead><tr><th>Estabelecimento</th><th>Login Admin</th><th>Status</th><th>Ações</th></tr></thead><tbody>';
+            
+            filiais.forEach(filial => {
+                const statusText = filial.status === 'ativo' ? 'Ativo' : 'Inativo';
+                const statusClass = filial.status === 'ativo' ? 'bg-success' : 'bg-danger';
+                
+                html += `
+                    <tr>
+                        <td><strong>${filial.nome}</strong><br><small class="text-muted">${filial.endereco || 'Endereço não informado'}</small></td>
+                        <td><code>${filial.login || 'N/A'}</code></td>
+                        <td><span class="badge ${statusClass}">${statusText}</span></td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-primary" onclick="verCredenciaisFilial('${filial.login || ''}')" title="Ver Credenciais">
+                                    <i class="fas fa-key"></i>
+                                </button>
+                                <button class="btn btn-outline-danger" onclick="excluirFilial(${filial.id}, '${filial.nome.replace(/'/g, "\\'")}')" title="Excluir">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
+        }
+
+        function abrirModalNovaFilial() {
+            Swal.fire({
+                title: 'Nova Filial',
+                html: `
+                    <div class="mb-3">
+                        <label class="form-label">Nome da Filial *</label>
+                        <input type="text" class="form-control" id="nomeFilial" placeholder="Ex: Filial Centro">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Login do Usuário *</label>
+                        <input type="text" class="form-control" id="loginFilial" placeholder="Ex: filial_centro">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Senha *</label>
+                        <input type="password" class="form-control" id="senhaFilial" placeholder="Senha forte">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nome Completo *</label>
+                        <input type="text" class="form-control" id="nomeCompletoFilial" placeholder="Nome do responsável">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Endereço da Filial</label>
+                        <textarea class="form-control" id="enderecoFilial" rows="2" placeholder="Endereço completo da filial"></textarea>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Criar Filial',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#007bff',
+                preConfirm: () => {
+                    const nomeFilial = document.getElementById('nomeFilial').value;
+                    const login = document.getElementById('loginFilial').value;
+                    const senha = document.getElementById('senhaFilial').value;
+                    const nome = document.getElementById('nomeCompletoFilial').value;
+                    const endereco = document.getElementById('enderecoFilial').value;
+                    
+                    if (!nomeFilial || !login || !senha || !nome) {
+                        Swal.showValidationMessage('Preencha todos os campos obrigatórios');
+                        return false;
+                    }
+                    
+                    return { nomeFilial, login, senha, nome, endereco };
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    criarFilial(result.value);
+                }
+            });
+        }
+
+        function criarFilial(dados) {
+            Swal.fire({
+                title: 'Criando Filial',
+                text: 'Criando usuário para a filial...',
+                icon: 'info',
+                showConfirmButton: false,
+                allowOutsideClick: false
+            });
+            
+            fetch('mvc/ajax/filiais.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: `action=criar_filial&nome_filial=${encodeURIComponent(dados.nomeFilial)}&login=${encodeURIComponent(dados.login)}&senha=${encodeURIComponent(dados.senha)}&nome=${encodeURIComponent(dados.nome)}&endereco=${encodeURIComponent(dados.endereco)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire({
+                        title: 'Filial Criada!',
+                        html: `
+                            <div class="text-start">
+                                <p><strong>Estabelecimento:</strong> ${dados.nomeFilial}</p>
+                                <p><strong>Login:</strong> <code>${dados.login}</code></p>
+                                <p><strong>Senha:</strong> <code>${dados.senha}</code></p>
+                                <hr>
+                                <div class="alert alert-info">
+                                    <i class="fas fa-info-circle"></i>
+                                    <strong>Como funciona:</strong><br>
+                                    • A filial é um <strong>estabelecimento independente</strong><br>
+                                    • Terá seu próprio dashboard <strong>zerado</strong><br>
+                                    • Pode configurar cardápio, produtos, etc.<br>
+                                    • Acessa o sistema normalmente com estas credenciais
+                                </div>
+                            </div>
+                        `,
+                        icon: 'success',
+                        confirmButtonText: 'OK'
+                    }).then(() => {
+                        carregarFiliais(); // Recarregar lista
+                    });
+                } else {
+                    Swal.fire('Erro', data.message || 'Erro ao criar filial', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire('Erro', 'Erro ao criar filial', 'error');
+            });
+        }
+
+        function verCredenciaisFilial(login) {
+            Swal.fire({
+                title: 'Credenciais de Acesso',
+                html: `
+                    <div class="text-start">
+                        <p><strong>URL de Acesso:</strong></p>
+                        <code>http://localhost:8080/index.php?view=login_admin</code>
+                        <hr>
+                        <p><strong>Login:</strong> <code>${login}</code></p>
+                        <p><strong>Senha:</strong> <code>123456</code> (padrão)</p>
+                        <hr>
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i>
+                            <strong>Como usar:</strong><br>
+                            1. O usuário da filial faz logout do sistema atual<br>
+                            2. Acessa a URL acima<br>
+                            3. Usa o login e senha para fazer login<br>
+                            4. Terá acesso ao sistema da filial (zerado)
+                        </div>
+                    </div>
+                `,
+                icon: 'info',
+                confirmButtonText: 'Entendi'
+            });
+        }
+
+        function excluirFilial(filialId, nome) {
+            Swal.fire({
+                title: 'Confirmar Exclusão',
+                html: `Deseja realmente excluir a filial <strong>${nome}</strong>?<br><br>
+                       <small class="text-danger">Esta ação não pode ser desfeita!</small>`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sim, excluir',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#dc3545'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    fetch('mvc/ajax/filiais.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        body: `action=excluir_filial&filial_id=${filialId}`
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Sucesso', 'Filial excluída com sucesso!', 'success').then(() => {
+                                carregarFiliais(); // Recarregar lista
+                            });
+                        } else {
+                            Swal.fire('Erro', data.message, 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro:', error);
+                        Swal.fire('Erro', 'Erro ao excluir filial', 'error');
+                    });
+                }
+            });
+        }
+
+        // ============================================
+        // FUNÇÕES ASAAS
+        // ============================================
+
+        // Carregar configuração atual do Asaas
+        function carregarConfiguracaoAsaas() {
+            fetch('mvc/ajax/asaas_config.php?action=getConfig', {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const config = data.data;
+                    document.getElementById('asaas-api-key').value = config.asaas_api_key || '';
+                    document.getElementById('asaas-customer-id').value = config.asaas_customer_id || '';
+                    document.getElementById('asaas-environment').value = config.asaas_environment || 'sandbox';
+                    document.getElementById('asaas-enabled').checked = config.asaas_enabled || false;
+                    
+                    // Atualizar status badge
+                    const statusBadge = document.getElementById('asaas-status-badge');
+                    if (config.asaas_enabled && config.asaas_api_key) {
+                        statusBadge.className = 'badge bg-success me-2';
+                        statusBadge.innerHTML = '<i class="fas fa-check-circle me-1"></i>Configurado';
+                    } else {
+                        statusBadge.className = 'badge bg-warning me-2';
+                        statusBadge.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>Não Configurado';
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao carregar configuração Asaas:', error);
+            });
+        }
+
+        // Salvar configuração do Asaas
+        function salvarConfiguracaoAsaas() {
+            const data = {
+                tenant_id: <?php echo $tenant['id']; ?>,
+                filial_id: <?php echo $filial['id'] ?? 'null'; ?>,
+                asaas_api_key: document.getElementById('asaas-api-key').value,
+                asaas_customer_id: document.getElementById('asaas-customer-id').value,
+                asaas_environment: document.getElementById('asaas-environment').value,
+                asaas_enabled: document.getElementById('asaas-enabled').checked
+            };
+
+            fetch('mvc/ajax/asaas_config.php?action=saveConfig', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire('Sucesso', 'Configuração do Asaas salva com sucesso!', 'success');
+                    carregarConfiguracaoAsaas(); // Recarregar configuração
+                } else {
+                    Swal.fire('Erro', data.error || 'Erro ao salvar configuração', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire('Erro', 'Erro ao salvar configuração', 'error');
+            });
+        }
+
+        // Testar conexão com Asaas
+        function testarConexaoAsaas() {
+            Swal.fire({
+                title: 'Testando Conexão...',
+                text: 'Aguarde enquanto testamos a conexão com o Asaas',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            fetch('mvc/ajax/asaas_config.php?action=testConnection', {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire({
+                        title: 'Conexão Bem-sucedida!',
+                        text: 'Sua integração com o Asaas está funcionando corretamente',
+                        icon: 'success',
+                        confirmButtonText: 'Ótimo!'
+                    });
+                } else {
+                    Swal.fire({
+                        title: 'Erro na Conexão',
+                        text: data.error || 'Não foi possível conectar com o Asaas',
+                        icon: 'error',
+                        confirmButtonText: 'Entendi'
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire('Erro', 'Erro ao testar conexão', 'error');
+            });
+        }
+
+        // Atualizar configuração automaticamente
+        function atualizarConfiguracaoAsaas() {
+            // Esta função pode ser chamada quando campos são alterados
+            // Por enquanto, apenas atualiza o status visual
+            const apiKey = document.getElementById('asaas-api-key').value;
+            const enabled = document.getElementById('asaas-enabled').checked;
+            
+            const statusBadge = document.getElementById('asaas-status-badge');
+            if (enabled && apiKey) {
+                statusBadge.className = 'badge bg-success me-2';
+                statusBadge.innerHTML = '<i class="fas fa-check-circle me-1"></i>Configurado';
+            } else {
+                statusBadge.className = 'badge bg-warning me-2';
+                statusBadge.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>Não Configurado';
+            }
+        }
+
+        // Salvar informações fiscais
+        function salvarInformacoesFiscais() {
+            const data = {
+                tenant_id: <?php echo $tenant['id']; ?>,
+                filial_id: <?php echo $filial['id'] ?? 'null'; ?>,
+                cnpj: document.getElementById('fiscal-cnpj').value,
+                razao_social: document.getElementById('fiscal-razao-social').value,
+                nome_fantasia: document.getElementById('fiscal-nome-fantasia').value,
+                inscricao_estadual: document.getElementById('fiscal-inscricao-estadual').value,
+                municipal_service_id: document.getElementById('fiscal-municipal-service-id').value,
+                municipal_service_code: document.getElementById('fiscal-municipal-service-code').value,
+                endereco: {
+                    // Aqui você pode adicionar campos de endereço se necessário
+                }
+            };
+
+            fetch('mvc/ajax/fiscal_info.php?action=createOrUpdateFiscalInfo', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire('Sucesso', 'Informações fiscais salvas com sucesso!', 'success');
+                } else {
+                    Swal.fire('Erro', data.error || 'Erro ao salvar informações fiscais', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire('Erro', 'Erro ao salvar informações fiscais', 'error');
+            });
+        }
+
+        // Carregar opções municipais
+        function carregarOpcoesMunicipais() {
+            Swal.fire({
+                title: 'Carregando Opções Municipais...',
+                text: 'Aguarde enquanto carregamos as opções disponíveis',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            fetch('mvc/ajax/fiscal_info.php?action=listMunicipalOptions', {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire({
+                        title: 'Opções Municipais Carregadas',
+                        text: 'As opções municipais foram carregadas com sucesso. Verifique os campos de serviço municipal.',
+                        icon: 'success',
+                        confirmButtonText: 'Ótimo!'
+                    });
+                } else {
+                    Swal.fire({
+                        title: 'Erro',
+                        text: data.error || 'Não foi possível carregar as opções municipais',
+                        icon: 'error',
+                        confirmButtonText: 'Entendi'
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire('Erro', 'Erro ao carregar opções municipais', 'error');
+            });
+        }
+
+        // Abrir gestão de notas fiscais
+        function abrirGestaoNotasFiscais() {
+            window.open('index.php?view=asaas_config', '_blank');
+        }
+
+        // Criar nota fiscal de pedido
+        function criarNotaFiscalPedido() {
+            Swal.fire({
+                title: 'Criar Nota Fiscal',
+                text: 'Esta funcionalidade abrirá uma lista de pedidos para seleção',
+                icon: 'info',
+                showCancelButton: true,
+                confirmButtonText: 'Continuar',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Aqui você pode implementar a lógica para selecionar pedidos
+                    Swal.fire('Info', 'Funcionalidade será implementada em breve', 'info');
+                }
+            });
+        }
+
+        // Abrir configuração avançada
+        function abrirConfiguracaoAvancada() {
+            window.open('index.php?view=asaas_config', '_blank');
+        }
+
+        // Toggle password visibility
+        function togglePasswordVisibility(inputId) {
+            const input = document.getElementById(inputId);
+            const button = input.nextElementSibling;
+            const icon = button.querySelector('i');
+            
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.className = 'fas fa-eye-slash';
+            } else {
+                input.type = 'password';
+                icon.className = 'fas fa-eye';
+            }
+        }
+
+        // Formatação de CNPJ
+        function formatarCNPJ(input) {
+            let value = input.value.replace(/\D/g, '');
+            if (value.length <= 14) {
+                value = value.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+                input.value = value;
+            }
+        }
+
+        // Adicionar event listeners quando a página carregar
+        document.addEventListener('DOMContentLoaded', function() {
+            // Carregar configuração do Asaas
+            carregarConfiguracaoAsaas();
+            
+            // Adicionar formatação de CNPJ
+            const cnpjInput = document.getElementById('fiscal-cnpj');
+            if (cnpjInput) {
+                cnpjInput.addEventListener('input', function() {
+                    formatarCNPJ(this);
+                });
+            }
+        });
 
     </script>
     

@@ -4,50 +4,108 @@ $session = \System\Session::getInstance();
 $router = \System\Router::getInstance();
 $db = \System\Database::getInstance();
 
-// Get current user, tenant and filial
+// Ensure tenant and filial context
+$context = \System\TenantHelper::ensureTenantContext();
+$tenant = $context['tenant'];
+$filial = $context['filial'];
 $user = $session->getUser();
-$tenant = $session->getTenant();
-$filial = $session->getFilial();
 
-// Debug: Se não tem tenant/filial, usar valores padrão
-if (!$tenant) {
-    $tenant = $db->fetch("SELECT * FROM tenants WHERE id = 1");
-    if ($tenant) {
-        $session->setTenant($tenant);
+// Get tenant and filial from user session
+if (!$tenant && $user) {
+    // Get tenant from user's tenant_id
+    $tenantId = $user['tenant_id'] ?? null;
+    if ($tenantId) {
+        $tenant = $db->fetch("SELECT * FROM tenants WHERE id = ?", [$tenantId]);
+        if ($tenant) {
+            $session->setTenant($tenant);
+        }
     }
 }
 
-if (!$filial) {
-    $filial = $db->fetch("SELECT * FROM filiais WHERE id = 1");
-    if ($filial) {
-        $session->setFilial($filial);
+if (!$filial && $user) {
+    // Get filial from user's filial_id
+    $filialId = $user['filial_id'] ?? null;
+    if ($filialId) {
+        $filial = $db->fetch("SELECT * FROM filiais WHERE id = ?", [$filialId]);
+        if ($filial) {
+            $session->setFilial($filial);
+        }
     }
+}
+
+// If still no tenant, this is an error - user should not access dashboard
+if (!$tenant) {
+    error_log("Dashboard: User {$user['id']} has no valid tenant context");
+    // Redirect to login or show error
+    header('Location: index.php?view=login');
+    exit;
+}
+
+// If no filial but we have tenant, use tenant as default filial
+if (!$filial && $tenant) {
+    $filial = [
+        'id' => $tenant['id'],
+        'tenant_id' => $tenant['id'],
+        'nome' => $tenant['nome'],
+        'endereco' => $tenant['endereco'],
+        'telefone' => $tenant['telefone'],
+        'email' => $tenant['email'],
+        'cnpj' => $tenant['cnpj'],
+        'logo_url' => $tenant['logo_url'],
+        'status' => $tenant['status']
+    ];
+    $session->setFilial($filial);
+    error_log("Dashboard: Using tenant as default filial for user {$user['id']}");
 }
 
 // Get mesas data
 $mesas = [];
-if ($tenant && $filial) {
-    $mesas = $db->fetchAll(
-        "SELECT * FROM mesas WHERE tenant_id = ? AND filial_id = ? ORDER BY id_mesa::integer",
-        [$tenant['id'], $filial['id']]
-    );
+if ($tenant) {
+    if ($filial) {
+        // Matriz user - get mesas for specific filial
+        $mesas = $db->fetchAll(
+            "SELECT * FROM mesas WHERE tenant_id = ? AND filial_id = ? ORDER BY id_mesa",
+            [$tenant['id'], $filial['id']]
+        );
+    } else {
+        // Filial user - get mesas for tenant (filial is the main branch)
+        $mesas = $db->fetchAll(
+            "SELECT * FROM mesas WHERE tenant_id = ? AND (filial_id = ? OR filial_id IS NULL) ORDER BY id_mesa",
+            [$tenant['id'], null]
+        );
+    }
 }
 
 // Get pedido ativos grouped by mesa - only truly active orders
 $pedido = [];
-if ($tenant && $filial) {
-    // Get only orders with valid status (remove time restriction to see all active orders)
-    $pedido = $db->fetchAll(
-        "SELECT p.*, m.numero as mesa_numero, m.id as mesa_id,
-                COUNT(p.idpedido) OVER (PARTITION BY p.idmesa) as total_pedido_mesa
-         FROM pedido p 
-         LEFT JOIN mesas m ON p.idmesa::varchar = m.id_mesa AND m.tenant_id = p.tenant_id AND m.filial_id = p.filial_id
-         WHERE p.tenant_id = ? AND p.filial_id = ? 
-         AND p.status IN ('Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega')
-         AND p.status_pagamento != 'quitado'
-         ORDER BY p.idmesa, p.created_at ASC",
-        [$tenant['id'], $filial['id']]
-    );
+if ($tenant) {
+    if ($filial) {
+        // Matriz user - get orders for specific filial
+        $pedido = $db->fetchAll(
+            "SELECT p.*, m.numero as mesa_numero, m.id as mesa_id,
+                    COUNT(p.idpedido) OVER (PARTITION BY p.idmesa) as total_pedido_mesa
+             FROM pedido p 
+             LEFT JOIN mesas m ON p.idmesa::varchar = m.id_mesa AND m.tenant_id = p.tenant_id AND m.filial_id = p.filial_id
+             WHERE p.tenant_id = ? AND p.filial_id = ? 
+             AND p.status IN ('Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega')
+             AND p.status_pagamento != 'quitado'
+             ORDER BY p.idmesa, p.created_at ASC",
+            [$tenant['id'], $filial['id']]
+        );
+    } else {
+        // Filial user - get orders for tenant (filial is the main branch)
+        $pedido = $db->fetchAll(
+            "SELECT p.*, m.numero as mesa_numero, m.id as mesa_id,
+                    COUNT(p.idpedido) OVER (PARTITION BY p.idmesa) as total_pedido_mesa
+             FROM pedido p 
+             LEFT JOIN mesas m ON p.idmesa::varchar = m.id_mesa AND m.tenant_id = p.tenant_id AND (m.filial_id = p.filial_id OR m.filial_id IS NULL)
+             WHERE p.tenant_id = ? AND (p.filial_id = ? OR p.filial_id IS NULL)
+             AND p.status IN ('Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega')
+             AND p.status_pagamento != 'quitado'
+             ORDER BY p.idmesa, p.created_at ASC",
+            [$tenant['id'], null]
+        );
+    }
 }
 
 // Group pedido by mesa - use idmesa as key for uniqueness
@@ -557,6 +615,9 @@ if ($tenant && $filial) {
     </style>
 </head>
 <body>
+    <!-- Subscription Alert Component -->
+    <?php include __DIR__ . '/components/subscription_alert.php'; ?>
+    
     <div class="container-fluid">
         <div class="row">
             <?php include __DIR__ . '/components/sidebar.php'; ?>

@@ -4,40 +4,30 @@
  * Gerencia os estabelecimentos (tenants) no sistema SaaS
  */
 
+use System\Database;
+
 class Tenant {
-    private $conn;
+    private $db;
     
     public function __construct() {
-        $this->conn = Database::getInstance()->getConnection();
+        $this->db = Database::getInstance();
     }
     
     /**
      * Criar novo tenant
      */
     public function create($data) {
-        $query = "INSERT INTO tenants 
-                  (nome, subdomain, cnpj, telefone, email, endereco, cor_primaria, status, plano_id) 
-                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
-                  RETURNING id";
-        
-        $result = pg_query_params($this->conn, $query, [
-            $data['nome'],
-            $data['subdomain'],
-            $data['cnpj'] ?? null,
-            $data['telefone'] ?? null,
-            $data['email'] ?? null,
-            $data['endereco'] ?? null,
-            $data['cor_primaria'] ?? '#007bff',
-            $data['status'] ?? 'ativo',
-            $data['plano_id']
+        return $this->db->insert('tenants', [
+            'nome' => $data['nome'],
+            'subdomain' => $data['subdomain'],
+            'cnpj' => $data['cnpj'] ?? null,
+            'telefone' => $data['telefone'] ?? null,
+            'email' => $data['email'] ?? null,
+            'endereco' => $data['endereco'] ?? null,
+            'cor_primaria' => $data['cor_primaria'] ?? '#007bff',
+            'status' => $data['status'] ?? 'ativo',
+            'plano_id' => $data['plano_id']
         ]);
-        
-        if ($result) {
-            $row = pg_fetch_assoc($result);
-            return $row['id'];
-        }
-        
-        return false;
     }
     
     /**
@@ -47,15 +37,9 @@ class Tenant {
         $query = "SELECT t.*, p.nome as plano_nome, p.recursos as plano_recursos
                   FROM tenants t
                   LEFT JOIN planos p ON t.plano_id = p.id
-                  WHERE t.id = $1";
+                  WHERE t.id = ?";
         
-        $result = pg_query_params($this->conn, $query, [$id]);
-        
-        if ($result && pg_num_rows($result) > 0) {
-            return pg_fetch_assoc($result);
-        }
-        
-        return null;
+        return $this->db->fetch($query, [$id]);
     }
     
     /**
@@ -65,15 +49,9 @@ class Tenant {
         $query = "SELECT t.*, p.nome as plano_nome, p.recursos as plano_recursos
                   FROM tenants t
                   LEFT JOIN planos p ON t.plano_id = p.id
-                  WHERE t.subdomain = $1";
+                  WHERE t.subdomain = ?";
         
-        $result = pg_query_params($this->conn, $query, [$subdomain]);
-        
-        if ($result && pg_num_rows($result) > 0) {
-            return pg_fetch_assoc($result);
-        }
-        
-        return null;
+        return $this->db->fetch($query, [$subdomain]);
     }
     
     /**
@@ -118,43 +96,29 @@ class Tenant {
             $query .= " OFFSET " . intval($filters['offset']);
         }
         
-        $result = pg_query_params($this->conn, $query, $params);
-        
-        if ($result) {
-            return pg_fetch_all($result) ?: [];
-        }
-        
-        return [];
+        return $this->db->fetchAll($query, $params);
     }
     
     /**
      * Atualizar tenant
      */
     public function update($id, $data) {
-        $fields = [];
-        $params = [];
-        $paramCount = 1;
-        
         $allowed_fields = ['nome', 'subdomain', 'cnpj', 'telefone', 'email', 'endereco', 'logo_url', 'cor_primaria', 'status', 'plano_id'];
         
+        $updateData = [];
         foreach ($allowed_fields as $field) {
             if (isset($data[$field])) {
-                $fields[] = "$field = $$paramCount";
-                $params[] = $data[$field];
-                $paramCount++;
+                $updateData[$field] = $data[$field];
             }
         }
         
-        if (empty($fields)) {
+        if (empty($updateData)) {
             return false;
         }
         
-        $fields[] = "updated_at = CURRENT_TIMESTAMP";
-        $params[] = $id;
+        $updateData['updated_at'] = date('Y-m-d H:i:s');
         
-        $query = "UPDATE tenants SET " . implode(', ', $fields) . " WHERE id = $$paramCount";
-        
-        return pg_query_params($this->conn, $query, $params);
+        return $this->db->update('tenants', $updateData, 'id = ?', [$id]);
     }
     
     /**
@@ -168,57 +132,40 @@ class Tenant {
      * Verificar se subdomain está disponível
      */
     public function isSubdomainAvailable($subdomain, $except_id = null) {
-        $query = "SELECT COUNT(*) as count FROM tenants WHERE subdomain = $1";
+        $query = "SELECT COUNT(*) as count FROM tenants WHERE subdomain = ?";
         $params = [$subdomain];
         
         if ($except_id) {
-            $query .= " AND id != $2";
+            $query .= " AND id != ?";
             $params[] = $except_id;
         }
         
-        $result = pg_query_params($this->conn, $query, $params);
+        $result = $this->db->fetch($query, $params);
         
-        if ($result) {
-            $row = pg_fetch_assoc($result);
-            return $row['count'] == 0;
-        }
-        
-        return false;
+        return $result && $result['count'] == 0;
     }
     
     /**
      * Estatísticas gerais
      */
     public function getStats() {
-        $query = "SELECT 
+        return $this->db->fetch("SELECT 
                     COUNT(*) as total_tenants,
                     COUNT(CASE WHEN status = 'ativo' THEN 1 END) as tenants_ativos,
                     COUNT(CASE WHEN status = 'inativo' THEN 1 END) as tenants_inativos,
                     COUNT(CASE WHEN status = 'suspenso' THEN 1 END) as tenants_suspensos
                   FROM tenants
-                  WHERE subdomain != 'admin'";
-        
-        $result = pg_query($this->conn, $query);
-        
-        if ($result && pg_num_rows($result) > 0) {
-            return pg_fetch_assoc($result);
-        }
-        
-        return null;
+                  WHERE subdomain != 'admin'");
     }
     
     /**
      * Buscar filiais de um tenant
      */
     public function getFiliais($tenant_id) {
-        $query = "SELECT * FROM filiais WHERE tenant_id = $1 ORDER BY created_at ASC";
-        $result = pg_query_params($this->conn, $query, [$tenant_id]);
-        
-        if ($result) {
-            return pg_fetch_all($result) ?: [];
-        }
-        
-        return [];
+        return $this->db->fetchAll(
+            "SELECT * FROM filiais WHERE tenant_id = ? ORDER BY created_at ASC",
+            [$tenant_id]
+        );
     }
 }
 

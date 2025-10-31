@@ -4,10 +4,11 @@ $session = \System\Session::getInstance();
 $router = \System\Router::getInstance();
 $db = \System\Database::getInstance();
 
-// Get current user, tenant and filial
+// Ensure tenant and filial context
+$context = \System\TenantHelper::ensureTenantContext();
+$tenant = $context['tenant'];
+$filial = $context['filial'];
 $user = $session->getUser();
-$tenant = $session->getTenant();
-$filial = $session->getFilial();
 
 // Debug: Se não tem tenant/filial, usar valores padrão
 if (!$tenant) {

@@ -27,6 +27,7 @@ require_once __DIR__ . '/../../system/Config.php';
 require_once __DIR__ . '/../../system/Database.php';
 require_once __DIR__ . '/../../system/Session.php';
 require_once __DIR__ . '/../../system/WhatsApp/BaileysManager.php';
+require_once __DIR__ . '/../../system/Middleware/SubscriptionCheck.php';
 
 try {
     $action = $_POST['action'] ?? '';
@@ -45,18 +46,26 @@ try {
             $db = \System\Database::getInstance();
             $session = \System\Session::getInstance();
             $tenantId = $session->getTenantId();
+            $filialId = $session->getFilialId();
             
-            // Atualizar tenant
+            // Salvar cor_primaria isolada por filial na tabela filial_settings
+            $db->query("
+                INSERT INTO filial_settings (tenant_id, filial_id, setting_key, setting_value, updated_at)
+                VALUES (?, ?, 'cor_primaria', ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (tenant_id, filial_id, setting_key) 
+                DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = CURRENT_TIMESTAMP
+            ", [$tenantId, $filialId, $corPrimaria]);
+            
+            // Atualizar nome do tenant (nome é global para o tenant)
             $db->update(
                 'tenants',
-                ['cor_primaria' => $corPrimaria, 'nome' => $nomeEstabelecimento],
+                ['nome' => $nomeEstabelecimento],
                 'id = ?',
                 [$tenantId]
             );
             
             // Atualizar sessão
             $tenant = $session->getTenant();
-            $tenant['cor_primaria'] = $corPrimaria;
             $tenant['nome'] = $nomeEstabelecimento;
             $session->setTenant($tenant);
             
@@ -73,9 +82,16 @@ try {
             
             $db = \System\Database::getInstance();
             
-            // Usar valores padrão para tenant_id e filial_id
-            $tenantId = 1;
-            $filialId = 1;
+            // Usar valores da sessão
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId() ?? 1;
+            $filialId = $session->getFilialId();
+            
+            // Se não há filial específica, usar filial padrão do tenant
+            if ($filialId === null) {
+                $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+                $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+            }
             
             // Deletar mesas existentes
             $db->delete('mesas', 'tenant_id = ? AND filial_id = ?', [$tenantId, $filialId]);
@@ -99,13 +115,15 @@ try {
         case 'listar_caixas_entrada':
             error_log("AJAX listar_caixas_entrada - Iniciando");
             
-            // Usar tenant_id fixo para teste (mesmo usado na criação)
-            $tenantId = 1;
+            // Usar tenant_id e filial_id da sessão atual
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId() ?? 1;
+            $filialId = $session->getFilialId();
             
-            error_log("AJAX listar_caixas_entrada - Tenant ID: " . $tenantId);
+            error_log("AJAX listar_caixas_entrada - Tenant ID: " . $tenantId . ", Filial ID: " . ($filialId ?? 'NULL'));
             
             $baileysManager = new \System\WhatsApp\BaileysManager();
-            $instancias = $baileysManager->getInstances($tenantId);
+            $instancias = $baileysManager->getInstances($tenantId, $filialId);
             
             error_log("AJAX listar_caixas_entrada - Instâncias encontradas: " . count($instancias));
             
@@ -190,6 +208,12 @@ try {
         // ===== USER MANAGEMENT FUNCTIONS =====
         
         case 'criar_usuario':
+            // VERIFICAÇÃO DE ASSINATURA - Bloquear criação se trial expirado ou fatura vencida
+            if (!\System\Middleware\SubscriptionCheck::canPerformCriticalAction()) {
+                $status = \System\Middleware\SubscriptionCheck::checkSubscriptionStatus();
+                throw new Exception($status['message'] . ' Para criar usuários, regularize sua situação.');
+            }
+            
             $nome = $_POST['nome'] ?? '';
             $email = $_POST['email'] ?? '';
             $telefone = $_POST['telefone'] ?? '';
@@ -249,28 +273,28 @@ try {
                 $db = \System\Database::getInstance();
                 $session = \System\Session::getInstance();
                 $tenantId = $session->getTenantId() ?? 1;
+                $filialId = $session->getFilialId();
                 
-                error_log("AJAX listar_usuarios - Tenant ID: " . $tenantId);
+                error_log("AJAX listar_usuarios - Tenant ID: $tenantId, Filial ID: " . ($filialId ?? 'NULL'));
                 
-                // Buscar usuários do estabelecimento
+                // Buscar apenas usuários internos da filial específica (funcionários, não clientes)
                 $usuarios = $db->fetchAll("
                     SELECT 
                         ug.id,
                         ug.nome,
                         ug.email,
                         ug.telefone,
-                        ug.tipo_usuario,
-                        ug.cpf,
-                        ug.cnpj,
-                        ug.endereco_completo,
-                        ug.ativo,
-                        ug.data_cadastro,
+                        ue.tipo_usuario,
                         ue.cargo,
-                        ue.ativo as ativo_estabelecimento
+                        CASE WHEN ue.ativo = true OR ue.ativo IS NULL THEN 'Ativo' ELSE 'Inativo' END as status,
+                        COALESCE(ue.ativo, true) as ativo
                     FROM usuarios_globais ug
-                    LEFT JOIN usuarios_estabelecimento ue ON ug.id = ue.usuario_global_id AND ue.tenant_id = ?
+                    INNER JOIN usuarios_estabelecimento ue ON ug.id = ue.usuario_global_id
+                    WHERE ue.tenant_id = ? 
+                    AND ue.filial_id = ?
+                    AND ue.tipo_usuario IN ('admin', 'cozinha', 'garcom', 'caixa', 'entregador')
                     ORDER BY ug.nome
-                ", [$tenantId]);
+                ", [$tenantId, $filialId]);
                 
                 error_log("AJAX listar_usuarios - Usuários encontrados: " . count($usuarios));
                 
@@ -367,9 +391,10 @@ try {
                 'updated_at' => date('Y-m-d H:i:s')
             ], 'id = ?', [$usuarioId]);
             
-            // Atualizar cargo na tabela usuarios_estabelecimento se for usuário interno
+            // Atualizar cargo e tipo_usuario na tabela usuarios_estabelecimento se for usuário interno
             if (in_array($tipoUsuario, ['admin', 'cozinha', 'garcom', 'caixa', 'entregador'])) {
                 $db->update('usuarios_estabelecimento', [
+                    'tipo_usuario' => $tipoUsuario, // Atualizar tipo_usuario
                     'cargo' => ucfirst($tipoUsuario),
                     'updated_at' => date('Y-m-d H:i:s')
                 ], 'usuario_global_id = ? AND tenant_id = ?', [$usuarioId, $tenantId]);

@@ -4,24 +4,54 @@ $session = \System\Session::getInstance();
 $router = \System\Router::getInstance();
 $db = \System\Database::getInstance();
 
-// Get current user, tenant and filial
+// Ensure tenant and filial context
+$context = \System\TenantHelper::ensureTenantContext();
+$tenant = $context['tenant'];
+$filial = $context['filial'];
 $user = $session->getUser();
-$tenant = $session->getTenant();
-$filial = $session->getFilial();
 
-// Debug: Se não tem tenant/filial, usar valores padrão
-if (!$tenant) {
-    $tenant = $db->fetch("SELECT * FROM tenants WHERE id = 1");
-    if ($tenant) {
-        $session->setTenant($tenant);
+// Get tenant and filial from user session
+if (!$tenant && $user) {
+    $tenantId = $user['tenant_id'] ?? null;
+    if ($tenantId) {
+        $tenant = $db->fetch("SELECT * FROM tenants WHERE id = ?", [$tenantId]);
+        if ($tenant) {
+            $session->setTenant($tenant);
+        }
     }
 }
 
-if (!$filial) {
-    $filial = $db->fetch("SELECT * FROM filiais WHERE id = 1");
-    if ($filial) {
-        $session->setFilial($filial);
+if (!$filial && $user) {
+    $filialId = $user['filial_id'] ?? null;
+    if ($filialId) {
+        $filial = $db->fetch("SELECT * FROM filiais WHERE id = ?", [$filialId]);
+        if ($filial) {
+            $session->setFilial($filial);
+        }
     }
+}
+
+// If no filial but we have tenant, use tenant as default filial
+if (!$filial && $tenant) {
+    $filial = [
+        'id' => $tenant['id'],
+        'tenant_id' => $tenant['id'],
+        'nome' => $tenant['nome'],
+        'endereco' => $tenant['endereco'],
+        'telefone' => $tenant['telefone'],
+        'email' => $tenant['email'],
+        'cnpj' => $tenant['cnpj'],
+        'logo_url' => $tenant['logo_url'],
+        'status' => $tenant['status']
+    ];
+    $session->setFilial($filial);
+    error_log("Financeiro: Using tenant as default filial for user {$user['id']}");
+}
+
+if (!$tenant || !$filial) {
+    error_log("Financeiro: User {$user['id']} has no valid tenant/filial context");
+    header('Location: index.php?view=login');
+    exit;
 }
 
 // Filtros
@@ -49,7 +79,7 @@ if ($tenant && $filial) {
     }
     
     if ($tipoFiltro !== 'todos') {
-        $whereConditions[] = "l.tipo = ?";
+        $whereConditions[] = "l.tipo_lancamento = ?";
         $params[] = $tipoFiltro;
     }
     
@@ -71,12 +101,11 @@ if ($tenant && $filial) {
     $lancamentos = $db->fetchAll(
         "SELECT l.*, c.nome as categoria_nome, c.cor as categoria_cor, c.icone as categoria_icone,
                 cf.nome as conta_nome, cf.tipo as conta_tipo, cf.cor as conta_cor,
-                u.login as usuario_nome, p.idpedido, p.cliente as pedido_cliente
+                u.login as usuario_nome
          FROM lancamentos_financeiros l
          LEFT JOIN categorias_financeiras c ON l.categoria_id = c.id
          LEFT JOIN contas_financeiras cf ON l.conta_id = cf.id
          LEFT JOIN usuarios u ON l.usuario_id = u.id
-         LEFT JOIN pedido p ON l.pedido_id = p.idpedido
          WHERE " . implode(' AND ', $whereConditions) . "
          ORDER BY l.created_at DESC",
         $params
@@ -306,66 +335,8 @@ $contas = $db->fetchAll(
 <body class="bg-light">
     <div class="container-fluid">
         <div class="row">
-            <!-- Sidebar -->
-            <div class="sidebar collapsed" id="sidebar">
-                <button class="sidebar-toggle" id="sidebarToggle">
-                    <i class="fas fa-bars"></i>
-                </button>
-                <div class="sidebar-content">
-                    <div class="sidebar-brand">
-                        <div class="brand-icon text-white">
-                            <i class="fas fa-utensils"></i>
-                        </div>
-                    </div>
-                    <nav class="nav flex-column">
-                        <a class="nav-link" href="<?php echo $router->url('dashboard'); ?>" data-tooltip="Dashboard">
-                            <i class="fas fa-tachometer-alt"></i>
-                            <span>Dashboard</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('pedidos'); ?>" data-tooltip="Pedidos">
-                            <i class="fas fa-list"></i>
-                            <span>Pedidos</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('delivery'); ?>" data-tooltip="Delivery">
-                            <i class="fas fa-motorcycle"></i>
-                            <span>Delivery</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('gerenciar_produtos'); ?>" data-tooltip="Produtos">
-                            <i class="fas fa-box"></i>
-                            <span>Produtos</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('estoque'); ?>" data-tooltip="Estoque">
-                            <i class="fas fa-warehouse"></i>
-                            <span>Estoque</span>
-                        </a>
-                        <a class="nav-link active" href="<?php echo $router->url('financeiro'); ?>" data-tooltip="Financeiro">
-                            <i class="fas fa-chart-line"></i>
-                            <span>Financeiro</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('relatorios'); ?>" data-tooltip="Relatórios">
-                            <i class="fas fa-chart-bar"></i>
-                            <span>Relatórios</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('clientes'); ?>" data-tooltip="Clientes">
-                            <i class="fas fa-users"></i>
-                            <span>Clientes</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('ai_chat'); ?>" data-tooltip="Assistente IA">
-                            <i class="fas fa-robot"></i>
-                            <span>Assistente IA</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('configuracoes'); ?>" data-tooltip="Configurações">
-                            <i class="fas fa-cog"></i>
-                            <span>Configurações</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('logout'); ?>" data-tooltip="Sair">
-                            <i class="fas fa-sign-out-alt"></i>
-                            <span>Sair</span>
-                        </a>
-                    </nav>
-                </div>
-            </div>
-
+            <?php include __DIR__ . '/components/sidebar.php'; ?>
+            
             <!-- Main Content -->
             <div class="main-content" id="mainContent">
                 <div class="p-4">
@@ -383,10 +354,34 @@ $contas = $db->fetchAll(
                         <i class="fas fa-plus me-1"></i>
                         Novo Lançamento
                     </a>
-                    <a href="<?php echo $router->url('gerar_relatorios'); ?>" class="btn btn-success">
+                    <a href="<?php echo $router->url('gerar_relatorios'); ?>" class="btn btn-success me-2">
                         <i class="fas fa-chart-bar me-1"></i>
                         Gerar Relatório
                     </a>
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-outline-info dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-download me-1"></i>
+                            Exportar
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="#" onclick="exportarDados('financial')">
+                                <i class="fas fa-list me-2"></i>Lançamentos
+                            </a></li>
+                            <li><a class="dropdown-item" href="#" onclick="exportarDados('orders')">
+                                <i class="fas fa-shopping-cart me-2"></i>Todos os Pedidos
+                            </a></li>
+                            <li><a class="dropdown-item" href="#" onclick="exportarDados('paid_orders')">
+                                <i class="fas fa-check-circle me-2"></i>Pedidos Quitados
+                            </a></li>
+                            <li><a class="dropdown-item" href="#" onclick="exportarDados('credit_orders')">
+                                <i class="fas fa-credit-card me-2"></i>Pedidos Fiados
+                            </a></li>
+                        </ul>
+                    </div>
+                    <button class="btn btn-outline-warning ms-2" onclick="abrirModalImportacao()">
+                        <i class="fas fa-upload me-1"></i>
+                        Importar
+                    </button>
                     </div>
                 </div>
 
@@ -1761,12 +1756,19 @@ $contas = $db->fetchAll(
             })
             .then(response => response.json())
             .then(data => {
+                console.log('📦 Resposta recebida:', data);
+                console.log('📦 Total de pedidos:', data.pedidos?.length || 0);
+                
                 if (data.success) {
                     const tabela = document.querySelector('#tabelaPedidosFiado tbody');
+                    console.log('📋 Tabela encontrada?', !!tabela);
+                    
                     if (tabela) {
                         if (data.pedidos.length === 0) {
+                            console.log('⚠️ Nenhum pedido fiado encontrado');
                             tabela.innerHTML = '<tr><td colspan="8" class="text-center text-muted"><i class="fas fa-info-circle me-2"></i>Nenhum pedido fiado encontrado</td></tr>';
                         } else {
+                            console.log('✅ Renderizando ' + data.pedidos.length + ' pedidos');
                             tabela.innerHTML = '';
                             let totalRecebiveis = 0;
                             
@@ -1789,7 +1791,7 @@ $contas = $db->fetchAll(
                                     <td>#${pedido.idpedido}</td>
                                     <td>${pedido.data} ${pedido.hora_pedido}</td>
                                     <td>${pedido.cliente || 'N/A'}</td>
-                                    <td>${pedido.telefone_cliente || 'N/A'}</td>
+                                    <td>-</td>
                                     <td>${pedido.idmesa == '999' ? 'Delivery' : `Mesa ${pedido.idmesa}`}</td>
                                     <td>
                                         <div>Total: R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</div>
@@ -1833,10 +1835,139 @@ $contas = $db->fetchAll(
             })
             .catch(error => {
                 console.error('❌ Erro ao carregar pedidos fiado:', error);
+                const tabela = document.querySelector('#tabelaPedidosFiado tbody');
+                if (tabela) {
+                    tabela.innerHTML = '<tr><td colspan="8" class="text-center text-danger"><i class="fas fa-exclamation-triangle me-2"></i>Erro ao carregar: ' + error.message + '</td></tr>';
+                }
             });
         }, 3000); // Aguardar 3 segundos para garantir que tudo esteja carregado
         
         console.log('✅ Script de carregamento automático configurado!');
+        
+        // Funções de exportação e importação
+        function exportarDados(tipo) {
+            const actions = {
+                'financial': 'export_financial',
+                'orders': 'export_orders',
+                'paid_orders': 'export_paid_orders',
+                'credit_orders': 'export_credit_orders'
+            };
+            
+            const action = actions[tipo];
+            if (!action) {
+                alert('Tipo de exportação inválido');
+                return;
+            }
+            
+            // Criar link de download
+            const url = `api/export_excel_fixed.php?action=${action}`;
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = '';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+        
+        function abrirModalImportacao() {
+            const modal = new bootstrap.Modal(document.getElementById('modalImportacao'));
+            modal.show();
+        }
+        
+        function importarDados() {
+            const fileInput = document.getElementById('importFile');
+            const tipoSelect = document.getElementById('importTipo');
+            
+            if (!fileInput.files[0]) {
+                alert('Selecione um arquivo para importar');
+                return;
+            }
+            
+            if (!tipoSelect.value) {
+                alert('Selecione o tipo de dados para importar');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('action', `import_${tipoSelect.value}`);
+            
+            // Mostrar loading
+            const btnImportar = document.getElementById('btnImportar');
+            const originalText = btnImportar.innerHTML;
+            btnImportar.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Importando...';
+            btnImportar.disabled = true;
+            
+            fetch('api/import.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`Importação concluída! ${data.imported} registros importados.`);
+                    if (data.errors && data.errors.length > 0) {
+                        console.warn('Erros durante importação:', data.errors);
+                    }
+                    // Recarregar a página para mostrar os dados atualizados
+                    location.reload();
+                } else {
+                    alert('Erro na importação: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                alert('Erro na importação: ' + error.message);
+            })
+            .finally(() => {
+                btnImportar.innerHTML = originalText;
+                btnImportar.disabled = false;
+            });
+        }
     </script>
+    
+    <!-- Modal de Importação -->
+    <div class="modal fade" id="modalImportacao" tabindex="-1" aria-labelledby="modalImportacaoLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalImportacaoLabel">
+                        <i class="fas fa-upload me-2"></i>
+                        Importar Dados Financeiros
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="importTipo" class="form-label">Tipo de Dados</label>
+                        <select class="form-select" id="importTipo" required>
+                            <option value="">Selecione o tipo de dados</option>
+                            <option value="financial">Lançamentos Financeiros</option>
+                            <option value="orders">Pedidos</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="importFile" class="form-label">Arquivo CSV</label>
+                        <input type="file" class="form-control" id="importFile" accept=".csv" required>
+                        <div class="form-text">
+                            Selecione um arquivo CSV exportado anteriormente do sistema.
+                        </div>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Importante:</strong> O arquivo deve estar no formato CSV exportado pelo sistema. 
+                        Dados existentes com o mesmo ID serão atualizados, novos registros serão criados.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="btnImportar" onclick="importarDados()">
+                        <i class="fas fa-upload me-1"></i>
+                        Importar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

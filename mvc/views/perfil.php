@@ -159,25 +159,25 @@ $establishments = $db->fetchAll(
                 <div class="col-md-6">
                     <div class="info-row">
                         <div class="info-label">Nome Completo</div>
-                        <div class="info-value"><?php echo htmlspecialchars($userData['nome'] ?? '-'); ?></div>
+                        <div class="info-value" data-field="nome"><?php echo htmlspecialchars($userData['nome'] ?? '-'); ?></div>
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="info-row">
                         <div class="info-label">CPF</div>
-                        <div class="info-value"><?php echo htmlspecialchars($userData['cpf'] ?? '-'); ?></div>
+                        <div class="info-value" data-field="cpf"><?php echo htmlspecialchars($userData['cpf'] ?? '-'); ?></div>
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="info-row">
                         <div class="info-label">Email</div>
-                        <div class="info-value"><?php echo htmlspecialchars($userData['email'] ?? '-'); ?></div>
+                        <div class="info-value" data-field="email"><?php echo htmlspecialchars($userData['email'] ?? '-'); ?></div>
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="info-row">
                         <div class="info-label">Data de Nascimento</div>
-                        <div class="info-value">
+                        <div class="info-value" data-field="data_nascimento">
                             <?php 
                             if (!empty($userData['data_nascimento'])) {
                                 echo date('d/m/Y', strtotime($userData['data_nascimento']));
@@ -191,18 +191,13 @@ $establishments = $db->fetchAll(
                 <div class="col-md-6">
                     <div class="info-row">
                         <div class="info-label">Telefone Principal</div>
-                        <div class="info-value">
-                            <?php 
-                            $telefone = $db->fetch("SELECT telefone FROM usuarios_telefones WHERE usuario_global_id = ? AND tipo = 'principal' LIMIT 1", [$userId]);
-                            echo htmlspecialchars($telefone['telefone'] ?? '-');
-                            ?>
-                        </div>
+                        <div class="info-value" data-field="telefone"><?php echo htmlspecialchars($userData['telefone'] ?? '-'); ?></div>
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="info-row">
                         <div class="info-label">Telefone Secundário</div>
-                        <div class="info-value"><?php echo htmlspecialchars($userData['telefone_secundario'] ?? '-'); ?></div>
+                        <div class="info-value" data-field="telefone_secundario"><?php echo htmlspecialchars($userData['telefone_secundario'] ?? '-'); ?></div>
                     </div>
                 </div>
             </div>
@@ -314,16 +309,92 @@ $establishments = $db->fetchAll(
                 <a href="<?php echo $router->url('historico_pedidos'); ?>" class="btn btn-primary me-2">
                     <i class="fas fa-history"></i> Ver Histórico de Pedidos
                 </a>
-                <button class="btn btn-outline-primary" onclick="alert('Funcionalidade de edição em desenvolvimento')">
+                <button class="btn btn-outline-primary" onclick="enableEdit()">
                     <i class="fas fa-edit"></i> Editar Perfil
+                </button>
+                <button class="btn btn-success d-none" id="saveBtn" onclick="saveProfile()">
+                    <i class="fas fa-save"></i> Salvar
+                </button>
+                <button class="btn btn-secondary d-none" id="cancelBtn" onclick="cancelEdit()">
+                    <i class="fas fa-times"></i> Cancelar
                 </button>
             </div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+    let editMode = false;
+    let originalData = {};
+
+    function enableEdit() {
+        editMode = true;
+        document.querySelectorAll('.info-value').forEach(el => {
+            const field = el.dataset.field;
+            if (field) {
+                const text = el.textContent.trim();
+                originalData[field] = text;
+                el.innerHTML = `<input type="text" class="form-control" value="${text}" data-field="${field}">`;
+            }
+        });
+        const editBtn = document.querySelector('button.btn-outline-primary');
+        if (editBtn) editBtn.classList.add('d-none');
+        const saveBtn = document.getElementById('saveBtn');
+        if (saveBtn) saveBtn.classList.remove('d-none');
+        const cancelBtn = document.getElementById('cancelBtn');
+        if (cancelBtn) cancelBtn.classList.remove('d-none');
+    }
+
+    function cancelEdit() {
+        editMode = false;
+        document.querySelectorAll('.info-value input').forEach(el => {
+            const field = el.dataset.field;
+            el.parentElement.innerHTML = `<span class="info-value" data-field="${field}">${originalData[field]}</span>`;
+        });
+        document.querySelector('button.btn-outline-primary').classList.remove('d-none');
+        document.getElementById('saveBtn').classList.add('d-none');
+        document.getElementById('cancelBtn').classList.add('d-none');
+    }
+
+    async function saveProfile() {
+        const data = {};
+        document.querySelectorAll('.info-value input').forEach(el => {
+            data[el.dataset.field] = el.value;
+        });
+
+        try {
+            const formData = new URLSearchParams({
+                action: 'atualizar',
+                id: '<?php echo $userId; ?>'
+            });
+            
+            Object.keys(data).forEach(key => {
+                formData.append(key, data[key]);
+            });
+
+            const response = await fetch('index.php?action=clientes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: formData
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                Swal.fire('Sucesso!', 'Perfil atualizado com sucesso!', 'success').then(() => {
+                    location.reload();
+                });
+            } else {
+                Swal.fire('Erro!', result.message || 'Erro ao atualizar perfil', 'error');
+            }
+        } catch (error) {
+            Swal.fire('Erro!', 'Erro ao salvar perfil: ' + error.message, 'error');
+        }
+    }
+    </script>
 </body>
 </html>
+
 
 
 

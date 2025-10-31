@@ -391,13 +391,23 @@ class Auth
                 [$codigoData['id']]
             );
 
-            // Buscar dados do estabelecimento do usuário (aceitar qualquer filial_id ou null)
-            $userEstablishment = self::$db->fetch(
-                "SELECT * FROM usuarios_estabelecimento 
-                 WHERE usuario_global_id = ? AND tenant_id = ? AND ativo = true
-                 ORDER BY filial_id DESC LIMIT 1",
-                [$codigoData['usuario_global_id'], $tenantId]
-            );
+            // Buscar dados do estabelecimento do usuário (filtrar por filial se fornecida)
+            if ($filialId !== null) {
+                $userEstablishment = self::$db->fetch(
+                    "SELECT * FROM usuarios_estabelecimento 
+                     WHERE usuario_global_id = ? AND tenant_id = ? AND filial_id = ? AND ativo = true
+                     LIMIT 1",
+                    [$codigoData['usuario_global_id'], $tenantId, $filialId]
+                );
+            } else {
+                // Se não tem filial específica, buscar qualquer vínculo do tenant
+                $userEstablishment = self::$db->fetch(
+                    "SELECT * FROM usuarios_estabelecimento 
+                     WHERE usuario_global_id = ? AND tenant_id = ? AND ativo = true
+                     ORDER BY filial_id ASC LIMIT 1",
+                    [$codigoData['usuario_global_id'], $tenantId]
+                );
+            }
 
             if (!$userEstablishment) {
                 return [
@@ -576,20 +586,20 @@ class Auth
             'admin' => [
                 'dashboard', 'pedidos', 'delivery', 'produtos', 'estoque', 
                 'financeiro', 'relatorios', 'clientes', 'configuracoes', 'usuarios',
-                'novo_pedido', 'mesas', 'relatorios_avancados'
+                'novo_pedido', 'relatorios_avancados', 'asaas_config', 'gerenciar_faturas', 'logout'
             ],
             'cozinha' => [
-                'dashboard', 'pedidos', 'estoque', 'produtos', 'gerenciar_produtos', 'gerar_pedido', 'novo_pedido', 'logout'
+                'dashboard', 'pedidos', 'estoque', 'produtos', 'gerenciar_produtos', 'novo_pedido', 'logout'
             ],
             'garcom' => [
-                'novo_pedido', 'pedidos', 'delivery', 'dashboard', 'mesas', 'logout'
+                'dashboard', 'novo_pedido', 'pedidos', 'delivery', 'estoque', 'produtos', 'gerenciar_produtos', 'logout'
             ],
             'entregador' => [
-                'delivery', 'pedidos', 'logout'
+                'delivery', 'pedidos', 'novo_pedido', 'logout'
             ],
             'caixa' => [
                 'dashboard', 'novo_pedido', 'delivery', 'produtos', 'estoque', 
-                'pedidos', 'financeiro', 'mesas', 'logout'
+                'pedidos', 'financeiro', 'logout'
             ],
             'cliente' => [
                 'cliente_dashboard', 'historico_pedidos', 'perfil', 'novo_pedido', 'gerar_pedido', 'pedidos', 'logout'

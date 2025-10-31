@@ -4,10 +4,11 @@ $session = \System\Session::getInstance();
 $router = \System\Router::getInstance();
 $db = \System\Database::getInstance();
 
-// Get current user, tenant and filial
+// Ensure tenant and filial context
+$context = \System\TenantHelper::ensureTenantContext();
+$tenant = $context['tenant'];
+$filial = $context['filial'];
 $user = $session->getUser();
-$tenant = $session->getTenant();
-$filial = $session->getFilial();
 
 // Get produtos data with ingredients
 $produtos = [];
@@ -20,6 +21,20 @@ if ($tenant && $filial) {
          ORDER BY c.nome, p.nome",
         [$tenant['id'], $filial['id']]
     );
+    
+    error_log("========== GERENCIAR PRODUTOS ==========");
+    error_log("Session Tenant: " . ($tenant ? $tenant['id'] : 'NULL'));
+    error_log("Session Filial: " . ($filial ? $filial['id'] : 'NULL'));
+    error_log("Produtos encontrados: " . count($produtos));
+    error_log("IDs únicos: " . count(array_unique(array_column($produtos, 'id'))));
+    
+    if (count($produtos) > 0) {
+        error_log("TODOS os produtos retornados:");
+        foreach ($produtos as $idx => $prod) {
+            error_log("  [$idx] ID:{$prod['id']}, Nome:{$prod['nome']}, tenant:{$prod['tenant_id']}, filial:{$prod['filial_id']}");
+        }
+    }
+    error_log("========================================");
     
     // Get ingredients for each product (if tables exist)
     foreach ($produtos as &$produto) {
@@ -37,6 +52,7 @@ if ($tenant && $filial) {
             $produto['ingredientes'] = [];
         }
     }
+    unset($produto); // Break reference to avoid side effects
 }
 
 // Get categorias
@@ -50,6 +66,34 @@ if ($tenant && $filial) {
     } catch (Exception $e) {
         $categorias = [];
     }
+} else {
+    // Se não há tenant/filial na sessão, usar valores padrão
+    $tenantId = $session->getTenantId() ?? 1;
+    $filialId = $session->getFilialId();
+    
+    if ($filialId === null) {
+        // Se não há filial específica, usar filial padrão do tenant
+        $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+        $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+    }
+    
+    try {
+        if ($filialId === null) {
+            // Se não há filial específica, buscar categorias sem filial ou com filial padrão
+            $categorias = $db->fetchAll(
+                "SELECT * FROM categorias WHERE tenant_id = ? AND (filial_id IS NULL OR filial_id = (SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1)) ORDER BY nome",
+                [$tenantId, $tenantId]
+            );
+        } else {
+            // Se há filial específica, buscar categorias da filial
+            $categorias = $db->fetchAll(
+                "SELECT * FROM categorias WHERE tenant_id = ? AND filial_id = ? ORDER BY nome",
+                [$tenantId, $filialId]
+            );
+        }
+    } catch (Exception $e) {
+        $categorias = [];
+    }
 }
 
 // Get ingredientes (if table exists)
@@ -60,6 +104,34 @@ if ($tenant && $filial) {
             "SELECT * FROM ingredientes WHERE tenant_id = ? AND filial_id = ? ORDER BY nome",
             [$tenant['id'], $filial['id']]
         );
+    } catch (Exception $e) {
+        $ingredientes = [];
+    }
+} else {
+    // Se não há tenant/filial na sessão, usar valores padrão
+    $tenantId = $session->getTenantId() ?? 1;
+    $filialId = $session->getFilialId();
+    
+    if ($filialId === null) {
+        // Se não há filial específica, usar filial padrão do tenant
+        $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+        $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+    }
+    
+    try {
+        if ($filialId === null) {
+            // Se não há filial específica, buscar ingredientes sem filial ou com filial padrão
+            $ingredientes = $db->fetchAll(
+                "SELECT * FROM ingredientes WHERE tenant_id = ? AND (filial_id IS NULL OR filial_id = (SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1)) ORDER BY nome",
+                [$tenantId, $tenantId]
+            );
+        } else {
+            // Se há filial específica, buscar ingredientes da filial
+            $ingredientes = $db->fetchAll(
+                "SELECT * FROM ingredientes WHERE tenant_id = ? AND filial_id = ? ORDER BY nome",
+                [$tenantId, $filialId]
+            );
+        }
     } catch (Exception $e) {
         $ingredientes = [];
     }
@@ -197,66 +269,8 @@ if ($tenant && $filial) {
 <body>
     <div class="container-fluid">
         <div class="row">
-            <!-- Sidebar -->
-            <div class="sidebar collapsed" id="sidebar">
-                <button class="sidebar-toggle" id="sidebarToggle">
-                    <i class="fas fa-bars"></i>
-                </button>
-                <div class="sidebar-content">
-                    <div class="sidebar-brand">
-                        <div class="brand-icon text-white">
-                            <i class="fas fa-utensils"></i>
-                        </div>
-                    </div>
-                    <nav class="nav flex-column">
-                        <a class="nav-link" href="<?php echo $router->url('dashboard'); ?>" data-tooltip="Dashboard">
-                            <i class="fas fa-tachometer-alt"></i>
-                            <span>Dashboard</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('gerar_pedido'); ?>" data-tooltip="Novo Pedido">
-                            <i class="fas fa-plus-circle"></i>
-                            <span>Novo Pedido</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('pedidos'); ?>" data-tooltip="Pedidos">
-                            <i class="fas fa-list"></i>
-                            <span>Pedidos</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('delivery'); ?>" data-tooltip="Delivery">
-                            <i class="fas fa-motorcycle"></i>
-                            <span>Delivery</span>
-                        </a>
-                        <a class="nav-link active" href="<?php echo $router->url('gerenciar_produtos'); ?>" data-tooltip="Produtos">
-                            <i class="fas fa-box"></i>
-                            <span>Produtos</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('estoque'); ?>" data-tooltip="Estoque">
-                            <i class="fas fa-warehouse"></i>
-                            <span>Estoque</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('financeiro'); ?>" data-tooltip="Financeiro">
-                            <i class="fas fa-chart-line"></i>
-                            <span>Financeiro</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('relatorios'); ?>" data-tooltip="Relatórios">
-                            <i class="fas fa-chart-bar"></i>
-                            <span>Relatórios</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('clientes'); ?>" data-tooltip="Clientes">
-                            <i class="fas fa-users"></i>
-                            <span>Clientes</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('configuracoes'); ?>" data-tooltip="Configurações">
-                            <i class="fas fa-cog"></i>
-                            <span>Configurações</span>
-                        </a>
-                        <hr class="text-white-50">
-                        <a class="nav-link" href="<?php echo $router->url('logout'); ?>" data-tooltip="Sair">
-                            <i class="fas fa-sign-out-alt"></i>
-                            <span>Sair</span>
-                        </a>
-                    </nav>
-                </div>
-            </div>
+            <!-- Sidebar Dinâmica -->
+            <?php include __DIR__ . '/components/sidebar.php'; ?>
 
             <!-- Main Content -->
             <div class="main-content expanded">
@@ -272,7 +286,7 @@ if ($tenant && $filial) {
                             <p class="text-muted mb-0">Gerenciamento de produtos e categorias</p>
                         </div>
                         <div class="col-md-6">
-                            <div class="d-flex justify-content-end gap-2">
+                            <div class="d-flex justify-content-end gap-2 flex-wrap">
                                 <button class="btn btn-outline-primary" onclick="abrirModalProduto()">
                                     <i class="fas fa-plus me-1"></i>
                                     Novo Produto
@@ -284,6 +298,27 @@ if ($tenant && $filial) {
                                 <button class="btn btn-outline-success" onclick="abrirModalIngrediente()">
                                     <i class="fas fa-plus me-1"></i>
                                     Novo Ingrediente
+                                </button>
+                                <div class="btn-group" role="group">
+                                    <button class="btn btn-outline-info dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                        <i class="fas fa-download me-1"></i>
+                                        Exportar
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        <li><a class="dropdown-item" href="#" onclick="exportarDados('products')">
+                                            <i class="fas fa-box me-2"></i>Produtos
+                                        </a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="exportarDados('categories')">
+                                            <i class="fas fa-tags me-2"></i>Categorias
+                                        </a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="exportarDados('ingredients')">
+                                            <i class="fas fa-leaf me-2"></i>Ingredientes
+                                        </a></li>
+                                    </ul>
+                                </div>
+                                <button class="btn btn-outline-warning" onclick="abrirModalImportacao()">
+                                    <i class="fas fa-upload me-1"></i>
+                                    Importar
                                 </button>
                             </div>
                         </div>
@@ -315,8 +350,12 @@ if ($tenant && $filial) {
                     <div class="tab-pane fade show active" id="produtos" role="tabpanel">
                         <div class="produtos-grid">
                     <div class="row">
-                        <?php foreach ($produtos as $produto): ?>
-                            <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
+                        <?php 
+                        error_log("Renderizando " . count($produtos) . " produtos no HTML");
+                        foreach ($produtos as $index => $produto): 
+                            error_log("Renderizando produto [$index]: ID={$produto['id']}, Nome={$produto['nome']}");
+                        ?>
+                            <div class="col-lg-3 col-md-4 col-sm-6 mb-3" data-produto-id="<?php echo $produto['id']; ?>">
                                 <div class="produto-card">
                                     <?php if ($produto['imagem']): ?>
                                         <img src="<?php echo htmlspecialchars($produto['imagem']); ?>" class="produto-imagem" alt="<?php echo htmlspecialchars($produto['nome']); ?>">
@@ -326,7 +365,7 @@ if ($tenant && $filial) {
                                         </div>
                                     <?php endif; ?>
                                     
-                                    <div class="produto-nome fw-bold mb-2"><?php echo htmlspecialchars($produto['nome']); ?></div>
+                                    <div class="produto-nome fw-bold mb-2"><?php echo htmlspecialchars($produto['nome']); ?> <small class="text-muted">(ID:<?php echo $produto['id']; ?>)</small></div>
                                     
                                     <?php if ($produto['categoria_nome']): ?>
                                         <div class="text-muted small mb-2">
@@ -1178,7 +1217,132 @@ if ($tenant && $filial) {
                 salvarIngrediente();
             });
         });
+        
+        // Funções de exportação e importação
+        function exportarDados(tipo) {
+            const actions = {
+                'products': 'export_products',
+                'categories': 'export_categories', 
+                'ingredients': 'export_ingredients'
+            };
+            
+            const action = actions[tipo];
+            if (!action) {
+                alert('Tipo de exportação inválido');
+                return;
+            }
+            
+            // Criar link de download
+            const url = `api/export_excel_fixed.php?action=${action}`;
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = '';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+        
+        function abrirModalImportacao() {
+            const modal = new bootstrap.Modal(document.getElementById('modalImportacao'));
+            modal.show();
+        }
+        
+        function importarDados() {
+            const fileInput = document.getElementById('importFile');
+            const tipoSelect = document.getElementById('importTipo');
+            
+            if (!fileInput.files[0]) {
+                alert('Selecione um arquivo para importar');
+                return;
+            }
+            
+            if (!tipoSelect.value) {
+                alert('Selecione o tipo de dados para importar');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('action', `import_${tipoSelect.value}`);
+            
+            // Mostrar loading
+            const btnImportar = document.getElementById('btnImportar');
+            const originalText = btnImportar.innerHTML;
+            btnImportar.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Importando...';
+            btnImportar.disabled = true;
+            
+            fetch('api/import.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`Importação concluída! ${data.imported} registros importados.`);
+                    if (data.errors && data.errors.length > 0) {
+                        console.warn('Erros durante importação:', data.errors);
+                    }
+                    // Recarregar a página para mostrar os dados atualizados
+                    location.reload();
+                } else {
+                    alert('Erro na importação: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                alert('Erro na importação: ' + error.message);
+            })
+            .finally(() => {
+                btnImportar.innerHTML = originalText;
+                btnImportar.disabled = false;
+            });
+        }
     </script>
+    
+    <!-- Modal de Importação -->
+    <div class="modal fade" id="modalImportacao" tabindex="-1" aria-labelledby="modalImportacaoLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalImportacaoLabel">
+                        <i class="fas fa-upload me-2"></i>
+                        Importar Dados
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="importTipo" class="form-label">Tipo de Dados</label>
+                        <select class="form-select" id="importTipo" required>
+                            <option value="">Selecione o tipo de dados</option>
+                            <option value="products">Produtos</option>
+                            <option value="categories">Categorias</option>
+                            <option value="ingredients">Ingredientes</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="importFile" class="form-label">Arquivo CSV</label>
+                        <input type="file" class="form-control" id="importFile" accept=".csv" required>
+                        <div class="form-text">
+                            Selecione um arquivo CSV exportado anteriormente do sistema.
+                        </div>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Importante:</strong> O arquivo deve estar no formato CSV exportado pelo sistema. 
+                        Dados existentes com o mesmo ID serão atualizados, novos registros serão criados.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="btnImportar" onclick="importarDados()">
+                        <i class="fas fa-upload me-1"></i>
+                        Importar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
     
     <!-- Sidebar JavaScript -->
     <script src="assets/js/sidebar.js"></script>

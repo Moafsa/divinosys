@@ -7,6 +7,10 @@ $currentRoute = $_GET['view'] ?? 'dashboard';
 if (empty($navigationMenu)) {
     error_log("Navigation menu is empty. User type: " . ($_SESSION['user_type'] ?? 'not set'));
     error_log("Global navigationMenu: " . print_r($GLOBALS['navigationMenu'] ?? 'not set', true));
+    error_log("Permissions for cozinha: " . print_r(\System\Auth::getUserPermissions('cozinha'), true));
+} else {
+    error_log("Navigation menu has " . count($navigationMenu) . " items for user type: " . ($_SESSION['user_type'] ?? 'not set'));
+    error_log("Navigation menu items: " . implode(', ', array_keys($navigationMenu)));
 }
 ?>
 
@@ -27,11 +31,4 @@ if (empty($navigationMenu)) {
             <span><?php echo $menuItem['label']; ?></span>
         </a>
     <?php endforeach; ?>
-    
-    <hr class="text-white-50">
-    
-    <a class="nav-link" href="<?php echo $router->url('logout'); ?>" data-tooltip="Sair">
-        <i class="fas fa-sign-out-alt"></i>
-        <span>Sair</span>
-    </a>
 </nav>

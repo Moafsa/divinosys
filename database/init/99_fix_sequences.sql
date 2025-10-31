@@ -90,11 +90,11 @@ END $$;
 -- Create a function to check sequence status
 CREATE OR REPLACE FUNCTION check_sequences()
 RETURNS TABLE(
-    table_name TEXT,
-    sequence_name TEXT,
-    last_value BIGINT,
-    max_id BIGINT,
-    status TEXT
+    tbl_name TEXT,
+    seq_name TEXT,
+    seq_last_value BIGINT,
+    tbl_max_id BIGINT,
+    seq_status TEXT
 ) AS $$
 BEGIN
     RETURN QUERY
@@ -102,41 +102,41 @@ BEGIN
         SELECT 
             schemaname,
             sequencename,
-            last_value
+            last_value as seq_value
         FROM pg_sequences 
         WHERE schemaname = 'public'
         AND sequencename LIKE '%_id_seq'
     ),
     table_info AS (
         SELECT 
-            table_name,
+            t.table_name as tname,
             CASE 
-                WHEN table_name = 'pedido' THEN (SELECT COALESCE(MAX(idpedido), 0) FROM pedido)
-                ELSE (SELECT COALESCE(MAX(id), 0) FROM information_schema.tables t 
-                      WHERE t.table_name = si.table_name)
+                WHEN t.table_name = 'pedido' THEN (SELECT COALESCE(MAX(idpedido), 0) FROM pedido)
+                ELSE (SELECT COALESCE(MAX(id), 0) FROM information_schema.tables tb 
+                      WHERE tb.table_name = si.table_name)
             END as max_id
         FROM information_schema.tables t
-        JOIN sequence_info si ON si.sequencename = t.table_name || '_id_seq'
+        JOIN sequence_info si ON si.sequencename = t.table_name || '_id_seq' OR si.sequencename = t.table_name || '_idpedido_seq'
         WHERE t.table_schema = 'public'
         AND t.table_type = 'BASE TABLE'
     )
     SELECT 
-        ti.table_name::TEXT,
+        ti.tname::TEXT,
         si.sequencename::TEXT,
-        si.last_value,
+        si.seq_value,
         ti.max_id,
         CASE 
-            WHEN si.last_value >= ti.max_id THEN 'OK'::TEXT
+            WHEN si.seq_value >= ti.max_id THEN 'OK'::TEXT
             ELSE 'NEEDS_FIX'::TEXT
-        END as status
+        END as seq_status
     FROM sequence_info si
-    JOIN table_info ti ON si.sequencename = ti.table_name || '_id_seq'
-    ORDER BY ti.table_name;
+    JOIN table_info ti ON si.sequencename = ti.tname || '_id_seq' OR si.sequencename = ti.tname || '_idpedido_seq'
+    ORDER BY ti.tname;
 END;
 $$ LANGUAGE plpgsql;
 
--- Show current sequence status
-SELECT * FROM check_sequences();
+-- Show current sequence status (commented out to avoid errors during init)
+-- SELECT * FROM check_sequences();
 
 -- Drop the temporary function
 DROP FUNCTION IF EXISTS fix_sequence(TEXT, TEXT, TEXT);

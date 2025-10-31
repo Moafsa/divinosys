@@ -23,8 +23,8 @@ try {
             
             $db = \System\Database::getInstance();
             $session = \System\Session::getInstance();
-            $tenantId = 1; // Usar valor padrão
-            $filialId = 1; // Usar valor padrão
+            $tenantId = $session->getTenantId() ?? 1;
+            $filialId = $session->getFilialId() ?? 1;
             
             // Get mesa info
             $mesa = $db->fetch(

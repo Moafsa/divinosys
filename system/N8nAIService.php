@@ -42,8 +42,8 @@ class N8nAIService
     public function processMessage($message, $attachments = [])
     {
         try {
-            $tenantId = $this->session->getTenantId() ?? 1;
-            $filialId = $this->session->getFilialId() ?? 1;
+            $tenantId = $this->session->getTenantId();
+            $filialId = $this->session->getFilialId();
             $userId = $this->session->getUserId();
             
             // Prepare payload - only send question and context
@@ -55,13 +55,26 @@ class N8nAIService
                 'timestamp' => date('Y-m-d H:i:s')
             ];
             
+            // Validate tenant and filial IDs from session
+            if (!$tenantId || !$filialId) {
+                throw new Exception('Multi-tenant system requires valid tenant_id and filial_id from user session');
+            }
+            
             // Add attachment info if present
             if (!empty($attachments)) {
                 $payload['attachments'] = array_map(function($attachment) {
+                    // Convert file to base64 for n8n processing
+                    $fileContent = '';
+                    if (isset($attachment['path']) && file_exists($attachment['path'])) {
+                        $fileContent = base64_encode(file_get_contents($attachment['path']));
+                    }
+                    
                     return [
                         'name' => $attachment['name'] ?? '',
                         'type' => $attachment['type'] ?? '',
-                        'path' => $attachment['path'] ?? ''
+                        'path' => $attachment['path'] ?? '',
+                        'content' => $fileContent,
+                        'size' => isset($attachment['path']) ? filesize($attachment['path']) : 0
                     ];
                 }, $attachments);
             }
@@ -217,11 +230,18 @@ class N8nAIService
      */
     private function executeRemoteOperation($operation)
     {
+        $tenantId = $this->session->getTenantId();
+        $filialId = $this->session->getFilialId();
+        
+        if (!$tenantId || !$filialId) {
+            throw new Exception('Multi-tenant system requires valid tenant_id and filial_id from user session');
+        }
+        
         $payload = [
             'action' => 'execute_operation',
             'operation' => $operation,
-            'tenant_id' => $this->session->getTenantId() ?? 1,
-            'filial_id' => $this->session->getFilialId() ?? 1
+            'tenant_id' => $tenantId,
+            'filial_id' => $filialId
         ];
         
         $response = $this->callN8nWebhook($payload);

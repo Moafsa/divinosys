@@ -30,6 +30,7 @@ class Router
             'home' => 'home.php',
             'login' => 'login.php',
             'login_admin' => 'login_admin.php',
+            'register' => 'register.php',
             'logout' => 'logout.php',
             'dashboard' => 'Dashboard1.php',
             'cliente_dashboard' => 'cliente_dashboard.php',
@@ -65,6 +66,13 @@ class Router
         'fix_mesas_pedidos' => 'fix_mesas_pedidos.php',
         'fix_mesas_page' => 'fix_mesas_page.php',
         'test_fechar_pedido' => 'test_fechar_pedido.php',
+        // SaaS Routes
+        'superadmin_dashboard' => 'superadmin_dashboard.php',
+        'tenant_dashboard' => 'tenant_dashboard.php',
+        'onboarding' => 'onboarding.php',
+        'subscription_expired' => 'subscription_expired.php',
+        'gerenciar_faturas' => 'gerenciar_faturas.php',
+        'asaas_config' => 'asaas_config.php',
         ];
     }
 
@@ -98,7 +106,20 @@ class Router
 
     private function isProtectedRoute($view)
     {
-        $publicRoutes = ['home', 'login', 'login_admin'];
+        $publicRoutes = [
+            'home', 
+            'login', 
+            'login_admin',
+            'register',
+            'onboarding',
+            'subscription_expired'
+        ];
+        
+        // SuperAdmin dashboard é protegido mas acessível para superadmin
+        if ($view === 'superadmin_dashboard') {
+            return !isset($_SESSION['nivel']) || $_SESSION['nivel'] != 999;
+        }
+        
         return !in_array($view, $publicRoutes);
     }
 
@@ -108,7 +129,9 @@ class Router
             'dashboard', 'gerar_pedido', 'pedidos', 'delivery',
             'gerenciar_produtos', 'gerenciar_categorias', 'estoque',
             'financeiro', 'relatorios', 'lancamentos', 'agenda', 'clientes', 'entregadores',
-            'ai_chat', 'configuracoes', 'whatsapp_config'
+            'ai_chat', 'configuracoes', 'whatsapp_config',
+            // Sistema de Filiais
+            'dashboard_estabelecimento', 'gerenciar_filiais', 'relatorios_consolidados'
         ];
         return in_array($view, $multiTenantRoutes);
     }
@@ -261,6 +284,10 @@ class Router
             'clientes' => 'Clientes',
             'entregadores' => 'Entregadores',
             'configuracoes' => 'Configurações',
+            // Sistema de Filiais
+            'dashboard_estabelecimento' => 'Dashboard Estabelecimento',
+            'gerenciar_filiais' => 'Gerenciar Filiais',
+            'relatorios_consolidados' => 'Relatórios Consolidados',
         ];
         
         return $names[$view] ?? ucfirst($view);

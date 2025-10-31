@@ -202,7 +202,12 @@
                 if (data.success) {
                     showAlert('Login realizado com sucesso!', 'success');
                     setTimeout(() => {
-                        window.location.href = 'index.php?view=dashboard';
+                        // Verificar se é superadmin (nível 999) para redirecionar corretamente
+                        if (data.user && data.user.nivel == 999) {
+                            window.location.href = 'index.php?view=superadmin_dashboard';
+                        } else {
+                            window.location.href = 'index.php?view=dashboard';
+                        }
                     }, 1500);
                 } else {
                     showAlert(data.message || 'Usuário ou senha incorretos', 'error');

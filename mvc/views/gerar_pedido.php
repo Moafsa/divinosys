@@ -4,10 +4,11 @@ $session = \System\Session::getInstance();
 $router = \System\Router::getInstance();
 $db = \System\Database::getInstance();
 
-// Get current user, tenant and filial
+// Ensure tenant and filial context
+$context = \System\TenantHelper::ensureTenantContext();
+$tenant = $context['tenant'];
+$filial = $context['filial'];
 $user = $session->getUser();
-$tenant = $session->getTenant();
-$filial = $session->getFilial();
 
 // Debug: Se não tem tenant/filial, usar valores padrão
 if (!$tenant) {
@@ -102,26 +103,8 @@ if ($tenant && $filial) {
     }
 }
 
-// Se não encontrou produtos com tenant/filial específicos, buscar todos
-if (empty($produtos)) {
-    try {
-        $produtos = $db->fetchAll(
-            "SELECT p.*, c.nome as categoria_nome 
-             FROM produtos p 
-             LEFT JOIN categorias c ON p.categoria_id = c.id 
-             WHERE p.ativo = 1
-             ORDER BY c.nome, p.nome"
-        );
-    } catch (Exception $e) {
-        // Se der erro, buscar sem filtro de ativo
-        $produtos = $db->fetchAll(
-            "SELECT p.*, c.nome as categoria_nome 
-             FROM produtos p 
-             LEFT JOIN categorias c ON p.categoria_id = c.id 
-             ORDER BY c.nome, p.nome"
-        );
-    }
-}
+// Isolamento: não buscar todos os produtos se não encontrar com tenant/filial específicos
+// Se não encontrou produtos, manter array vazio para garantir isolamento
 
 // Buscar ingredientes para cada produto
 foreach ($produtos as &$produto) {
@@ -146,17 +129,44 @@ if ($tenant && $filial) {
     try {
         $todosIngredientes = $db->fetchAll(
             "SELECT * FROM ingredientes 
-             WHERE COALESCE(tenant_id, 1) = ? AND COALESCE(filial_id, 1) = ? AND COALESCE(disponivel, true) = true
+             WHERE tenant_id = ? AND (filial_id = ? OR (? IS NULL AND filial_id IS NULL)) AND COALESCE(disponivel, true) = true
              ORDER BY nome",
-            [$tenant['id'], $filial['id']]
+            [$tenant['id'], $filial['id'], $filial['id']]
         );
     } catch (Exception $e) {
-        // Se der erro, buscar sem filtro de tenant/filial
-        $todosIngredientes = $db->fetchAll(
-            "SELECT * FROM ingredientes 
-             WHERE COALESCE(disponivel, true) = true
-             ORDER BY nome"
-        );
+        $todosIngredientes = [];
+    }
+} else {
+    // Se não há tenant/filial na sessão, usar valores padrão
+    $tenantId = $session->getTenantId() ?? 1;
+    $filialId = $session->getFilialId();
+    
+    if ($filialId === null) {
+        // Se não há filial específica, usar filial padrão do tenant
+        $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+        $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+    }
+    
+    try {
+        if ($filialId === null) {
+            // Se não há filial específica, buscar ingredientes sem filial ou com filial padrão
+            $todosIngredientes = $db->fetchAll(
+                "SELECT * FROM ingredientes 
+                 WHERE tenant_id = ? AND (filial_id IS NULL OR filial_id = (SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1)) AND COALESCE(disponivel, true) = true
+                 ORDER BY nome",
+                [$tenantId, $tenantId]
+            );
+        } else {
+            // Se há filial específica, buscar ingredientes da filial
+            $todosIngredientes = $db->fetchAll(
+                "SELECT * FROM ingredientes 
+                 WHERE tenant_id = ? AND filial_id = ? AND COALESCE(disponivel, true) = true
+                 ORDER BY nome",
+                [$tenantId, $filialId]
+            );
+        }
+    } catch (Exception $e) {
+        $todosIngredientes = [];
     }
 }
 
@@ -167,6 +177,30 @@ if ($tenant && $filial) {
         "SELECT * FROM categorias WHERE tenant_id = ? AND filial_id = ? ORDER BY nome",
         [$tenant['id'], $filial['id']]
     );
+} else {
+    // Se não há tenant/filial na sessão, usar valores padrão
+    $tenantId = $session->getTenantId() ?? 1;
+    $filialId = $session->getFilialId();
+    
+    if ($filialId === null) {
+        // Se não há filial específica, usar filial padrão do tenant
+        $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+        $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+    }
+    
+    if ($filialId === null) {
+        // Se não há filial específica, buscar categorias sem filial ou com filial padrão
+        $categorias = $db->fetchAll(
+            "SELECT * FROM categorias WHERE tenant_id = ? AND (filial_id IS NULL OR filial_id = (SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1)) ORDER BY nome",
+            [$tenantId, $tenantId]
+        );
+    } else {
+        // Se há filial específica, buscar categorias da filial
+        $categorias = $db->fetchAll(
+            "SELECT * FROM categorias WHERE tenant_id = ? AND filial_id = ? ORDER BY nome",
+            [$tenantId, $filialId]
+        );
+    }
 }
 
 // Get mesa from URL parameter
@@ -375,70 +409,7 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
 <body>
     <div class="container-fluid">
         <div class="row">
-            <!-- Sidebar -->
-            <div class="sidebar collapsed" id="sidebar">
-                <button class="sidebar-toggle" id="sidebarToggle">
-                    <i class="fas fa-bars"></i>
-                </button>
-                <div class="sidebar-content">
-                    <div class="sidebar-brand">
-                        <div class="brand-icon text-white">
-                            <i class="fas fa-utensils"></i>
-                        </div>
-                    </div>
-                    <nav class="nav flex-column">
-                        <a class="nav-link" href="<?php echo $router->url('dashboard'); ?>" data-tooltip="Dashboard">
-                            <i class="fas fa-tachometer-alt"></i>
-                            <span>Dashboard</span>
-                        </a>
-                        <a class="nav-link active" href="<?php echo $router->url('gerar_pedido'); ?>" data-tooltip="Novo Pedido">
-                            <i class="fas fa-plus-circle"></i>
-                            <span>Novo Pedido</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('pedidos'); ?>" data-tooltip="Pedidos">
-                            <i class="fas fa-list"></i>
-                            <span>Pedidos</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('mesas'); ?>" data-tooltip="Mesas">
-                            <i class="fas fa-table"></i>
-                            <span>Mesas</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('delivery'); ?>" data-tooltip="Delivery">
-                            <i class="fas fa-motorcycle"></i>
-                            <span>Delivery</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('gerenciar_produtos'); ?>" data-tooltip="Produtos">
-                            <i class="fas fa-box"></i>
-                            <span>Produtos</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('estoque'); ?>" data-tooltip="Estoque">
-                            <i class="fas fa-warehouse"></i>
-                            <span>Estoque</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('financeiro'); ?>" data-tooltip="Financeiro">
-                            <i class="fas fa-chart-line"></i>
-                            <span>Financeiro</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('relatorios'); ?>" data-tooltip="Relatórios">
-                            <i class="fas fa-chart-bar"></i>
-                            <span>Relatórios</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('clientes'); ?>" data-tooltip="Clientes">
-                            <i class="fas fa-users"></i>
-                            <span>Clientes</span>
-                        </a>
-                        <a class="nav-link" href="<?php echo $router->url('configuracoes'); ?>" data-tooltip="Configurações">
-                            <i class="fas fa-cog"></i>
-                            <span>Configurações</span>
-                        </a>
-                        <hr class="text-white-50">
-                        <a class="nav-link" href="<?php echo $router->url('logout'); ?>" data-tooltip="Sair">
-                            <i class="fas fa-sign-out-alt"></i>
-                            <span>Sair</span>
-                        </a>
-                    </nav>
-                </div>
-            </div>
+            <?php include __DIR__ . '/components/sidebar.php'; ?>
 
             <!-- Main Content -->
             <div class="main-content expanded">
@@ -591,6 +562,52 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                             </div>
                             
                             <div class="carrinho-total" id="carrinhoTotal" style="display: none;">
+                                <!-- Customer Information Section -->
+                                <div class="mb-3">
+                                    <h6 class="mb-3">
+                                        <i class="fas fa-user me-2"></i>
+                                        Informações do Cliente (Opcional)
+                                    </h6>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="clienteNome" class="form-label">Nome do Cliente</label>
+                                                <input type="text" class="form-control" id="clienteNome" placeholder="Nome completo">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="clienteTelefone" class="form-label">Telefone</label>
+                                                <div class="input-group">
+                                                    <input type="text" class="form-control" id="clienteTelefone" placeholder="(11) 99999-9999">
+                                                    <button class="btn btn-outline-secondary" type="button" onclick="buscarClientePorTelefone()">
+                                                        <i class="fas fa-search"></i>
+                                                    </button>
+                                                </div>
+                                                <small class="text-muted">Digite o telefone e clique em buscar para carregar dados do cliente</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="clienteEmail" class="form-label">Email</label>
+                                                <input type="email" class="form-control" id="clienteEmail" placeholder="email@exemplo.com">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="clienteCpf" class="form-label">CPF</label>
+                                                <input type="text" class="form-control" id="clienteCpf" placeholder="000.000.000-00">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div id="clienteEncontrado" class="alert alert-success" style="display: none;">
+                                        <i class="fas fa-check-circle me-2"></i>
+                                        <span id="clienteEncontradoTexto">Cliente encontrado e carregado!</span>
+                                    </div>
+                                </div>
+                                
                                 <div class="mb-3">
                                     <label for="observacaoPedido" class="form-label">Observação do Pedido</label>
                                     <textarea class="form-control" id="observacaoPedido" rows="2" placeholder="Observações especiais para o pedido..."></textarea>
@@ -1402,6 +1419,63 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
             }
         }
         
+        // Search client by phone
+        function buscarClientePorTelefone() {
+            const telefone = document.getElementById('clienteTelefone').value.trim();
+            if (!telefone) {
+                Swal.fire('Atenção', 'Digite o telefone do cliente', 'warning');
+                return;
+            }
+            
+            fetch(`mvc/ajax/clientes.php?action=buscar_por_telefone&telefone=${encodeURIComponent(telefone)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.cliente) {
+                        // Load client data into form
+                        document.getElementById('clienteNome').value = data.cliente.nome || '';
+                        document.getElementById('clienteEmail').value = data.cliente.email || '';
+                        document.getElementById('clienteCpf').value = data.cliente.cpf || '';
+                        
+                        // Show success message
+                        const alert = document.getElementById('clienteEncontrado');
+                        const texto = document.getElementById('clienteEncontradoTexto');
+                        texto.textContent = `Cliente encontrado: ${data.cliente.nome}`;
+                        alert.style.display = 'block';
+                        
+                        // Hide alert after 3 seconds
+                        setTimeout(() => {
+                            alert.style.display = 'none';
+                        }, 3000);
+                    } else {
+                        Swal.fire('Info', 'Cliente não encontrado. Você pode cadastrar um novo cliente preenchendo os dados.', 'info');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    Swal.fire('Erro', 'Erro ao buscar cliente', 'error');
+                });
+        }
+
+        // Get customer data from form
+        function obterDadosCliente() {
+            const nome = document.getElementById('clienteNome').value.trim();
+            const telefone = document.getElementById('clienteTelefone').value.trim();
+            const email = document.getElementById('clienteEmail').value.trim();
+            const cpf = document.getElementById('clienteCpf').value.trim();
+            
+            // Only return data if at least name is provided
+            if (nome) {
+                return {
+                    nome: nome,
+                    telefone: telefone || null,
+                    email: email || null,
+                    cpf: cpf || null
+                };
+            }
+            
+            return null;
+        }
+
         function finalizarPedido() {
             if (!mesaSelecionada) {
                 Swal.fire('Atenção', 'Selecione uma mesa primeiro!', 'warning');
@@ -1415,6 +1489,9 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
             
             const isEditing = <?php echo $editarPedido ? 'true' : 'false'; ?>;
             const pedidoId = <?php echo $editarPedido ? $editarPedido['idpedido'] : 'null'; ?>;
+            
+            // Get customer data
+            const dadosCliente = obterDadosCliente();
             
             // Finalizar/Atualizar pedido via AJAX diretamente
             console.log('Carrinho antes de enviar:', carrinho);
@@ -1432,6 +1509,11 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
             formData.append('mesa_id', mesaSelecionada.id);
             formData.append('itens', JSON.stringify(carrinho));
             formData.append('observacao', document.getElementById('observacaoPedido').value || '');
+            
+            // Add customer data if provided
+            if (dadosCliente) {
+                formData.append('dados_cliente', JSON.stringify(dadosCliente));
+            }
             
             if (isEditing) {
                 formData.append('pedido_id', pedidoId);
@@ -1466,8 +1548,8 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                             id: data.pedido.idpedido || data.pedido.id,
                             tipo: mesaSelecionada.tipo || 'mesa',
                             mesa: mesaSelecionada.numero || mesaSelecionada.nome,
-                            cliente: mesaSelecionada.cliente || 'Cliente Mesa',
-                            telefone: mesaSelecionada.telefone || '',
+                            cliente: obterDadosCliente() ? obterDadosCliente().nome : (mesaSelecionada.cliente || 'Cliente Mesa'),
+                            telefone: obterDadosCliente() ? obterDadosCliente().telefone : (mesaSelecionada.telefone || ''),
                             endereco: mesaSelecionada.endereco || '',
                             itens: carrinho,
                             valor_total: carrinho.reduce((total, item) => total + (item.preco * item.quantidade), 0),

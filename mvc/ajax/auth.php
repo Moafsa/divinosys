@@ -27,17 +27,18 @@ try {
     $action = $_POST['action'] ?? $_GET['action'] ?? '';
     
     switch ($action) {
+        case 'login':
         case 'login_admin':
-            $usuario = $_POST['usuario'] ?? '';
+            $usuario = $_POST['usuario'] ?? $_POST['login'] ?? '';
             $senha = $_POST['senha'] ?? '';
             
             if (empty($usuario) || empty($senha)) {
                 throw new Exception('Usuário e senha são obrigatórios');
             }
             
-            // Buscar usuário admin (aceitar nivel 1 ou NULL)
+            // Buscar usuário admin (aceitar nivel 1, NULL ou 999 para superadmin)
             $user = $db->fetch(
-                "SELECT * FROM usuarios WHERE login = ? AND (nivel = 1 OR nivel IS NULL)",
+                "SELECT * FROM usuarios WHERE login = ? AND (nivel = 1 OR nivel IS NULL OR nivel = 999)",
                 [$usuario]
             );
             
@@ -50,11 +51,28 @@ try {
                 throw new Exception('Senha incorreta');
             }
             
-            // Iniciar sessão
-            session_start();
+            // Set session data (session already started)
             $_SESSION['user'] = $user;
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['nivel'] = $user['nivel']; // Adicionar nível na sessão
             $_SESSION['tenant_id'] = $user['tenant_id'] ?? 1;
-            $_SESSION['filial_id'] = $user['filial_id'] ?? 1;
+            $_SESSION['filial_id'] = $user['filial_id'] ?? null;
+            
+            // Buscar e definir dados completos do tenant e filial
+            $tenant = $db->fetch("SELECT * FROM tenants WHERE id = ?", [$_SESSION['tenant_id']]);
+            if ($tenant) {
+                $_SESSION['tenant'] = $tenant;
+            }
+            
+            if ($_SESSION['filial_id']) {
+                $filial = $db->fetch("SELECT * FROM filiais WHERE id = ? AND tenant_id = ?", [$_SESSION['filial_id'], $_SESSION['tenant_id']]);
+                if ($filial) {
+                    $_SESSION['filial'] = $filial;
+                }
+            }
+            
+            // Log para debug
+            error_log("Login Admin: User {$user['id']} - tenant_id: {$user['tenant_id']}, filial_id: {$user['filial_id']}");
             
             echo json_encode([
                 'success' => true,
@@ -280,10 +298,9 @@ try {
         case 'logout':
             Auth::logout();
             
-            echo json_encode([
-                'success' => true,
-                'message' => 'Logout realizado com sucesso'
-            ]);
+            // Instead of returning JSON, redirect to login
+            header('Location: index.php?view=login');
+            exit;
             break;
             
         case 'verificar_sessao':

@@ -314,7 +314,7 @@
             btnText.style.display = 'none';
             loading.classList.add('show');
             
-            fetch('mvc/ajax/phone_auth.php', {
+            fetch('mvc/ajax/phone_auth_clean.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -358,7 +358,7 @@
             btnText.style.display = 'none';
             loading.classList.add('show');
             
-            fetch('mvc/ajax/phone_auth.php', {
+            fetch('mvc/ajax/phone_auth_clean.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -368,14 +368,29 @@
             })
             .then(response => response.json())
             .then(data => {
+                console.log('Resposta da validação:', data);
+                
                 if (data.success) {
                     showAlert('Login realizado com sucesso!', 'success');
                     
-                    // Redirecionar baseado no tipo de usuário
+                    // Garantir que a sessão foi salva antes de redirecionar
+                    // Forçar um pequeno delay e verificar se realmente está autenticado
                     setTimeout(() => {
-                        redirectByUserType(data.establishment?.tipo_usuario, data.permissions);
-                    }, 1500);
+                        console.log('Dados do establishment:', data.establishment);
+                        console.log('Tipo de usuário:', data.establishment?.tipo_usuario);
+                        
+                        // Verificar se há múltiplos estabelecimentos
+                        if (data.establishment && data.establishment.tipo_usuario) {
+                            console.log('Redirecionando para tipo:', data.establishment.tipo_usuario);
+                            redirectByUserType(data.establishment.tipo_usuario, data.permissions);
+                        } else {
+                            // Fallback: sempre redirecionar para dashboard se não tiver tipo
+                            console.warn('Tipo de usuário não encontrado, redirecionando para dashboard');
+                            window.location.href = 'index.php?view=dashboard';
+                        }
+                    }, 500); // Reduzido para 500ms para ser mais rápido
                 } else {
+                    console.error('Erro na validação:', data);
                     showAlert(data.message || 'Código inválido ou expirado', 'error');
                 }
             })
@@ -391,16 +406,23 @@
         }
 
         function redirectByUserType(userType, permissions) {
+            if (!userType) {
+                console.warn('Tipo de usuário não informado, usando padrão (dashboard)');
+                userType = 'admin'; // Default
+            }
+            
             let redirectUrl = 'index.php?view=dashboard';
             
-            switch (userType) {
+            switch (userType.toLowerCase()) {
                 case 'admin':
+                case 'administrador':
                     redirectUrl = 'index.php?view=dashboard';
                     break;
                 case 'cozinha':
                     redirectUrl = 'index.php?view=pedidos';
                     break;
                 case 'garcom':
+                case 'garçom':
                     redirectUrl = 'index.php?view=dashboard';
                     break;
                 case 'entregador':
@@ -413,10 +435,14 @@
                     redirectUrl = 'index.php?view=cliente_dashboard';
                     break;
                 default:
+                    console.warn('Tipo de usuário desconhecido:', userType, '- usando dashboard como padrão');
                     redirectUrl = 'index.php?view=dashboard';
             }
             
-            window.location.href = redirectUrl;
+            console.log('Redirecionando para:', redirectUrl, 'baseado no tipo:', userType);
+            
+            // Usar location.replace para evitar que o botão "voltar" volte ao login
+            window.location.replace(redirectUrl);
         }
 
         function startCodeTimer(seconds) {

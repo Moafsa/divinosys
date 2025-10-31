@@ -4,11 +4,13 @@
  * Gerencia os planos de assinatura do sistema SaaS
  */
 
+use System\Database;
+
 class Plan {
-    private $conn;
+    private $db;
     
     public function __construct() {
-        $this->conn = Database::getInstance()->getConnection();
+        $this->db = Database::getInstance();
     }
     
     /**
@@ -16,27 +18,15 @@ class Plan {
      */
     public function getAll() {
         $query = "SELECT * FROM planos ORDER BY preco_mensal ASC";
-        $result = pg_query($this->conn, $query);
-        
-        if ($result) {
-            return pg_fetch_all($result) ?: [];
-        }
-        
-        return [];
+        return $this->db->fetchAll($query);
     }
     
     /**
      * Buscar plano por ID
      */
     public function getById($id) {
-        $query = "SELECT * FROM planos WHERE id = $1";
-        $result = pg_query_params($this->conn, $query, [$id]);
-        
-        if ($result && pg_num_rows($result) > 0) {
-            return pg_fetch_assoc($result);
-        }
-        
-        return null;
+        $query = "SELECT * FROM planos WHERE id = " . intval($id);
+        return $this->db->fetch($query);
     }
     
     /**
@@ -50,7 +40,7 @@ class Plan {
         
         $recursos_json = json_encode($data['recursos']);
         
-        $result = pg_query_params($this->conn, $query, [
+        $result = $this->db->execute($query, [
             $data['nome'],
             $data['max_mesas'],
             $data['max_usuarios'],
@@ -61,8 +51,7 @@ class Plan {
         ]);
         
         if ($result) {
-            $row = pg_fetch_assoc($result);
-            return $row['id'];
+            return $result;
         }
         
         return false;
@@ -72,28 +61,22 @@ class Plan {
      * Atualizar plano
      */
     public function update($id, $data) {
-        $query = "UPDATE planos SET 
-                  nome = $1, 
-                  max_mesas = $2, 
-                  max_usuarios = $3, 
-                  max_produtos = $4, 
-                  max_pedidos_mes = $5, 
-                  recursos = $6, 
-                  preco_mensal = $7
-                  WHERE id = $8";
-        
         $recursos_json = is_array($data['recursos']) ? json_encode($data['recursos']) : $data['recursos'];
         
-        return pg_query_params($this->conn, $query, [
-            $data['nome'],
-            $data['max_mesas'],
-            $data['max_usuarios'],
-            $data['max_produtos'],
-            $data['max_pedidos_mes'],
-            $recursos_json,
-            $data['preco_mensal'],
-            $id
-        ]);
+        $query = "UPDATE planos SET 
+                  nome = '" . addslashes($data['nome']) . "', 
+                  max_mesas = " . intval($data['max_mesas']) . ", 
+                  max_usuarios = " . intval($data['max_usuarios']) . ", 
+                  max_produtos = " . intval($data['max_produtos']) . ", 
+                  max_pedidos_mes = " . intval($data['max_pedidos_mes']) . ", 
+                  recursos = '" . $recursos_json . "', 
+                  preco_mensal = " . floatval($data['preco_mensal']) . ",
+                  max_filiais = " . intval($data['max_filiais'] ?? 1) . "
+                  WHERE id = " . intval($id);
+        
+        $result = $this->db->query($query);
+        
+        return $result !== false;
     }
     
     /**
@@ -103,17 +86,14 @@ class Plan {
         // Verificar se existem assinaturas ativas
         $check_query = "SELECT COUNT(*) as count FROM assinaturas 
                        WHERE plano_id = $1 AND status IN ('ativa', 'trial')";
-        $check_result = pg_query_params($this->conn, $check_query, [$id]);
+        $check_result = $this->db->fetch($check_query, [$id]);
         
-        if ($check_result) {
-            $row = pg_fetch_assoc($check_result);
-            if ($row['count'] > 0) {
-                return ['success' => false, 'message' => 'Não é possível deletar plano com assinaturas ativas'];
-            }
+        if ($check_result && $check_result['count'] > 0) {
+            return ['success' => false, 'message' => 'Não é possível deletar plano com assinaturas ativas'];
         }
         
         $query = "DELETE FROM planos WHERE id = $1";
-        $result = pg_query_params($this->conn, $query, [$id]);
+        $result = $this->db->execute($query, [$id]);
         
         return ['success' => (bool)$result, 'message' => $result ? 'Plano deletado com sucesso' : 'Erro ao deletar plano'];
     }
@@ -151,15 +131,17 @@ class Plan {
                          AND EXTRACT(MONTH FROM created_at) = EXTRACT(MONTH FROM CURRENT_DATE)
                          AND EXTRACT(YEAR FROM created_at) = EXTRACT(YEAR FROM CURRENT_DATE)";
                 break;
+            case 'filiais':
+                $query = "SELECT COUNT(*) as count FROM tenants WHERE tenant_pai_id = $1";
+                break;
             default:
                 return false;
         }
         
-        $result = pg_query_params($this->conn, $query, [$tenant_id]);
+        $result = $this->db->fetch($query, [$tenant_id]);
         
         if ($result) {
-            $row = pg_fetch_assoc($result);
-            return $row['count'] < $limite_plano;
+            return $result['count'] < $limite_plano;
         }
         
         return false;

@@ -4,11 +4,13 @@
  * Gerencia os pagamentos das assinaturas
  */
 
+use System\Database;
+
 class Payment {
-    private $conn;
+    private $db;
     
     public function __construct() {
-        $this->conn = Database::getInstance()->getConnection();
+        $this->db = Database::getInstance();
     }
     
     /**
@@ -20,7 +22,7 @@ class Payment {
                   VALUES ($1, $2, $3, $4, $5, $6) 
                   RETURNING id";
         
-        $result = pg_query_params($this->conn, $query, [
+        $result = $this->db->execute($query, [
             $data['assinatura_id'],
             $data['tenant_id'],
             $data['valor'],
@@ -30,8 +32,7 @@ class Payment {
         ]);
         
         if ($result) {
-            $row = pg_fetch_assoc($result);
-            return $row['id'];
+            return $result;
         }
         
         return false;
@@ -47,13 +48,7 @@ class Payment {
                   INNER JOIN assinaturas a ON p.assinatura_id = a.id
                   WHERE p.id = $1";
         
-        $result = pg_query_params($this->conn, $query, [$id]);
-        
-        if ($result && pg_num_rows($result) > 0) {
-            return pg_fetch_assoc($result);
-        }
-        
-        return null;
+        return $this->db->fetch($query, [$id]);
     }
     
     /**
@@ -64,13 +59,7 @@ class Payment {
                   WHERE assinatura_id = $1 
                   ORDER BY created_at DESC";
         
-        $result = pg_query_params($this->conn, $query, [$assinatura_id]);
-        
-        if ($result) {
-            return pg_fetch_all($result) ?: [];
-        }
-        
-        return [];
+        return $this->db->fetchAll($query, [$assinatura_id]);
     }
     
     /**
@@ -98,7 +87,7 @@ class Payment {
             $query .= " LIMIT " . intval($filters['limit']);
         }
         
-        $result = pg_query_params($this->conn, $query, $params);
+        $result = pg_query_params($this->db->getConnection(), $query, $params);
         
         if ($result) {
             return pg_fetch_all($result) ?: [];
@@ -111,12 +100,14 @@ class Payment {
      * Listar todos os pagamentos (superadmin)
      */
     public function getAll($filters = []) {
-        $query = "SELECT p.*, t.nome as tenant_nome, t.subdomain, 
-                  a.plano_id, pl.nome as plano_nome
+        $query = "SELECT p.*, 
+                  t.nome as tenant_nome, 
+                  t.subdomain,
+                  pl.nome as plano_nome
                   FROM pagamentos p
-                  INNER JOIN tenants t ON p.tenant_id = t.id
-                  INNER JOIN assinaturas a ON p.assinatura_id = a.id
-                  INNER JOIN planos pl ON a.plano_id = pl.id
+                  LEFT JOIN tenants t ON p.tenant_id = t.id
+                  LEFT JOIN assinaturas a ON p.assinatura_id = a.id
+                  LEFT JOIN planos pl ON a.plano_id = pl.id
                   WHERE 1=1";
         
         $params = [];
@@ -144,13 +135,7 @@ class Payment {
             $query .= " OFFSET " . intval($filters['offset']);
         }
         
-        $result = pg_query_params($this->conn, $query, $params);
-        
-        if ($result) {
-            return pg_fetch_all($result) ?: [];
-        }
-        
-        return [];
+        return $this->db->fetchAll($query, $params);
     }
     
     /**
@@ -183,43 +168,32 @@ class Payment {
         $query .= " WHERE id = $$paramCount";
         $params[] = $id;
         
-        return pg_query_params($this->conn, $query, $params);
+        return pg_query_params($this->db->getConnection(), $query, $params);
     }
     
     /**
      * Marcar pagamento como pago
      */
     public function markAsPaid($id, $metodo_pagamento = null, $gateway_data = []) {
-        $query = "UPDATE pagamentos SET 
-                  status = 'pago',
-                  data_pagamento = CURRENT_TIMESTAMP,
-                  updated_at = CURRENT_TIMESTAMP";
-        
-        $params = [];
-        $paramCount = 1;
+        $updateData = [
+            'status' => 'pago',
+            'data_pagamento' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s')
+        ];
         
         if ($metodo_pagamento) {
-            $query .= ", metodo_pagamento = $$paramCount";
-            $params[] = $metodo_pagamento;
-            $paramCount++;
+            $updateData['metodo_pagamento'] = $metodo_pagamento;
         }
         
         if (!empty($gateway_data['gateway_payment_id'])) {
-            $query .= ", gateway_payment_id = $$paramCount";
-            $params[] = $gateway_data['gateway_payment_id'];
-            $paramCount++;
+            $updateData['gateway_payment_id'] = $gateway_data['gateway_payment_id'];
         }
         
         if (!empty($gateway_data['gateway_response'])) {
-            $query .= ", gateway_response = $$paramCount";
-            $params[] = json_encode($gateway_data['gateway_response']);
-            $paramCount++;
+            $updateData['gateway_response'] = json_encode($gateway_data['gateway_response']);
         }
         
-        $query .= " WHERE id = $$paramCount";
-        $params[] = $id;
-        
-        return pg_query_params($this->conn, $query, $params);
+        return $this->db->update('pagamentos', $updateData, 'id = ?', [$id]);
     }
     
     /**
@@ -231,7 +205,7 @@ class Payment {
                   updated_at = CURRENT_TIMESTAMP
                   WHERE id = $1";
         
-        return pg_query_params($this->conn, $query, [$id]);
+        return pg_query_params($this->db->getConnection(), $query, [$id]);
     }
     
     /**
@@ -248,7 +222,7 @@ class Payment {
                   AND p.data_vencimento < CURRENT_DATE
                   ORDER BY p.data_vencimento ASC";
         
-        $result = pg_query($this->conn, $query);
+        $result = pg_query($this->db->getConnection(), $query);
         
         if ($result) {
             return pg_fetch_all($result) ?: [];
@@ -270,7 +244,7 @@ class Payment {
             default => "1=1"
         };
         
-        $query = "SELECT 
+        return $this->db->fetch("SELECT 
                     COUNT(*) as total_pagamentos,
                     COUNT(CASE WHEN status = 'pago' THEN 1 END) as pagamentos_pagos,
                     COUNT(CASE WHEN status = 'pendente' THEN 1 END) as pagamentos_pendentes,
@@ -278,15 +252,7 @@ class Payment {
                     COALESCE(SUM(CASE WHEN status = 'pago' THEN valor ELSE 0 END), 0) as receita_total,
                     COALESCE(SUM(CASE WHEN status = 'pendente' THEN valor ELSE 0 END), 0) as receita_pendente
                   FROM pagamentos p
-                  WHERE $date_filter";
-        
-        $result = pg_query($this->conn, $query);
-        
-        if ($result && pg_num_rows($result) > 0) {
-            return pg_fetch_assoc($result);
-        }
-        
-        return null;
+                  WHERE $date_filter");
     }
 }
 
