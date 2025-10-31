@@ -29,6 +29,7 @@ docker-compose.production.yml
 
 # Backups de banco de dados (CRÍTICO!)
 *.sql
+!database/**/*.sql
 *.dump
 *.backup
 backup_*.sql
