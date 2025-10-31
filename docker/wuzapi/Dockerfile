@@ -26,8 +26,13 @@ COPY --from=builder /app/migrations /usr/local/bin/migrations
 COPY --from=builder /app/frontend /app/frontend
 COPY --from=builder /app/static /app/static
 
-# Copiar arquivo de configuração do frontend
-COPY frontend.env /app/frontend/.env
+# Copiar arquivo de configuração do frontend (usa .example se real não existir)
+COPY frontend.env* /tmp/
+RUN if [ -f /tmp/frontend.env ]; then \
+        cp /tmp/frontend.env /app/frontend/.env; \
+    else \
+        cp /tmp/frontend.env.example /app/frontend/.env; \
+    fi
 
 # Build do frontend React (como root)
 RUN cd /app/frontend && npm install && npm run build

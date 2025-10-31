@@ -8,6 +8,7 @@
 !.env.example
 *.env
 !*.env.example
+!docker/wuzapi/frontend.env.example
 
 # Credenciais e senhas
 CREDENCIAIS_ACESSO.md
