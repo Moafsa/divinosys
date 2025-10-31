@@ -1,0 +1,162 @@
+# ===================================================================
+# Docker Compose - Divino Lanches 2.0
+# EXEMPLO: Substitua os valores antes de usar!
+# ===================================================================
+
+version: '3.8'
+
+services:
+  # ========== PostgreSQL Database ==========
+  postgres:
+    image: postgres:15-alpine
+    container_name: divino-lanches-db
+    environment:
+      POSTGRES_DB: divino_db
+      POSTGRES_USER: divino_user
+      POSTGRES_PASSWORD: MUDE_ESTA_SENHA_123  # ⚠️ TROQUE!
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - divino-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U divino_user -d divino_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ========== Redis Cache ==========
+  redis:
+    image: redis:7-alpine
+    container_name: divino-lanches-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - divino-network
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ========== WuzAPI (WhatsApp) ==========
+  wuzapi:
+    image: clairton/wuzapi:latest
+    container_name: divino-lanches-wuzapi
+    environment:
+      - PORT=8080
+      - API_KEY=1234ABCD  # ⚠️ TROQUE EM PRODUÇÃO!
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=divino_db
+      - DB_USER=divino_user
+      - DB_PASSWORD=MUDE_ESTA_SENHA_123  # ⚠️ TROQUE!
+    ports:
+      - "8081:8080"
+    volumes:
+      - wuzapi_sessions:/app/sessions
+      - wuzapi_data:/app/data
+    networks:
+      - divino-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ========== MCP Server (AI Integration) ==========
+  mcp-server:
+    build:
+      context: ./docker/mcp-server
+      dockerfile: Dockerfile
+    container_name: divino-mcp-server
+    ports:
+      - "3100:3100"
+    environment:
+      MCP_PORT: 3100
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: divino_db
+      DB_USER: divino_user
+      DB_PASSWORD: MUDE_ESTA_SENHA_123  # ⚠️ TROQUE!
+      MCP_API_KEY: GERE_TOKEN_ALEATORIO_AQUI  # ⚠️ TROQUE!
+      NODE_ENV: production
+    networks:
+      - divino-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ========== Main Application ==========
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: divino-lanches-app
+    ports:
+      - "8080:80"
+    environment:
+      # Database
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=divino_db
+      - DB_USER=divino_user
+      - DB_PASSWORD=MUDE_ESTA_SENHA_123  # ⚠️ TROQUE!
+      
+      # Application
+      - APP_ENV=production
+      - APP_URL=http://localhost:8080
+      
+      # WuzAPI
+      - WUZAPI_URL=http://wuzapi:8080
+      - WUZAPI_API_KEY=1234ABCD  # ⚠️ TROQUE!
+      
+      # Asaas (Payment Gateway)
+      - ASAAS_API_KEY=$$aact_SEU_TOKEN_AQUI  # ⚠️ SUBSTITUA!
+      - ASAAS_API_URL=https://sandbox.asaas.com/api/v3
+      - ASAAS_WEBHOOK_URL=http://localhost:8080/webhook/asaas.php
+      
+      # AI Integration (Opcional)
+      - USE_N8N_AI=false
+      - AI_N8N_WEBHOOK_URL=
+      - AI_N8N_TIMEOUT=30
+      - OPENAI_API_KEY=
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/var/www/html
+      - ./uploads:/var/www/html/uploads
+      - ./logs:/var/www/html/logs
+      - ./backups:/var/www/html/backups
+    networks:
+      - divino-network
+
+# ========== Volumes ==========
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  wuzapi_sessions:
+    driver: local
+  wuzapi_data:
+    driver: local
+
+# ========== Networks ==========
+networks:
+  divino-network:
+    driver: bridge
+
+# ===================================================================
+# IMPORTANTE:
+# 1. Copie este arquivo para docker-compose.yml
+# 2. Substitua TODAS as senhas e tokens
+# 3. Nunca commite docker-compose.yml com credenciais reais!
+# ===================================================================
+

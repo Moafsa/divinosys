@@ -15,6 +15,17 @@ CREDENCIAIS_ACESSO.md
 *password*
 *credentials*
 
+# Arquivos MD com credenciais (CRÍTICO!)
+COOLIFY_VARIAVEIS_AMBIENTE.md
+DEPLOYMENT.md
+ENV_SETUP_GUIDE.md
+!*.example.md
+
+# Docker Compose com credenciais reais
+docker-compose.yml
+docker-compose.production.yml
+!docker-compose.example.yml
+
 # Backups de banco de dados (CRÍTICO!)
 *.sql
 *.dump
