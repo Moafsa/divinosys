@@ -71,7 +71,7 @@ services:
       context: ./docker/wuzapi
       dockerfile: Dockerfile
       args:
-        - WUZAPI_API_URL=${WUZAPI_PUBLIC_URL:-http://localhost:8080}
+        - WUZAPI_API_URL=${WUZAPI_BACKEND_URL:-http://localhost:8080}
     environment:
       - PORT=8080
       - API_KEY=${WUZAPI_ADMIN_TOKEN:-admin123456}
@@ -82,6 +82,9 @@ services:
       - DB_PASSWORD=${WUZAPI_DB_PASSWORD:-wuzapi}
       - WUZAPI_URL=http://wuzapi:8080
       - WEBHOOK_URL=${APP_URL}/webhook/wuzapi.php
+    ports:
+      - "8080:8080"  # API Backend
+      - "3000:3000"  # Frontend React
     volumes:
       - wuzapi_sessions:/app/sessions
       - wuzapi_logs:/app/logs

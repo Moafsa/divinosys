@@ -43,15 +43,13 @@ RUN sed -i "s|\${WUZAPI_API_URL:-http://localhost:8080}|${WUZAPI_API_URL}|g" /ap
 # Build do frontend React (como root)
 RUN cd /app/frontend && npm install && npm run build
 
-# Mover build do frontend para o diretório static que o WuzAPI serve
-RUN cp -r /app/frontend/build/* /app/static/
-
 # Criar usuário não-root e dar permissões
 RUN adduser -D -s /bin/sh wuzapi
 RUN chown -R wuzapi:wuzapi /app/frontend /app/static
 
-# Expor apenas porta do backend (que serve frontend+API)
-EXPOSE 8080
+# Expor portas (backend API:8080 e frontend:3000)
+EXPOSE 8080 3000
 
-# Comando de inicialização (apenas backend, que serve tudo)
-CMD ["wuzapi", "-port=8080", "-address=0.0.0.0", "-admintoken=${API_KEY:-admin123456}"]
+# Comando de inicialização
+# Backend API na porta 8080, Frontend na porta 3000
+CMD ["sh", "-c", "wuzapi -port=8080 -address=0.0.0.0 -admintoken=${API_KEY:-admin123456} & cd /app/frontend && npx serve -s build -l 3000"]
