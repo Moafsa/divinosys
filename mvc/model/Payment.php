@@ -17,7 +17,7 @@ class Payment {
      * Criar novo pagamento
      */
     public function create($data) {
-        $query = "INSERT INTO pagamentos 
+        $query = "INSERT INTO pagamentos_assinaturas 
                   (assinatura_id, tenant_id, valor, status, metodo_pagamento, data_vencimento) 
                   VALUES ($1, $2, $3, $4, $5, $6) 
                   RETURNING id";
@@ -43,7 +43,7 @@ class Payment {
      */
     public function getById($id) {
         $query = "SELECT p.*, t.nome as tenant_nome, a.plano_id
-                  FROM pagamentos p
+                  FROM pagamentos_assinaturas p
                   INNER JOIN tenants t ON p.tenant_id = t.id
                   INNER JOIN assinaturas a ON p.assinatura_id = a.id
                   WHERE p.id = $1";
@@ -67,7 +67,7 @@ class Payment {
      */
     public function getByTenant($tenant_id, $filters = []) {
         $query = "SELECT p.*, a.plano_id, pl.nome as plano_nome
-                  FROM pagamentos p
+                  FROM pagamentos_assinaturas p
                   INNER JOIN assinaturas a ON p.assinatura_id = a.id
                   INNER JOIN planos pl ON a.plano_id = pl.id
                   WHERE p.tenant_id = $1";
@@ -104,7 +104,7 @@ class Payment {
                   t.nome as tenant_nome, 
                   t.subdomain,
                   pl.nome as plano_nome
-                  FROM pagamentos p
+                  FROM pagamentos_assinaturas p
                   LEFT JOIN tenants t ON p.tenant_id = t.id
                   LEFT JOIN assinaturas a ON p.assinatura_id = a.id
                   LEFT JOIN planos pl ON a.plano_id = pl.id
@@ -142,7 +142,7 @@ class Payment {
      * Atualizar status do pagamento
      */
     public function updateStatus($id, $status, $dados_gateway = []) {
-        $query = "UPDATE pagamentos SET 
+        $query = "UPDATE pagamentos_assinaturas SET 
                   status = $1, 
                   updated_at = CURRENT_TIMESTAMP";
         
@@ -193,14 +193,14 @@ class Payment {
             $updateData['gateway_response'] = json_encode($gateway_data['gateway_response']);
         }
         
-        return $this->db->update('pagamentos', $updateData, 'id = ?', [$id]);
+        return $this->db->update('pagamentos_assinaturas', $updateData, 'id = ?', [$id]);
     }
     
     /**
      * Incrementar tentativas de cobrança
      */
     public function incrementTentativas($id) {
-        $query = "UPDATE pagamentos SET 
+        $query = "UPDATE pagamentos_assinaturas SET 
                   tentativas = tentativas + 1,
                   updated_at = CURRENT_TIMESTAMP
                   WHERE id = $1";

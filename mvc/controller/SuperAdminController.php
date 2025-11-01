@@ -606,7 +606,7 @@ class SuperAdminController {
         $db = \System\Database::getInstance();
         
         // Buscar pagamento no banco local
-        $payment = $db->fetch("SELECT * FROM pagamentos WHERE id = ?", [$data['payment_id']]);
+        $payment = $db->fetch("SELECT * FROM pagamentos_assinaturas WHERE id = ?", [$data['payment_id']]);
         
         if (!$payment) {
             error_log("SuperAdminController::markPaymentAsPaid - Pagamento não encontrado: {$data['payment_id']}");
