@@ -204,6 +204,31 @@ try {
                 } else {
                     error_log("tenant_subscription.php - Erro ao atualizar no Asaas: " . json_encode($asaasResult));
                 }
+                
+                // CRIAR FATURA se não existir (mesmo sem mudança de periodicidade)
+                $existingPayment = $db->fetch(
+                    "SELECT id FROM pagamentos_assinaturas 
+                     WHERE tenant_id = ? AND assinatura_id = ? AND status = 'pendente' 
+                     ORDER BY created_at DESC LIMIT 1",
+                    [$tenantId, $currentSubscription['id']]
+                );
+                
+                if (!$existingPayment) {
+                    $payment_record = [
+                        'tenant_id' => $tenantId,
+                        'assinatura_id' => $currentSubscription['id'],
+                        'valor' => $valorFinal,
+                        'status' => 'pendente',
+                        'data_vencimento' => date('Y-m-d', strtotime('+7 days')),
+                        'metodo_pagamento' => 'pix',
+                        'gateway_payment_id' => $currentSubscription['asaas_subscription_id'],
+                        'gateway_response' => json_encode(['message' => 'Fatura criada por mudança de plano']),
+                        'created_at' => date('Y-m-d H:i:s')
+                    ];
+                    
+                    $payment_id = $db->insert('pagamentos_assinaturas', $payment_record);
+                    error_log("tenant_subscription.php - Fatura criada (mudança de plano sem mudança de periodicidade): ID $payment_id");
+                }
             }
         } else {
             // É pagamento único antigo - apenas loga, não tenta atualizar
@@ -211,6 +236,31 @@ try {
         }
     } else {
         error_log("tenant_subscription.php - Sem assinatura no Asaas. Atualização apenas local.");
+    }
+    
+    // CRIAR FATURA se não existir (mesmo sem Asaas)
+    $existingPayment = $db->fetch(
+        "SELECT id FROM pagamentos_assinaturas 
+         WHERE tenant_id = ? AND assinatura_id = ? AND status = 'pendente' 
+         ORDER BY created_at DESC LIMIT 1",
+        [$tenantId, $currentSubscription['id']]
+    );
+    
+    if (!$existingPayment) {
+        $payment_record = [
+            'tenant_id' => $tenantId,
+            'assinatura_id' => $currentSubscription['id'],
+            'valor' => $valorFinal,
+            'status' => 'pendente',
+            'data_vencimento' => date('Y-m-d', strtotime('+7 days')),
+            'metodo_pagamento' => 'pix',
+            'gateway_payment_id' => null,
+            'gateway_response' => json_encode(['message' => 'Fatura criada localmente (sem integração Asaas)']),
+            'created_at' => date('Y-m-d H:i:s')
+        ];
+        
+        $payment_id = $db->insert('pagamentos_assinaturas', $payment_record);
+        error_log("tenant_subscription.php - Fatura criada (modo local, sem Asaas): ID $payment_id");
     }
     
     echo json_encode([

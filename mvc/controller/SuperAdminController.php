@@ -347,10 +347,64 @@ class SuperAdminController {
                                     error_log("SuperAdminController::updateTenant - Erro ao atualizar no Asaas: " . json_encode($asaasResult));
                                 }
                             }
+                            
+                            // CRIAR FATURA se não existir (mesmo sem mudança de periodicidade)
+                            $existingPayment = $db->fetch(
+                                "SELECT id FROM pagamentos_assinaturas 
+                                 WHERE tenant_id = ? AND assinatura_id = ? AND status = 'pendente' 
+                                 ORDER BY created_at DESC LIMIT 1",
+                                [$data['id'], $subscription['id']]
+                            );
+                            
+                            if (!$existingPayment) {
+                                $valorFatura = $updateSubscriptionData['valor'] ?? $subscription['valor'];
+                                $payment_record = [
+                                    'tenant_id' => $data['id'],
+                                    'assinatura_id' => $subscription['id'],
+                                    'valor' => $valorFatura,
+                                    'status' => 'pendente',
+                                    'data_vencimento' => date('Y-m-d', strtotime('+7 days')),
+                                    'metodo_pagamento' => 'pix',
+                                    'gateway_payment_id' => $subscription['asaas_subscription_id'],
+                                    'gateway_response' => json_encode(['message' => 'Fatura criada por mudança de plano (SuperAdmin)']),
+                                    'created_at' => date('Y-m-d H:i:s')
+                                ];
+                                
+                                $payment_id = $db->insert('pagamentos_assinaturas', $payment_record);
+                                error_log("SuperAdminController::updateTenant - Fatura criada (mudança sem periodicidade): ID $payment_id");
+                            }
                         }
                     } else {
                         // É pagamento único - não pode editar, avisar
                         error_log("SuperAdminController::updateTenant - Assinatura antiga (payment ID: {$subscription['asaas_subscription_id']}). Não é possível editar no Asaas. Crie uma nova assinatura recorrente.");
+                    }
+                } else {
+                    // Sem assinatura no Asaas - criar fatura local
+                    error_log("SuperAdminController::updateTenant - Sem assinatura no Asaas. Criando fatura local.");
+                    
+                    $existingPayment = $db->fetch(
+                        "SELECT id FROM pagamentos_assinaturas 
+                         WHERE tenant_id = ? AND assinatura_id = ? AND status = 'pendente' 
+                         ORDER BY created_at DESC LIMIT 1",
+                        [$data['id'], $subscription['id']]
+                    );
+                    
+                    if (!$existingPayment) {
+                        $valorFatura = $updateSubscriptionData['valor'] ?? $subscription['valor'];
+                        $payment_record = [
+                            'tenant_id' => $data['id'],
+                            'assinatura_id' => $subscription['id'],
+                            'valor' => $valorFatura,
+                            'status' => 'pendente',
+                            'data_vencimento' => date('Y-m-d', strtotime('+7 days')),
+                            'metodo_pagamento' => 'pix',
+                            'gateway_payment_id' => null,
+                            'gateway_response' => json_encode(['message' => 'Fatura criada localmente (sem integração Asaas - SuperAdmin)']),
+                            'created_at' => date('Y-m-d H:i:s')
+                        ];
+                        
+                        $payment_id = $db->insert('pagamentos_assinaturas', $payment_record);
+                        error_log("SuperAdminController::updateTenant - Fatura criada (modo local): ID $payment_id");
                     }
                 }
             }
