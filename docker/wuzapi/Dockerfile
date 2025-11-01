@@ -1,5 +1,5 @@
 # Dockerfile para WuzAPI (Backend + Frontend)
-FROM golang:1.24-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 # Instalar dependências
 RUN apk add --no-cache git
