@@ -34,6 +34,12 @@ RUN if [ -f /tmp/frontend.env ]; then \
         cp /tmp/frontend.env.example /app/frontend/.env; \
     fi
 
+# Aceitar WUZAPI_API_URL como argumento de build
+ARG WUZAPI_API_URL=http://localhost:8080
+
+# Substituir variável no .env do frontend
+RUN sed -i "s|\${WUZAPI_API_URL:-http://localhost:8080}|${WUZAPI_API_URL}|g" /app/frontend/.env
+
 # Build do frontend React (como root)
 RUN cd /app/frontend && npm install && npm run build
 
