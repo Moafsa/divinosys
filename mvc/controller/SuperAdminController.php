@@ -290,6 +290,23 @@ class SuperAdminController {
                                             'asaas_subscription_id' => $newAsaasSubId
                                         ]);
                                         
+                                        // 7. Criar fatura no banco local
+                                        $valorFatura = $updateSubscriptionData['valor'] ?? $subscription['valor'];
+                                        $payment_record = [
+                                            'tenant_id' => $data['id'],
+                                            'assinatura_id' => $subscription['id'],
+                                            'valor' => $valorFatura,
+                                            'status' => 'pendente',
+                                            'data_vencimento' => date('Y-m-d', strtotime('+7 days')),
+                                            'metodo_pagamento' => 'pix',
+                                            'gateway_payment_id' => $newAsaasSubId,
+                                            'gateway_response' => json_encode($newSubscription['data']),
+                                            'created_at' => date('Y-m-d H:i:s')
+                                        ];
+                                        
+                                        $payment_id = $db->insert('pagamentos_assinaturas', $payment_record);
+                                        error_log("SuperAdminController::updateTenant - Fatura criada no banco local: ID $payment_id");
+                                        
                                         error_log("SuperAdminController::updateTenant - Assinatura recriada com sucesso no Asaas");
                                     } else {
                                         error_log("SuperAdminController::updateTenant - ERRO ao criar nova assinatura: " . json_encode($newSubscription));
