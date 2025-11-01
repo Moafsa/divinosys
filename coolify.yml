@@ -71,14 +71,15 @@ services:
       context: ./docker/wuzapi
       dockerfile: Dockerfile
     environment:
+      - PORT=8080
+      - API_KEY=${WUZAPI_ADMIN_TOKEN:-admin123456}
       - DB_HOST=${DB_HOST}
       - DB_PORT=5432
       - DB_NAME=wuzapi
       - DB_USER=wuzapi
-      - DB_PASSWORD=${WUZAPI_DB_PASSWORD}
+      - DB_PASSWORD=${WUZAPI_DB_PASSWORD:-wuzapi}
       - WUZAPI_URL=http://wuzapi:8080
       - WEBHOOK_URL=${APP_URL}/webhook/wuzapi.php
-      - WUZAPI_ADMIN_TOKEN=${WUZAPI_ADMIN_TOKEN}
     volumes:
       - wuzapi_sessions:/app/sessions
       - wuzapi_logs:/app/logs
