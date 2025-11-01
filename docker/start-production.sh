@@ -40,6 +40,10 @@ else
     echo "⚠️  Warning: Could not create backup (this is OK for first run or if database is empty)"
 fi
 
+# Setup WuzAPI database (separate from main app)
+echo "Setting up WuzAPI database..."
+php setup_wuzapi_database.php
+
 # Run consolidated database migration
 # This script handles: init scripts, migrations, seeds, and sequence fixes
 echo "Running consolidated database migration..."
