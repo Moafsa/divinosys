@@ -73,7 +73,7 @@ class Subscription {
      */
     public function delete($id) {
         // Verificar se há pagamentos associados
-        $checkQuery = "SELECT COUNT(*) as count FROM pagamentos WHERE assinatura_id = " . intval($id);
+        $checkQuery = "SELECT COUNT(*) as count FROM pagamentos_assinaturas WHERE assinatura_id = " . intval($id);
         $check = $this->db->fetch($checkQuery);
         
         if ($check['count'] > 0) {

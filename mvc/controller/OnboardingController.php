@@ -434,22 +434,18 @@ class OnboardingController {
                     
                     $payment_record = [
                         'tenant_id' => $tenant_id,
-                        'filial_id' => $filial_id,
                         'assinatura_id' => $subscription_id,
                         'valor' => $valorPagamento,
-                        'valor_pago' => $valorPagamento, // Valor pago = valor da assinatura para registro inicial
-                        'forma_pagamento' => 'pix',
                         'status' => 'pendente',
                         'data_vencimento' => date('Y-m-d', strtotime('+7 days')),
                         'metodo_pagamento' => 'pix',
                         'gateway_payment_id' => $asaas_charge['data']['id'] ?? $asaas_subscription_id,
-                        'gateway_customer_id' => $asaas_customer['data']['id'],
                         'gateway_response' => json_encode($asaas_charge['data']),
                         'created_at' => date('Y-m-d H:i:s')
                     ];
                     
                     $db = \System\Database::getInstance();
-                    $payment_id = $db->insert('pagamentos', $payment_record);
+                    $payment_id = $db->insert('pagamentos_assinaturas', $payment_record);
                 } else {
                     error_log("OnboardingController - Erro ao criar cobrança Asaas (não crítico): " . json_encode($asaas_charge));
                 }
