@@ -207,6 +207,32 @@ class SuperAdminController {
             $subscription = $this->subscriptionModel->getByTenant($data['id']);
             error_log("SuperAdminController::updateTenant - Assinatura encontrada: " . ($subscription ? 'SIM (ID: ' . $subscription['id'] . ')' : 'NÃO'));
             
+            // Se não tem assinatura, criar uma nova
+            if (!$subscription && isset($data['plano_id'])) {
+                error_log("SuperAdminController::updateTenant - Criando nova assinatura para tenant {$data['id']}");
+                $plano = $this->planModel->getById($data['plano_id']);
+                
+                if ($plano) {
+                    $periodicidade = $data['periodicidade'] ?? 'mensal';
+                    $subscriptionData = [
+                        'tenant_id' => $data['id'],
+                        'plano_id' => $data['plano_id'],
+                        'status' => 'ativa',
+                        'valor' => $plano['preco_mensal'],
+                        'periodicidade' => $periodicidade,
+                        'data_inicio' => date('Y-m-d'),
+                        'trial_ate' => null, // Sem trial para assinaturas criadas pelo SuperAdmin
+                        'created_at' => date('Y-m-d H:i:s')
+                    ];
+                    
+                    $subscriptionId = $db->insert('assinaturas', $subscriptionData);
+                    error_log("SuperAdminController::updateTenant - Nova assinatura criada: ID $subscriptionId");
+                    
+                    // Buscar a assinatura recém-criada
+                    $subscription = $this->subscriptionModel->getByTenant($data['id']);
+                }
+            }
+            
             if ($subscription) {
                 $updateSubscriptionData = [];
                 

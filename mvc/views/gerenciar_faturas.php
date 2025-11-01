@@ -46,7 +46,7 @@ $faturas = $db->fetchAll("
     SELECT 
         p.*,
         a.periodicidade
-    FROM pagamentos p
+    FROM pagamentos_assinaturas p
     LEFT JOIN assinaturas a ON p.assinatura_id = a.id
     WHERE p.tenant_id = ? AND p.assinatura_id IS NOT NULL
     ORDER BY p.created_at DESC
