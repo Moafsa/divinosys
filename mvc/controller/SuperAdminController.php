@@ -290,22 +290,34 @@ class SuperAdminController {
                                             'asaas_subscription_id' => $newAsaasSubId
                                         ]);
                                         
-                                        // 7. Criar fatura no banco local
-                                        $valorFatura = $updateSubscriptionData['valor'] ?? $subscription['valor'];
-                                        $payment_record = [
-                                            'tenant_id' => $data['id'],
-                                            'assinatura_id' => $subscription['id'],
-                                            'valor' => $valorFatura,
-                                            'status' => 'pendente',
-                                            'data_vencimento' => date('Y-m-d', strtotime('+7 days')),
-                                            'metodo_pagamento' => 'pix',
-                                            'gateway_payment_id' => $newAsaasSubId,
-                                            'gateway_response' => json_encode($newSubscription['data']),
-                                            'created_at' => date('Y-m-d H:i:s')
-                                        ];
+                                        // 7. Verificar se já existe fatura pendente para esta assinatura
+                                        $existingPayment = $db->fetch(
+                                            "SELECT id FROM pagamentos_assinaturas 
+                                             WHERE tenant_id = ? AND assinatura_id = ? AND status = 'pendente' 
+                                             ORDER BY created_at DESC LIMIT 1",
+                                            [$data['id'], $subscription['id']]
+                                        );
                                         
-                                        $payment_id = $db->insert('pagamentos_assinaturas', $payment_record);
-                                        error_log("SuperAdminController::updateTenant - Fatura criada no banco local: ID $payment_id");
+                                        if (!$existingPayment) {
+                                            // Criar fatura no banco local APENAS se não existir
+                                            $valorFatura = $updateSubscriptionData['valor'] ?? $subscription['valor'];
+                                            $payment_record = [
+                                                'tenant_id' => $data['id'],
+                                                'assinatura_id' => $subscription['id'],
+                                                'valor' => $valorFatura,
+                                                'status' => 'pendente',
+                                                'data_vencimento' => date('Y-m-d', strtotime('+7 days')),
+                                                'metodo_pagamento' => 'pix',
+                                                'gateway_payment_id' => $newAsaasSubId,
+                                                'gateway_response' => json_encode($newSubscription['data']),
+                                                'created_at' => date('Y-m-d H:i:s')
+                                            ];
+                                            
+                                            $payment_id = $db->insert('pagamentos_assinaturas', $payment_record);
+                                            error_log("SuperAdminController::updateTenant - Fatura criada no banco local: ID $payment_id");
+                                        } else {
+                                            error_log("SuperAdminController::updateTenant - Fatura pendente já existe (ID {$existingPayment['id']}), não criando duplicada");
+                                        }
                                         
                                         error_log("SuperAdminController::updateTenant - Assinatura recriada com sucesso no Asaas");
                                     } else {
