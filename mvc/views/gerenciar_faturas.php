@@ -41,14 +41,14 @@ $assinatura = $db->fetch("
 // Buscar todos os planos disponíveis
 $planos = $db->fetchAll("SELECT * FROM planos ORDER BY preco_mensal ASC");
 
-// Buscar histórico de faturas
+// Buscar histórico de faturas (TABELA CORRETA: pagamentos_assinaturas)
 $faturas = $db->fetchAll("
     SELECT 
         p.*,
         a.periodicidade
     FROM pagamentos_assinaturas p
     LEFT JOIN assinaturas a ON p.assinatura_id = a.id
-    WHERE p.tenant_id = ? AND p.assinatura_id IS NOT NULL
+    WHERE p.tenant_id = ?
     ORDER BY p.created_at DESC
 ", [$tenant['id']]);
 
