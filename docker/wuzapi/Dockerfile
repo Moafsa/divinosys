@@ -9,6 +9,7 @@ WORKDIR /app
 RUN git clone https://github.com/pedroherpeto/wuzapi.git .
 
 # Compilar backend Go
+RUN go env -w GOPROXY=https://proxy.golang.org,direct
 RUN go mod download
 RUN go build -o wuzapi .
 
