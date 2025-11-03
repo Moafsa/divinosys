@@ -1176,6 +1176,11 @@
                                             <label class="form-label">Máx. Filiais (-1 = ilimitado)</label>
                                             <input type="number" class="form-control" name="max_filiais" value="1">
                                         </div>
+                                        <div class="col-md-3 mb-3">
+                                            <label class="form-label">Dias de Trial (0 = sem trial)</label>
+                                            <input type="number" class="form-control" name="trial_days" value="14" min="0">
+                                            <small class="text-muted">Período de teste gratuito</small>
+                                        </div>
                                         <div class="col-12 mb-3">
                                             <label class="form-label fw-bold">Recursos Incluídos</label>
                                             <div class="row">
@@ -1333,6 +1338,11 @@
                                             <div class="col-md-3 mb-3">
                                                 <label class="form-label">Máx. Filiais (-1 = ilimitado)</label>
                                                 <input type="number" class="form-control" name="max_filiais" value="${plan.max_filiais || 1}">
+                                            </div>
+                                            <div class="col-md-3 mb-3">
+                                                <label class="form-label">Dias de Trial (0 = sem trial)</label>
+                                                <input type="number" class="form-control" name="trial_days" value="${plan.trial_days || 14}" min="0">
+                                                <small class="text-muted">Período de teste gratuito</small>
                                             </div>
                                             <div class="col-12 mb-3">
                                                 <label class="form-label fw-bold">Recursos Incluídos</label>

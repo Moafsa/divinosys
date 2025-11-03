@@ -95,6 +95,11 @@ class OnboardingController {
             // 3. Criar assinatura com trial
             $plano = $this->planModel->getById($data['plano_id']);
             
+            // Usar trial_days do plano (padrão 14 dias se não configurado)
+            $trial_days = isset($plano['trial_days']) && $plano['trial_days'] > 0 
+                ? intval($plano['trial_days']) 
+                : 14;
+            
             $subscription_data = [
                 'tenant_id' => $tenant_id,
                 'plano_id' => $data['plano_id'],
@@ -102,8 +107,8 @@ class OnboardingController {
                 'valor' => $plano['preco_mensal'],
                 'periodicidade' => 'mensal',
                 'data_inicio' => date('Y-m-d'),
-                'data_proxima_cobranca' => date('Y-m-d', strtotime('+14 days')),
-                'trial_ate' => date('Y-m-d', strtotime('+14 days'))
+                'data_proxima_cobranca' => date('Y-m-d', strtotime("+{$trial_days} days")),
+                'trial_ate' => date('Y-m-d', strtotime("+{$trial_days} days"))
             ];
             
             $subscription_id = $this->subscriptionModel->create($subscription_data);
@@ -299,6 +304,11 @@ class OnboardingController {
             // 3. Criar assinatura com trial
             $plano = $this->planModel->getById($data['plano_id']);
             
+            // Usar trial_days do plano (padrão 14 dias se não configurado)
+            $trial_days = isset($plano['trial_days']) && $plano['trial_days'] > 0 
+                ? intval($plano['trial_days']) 
+                : 14;
+            
             $subscription_data = [
                 'tenant_id' => $tenant_id,
                 'plano_id' => $data['plano_id'],
@@ -306,8 +316,8 @@ class OnboardingController {
                 'valor' => $plano['preco_mensal'],
                 'periodicidade' => $data['periodicidade'] ?? 'mensal',
                 'data_inicio' => date('Y-m-d'),
-                'data_proxima_cobranca' => date('Y-m-d', strtotime('+14 days')),
-                'trial_ate' => date('Y-m-d', strtotime('+14 days'))
+                'data_proxima_cobranca' => date('Y-m-d', strtotime("+{$trial_days} days")),
+                'trial_ate' => date('Y-m-d', strtotime("+{$trial_days} days"))
             ];
             
             $subscription_id = $this->subscriptionModel->create($subscription_data);

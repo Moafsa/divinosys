@@ -33,50 +33,65 @@ class Plan {
      * Criar novo plano
      */
     public function create($data) {
-        $query = "INSERT INTO planos 
-                  (nome, max_mesas, max_usuarios, max_produtos, max_pedidos_mes, recursos, preco_mensal) 
-                  VALUES ($1, $2, $3, $4, $5, $6, $7) 
-                  RETURNING id";
-        
-        $recursos_json = json_encode($data['recursos']);
-        
-        $result = $this->db->execute($query, [
-            $data['nome'],
-            $data['max_mesas'],
-            $data['max_usuarios'],
-            $data['max_produtos'],
-            $data['max_pedidos_mes'],
-            $recursos_json,
-            $data['preco_mensal']
-        ]);
-        
-        if ($result) {
-            return $result;
+        try {
+            $recursos_json = is_array($data['recursos']) ? json_encode($data['recursos']) : $data['recursos'];
+            
+            $insertData = [
+                'nome' => $data['nome'],
+                'max_mesas' => intval($data['max_mesas'] ?? 10),
+                'max_usuarios' => intval($data['max_usuarios'] ?? 3),
+                'max_produtos' => intval($data['max_produtos'] ?? 100),
+                'max_pedidos_mes' => intval($data['max_pedidos_mes'] ?? 1000),
+                'max_filiais' => intval($data['max_filiais'] ?? 1),
+                'trial_days' => intval($data['trial_days'] ?? 14),
+                'recursos' => $recursos_json,
+                'preco_mensal' => floatval($data['preco_mensal']),
+                'created_at' => date('Y-m-d H:i:s'),
+                'updated_at' => date('Y-m-d H:i:s')
+            ];
+            
+            $plan_id = $this->db->insert('planos', $insertData);
+            
+            if ($plan_id) {
+                error_log("Plan::create - Plan created successfully: ID $plan_id");
+                return $plan_id;
+            }
+            
+            return false;
+        } catch (\Exception $e) {
+            error_log("Plan::create - Exception: " . $e->getMessage());
+            return false;
         }
-        
-        return false;
     }
     
     /**
      * Atualizar plano
      */
     public function update($id, $data) {
-        $recursos_json = is_array($data['recursos']) ? json_encode($data['recursos']) : $data['recursos'];
-        
-        $query = "UPDATE planos SET 
-                  nome = '" . addslashes($data['nome']) . "', 
-                  max_mesas = " . intval($data['max_mesas']) . ", 
-                  max_usuarios = " . intval($data['max_usuarios']) . ", 
-                  max_produtos = " . intval($data['max_produtos']) . ", 
-                  max_pedidos_mes = " . intval($data['max_pedidos_mes']) . ", 
-                  recursos = '" . $recursos_json . "', 
-                  preco_mensal = " . floatval($data['preco_mensal']) . ",
-                  max_filiais = " . intval($data['max_filiais'] ?? 1) . "
-                  WHERE id = " . intval($id);
-        
-        $result = $this->db->query($query);
-        
-        return $result !== false;
+        try {
+            $recursos_json = is_array($data['recursos']) ? json_encode($data['recursos']) : $data['recursos'];
+            
+            $query = "UPDATE planos SET 
+                      nome = '" . addslashes($data['nome']) . "', 
+                      max_mesas = " . intval($data['max_mesas']) . ", 
+                      max_usuarios = " . intval($data['max_usuarios']) . ", 
+                      max_produtos = " . intval($data['max_produtos']) . ", 
+                      max_pedidos_mes = " . intval($data['max_pedidos_mes']) . ", 
+                      max_filiais = " . intval($data['max_filiais'] ?? 1) . ",
+                      trial_days = " . intval($data['trial_days'] ?? 14) . ",
+                      recursos = '" . $recursos_json . "', 
+                      preco_mensal = " . floatval($data['preco_mensal']) . ",
+                      updated_at = CURRENT_TIMESTAMP
+                      WHERE id = " . intval($id);
+            
+            $result = $this->db->query($query);
+            
+            error_log("Plan::update - Plan $id updated successfully");
+            return $result !== false;
+        } catch (\Exception $e) {
+            error_log("Plan::update - Exception: " . $e->getMessage());
+            return false;
+        }
     }
     
     /**
