@@ -3,18 +3,34 @@
 -- Execute este script UMA VEZ no banco existente
 -- ============================================
 
--- 1. Adicionar coluna trial_days se não existir
+-- 1. TABELA PLANOS - Adicionar coluna trial_days
 ALTER TABLE planos 
 ADD COLUMN IF NOT EXISTS trial_days INTEGER DEFAULT 14;
 
--- 2. Atualizar planos existentes com valores estratégicos de trial
+-- Atualizar planos existentes com valores estratégicos de trial
 UPDATE planos SET trial_days = 7 WHERE nome ILIKE '%básico%' OR nome ILIKE '%starter%';
 UPDATE planos SET trial_days = 14 WHERE nome ILIKE '%profissional%' OR nome ILIKE '%professional%';
 UPDATE planos SET trial_days = 30 WHERE nome ILIKE '%business%' OR preco_mensal BETWEEN 200 AND 400;
 UPDATE planos SET trial_days = 60 WHERE nome ILIKE '%enterprise%' OR preco_mensal > 400;
-
--- 3. Garantir que todos os planos tenham trial_days (fallback para 14)
 UPDATE planos SET trial_days = 14 WHERE trial_days IS NULL OR trial_days = 0;
+
+-- 2. TABELA PAGAMENTOS_ASSINATURAS - Adicionar colunas faltantes
+ALTER TABLE pagamentos_assinaturas ADD COLUMN IF NOT EXISTS valor_pago DECIMAL(10,2) DEFAULT 0.00;
+ALTER TABLE pagamentos_assinaturas ADD COLUMN IF NOT EXISTS filial_id INTEGER;
+ALTER TABLE pagamentos_assinaturas ADD COLUMN IF NOT EXISTS forma_pagamento VARCHAR(50);
+ALTER TABLE pagamentos_assinaturas ADD COLUMN IF NOT EXISTS gateway_customer_id VARCHAR(255);
+
+-- Atualizar valor_pago nos registros existentes
+UPDATE pagamentos_assinaturas 
+SET valor_pago = COALESCE(valor, 0.00) 
+WHERE valor_pago IS NULL OR valor_pago = 0.00;
+
+-- Comentários
+COMMENT ON COLUMN pagamentos_assinaturas.valor IS 'Valor da fatura (valor total a pagar)';
+COMMENT ON COLUMN pagamentos_assinaturas.valor_pago IS 'Valor efetivamente pago pelo cliente (pode ser diferente em caso de descontos ou pagamentos parciais)';
+COMMENT ON COLUMN pagamentos_assinaturas.filial_id IS 'Referência à filial do tenant (opcional)';
+COMMENT ON COLUMN pagamentos_assinaturas.forma_pagamento IS 'Forma de pagamento utilizada (pix, boleto, cartão, etc)';
+COMMENT ON COLUMN pagamentos_assinaturas.gateway_customer_id IS 'ID do cliente no gateway de pagamento (Asaas)';
 
 -- 4. Verificar resultado
 SELECT id, nome, preco_mensal, trial_days, max_filiais 

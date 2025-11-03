@@ -26,10 +26,14 @@ CREATE TABLE IF NOT EXISTS pagamentos_assinaturas (
     id SERIAL PRIMARY KEY,
     assinatura_id INTEGER NOT NULL REFERENCES assinaturas(id) ON DELETE CASCADE,
     tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    filial_id INTEGER REFERENCES filiais(id) ON DELETE SET NULL,
     valor DECIMAL(10,2) NOT NULL,
+    valor_pago DECIMAL(10,2) DEFAULT 0.00,
     status VARCHAR(20) DEFAULT 'pendente' CHECK (status IN ('pendente', 'pago', 'falhou', 'cancelado', 'estornado')),
     metodo_pagamento VARCHAR(50),
+    forma_pagamento VARCHAR(50),
     gateway_payment_id VARCHAR(255),
+    gateway_customer_id VARCHAR(255),
     gateway_response TEXT,
     data_pagamento TIMESTAMP,
     data_vencimento DATE NOT NULL,
@@ -95,19 +99,26 @@ CREATE TABLE IF NOT EXISTS tenant_config (
     UNIQUE(tenant_id, chave)
 );
 
+-- Comentários das colunas de pagamentos_assinaturas
+COMMENT ON COLUMN pagamentos_assinaturas.valor IS 'Valor da fatura (valor total a pagar)';
+COMMENT ON COLUMN pagamentos_assinaturas.valor_pago IS 'Valor efetivamente pago pelo cliente (pode ser diferente em caso de descontos ou pagamentos parciais)';
+COMMENT ON COLUMN pagamentos_assinaturas.filial_id IS 'Referência à filial do tenant (opcional)';
+COMMENT ON COLUMN pagamentos_assinaturas.forma_pagamento IS 'Forma de pagamento utilizada (pix, boleto, cartão, etc)';
+COMMENT ON COLUMN pagamentos_assinaturas.gateway_customer_id IS 'ID do cliente no gateway de pagamento (Asaas)';
+
 -- Índices para performance
-CREATE INDEX idx_assinaturas_tenant ON assinaturas(tenant_id);
-CREATE INDEX idx_assinaturas_status ON assinaturas(status);
-CREATE INDEX idx_pagamentos_assinaturas_assinatura ON pagamentos_assinaturas(assinatura_id);
-CREATE INDEX idx_pagamentos_assinaturas_tenant ON pagamentos_assinaturas(tenant_id);
-CREATE INDEX idx_pagamentos_assinaturas_status ON pagamentos_assinaturas(status);
-CREATE INDEX idx_uso_recursos_tenant ON uso_recursos(tenant_id);
-CREATE INDEX idx_uso_recursos_mes ON uso_recursos(mes_referencia);
-CREATE INDEX idx_audit_logs_tenant ON audit_logs(tenant_id);
-CREATE INDEX idx_audit_logs_created ON audit_logs(created_at);
-CREATE INDEX idx_notificacoes_tenant ON notificacoes(tenant_id);
-CREATE INDEX idx_notificacoes_usuario ON notificacoes(usuario_id);
-CREATE INDEX idx_notificacoes_lida ON notificacoes(lida);
+CREATE INDEX IF NOT EXISTS idx_assinaturas_tenant ON assinaturas(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_assinaturas_status ON assinaturas(status);
+CREATE INDEX IF NOT EXISTS idx_pagamentos_assinaturas_assinatura ON pagamentos_assinaturas(assinatura_id);
+CREATE INDEX IF NOT EXISTS idx_pagamentos_assinaturas_tenant ON pagamentos_assinaturas(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_pagamentos_assinaturas_status ON pagamentos_assinaturas(status);
+CREATE INDEX IF NOT EXISTS idx_uso_recursos_tenant ON uso_recursos(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_uso_recursos_mes ON uso_recursos(mes_referencia);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_tenant ON audit_logs(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_notificacoes_tenant ON notificacoes(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_notificacoes_usuario ON notificacoes(usuario_id);
+CREATE INDEX IF NOT EXISTS idx_notificacoes_lida ON notificacoes(lida);
 
 -- Inserir planos padrão (com max_filiais e trial_days)
 INSERT INTO planos (nome, max_mesas, max_usuarios, max_produtos, max_pedidos_mes, max_filiais, trial_days, recursos, preco_mensal) VALUES
