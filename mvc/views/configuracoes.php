@@ -10,6 +10,23 @@ $tenant = $context['tenant'];
 $filial = $context['filial'];
 $user = $session->getUser();
 
+// Get tenant plan and resources
+$planoRecursos = [];
+if ($tenant && isset($tenant['plano_id'])) {
+    $plano = $db->fetch(
+        "SELECT recursos FROM planos WHERE id = ?",
+        [$tenant['plano_id']]
+    );
+    if ($plano && !empty($plano['recursos'])) {
+        $planoRecursos = is_string($plano['recursos']) 
+            ? json_decode($plano['recursos'], true) 
+            : $plano['recursos'];
+    }
+}
+
+// Check if NFe is enabled in plan
+$nfeHabilitado = isset($planoRecursos['emissao_nfe']) && $planoRecursos['emissao_nfe'] === true;
+
 // Get current mesa configuration
 $numeroMesasAtual = 25; // default
 $capacidadeMesaAtual = 4; // default
@@ -459,6 +476,7 @@ if ($tenant && $filial) {
                     </div>
                     
                     <!-- Informações Fiscais -->
+                    <?php if ($nfeHabilitado): ?>
                     <hr class="my-4">
                     <h6 class="mb-3">
                         <i class="fas fa-file-invoice me-2"></i>
@@ -552,6 +570,16 @@ if ($tenant && $filial) {
                             </button>
                         </div>
                     </div>
+                    <?php else: ?>
+                    <hr class="my-4">
+                    <div class="alert alert-warning">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Emissão de Nota Fiscal não disponível no seu plano.</strong>
+                        <br>
+                        Para habilitar a emissão de notas fiscais, faça upgrade do seu plano em 
+                        <a href="index.php?view=gerenciar_faturas" class="alert-link">Gerenciar Faturas</a>.
+                    </div>
+                    <?php endif; ?>
                 </div>
 
                 <!-- Configurações de Sistema -->

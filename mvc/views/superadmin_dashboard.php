@@ -1213,6 +1213,10 @@
                                                 </div>
                                                 <div class="col-md-4">
                                                     <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="emissao_nfe" name="recursos[]" value="emissao_nfe">
+                                                        <label class="form-check-label" for="emissao_nfe">Emissão de Nota Fiscal</label>
+                                                    </div>
+                                                    <div class="form-check">
                                                         <input class="form-check-input" type="checkbox" id="backup_diario" name="recursos[]" value="backup_diario">
                                                         <label class="form-check-label" for="backup_diario">Backup Diário</label>
                                                     </div>
@@ -1344,6 +1348,10 @@
                                                         </div>
                                                     </div>
                                                     <div class="col-md-4">
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" id="edit_emissao_nfe" name="recursos[]" value="emissao_nfe" ${recursos?.emissao_nfe ? 'checked' : ''}>
+                                                            <label class="form-check-label" for="edit_emissao_nfe">Emissão de Nota Fiscal</label>
+                                                        </div>
                                                         <div class="form-check">
                                                             <input class="form-check-input" type="checkbox" id="edit_backup_diario" name="recursos[]" value="backup_diario" ${recursos?.backup_diario ? 'checked' : ''}>
                                                             <label class="form-check-label" for="edit_backup_diario">Backup Diário</label>
