@@ -67,9 +67,9 @@ class SubscriptionCheck
             
             // Se trial expirou
             if ($now > $trialEnd) {
-                // Verificar se há pagamentos pendentes VENCIDOS
+                // Verificar se há pagamentos pendentes VENCIDOS (tabela correta: pagamentos_assinaturas)
                 $paymentOverdue = $db->fetch("
-                    SELECT * FROM pagamentos
+                    SELECT * FROM pagamentos_assinaturas
                     WHERE tenant_id = ? 
                     AND status = 'pendente'
                     AND data_vencimento < CURRENT_DATE
