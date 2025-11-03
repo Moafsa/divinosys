@@ -85,14 +85,14 @@ class Plan {
     public function delete($id) {
         // Verificar se existem assinaturas ativas
         $check_query = "SELECT COUNT(*) as count FROM assinaturas 
-                       WHERE plano_id = $1 AND status IN ('ativa', 'trial')";
+                       WHERE plano_id = ? AND status IN ('ativa', 'trial')";
         $check_result = $this->db->fetch($check_query, [$id]);
         
         if ($check_result && $check_result['count'] > 0) {
-            return ['success' => false, 'message' => 'Não é possível deletar plano com assinaturas ativas'];
+            return ['success' => false, 'error' => 'Não é possível deletar plano com assinaturas ativas'];
         }
         
-        $query = "DELETE FROM planos WHERE id = $1";
+        $query = "DELETE FROM planos WHERE id = ?";
         $result = $this->db->execute($query, [$id]);
         
         return ['success' => (bool)$result, 'message' => $result ? 'Plano deletado com sucesso' : 'Erro ao deletar plano'];

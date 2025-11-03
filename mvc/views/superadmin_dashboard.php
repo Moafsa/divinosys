@@ -1157,24 +1157,83 @@
                                             <input type="number" class="form-control" name="preco_mensal" step="0.01" required>
                                         </div>
                                         <div class="col-md-3 mb-3">
-                                            <label class="form-label">Máx. Mesas</label>
-                                            <input type="number" class="form-control" name="max_mesas" value="0">
+                                            <label class="form-label">Máx. Mesas (-1 = ilimitado)</label>
+                                            <input type="number" class="form-control" name="max_mesas" value="10">
                                         </div>
                                         <div class="col-md-3 mb-3">
-                                            <label class="form-label">Máx. Usuários</label>
-                                            <input type="number" class="form-control" name="max_usuarios" value="0">
+                                            <label class="form-label">Máx. Usuários (-1 = ilimitado)</label>
+                                            <input type="number" class="form-control" name="max_usuarios" value="3">
                                         </div>
                                         <div class="col-md-3 mb-3">
-                                            <label class="form-label">Máx. Produtos</label>
-                                            <input type="number" class="form-control" name="max_produtos" value="0">
+                                            <label class="form-label">Máx. Produtos (-1 = ilimitado)</label>
+                                            <input type="number" class="form-control" name="max_produtos" value="100">
                                         </div>
                                         <div class="col-md-3 mb-3">
-                                            <label class="form-label">Máx. Pedidos/mês</label>
-                                            <input type="number" class="form-control" name="max_pedidos_mes" value="0">
+                                            <label class="form-label">Máx. Pedidos/mês (-1 = ilimitado)</label>
+                                            <input type="number" class="form-control" name="max_pedidos_mes" value="1000">
+                                        </div>
+                                        <div class="col-md-3 mb-3">
+                                            <label class="form-label">Máx. Filiais (-1 = ilimitado)</label>
+                                            <input type="number" class="form-control" name="max_filiais" value="1">
                                         </div>
                                         <div class="col-12 mb-3">
-                                            <label class="form-label">Recursos (JSON)</label>
-                                            <textarea class="form-control" name="recursos" rows="4" placeholder='{"relatorios_basicos": true, "suporte_email": true}'></textarea>
+                                            <label class="form-label fw-bold">Recursos Incluídos</label>
+                                            <div class="row">
+                                                <div class="col-md-4">
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="relatorios_basicos" name="recursos[]" value="relatorios_basicos" checked>
+                                                        <label class="form-check-label" for="relatorios_basicos">Relatórios Básicos</label>
+                                                    </div>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="relatorios_avancados" name="recursos[]" value="relatorios_avancados">
+                                                        <label class="form-check-label" for="relatorios_avancados">Relatórios Avançados</label>
+                                                    </div>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="relatorios_customizados" name="recursos[]" value="relatorios_customizados">
+                                                        <label class="form-check-label" for="relatorios_customizados">Relatórios Customizados</label>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="suporte_email" name="recursos[]" value="suporte_email" checked>
+                                                        <label class="form-check-label" for="suporte_email">Suporte por Email</label>
+                                                    </div>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="suporte_whatsapp" name="recursos[]" value="suporte_whatsapp">
+                                                        <label class="form-check-label" for="suporte_whatsapp">Suporte por WhatsApp</label>
+                                                    </div>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="suporte_telefone" name="recursos[]" value="suporte_telefone">
+                                                        <label class="form-check-label" for="suporte_telefone">Suporte por Telefone</label>
+                                                    </div>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="suporte_dedicado" name="recursos[]" value="suporte_dedicado">
+                                                        <label class="form-check-label" for="suporte_dedicado">Suporte Dedicado</label>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="backup_diario" name="recursos[]" value="backup_diario">
+                                                        <label class="form-check-label" for="backup_diario">Backup Diário</label>
+                                                    </div>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="backup_tempo_real" name="recursos[]" value="backup_tempo_real">
+                                                        <label class="form-check-label" for="backup_tempo_real">Backup em Tempo Real</label>
+                                                    </div>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="api_acesso" name="recursos[]" value="api_acesso">
+                                                        <label class="form-check-label" for="api_acesso">Acesso à API</label>
+                                                    </div>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="white_label" name="recursos[]" value="white_label">
+                                                        <label class="form-check-label" for="white_label">White Label</label>
+                                                    </div>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="integracoes_customizadas" name="recursos[]" value="integracoes_customizadas">
+                                                        <label class="form-check-label" for="integracoes_customizadas">Integrações Customizadas</label>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </form>
@@ -1206,6 +1265,9 @@
                 crossDomain: false
             })
             .done(function(plan) {
+                // Parse recursos if string
+                const recursos = typeof plan.recursos === 'string' ? JSON.parse(plan.recursos) : plan.recursos;
+                
                 const modal = `
                     <div class="modal fade" id="editPlanModal" tabindex="-1">
                         <div class="modal-dialog modal-lg">
@@ -1227,28 +1289,83 @@
                                                 <input type="number" class="form-control" name="preco_mensal" value="${plan.preco_mensal}" step="0.01" required>
                                             </div>
                                             <div class="col-md-3 mb-3">
-                                                <label class="form-label">Máx. Mesas</label>
+                                                <label class="form-label">Máx. Mesas (-1 = ilimitado)</label>
                                                 <input type="number" class="form-control" name="max_mesas" value="${plan.max_mesas}">
                                             </div>
                                             <div class="col-md-3 mb-3">
-                                                <label class="form-label">Máx. Usuários</label>
+                                                <label class="form-label">Máx. Usuários (-1 = ilimitado)</label>
                                                 <input type="number" class="form-control" name="max_usuarios" value="${plan.max_usuarios}">
                                             </div>
                                             <div class="col-md-3 mb-3">
-                                                <label class="form-label">Máx. Produtos</label>
+                                                <label class="form-label">Máx. Produtos (-1 = ilimitado)</label>
                                                 <input type="number" class="form-control" name="max_produtos" value="${plan.max_produtos}">
                                             </div>
                                             <div class="col-md-3 mb-3">
-                                                <label class="form-label">Máx. Pedidos/mês</label>
+                                                <label class="form-label">Máx. Pedidos/mês (-1 = ilimitado)</label>
                                                 <input type="number" class="form-control" name="max_pedidos_mes" value="${plan.max_pedidos_mes}">
                                             </div>
                                             <div class="col-md-3 mb-3">
-                                                <label class="form-label">Máx. Filiais</label>
-                                                <input type="number" class="form-control" name="max_filiais" value="${plan.max_filiais || 0}">
+                                                <label class="form-label">Máx. Filiais (-1 = ilimitado)</label>
+                                                <input type="number" class="form-control" name="max_filiais" value="${plan.max_filiais || 1}">
                                             </div>
                                             <div class="col-12 mb-3">
-                                                <label class="form-label">Recursos (JSON)</label>
-                                                <textarea class="form-control" name="recursos" rows="4">${JSON.stringify(plan.recursos, null, 2)}</textarea>
+                                                <label class="form-label fw-bold">Recursos Incluídos</label>
+                                                <div class="row">
+                                                    <div class="col-md-4">
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" id="edit_relatorios_basicos" name="recursos[]" value="relatorios_basicos" ${recursos?.relatorios_basicos ? 'checked' : ''}>
+                                                            <label class="form-check-label" for="edit_relatorios_basicos">Relatórios Básicos</label>
+                                                        </div>
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" id="edit_relatorios_avancados" name="recursos[]" value="relatorios_avancados" ${recursos?.relatorios_avancados ? 'checked' : ''}>
+                                                            <label class="form-check-label" for="edit_relatorios_avancados">Relatórios Avançados</label>
+                                                        </div>
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" id="edit_relatorios_customizados" name="recursos[]" value="relatorios_customizados" ${recursos?.relatorios_customizados ? 'checked' : ''}>
+                                                            <label class="form-check-label" for="edit_relatorios_customizados">Relatórios Customizados</label>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" id="edit_suporte_email" name="recursos[]" value="suporte_email" ${recursos?.suporte_email ? 'checked' : ''}>
+                                                            <label class="form-check-label" for="edit_suporte_email">Suporte por Email</label>
+                                                        </div>
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" id="edit_suporte_whatsapp" name="recursos[]" value="suporte_whatsapp" ${recursos?.suporte_whatsapp ? 'checked' : ''}>
+                                                            <label class="form-check-label" for="edit_suporte_whatsapp">Suporte por WhatsApp</label>
+                                                        </div>
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" id="edit_suporte_telefone" name="recursos[]" value="suporte_telefone" ${recursos?.suporte_telefone ? 'checked' : ''}>
+                                                            <label class="form-check-label" for="edit_suporte_telefone">Suporte por Telefone</label>
+                                                        </div>
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" id="edit_suporte_dedicado" name="recursos[]" value="suporte_dedicado" ${recursos?.suporte_dedicado ? 'checked' : ''}>
+                                                            <label class="form-check-label" for="edit_suporte_dedicado">Suporte Dedicado</label>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" id="edit_backup_diario" name="recursos[]" value="backup_diario" ${recursos?.backup_diario ? 'checked' : ''}>
+                                                            <label class="form-check-label" for="edit_backup_diario">Backup Diário</label>
+                                                        </div>
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" id="edit_backup_tempo_real" name="recursos[]" value="backup_tempo_real" ${recursos?.backup_tempo_real ? 'checked' : ''}>
+                                                            <label class="form-check-label" for="edit_backup_tempo_real">Backup em Tempo Real</label>
+                                                        </div>
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" id="edit_api_acesso" name="recursos[]" value="api_acesso" ${recursos?.api_acesso ? 'checked' : ''}>
+                                                            <label class="form-check-label" for="edit_api_acesso">Acesso à API</label>
+                                                        </div>
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" id="edit_white_label" name="recursos[]" value="white_label" ${recursos?.white_label ? 'checked' : ''}>
+                                                            <label class="form-check-label" for="edit_white_label">White Label</label>
+                                                        </div>
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" id="edit_integracoes_customizadas" name="recursos[]" value="integracoes_customizadas" ${recursos?.integracoes_customizadas ? 'checked' : ''}>
+                                                            <label class="form-check-label" for="edit_integracoes_customizadas">Integrações Customizadas</label>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     </form>
@@ -1358,16 +1475,21 @@
 
         function savePlan() {
             const formData = new FormData(document.getElementById('createPlanForm'));
-            const data = Object.fromEntries(formData.entries());
+            const data = {};
             
-            // Converter recursos de string para JSON
-            if (data.recursos) {
-                try {
-                    data.recursos = JSON.parse(data.recursos);
-                } catch (e) {
-                    data.recursos = {};
+            // Processar campos normais
+            for (const [key, value] of formData.entries()) {
+                if (key !== 'recursos[]') {
+                    data[key] = value;
                 }
             }
+            
+            // Processar checkboxes de recursos
+            const recursos = {};
+            formData.getAll('recursos[]').forEach(recurso => {
+                recursos[recurso] = true;
+            });
+            data.recursos = recursos;
             
             $.post('mvc/controller/SuperAdminController.php?action=createPlan', 
                 JSON.stringify(data),
@@ -1385,16 +1507,21 @@
 
         function updatePlan() {
             const formData = new FormData(document.getElementById('editPlanForm'));
-            const data = Object.fromEntries(formData.entries());
+            const data = {};
             
-            // Converter recursos de string para JSON
-            if (data.recursos) {
-                try {
-                    data.recursos = JSON.parse(data.recursos);
-                } catch (e) {
-                    data.recursos = {};
+            // Processar campos normais
+            for (const [key, value] of formData.entries()) {
+                if (key !== 'recursos[]') {
+                    data[key] = value;
                 }
             }
+            
+            // Processar checkboxes de recursos
+            const recursos = {};
+            formData.getAll('recursos[]').forEach(recurso => {
+                recursos[recurso] = true;
+            });
+            data.recursos = recursos;
             
             $.ajax({
                 url: 'index.php?action=updatePlan',
