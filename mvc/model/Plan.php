@@ -94,18 +94,21 @@ class Plan {
                 return ['success' => false, 'error' => 'Não é possível deletar plano com assinaturas ativas'];
             }
             
+            // Usar método query() diretamente ao invés de execute()
             $query = "DELETE FROM planos WHERE id = ?";
-            $result = $this->db->execute($query, [$id]);
+            $stmt = $this->db->query($query, [$id]);
+            $rowsAffected = $stmt->rowCount();
             
-            if ($result) {
+            if ($rowsAffected > 0) {
                 error_log("Plan::delete - Plan $id deleted successfully");
                 return ['success' => true, 'message' => 'Plano deletado com sucesso'];
             } else {
-                error_log("Plan::delete - Failed to delete plan $id");
-                return ['success' => false, 'error' => 'Erro ao deletar plano'];
+                error_log("Plan::delete - No rows affected, plan $id may not exist");
+                return ['success' => false, 'error' => 'Plano não encontrado'];
             }
         } catch (\Exception $e) {
             error_log("Plan::delete - Exception: " . $e->getMessage());
+            error_log("Plan::delete - Stack trace: " . $e->getTraceAsString());
             return ['success' => false, 'error' => 'Erro ao deletar plano: ' . $e->getMessage()];
         }
     }
