@@ -36,6 +36,13 @@ class Plan {
         try {
             $recursos_json = is_array($data['recursos']) ? json_encode($data['recursos']) : $data['recursos'];
             
+            // Verificar se coluna trial_days existe (para compatibilidade com bancos antigos)
+            $columnExists = $this->db->fetch("
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'planos' AND column_name = 'trial_days'
+            ");
+            
             $insertData = [
                 'nome' => $data['nome'],
                 'max_mesas' => intval($data['max_mesas'] ?? 10),
@@ -43,17 +50,21 @@ class Plan {
                 'max_produtos' => intval($data['max_produtos'] ?? 100),
                 'max_pedidos_mes' => intval($data['max_pedidos_mes'] ?? 1000),
                 'max_filiais' => intval($data['max_filiais'] ?? 1),
-                'trial_days' => intval($data['trial_days'] ?? 14),
                 'recursos' => $recursos_json,
                 'preco_mensal' => floatval($data['preco_mensal']),
                 'created_at' => date('Y-m-d H:i:s'),
                 'updated_at' => date('Y-m-d H:i:s')
             ];
             
+            // Só adiciona trial_days se a coluna existir
+            if ($columnExists) {
+                $insertData['trial_days'] = intval($data['trial_days'] ?? 14);
+            }
+            
             $plan_id = $this->db->insert('planos', $insertData);
             
             if ($plan_id) {
-                error_log("Plan::create - Plan created successfully: ID $plan_id");
+                error_log("Plan::create - Plan created successfully: ID $plan_id" . ($columnExists ? " (with trial_days)" : " (without trial_days - column not exists)"));
                 return $plan_id;
             }
             
@@ -71,6 +82,15 @@ class Plan {
         try {
             $recursos_json = is_array($data['recursos']) ? json_encode($data['recursos']) : $data['recursos'];
             
+            // Verificar se coluna trial_days existe (para compatibilidade com bancos antigos)
+            $columnExists = $this->db->fetch("
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'planos' AND column_name = 'trial_days'
+            ");
+            
+            $trialDaysClause = $columnExists ? "trial_days = " . intval($data['trial_days'] ?? 14) . "," : "";
+            
             $query = "UPDATE planos SET 
                       nome = '" . addslashes($data['nome']) . "', 
                       max_mesas = " . intval($data['max_mesas']) . ", 
@@ -78,7 +98,7 @@ class Plan {
                       max_produtos = " . intval($data['max_produtos']) . ", 
                       max_pedidos_mes = " . intval($data['max_pedidos_mes']) . ", 
                       max_filiais = " . intval($data['max_filiais'] ?? 1) . ",
-                      trial_days = " . intval($data['trial_days'] ?? 14) . ",
+                      {$trialDaysClause}
                       recursos = '" . $recursos_json . "', 
                       preco_mensal = " . floatval($data['preco_mensal']) . ",
                       updated_at = CURRENT_TIMESTAMP
@@ -86,7 +106,7 @@ class Plan {
             
             $result = $this->db->query($query);
             
-            error_log("Plan::update - Plan $id updated successfully");
+            error_log("Plan::update - Plan $id updated successfully" . ($columnExists ? " (with trial_days)" : " (without trial_days - column not exists)"));
             return $result !== false;
         } catch (\Exception $e) {
             error_log("Plan::update - Exception: " . $e->getMessage());
