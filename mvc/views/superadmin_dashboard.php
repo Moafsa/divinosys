@@ -1462,16 +1462,24 @@
             }).then((result) => {
                 if (result.isConfirmed) {
                     $.ajax({
-                        url: 'mvc/controller/SuperAdminController.php?action=deletePlan&id=' + id,
-                        type: 'DELETE',
-                        success: function(response) {
-                            if (response.success) {
-                                Swal.fire('Deletado!', 'Plano removido com sucesso', 'success');
-                                loadPlans();
-                            } else {
-                                Swal.fire('Erro!', response.error || 'Erro ao deletar plano', 'error');
-                            }
+                        url: 'index.php?action=deletePlan&id=' + id,
+                        method: 'DELETE',
+                        xhrFields: {
+                            withCredentials: true
+                        },
+                        crossDomain: false
+                    })
+                    .done(function(response) {
+                        if (response.success) {
+                            Swal.fire('Deletado!', 'Plano removido com sucesso', 'success');
+                            loadPlans();
+                        } else {
+                            Swal.fire('Erro!', response.error || 'Erro ao deletar plano', 'error');
                         }
+                    })
+                    .fail(function(xhr, status, error) {
+                        console.error('Erro ao deletar plano:', error);
+                        Swal.fire('Erro!', 'Erro ao deletar plano', 'error');
                     });
                 }
             });
