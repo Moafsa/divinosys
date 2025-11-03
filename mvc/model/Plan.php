@@ -83,19 +83,31 @@ class Plan {
      * Deletar plano
      */
     public function delete($id) {
-        // Verificar se existem assinaturas ativas
-        $check_query = "SELECT COUNT(*) as count FROM assinaturas 
-                       WHERE plano_id = ? AND status IN ('ativa', 'trial')";
-        $check_result = $this->db->fetch($check_query, [$id]);
-        
-        if ($check_result && $check_result['count'] > 0) {
-            return ['success' => false, 'error' => 'Não é possível deletar plano com assinaturas ativas'];
+        try {
+            // Verificar se existem assinaturas ativas
+            $check_query = "SELECT COUNT(*) as count FROM assinaturas 
+                           WHERE plano_id = ? AND status IN ('ativa', 'trial')";
+            $check_result = $this->db->fetch($check_query, [$id]);
+            
+            if ($check_result && $check_result['count'] > 0) {
+                error_log("Plan::delete - Cannot delete plan $id: {$check_result['count']} active subscriptions");
+                return ['success' => false, 'error' => 'Não é possível deletar plano com assinaturas ativas'];
+            }
+            
+            $query = "DELETE FROM planos WHERE id = ?";
+            $result = $this->db->execute($query, [$id]);
+            
+            if ($result) {
+                error_log("Plan::delete - Plan $id deleted successfully");
+                return ['success' => true, 'message' => 'Plano deletado com sucesso'];
+            } else {
+                error_log("Plan::delete - Failed to delete plan $id");
+                return ['success' => false, 'error' => 'Erro ao deletar plano'];
+            }
+        } catch (\Exception $e) {
+            error_log("Plan::delete - Exception: " . $e->getMessage());
+            return ['success' => false, 'error' => 'Erro ao deletar plano: ' . $e->getMessage()];
         }
-        
-        $query = "DELETE FROM planos WHERE id = ?";
-        $result = $this->db->execute($query, [$id]);
-        
-        return ['success' => (bool)$result, 'message' => $result ? 'Plano deletado com sucesso' : 'Erro ao deletar plano'];
     }
     
     /**
