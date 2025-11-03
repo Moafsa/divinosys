@@ -219,7 +219,20 @@ class SuperAdminController {
                     $plano = $this->planModel->getById($data['plano_id']);
                     if ($plano) {
                         $updateSubscriptionData['plano_id'] = $data['plano_id'];
-                        $updateSubscriptionData['valor'] = $plano['preco_mensal'];
+                        
+                        // Calcular valor baseado na periodicidade
+                        $periodicidade = $updateSubscriptionData['periodicidade'] ?? $subscription['periodicidade'] ?? 'mensal';
+                        $valorBase = $plano['preco_mensal'];
+                        $valorFinal = $valorBase;
+                        
+                        if ($periodicidade === 'semestral') {
+                            $valorFinal = $valorBase * 6 * 0.9; // 10% desconto
+                        } elseif ($periodicidade === 'anual') {
+                            $valorFinal = $valorBase * 12 * 0.8; // 20% desconto
+                        }
+                        
+                        $updateSubscriptionData['valor'] = $valorFinal;
+                        error_log("SuperAdminController::updateTenant - Valor calculado: Base=$valorBase, Period=$periodicidade, Final=$valorFinal");
                     }
                 }
                 

@@ -74,14 +74,18 @@ try {
     $periodicidade = $data['periodicidade'] ?? 'mensal';
     
     // Calcular valor com desconto
+    // IMPORTANTE: Asaas cobra o valor informado na periodicidade escolhida
+    // Se cycle=SEMIANNUALLY e value=269.1, cobra 269.1 a cada 6 meses
     $valorBase = $newPlan['preco_mensal'];
     $valorFinal = $valorBase;
     
     if ($periodicidade === 'semestral') {
-        $valorFinal = $valorBase * 6 * 0.9; // 10% desconto
+        $valorFinal = $valorBase * 6 * 0.9; // R$ 49.90 * 6 * 0.9 = R$ 269.46 (cobrado a cada 6 meses)
     } elseif ($periodicidade === 'anual') {
-        $valorFinal = $valorBase * 12 * 0.8; // 20% desconto
+        $valorFinal = $valorBase * 12 * 0.8; // R$ 49.90 * 12 * 0.8 = R$ 479.04 (cobrado a cada 12 meses)
     }
+    
+    error_log("tenant_subscription.php - Cálculo de valor: Base=$valorBase, Periodicidade=$periodicidade, Valor Final=$valorFinal");
     
     // Atualizar tenant
     $tenantModel->update($tenantId, ['plano_id' => $data['plano_id']]);
