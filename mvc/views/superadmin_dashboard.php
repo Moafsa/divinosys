@@ -1179,7 +1179,8 @@
                                         <div class="col-12 mb-3">
                                             <label class="form-label fw-bold">Recursos Incluídos</label>
                                             <div class="row">
-                                                <div class="col-md-4">
+                                                <div class="col-md-3">
+                                                    <h6 class="text-muted small mb-2">📊 Relatórios</h6>
                                                     <div class="form-check">
                                                         <input class="form-check-input" type="checkbox" id="relatorios_basicos" name="recursos[]" value="relatorios_basicos" checked>
                                                         <label class="form-check-label" for="relatorios_basicos">Relatórios Básicos</label>
@@ -1193,7 +1194,8 @@
                                                         <label class="form-check-label" for="relatorios_customizados">Relatórios Customizados</label>
                                                     </div>
                                                 </div>
-                                                <div class="col-md-4">
+                                                <div class="col-md-3">
+                                                    <h6 class="text-muted small mb-2">💬 Suporte</h6>
                                                     <div class="form-check">
                                                         <input class="form-check-input" type="checkbox" id="suporte_email" name="recursos[]" value="suporte_email" checked>
                                                         <label class="form-check-label" for="suporte_email">Suporte por Email</label>
@@ -1211,10 +1213,30 @@
                                                         <label class="form-check-label" for="suporte_dedicado">Suporte Dedicado</label>
                                                     </div>
                                                 </div>
-                                                <div class="col-md-4">
+                                                <div class="col-md-3">
+                                                    <h6 class="text-muted small mb-2">🤖 IA & Automação</h6>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="chatbot_vendas" name="recursos[]" value="chatbot_vendas">
+                                                        <label class="form-check-label" for="chatbot_vendas">Chatbot IA Vendas</label>
+                                                    </div>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="chatbot_cobranca" name="recursos[]" value="chatbot_cobranca">
+                                                        <label class="form-check-label" for="chatbot_cobranca">Chatbot Cobrança</label>
+                                                    </div>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="assistente_gestao" name="recursos[]" value="assistente_gestao">
+                                                        <label class="form-check-label" for="assistente_gestao">Assistente IA Gestão</label>
+                                                    </div>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="whatsapp_atendimento" name="recursos[]" value="whatsapp_atendimento">
+                                                        <label class="form-check-label" for="whatsapp_atendimento">WhatsApp Business</label>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <h6 class="text-muted small mb-2">🔧 Recursos Técnicos</h6>
                                                     <div class="form-check">
                                                         <input class="form-check-input" type="checkbox" id="emissao_nfe" name="recursos[]" value="emissao_nfe">
-                                                        <label class="form-check-label" for="emissao_nfe">Emissão de Nota Fiscal</label>
+                                                        <label class="form-check-label" for="emissao_nfe">Emissão de NF-e</label>
                                                     </div>
                                                     <div class="form-check">
                                                         <input class="form-check-input" type="checkbox" id="backup_diario" name="recursos[]" value="backup_diario">
@@ -1222,7 +1244,7 @@
                                                     </div>
                                                     <div class="form-check">
                                                         <input class="form-check-input" type="checkbox" id="backup_tempo_real" name="recursos[]" value="backup_tempo_real">
-                                                        <label class="form-check-label" for="backup_tempo_real">Backup em Tempo Real</label>
+                                                        <label class="form-check-label" for="backup_tempo_real">Backup Tempo Real</label>
                                                     </div>
                                                     <div class="form-check">
                                                         <input class="form-check-input" type="checkbox" id="api_acesso" name="recursos[]" value="api_acesso">
@@ -1234,7 +1256,7 @@
                                                     </div>
                                                     <div class="form-check">
                                                         <input class="form-check-input" type="checkbox" id="integracoes_customizadas" name="recursos[]" value="integracoes_customizadas">
-                                                        <label class="form-check-label" for="integracoes_customizadas">Integrações Customizadas</label>
+                                                        <label class="form-check-label" for="integracoes_customizadas">Integrações Custom</label>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1315,7 +1337,8 @@
                                             <div class="col-12 mb-3">
                                                 <label class="form-label fw-bold">Recursos Incluídos</label>
                                                 <div class="row">
-                                                    <div class="col-md-4">
+                                                    <div class="col-md-3">
+                                                        <h6 class="text-muted small mb-2">📊 Relatórios</h6>
                                                         <div class="form-check">
                                                             <input class="form-check-input" type="checkbox" id="edit_relatorios_basicos" name="recursos[]" value="relatorios_basicos" ${recursos?.relatorios_basicos ? 'checked' : ''}>
                                                             <label class="form-check-label" for="edit_relatorios_basicos">Relatórios Básicos</label>
@@ -1329,7 +1352,8 @@
                                                             <label class="form-check-label" for="edit_relatorios_customizados">Relatórios Customizados</label>
                                                         </div>
                                                     </div>
-                                                    <div class="col-md-4">
+                                                    <div class="col-md-3">
+                                                        <h6 class="text-muted small mb-2">💬 Suporte</h6>
                                                         <div class="form-check">
                                                             <input class="form-check-input" type="checkbox" id="edit_suporte_email" name="recursos[]" value="suporte_email" ${recursos?.suporte_email ? 'checked' : ''}>
                                                             <label class="form-check-label" for="edit_suporte_email">Suporte por Email</label>
@@ -1347,10 +1371,30 @@
                                                             <label class="form-check-label" for="edit_suporte_dedicado">Suporte Dedicado</label>
                                                         </div>
                                                     </div>
-                                                    <div class="col-md-4">
+                                                    <div class="col-md-3">
+                                                        <h6 class="text-muted small mb-2">🤖 IA & Automação</h6>
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" id="edit_chatbot_vendas" name="recursos[]" value="chatbot_vendas" ${recursos?.chatbot_vendas ? 'checked' : ''}>
+                                                            <label class="form-check-label" for="edit_chatbot_vendas">Chatbot IA Vendas</label>
+                                                        </div>
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" id="edit_chatbot_cobranca" name="recursos[]" value="chatbot_cobranca" ${recursos?.chatbot_cobranca ? 'checked' : ''}>
+                                                            <label class="form-check-label" for="edit_chatbot_cobranca">Chatbot Cobrança</label>
+                                                        </div>
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" id="edit_assistente_gestao" name="recursos[]" value="assistente_gestao" ${recursos?.assistente_gestao ? 'checked' : ''}>
+                                                            <label class="form-check-label" for="edit_assistente_gestao">Assistente IA Gestão</label>
+                                                        </div>
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" id="edit_whatsapp_atendimento" name="recursos[]" value="whatsapp_atendimento" ${recursos?.whatsapp_atendimento ? 'checked' : ''}>
+                                                            <label class="form-check-label" for="edit_whatsapp_atendimento">WhatsApp Business</label>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <h6 class="text-muted small mb-2">🔧 Recursos Técnicos</h6>
                                                         <div class="form-check">
                                                             <input class="form-check-input" type="checkbox" id="edit_emissao_nfe" name="recursos[]" value="emissao_nfe" ${recursos?.emissao_nfe ? 'checked' : ''}>
-                                                            <label class="form-check-label" for="edit_emissao_nfe">Emissão de Nota Fiscal</label>
+                                                            <label class="form-check-label" for="edit_emissao_nfe">Emissão de NF-e</label>
                                                         </div>
                                                         <div class="form-check">
                                                             <input class="form-check-input" type="checkbox" id="edit_backup_diario" name="recursos[]" value="backup_diario" ${recursos?.backup_diario ? 'checked' : ''}>
@@ -1358,7 +1402,7 @@
                                                         </div>
                                                         <div class="form-check">
                                                             <input class="form-check-input" type="checkbox" id="edit_backup_tempo_real" name="recursos[]" value="backup_tempo_real" ${recursos?.backup_tempo_real ? 'checked' : ''}>
-                                                            <label class="form-check-label" for="edit_backup_tempo_real">Backup em Tempo Real</label>
+                                                            <label class="form-check-label" for="edit_backup_tempo_real">Backup Tempo Real</label>
                                                         </div>
                                                         <div class="form-check">
                                                             <input class="form-check-input" type="checkbox" id="edit_api_acesso" name="recursos[]" value="api_acesso" ${recursos?.api_acesso ? 'checked' : ''}>
@@ -1370,7 +1414,7 @@
                                                         </div>
                                                         <div class="form-check">
                                                             <input class="form-check-input" type="checkbox" id="edit_integracoes_customizadas" name="recursos[]" value="integracoes_customizadas" ${recursos?.integracoes_customizadas ? 'checked' : ''}>
-                                                            <label class="form-check-label" for="edit_integracoes_customizadas">Integrações Customizadas</label>
+                                                            <label class="form-check-label" for="edit_integracoes_customizadas">Integrações Custom</label>
                                                         </div>
                                                     </div>
                                                 </div>
