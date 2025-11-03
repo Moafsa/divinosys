@@ -386,6 +386,11 @@ $planos = $db->fetchAll("SELECT * FROM planos ORDER BY preco_mensal ASC");
                 <?php foreach ($planos as $index => $plano): ?>
                 <div class="col-lg-3 col-md-6 mb-4">
                     <div class="pricing-card <?php echo $index == 1 ? 'featured' : ''; ?>" data-plan-id="<?php echo $plano['id']; ?>">
+                        <?php if (isset($plano['trial_days']) && $plano['trial_days'] > 0): ?>
+                        <div class="badge bg-success position-absolute top-0 end-0 m-2">
+                            <i class="fas fa-gift me-1"></i><?php echo $plano['trial_days']; ?> dias grátis
+                        </div>
+                        <?php endif; ?>
                         <div class="plan-name"><?php echo htmlspecialchars($plano['nome']); ?></div>
                         <div class="plan-price" data-base-price="<?php echo $plano['preco_mensal']; ?>">
                             R$ <span class="price-value"><?php echo number_format($plano['preco_mensal'], 2, ',', '.'); ?></span>

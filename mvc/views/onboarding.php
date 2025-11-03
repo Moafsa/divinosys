@@ -237,8 +237,8 @@
                     <div class="row" id="plans-container">
                         <!-- Plans will be loaded here -->
                     </div>
-                    <div class="alert alert-info mt-4">
-                        <i class="fas fa-gift"></i> <strong>14 dias grátis!</strong> Teste qualquer plano sem compromisso
+                    <div class="alert alert-success mt-4" id="trial-info-alert">
+                        <i class="fas fa-gift"></i> <strong>Período de teste grátis!</strong> Todos os planos incluem período de avaliação sem compromisso
                     </div>
                 </div>
 
@@ -332,9 +332,11 @@
                 let html = '';
                 plans.forEach(plan => {
                     const recursos = typeof plan.recursos === 'string' ? JSON.parse(plan.recursos) : plan.recursos;
+                    const trialDays = plan.trial_days || 14;
                     html += `
                         <div class="col-md-3 mb-3">
-                            <div class="plan-card" data-plan-id="${plan.id}">
+                            <div class="plan-card" data-plan-id="${plan.id}" style="position: relative;">
+                                ${trialDays > 0 ? `<div class="badge bg-success position-absolute top-0 end-0 m-2" style="font-size: 12px;"><i class="fas fa-gift me-1"></i>${trialDays} dias grátis</div>` : ''}
                                 <h5 class="text-center">${plan.nome}</h5>
                                 <div class="plan-price text-center">
                                     R$ ${parseFloat(plan.preco_mensal).toFixed(2)}
@@ -345,6 +347,7 @@
                                     <li><i class="fas fa-check text-success"></i> ${plan.max_usuarios == -1 ? 'Ilimitado' : plan.max_usuarios} usuários</li>
                                     <li><i class="fas fa-check text-success"></i> ${plan.max_produtos == -1 ? 'Ilimitado' : plan.max_produtos} produtos</li>
                                     <li><i class="fas fa-check text-success"></i> ${plan.max_pedidos_mes == -1 ? 'Ilimitado' : plan.max_pedidos_mes} pedidos/mês</li>
+                                    ${trialDays > 0 ? `<li><i class="fas fa-gift text-warning"></i> <strong>${trialDays} dias de teste grátis</strong></li>` : ''}
                                 </ul>
                             </div>
                         </div>
