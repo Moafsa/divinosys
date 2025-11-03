@@ -74,7 +74,14 @@ class AsaasPayment {
             $data['webhook'] = $this->webhookUrl;
         }
         
-        return $this->makeRequest('POST', '/subscriptions', $data);
+        error_log("AsaasPayment::createSubscription - Enviando para Asaas: " . json_encode($data));
+        error_log("AsaasPayment::createSubscription - Valor recebido: {$subscriptionData['valor']}, Cycle: {$data['cycle']}");
+        
+        $result = $this->makeRequest('POST', '/subscriptions', $data);
+        
+        error_log("AsaasPayment::createSubscription - Resposta Asaas: " . json_encode($result));
+        
+        return $result;
     }
     
     /**

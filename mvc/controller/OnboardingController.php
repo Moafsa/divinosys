@@ -373,12 +373,25 @@ class OnboardingController {
                     'anual' => 'YEARLY'
                 ];
                 
+                // Calcular valor baseado na periodicidade
+                $periodicidade = $data['periodicidade'] ?? 'mensal';
+                $valorBase = $plano['preco_mensal'];
+                $valorCalculado = $valorBase;
+                
+                if ($periodicidade === 'semestral') {
+                    $valorCalculado = $valorBase * 6 * 0.9; // 10% desconto
+                } elseif ($periodicidade === 'anual') {
+                    $valorCalculado = $valorBase * 12 * 0.8; // 20% desconto
+                }
+                
+                error_log("OnboardingController - Cálculo valor Asaas: Base=$valorBase, Period=$periodicidade, Calculado=$valorCalculado");
+                
                 $subscription_data_asaas = [
                     'asaas_customer_id' => $asaas_customer['data']['id'],
-                    'valor' => $data['valor_final'] ?? $plano['preco_mensal'],
+                    'valor' => $data['valor_final'] ?? $valorCalculado,
                     'descricao' => 'Assinatura ' . $plano['nome'] . ' - ' . $data['nome'],
                     'subscription_id' => $subscription_id,
-                    'cycle' => $cycleMap[$data['periodicidade'] ?? 'mensal'] ?? 'MONTHLY',
+                    'cycle' => $cycleMap[$periodicidade] ?? 'MONTHLY',
                     'next_due_date' => date('Y-m-d', strtotime('+7 days'))
                 ];
                 
@@ -440,7 +453,8 @@ class OnboardingController {
                     }
                     
                     // 9. Salvar dados do pagamento no banco
-                    $valorPagamento = $data['valor_final'] ?? $plano['preco_mensal'];
+                    // Usar valor calculado com periodicidade
+                    $valorPagamento = $data['valor_final'] ?? $valorCalculado;
                     
                     $payment_record = [
                         'tenant_id' => $tenant_id,
