@@ -1,11 +1,11 @@
 -- Insert essential data for Coolify deployment
 -- This creates the default tenant, user, and basic data
 
--- Insert plans (com max_filiais e updated_at)
-INSERT INTO planos (id, nome, max_mesas, max_usuarios, max_produtos, max_pedidos_mes, max_filiais, recursos, preco_mensal, created_at, updated_at) VALUES 
-(1, 'Plano Básico', 10, 3, 100, 1000, 1, '{"delivery": true, "relatorios": false, "multi_filiais": false}', 49.90, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-(2, 'Plano Profissional', 50, 10, 500, 5000, 3, '{"delivery": true, "relatorios": true, "multi_filiais": true}', 99.90, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-(3, 'Plano Empresarial', 200, 50, 2000, 20000, 10, '{"delivery": true, "relatorios": true, "multi_filiais": true, "api": true}', 199.90, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+-- Insert plans (com max_filiais, trial_days e updated_at)
+INSERT INTO planos (id, nome, max_mesas, max_usuarios, max_produtos, max_pedidos_mes, max_filiais, trial_days, recursos, preco_mensal, created_at, updated_at) VALUES 
+(1, 'Plano Básico', 10, 3, 100, 1000, 1, 7, '{"delivery": true, "relatorios_basicos": true, "suporte_email": true}', 49.90, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(2, 'Plano Profissional', 50, 10, 500, 5000, 3, 14, '{"delivery": true, "relatorios_basicos": true, "relatorios_avancados": true, "suporte_email": true, "suporte_whatsapp": true, "emissao_nfe": true}', 99.90, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(3, 'Plano Empresarial', 200, 50, 2000, 20000, 10, 30, '{"delivery": true, "relatorios_basicos": true, "relatorios_avancados": true, "relatorios_customizados": true, "suporte_email": true, "suporte_whatsapp": true, "suporte_telefone": true, "emissao_nfe": true, "chatbot_vendas": true, "whatsapp_atendimento": true, "api_acesso": true}', 199.90, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 ON CONFLICT (id) DO NOTHING;
 
 -- Insert default tenant

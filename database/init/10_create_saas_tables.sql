@@ -109,12 +109,12 @@ CREATE INDEX idx_notificacoes_tenant ON notificacoes(tenant_id);
 CREATE INDEX idx_notificacoes_usuario ON notificacoes(usuario_id);
 CREATE INDEX idx_notificacoes_lida ON notificacoes(lida);
 
--- Inserir planos padrão (com max_filiais)
-INSERT INTO planos (nome, max_mesas, max_usuarios, max_produtos, max_pedidos_mes, max_filiais, recursos, preco_mensal) VALUES
-('Starter', 5, 2, 50, 500, 1, '{"relatorios_basicos": true, "suporte_email": true, "backup_diario": false}', 49.90),
-('Professional', 15, 5, 200, 2000, 3, '{"relatorios_basicos": true, "relatorios_avancados": true, "suporte_email": true, "suporte_whatsapp": true, "backup_diario": true, "api_acesso": false}', 149.90),
-('Business', 30, 10, 500, 5000, 10, '{"relatorios_basicos": true, "relatorios_avancados": true, "relatorios_customizados": true, "suporte_email": true, "suporte_whatsapp": true, "suporte_telefone": true, "backup_diario": true, "api_acesso": true, "white_label": false}', 299.90),
-('Enterprise', -1, -1, -1, -1, -1, '{"relatorios_basicos": true, "relatorios_avancados": true, "relatorios_customizados": true, "suporte_email": true, "suporte_whatsapp": true, "suporte_telefone": true, "suporte_dedicado": true, "backup_diario": true, "backup_tempo_real": true, "api_acesso": true, "white_label": true, "integracoes_customizadas": true}', 999.90)
+-- Inserir planos padrão (com max_filiais e trial_days)
+INSERT INTO planos (nome, max_mesas, max_usuarios, max_produtos, max_pedidos_mes, max_filiais, trial_days, recursos, preco_mensal) VALUES
+('Starter', 5, 2, 50, 500, 1, 7, '{"relatorios_basicos": true, "suporte_email": true, "backup_diario": false}', 49.90),
+('Professional', 15, 5, 200, 2000, 3, 14, '{"relatorios_basicos": true, "relatorios_avancados": true, "suporte_email": true, "suporte_whatsapp": true, "emissao_nfe": true, "backup_diario": true, "whatsapp_atendimento": true}', 149.90),
+('Business', 30, 10, 500, 5000, 10, 30, '{"relatorios_basicos": true, "relatorios_avancados": true, "relatorios_customizados": true, "suporte_email": true, "suporte_whatsapp": true, "suporte_telefone": true, "emissao_nfe": true, "backup_diario": true, "chatbot_vendas": true, "whatsapp_atendimento": true, "api_acesso": true, "white_label": false}', 299.90),
+('Enterprise', -1, -1, -1, -1, -1, 60, '{"relatorios_basicos": true, "relatorios_avancados": true, "relatorios_customizados": true, "suporte_email": true, "suporte_whatsapp": true, "suporte_telefone": true, "suporte_dedicado": true, "emissao_nfe": true, "backup_diario": true, "backup_tempo_real": true, "chatbot_vendas": true, "chatbot_cobranca": true, "assistente_gestao": true, "whatsapp_atendimento": true, "api_acesso": true, "white_label": true, "integracoes_customizadas": true}', 999.90)
 ON CONFLICT DO NOTHING;
 
 -- Criar tenant para superadmin (sistema)

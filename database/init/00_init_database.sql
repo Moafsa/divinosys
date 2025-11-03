@@ -41,6 +41,7 @@ CREATE TABLE planos (
     max_produtos INTEGER DEFAULT 100,
     max_pedidos_mes INTEGER DEFAULT 1000,
     max_filiais INTEGER DEFAULT 1,
+    trial_days INTEGER DEFAULT 14,
     recursos JSONB,
     preco_mensal DECIMAL(10,2),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
