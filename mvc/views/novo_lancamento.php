@@ -289,6 +289,9 @@ $pedidos = $db->fetchAll(
                                                 <button type="button" class="btn btn-primary" onclick="openNovaCategoria()" title="Criar nova categoria">
                                                     <i class="fas fa-plus"></i>
                                                 </button>
+                                                <button type="button" class="btn btn-outline-danger" onclick="gerenciarCategorias()" title="Gerenciar categorias">
+                                                    <i class="fas fa-cog"></i>
+                                                </button>
                                             </div>
                                         </div>
                                         <div class="col-md-6">
@@ -304,6 +307,9 @@ $pedidos = $db->fetchAll(
                                                 </select>
                                                 <button type="button" class="btn btn-primary" onclick="openNovaConta()" title="Criar nova conta">
                                                     <i class="fas fa-plus"></i>
+                                                </button>
+                                                <button type="button" class="btn btn-outline-danger" onclick="gerenciarContas()" title="Gerenciar contas">
+                                                    <i class="fas fa-cog"></i>
                                                 </button>
                                             </div>
                                         </div>
@@ -475,6 +481,42 @@ $pedidos = $db->fetchAll(
                             </div>
                         </div>
                     </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Gerenciar Categorias -->
+    <div class="modal fade" id="modalGerenciarCategorias" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-tags me-2"></i>Gerenciar Categorias</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="listaCategorias"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Gerenciar Contas -->
+    <div class="modal fade" id="modalGerenciarContas" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-wallet me-2"></i>Gerenciar Contas</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="listaContas"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
                 </div>
             </div>
         </div>
@@ -990,6 +1032,139 @@ $pedidos = $db->fetchAll(
                 error: function(xhr, status, error) {
                     console.error('Erro:', error);
                     Swal.fire('Erro', 'Erro ao criar conta: ' + error, 'error');
+                }
+            });
+        }
+
+        // ==================================
+        // MANAGE CATEGORIES AND ACCOUNTS
+        // ==================================
+        
+        function gerenciarCategorias() {
+            // Load categories list
+            const categorias = <?= json_encode($categorias) ?>;
+            let html = '<div class="list-group">';
+            
+            categorias.forEach(cat => {
+                const emoji = cat.tipo === 'receita' ? '💰' : '💸';
+                html += `
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <span style="background:${cat.cor}; color:white; padding:2px 8px; border-radius:3px; margin-right:8px;">${emoji}</span>
+                            <strong>${cat.nome}</strong>
+                            ${cat.descricao ? `<br><small class="text-muted">${cat.descricao}</small>` : ''}
+                        </div>
+                        <button class="btn btn-sm btn-danger" onclick="excluirCategoria(${cat.id}, '${cat.nome}')">
+                            <i class="fas fa-trash"></i> Excluir
+                        </button>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            $('#listaCategorias').html(html);
+            $('#modalGerenciarCategorias').modal('show');
+        }
+
+        function gerenciarContas() {
+            // Load accounts list
+            const contas = <?= json_encode($contas) ?>;
+            let html = '<div class="list-group">';
+            
+            contas.forEach(conta => {
+                html += `
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <span style="background:${conta.cor}; color:white; padding:2px 8px; border-radius:3px; margin-right:8px;">
+                                <i class="fas fa-wallet"></i>
+                            </span>
+                            <strong>${conta.nome}</strong>
+                            <br><small class="text-muted">Saldo: R$ ${parseFloat(conta.saldo_atual || 0).toFixed(2)}</small>
+                        </div>
+                        <button class="btn btn-sm btn-danger" onclick="excluirConta(${conta.id}, '${conta.nome}')">
+                            <i class="fas fa-trash"></i> Excluir
+                        </button>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            $('#listaContas').html(html);
+            $('#modalGerenciarContas').modal('show');
+        }
+
+        function excluirCategoria(id, nome) {
+            Swal.fire({
+                title: 'Confirmar exclusão?',
+                text: `Deseja realmente excluir a categoria "${nome}"?`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Sim, excluir!',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.ajax({
+                        url: 'mvc/ajax/financeiro.php',
+                        method: 'POST',
+                        data: {
+                            action: 'excluir_categoria',
+                            categoria_id: id
+                        },
+                        dataType: 'json',
+                        success: function(response) {
+                            if (response.success) {
+                                Swal.fire('Excluído!', response.message, 'success').then(() => {
+                                    location.reload(); // Reload to update the list
+                                });
+                            } else {
+                                Swal.fire('Erro', response.message || 'Erro ao excluir categoria', 'error');
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            console.error('Erro:', error);
+                            Swal.fire('Erro', 'Erro ao excluir categoria: ' + error, 'error');
+                        }
+                    });
+                }
+            });
+        }
+
+        function excluirConta(id, nome) {
+            Swal.fire({
+                title: 'Confirmar exclusão?',
+                text: `Deseja realmente excluir a conta "${nome}"?`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Sim, excluir!',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.ajax({
+                        url: 'mvc/ajax/financeiro.php',
+                        method: 'POST',
+                        data: {
+                            action: 'excluir_conta',
+                            conta_id: id
+                        },
+                        dataType: 'json',
+                        success: function(response) {
+                            if (response.success) {
+                                Swal.fire('Excluído!', response.message, 'success').then(() => {
+                                    location.reload(); // Reload to update the list
+                                });
+                            } else {
+                                Swal.fire('Erro', response.message || 'Erro ao excluir conta', 'error');
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            console.error('Erro:', error);
+                            Swal.fire('Erro', 'Erro ao excluir conta: ' + error, 'error');
+                        }
+                    });
                 }
             });
         }

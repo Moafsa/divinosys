@@ -698,6 +698,66 @@ try {
             ]);
             exit;
             
+        case 'excluir_categoria':
+            $categoriaId = $_POST['categoria_id'] ?? '';
+            
+            if (empty($categoriaId)) {
+                throw new \Exception('ID da categoria é obrigatório');
+            }
+            
+            // Check if category belongs to tenant
+            $categoria = $db->fetch(
+                "SELECT id FROM categorias_financeiras WHERE id = ? AND tenant_id = ?",
+                [$categoriaId, $tenantId]
+            );
+            
+            if (!$categoria) {
+                throw new \Exception('Categoria não encontrada ou não pertence a este estabelecimento');
+            }
+            
+            // Soft delete - just set ativo = false
+            $db->query(
+                "UPDATE categorias_financeiras SET ativo = false WHERE id = ? AND tenant_id = ?",
+                [$categoriaId, $tenantId]
+            );
+            
+            ob_end_clean();
+            echo json_encode([
+                'success' => true,
+                'message' => 'Categoria excluída com sucesso'
+            ]);
+            exit;
+            
+        case 'excluir_conta':
+            $contaId = $_POST['conta_id'] ?? '';
+            
+            if (empty($contaId)) {
+                throw new \Exception('ID da conta é obrigatório');
+            }
+            
+            // Check if account belongs to tenant
+            $conta = $db->fetch(
+                "SELECT id FROM contas_financeiras WHERE id = ? AND tenant_id = ?",
+                [$contaId, $tenantId]
+            );
+            
+            if (!$conta) {
+                throw new \Exception('Conta não encontrada ou não pertence a este estabelecimento');
+            }
+            
+            // Soft delete - just set ativo = false
+            $db->query(
+                "UPDATE contas_financeiras SET ativo = false WHERE id = ? AND tenant_id = ?",
+                [$contaId, $tenantId]
+            );
+            
+            ob_end_clean();
+            echo json_encode([
+                'success' => true,
+                'message' => 'Conta excluída com sucesso'
+            ]);
+            exit;
+            
         default:
             throw new \Exception('Action not implemented: ' . $action);
     }
