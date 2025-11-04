@@ -340,8 +340,8 @@ function syncAsaasInvoices($tenantId, $db) {
             
             if (!$paymentId) continue;
             
-            // Verificar se já existe
-            $existing = $db->fetch("SELECT id FROM pagamentos WHERE gateway_payment_id = ?", [$paymentId]);
+            // Verificar se já existe (TABELA CORRETA: pagamentos_assinaturas)
+            $existing = $db->fetch("SELECT id FROM pagamentos_assinaturas WHERE gateway_payment_id = ?", [$paymentId]);
             
             $paymentData = [
                 'status' => mapAsaasStatusLocal($payment['status'] ?? 'PENDING'),
@@ -355,7 +355,7 @@ function syncAsaasInvoices($tenantId, $db) {
             
             if ($existing) {
                 // Atualizar
-                $db->update('pagamentos', $paymentData, 'id = ?', [$existing['id']]);
+                $db->update('pagamentos_assinaturas', $paymentData, 'id = ?', [$existing['id']]);
                 $updatedInvoices++;
             } else {
                 // Criar novo
@@ -373,7 +373,7 @@ function syncAsaasInvoices($tenantId, $db) {
                     'created_at' => date('Y-m-d H:i:s')
                 ]);
                 
-                $db->insert('pagamentos', $paymentData);
+                $db->insert('pagamentos_assinaturas', $paymentData);
                 $newInvoices++;
             }
         }
