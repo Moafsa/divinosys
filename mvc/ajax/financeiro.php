@@ -1,4 +1,12 @@
 <?php
+// Desabilitar exibição de erros na saída (para não corromper JSON)
+ini_set('display_errors', 0);
+ini_set('display_startup_errors', 0);
+error_reporting(E_ALL); // Ainda loga erros, mas não exibe
+
+// Iniciar output buffering para capturar qualquer saída inesperada
+ob_start();
+
 session_start();
 header('Content-Type: application/json');
 
@@ -50,9 +58,20 @@ try {
         'is_logged_in' => $session->isLoggedIn()
     ]));
     
-    $userId = $session->getUserId() ?? 1;
-    $tenantId = $session->getTenantId() ?? 1;
-    $filialId = $session->getFilialId() ?? 1;
+    // Validar tenant_id - obrigatório
+    $tenantId = $session->getTenantId();
+    if (!$tenantId) {
+        throw new \Exception('Tenant ID não encontrado na sessão. Faça login novamente.');
+    }
+    
+    // Obter filial_id - buscar padrão se não estiver na sessão
+    $filialId = $session->getFilialId();
+    if ($filialId === null) {
+        $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+        $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+    }
+    
+    $userId = $session->getUserId();
     
     switch ($action) {
         
@@ -89,11 +108,12 @@ try {
                 throw new \Exception('Pedido fiado não encontrado');
             }
             
+            ob_end_clean();
             echo json_encode([
                 'success' => true,
                 'pedido' => $pedido
             ]);
-            break;
+            exit;
         
         case 'buscar_pedidos_fiado':
             error_log("financeiro.php - buscar_pedidos_fiado - Tenant: $tenantId, Filial: $filialId");
@@ -162,12 +182,13 @@ try {
             
             error_log("financeiro.php - buscar_pedidos_fiado - Retornando " . count($pedidos) . " pedidos após filtragem");
             
+            ob_end_clean();
             echo json_encode([
                 'success' => true,
                 'pedidos' => $pedidos,
                 'total' => count($pedidos)
             ]);
-            break;
+            exit;
             
         case 'buscar_total_recebiveis_fiado':
             // Calcular saldo fiado real (fiado original - fiado quitado)
@@ -210,11 +231,12 @@ try {
             
             $resultado = ['total_recebiveis' => $totalRecebiveis];
             
+            ob_end_clean();
             echo json_encode([
                 'success' => true,
                 'total_recebiveis' => $resultado['total_recebiveis'] ?? 0
             ]);
-            break;
+            exit;
             
         case 'excluir_pedido_fiado':
             $pedidoId = $_POST['pedido_id'] ?? '';
@@ -272,17 +294,18 @@ try {
                 // Commit transaction
                 $db->commit();
                 
+                ob_end_clean();
                 echo json_encode([
                     'success' => true,
                     'message' => 'Pedido excluído com sucesso!'
                 ]);
+                exit;
                 
             } catch (\Exception $e) {
                 // Rollback transaction
                 $db->rollback();
                 throw $e;
             }
-            break;
             
 
         case 'registrar_pagamento_fiado':
@@ -328,8 +351,8 @@ try {
                     'pedido_id' => $pedidoId,
                     'valor_pago' => $valorPago,
                     'forma_pagamento' => $formaPagamento,
-                    'nome_cliente' => $pedido['cliente'],
-                    'telefone_cliente' => $pedido['telefone_cliente'],
+                    'nome_cliente' => $pedido['cliente'] ?? null,
+                    'telefone_cliente' => $pedido['telefone_cliente'] ?? null,
                     'descricao' => $descricao ?: 'Pagamento de pedido fiado',
                     'usuario_id' => $userId,
                     'tenant_id' => $tenantId,
@@ -387,6 +410,7 @@ try {
                 
                 $db->commit();
                 
+                ob_end_clean();
                 echo json_encode([
                     'success' => true,
                     'message' => 'Pagamento registrado com sucesso!',
@@ -395,12 +419,12 @@ try {
                     'mesa_liberada' => $mesaLiberada,
                     'saldo_restante' => $novoSaldoDevedor
                 ]);
+                exit;
                 
             } catch (\Exception $e) {
                 $db->rollback();
                 throw $e;
             }
-            break;
             
         case 'criar_lancamento':
             // Get form data
@@ -580,22 +604,28 @@ try {
                 throw new \Exception('Erro ao criar lançamento');
             }
             
+            ob_end_clean();
             echo json_encode([
                 'success' => true,
                 'message' => 'Lançamento criado com sucesso!',
                 'lancamento_id' => $lancamentoId
             ]);
-            break;
+            exit;
             
         default:
             throw new \Exception('Action not implemented: ' . $action);
     }
     
 } catch (\Exception $e) {
+    // Limpar qualquer output inesperado
+    ob_end_clean();
+    
     http_response_code(500);
     echo json_encode([
         'success' => false,
         'message' => $e->getMessage()
     ]);
+    exit;
 }
+
 ?>
