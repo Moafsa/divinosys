@@ -64,13 +64,13 @@ if ($tenant) {
     if ($filial) {
         // Matriz user - get mesas for specific filial
         $mesas = $db->fetchAll(
-            "SELECT * FROM mesas WHERE tenant_id = ? AND filial_id = ? ORDER BY id_mesa",
+            "SELECT * FROM mesas WHERE tenant_id = ? AND filial_id = ? ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE id_mesa::integer END",
             [$tenant['id'], $filial['id']]
         );
     } else {
         // Filial user - get mesas for tenant (filial is the main branch)
         $mesas = $db->fetchAll(
-            "SELECT * FROM mesas WHERE tenant_id = ? AND (filial_id = ? OR filial_id IS NULL) ORDER BY id_mesa",
+            "SELECT * FROM mesas WHERE tenant_id = ? AND (filial_id = ? OR filial_id IS NULL) ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE id_mesa::integer END",
             [$tenant['id'], null]
         );
     }
