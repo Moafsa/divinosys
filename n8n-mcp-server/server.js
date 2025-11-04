@@ -28,7 +28,8 @@ app.use((req, res, next) => {
       'create_ingredient', 'update_ingredient', 'delete_ingredient',
       'create_category', 'update_category', 'delete_category',
       'create_financial_entry', 'update_order_status', 'create_payment',
-      'create_order'  // Added: create order requires authentication
+      'create_order',
+      'create_customer', 'update_customer', 'delete_customer'
     ];
     
     if (writeOperations.includes(req.body.tool)) {
@@ -181,6 +182,53 @@ app.get('/tools', (req, res) => {
         }
       },
       {
+        name: 'get_customers',
+        description: 'Get all customers with optional filters',
+        parameters: {
+          search: 'Search by name or phone',
+          ativo: 'Filter by active status (true/false)',
+          limit: 'Maximum number of results (default: 50)'
+        }
+      },
+      {
+        name: 'create_customer',
+        description: 'Create a new customer',
+        parameters: {
+          nome: 'Customer name (required)',
+          telefone: 'Phone number',
+          whatsapp: 'WhatsApp number',
+          email: 'Email address',
+          endereco: 'Address',
+          cpf: 'CPF',
+          data_nascimento: 'Birth date',
+          observacoes: 'Notes'
+        },
+        authentication: 'required'
+      },
+      {
+        name: 'update_customer',
+        description: 'Update existing customer',
+        parameters: {
+          customer_id: 'Customer ID (required)',
+          nome: 'Customer name',
+          telefone: 'Phone number',
+          whatsapp: 'WhatsApp number',
+          email: 'Email',
+          endereco: 'Address',
+          cpf: 'CPF',
+          observacoes: 'Notes'
+        },
+        authentication: 'required'
+      },
+      {
+        name: 'delete_customer',
+        description: 'Delete (soft) a customer',
+        parameters: {
+          customer_id: 'Customer ID (required)'
+        },
+        authentication: 'required'
+      },
+      {
         name: 'create_product',
         description: 'Create a new product',
         authentication: 'required'
@@ -308,6 +356,18 @@ app.post('/execute', async (req, res) => {
         break;
       case 'get_fiado_customers':
         result = await getFiadoCustomers(parameters, tenantId, filialId);
+        break;
+      case 'get_customers':
+        result = await getCustomers(parameters, tenantId, filialId);
+        break;
+      case 'create_customer':
+        result = await createCustomer(parameters, tenantId, filialId);
+        break;
+      case 'update_customer':
+        result = await updateCustomer(parameters, tenantId, filialId);
+        break;
+      case 'delete_customer':
+        result = await deleteCustomer(parameters, tenantId, filialId);
         break;
         
       default:
@@ -1167,6 +1227,198 @@ async function getFiadoCustomers(params, tenantId, filialId) {
     customers: result.rows,
     total_customers: result.rows.length,
     total_debt: result.rows.reduce((sum, c) => sum + parseFloat(c.total_devedor || 0), 0)
+  };
+}
+
+async function getCustomers(params, tenantId, filialId) {
+  const limit = params.limit || 50;
+  const search = params.search || '';
+  const ativo = params.ativo !== undefined ? params.ativo : true;
+  
+  let sql = `
+    SELECT 
+      c.id,
+      c.nome,
+      c.telefone,
+      c.whatsapp,
+      c.email,
+      c.endereco,
+      c.cpf,
+      c.data_nascimento,
+      c.ativo,
+      c.observacoes,
+      COUNT(DISTINCT p.idpedido) as total_pedidos,
+      SUM(CASE WHEN p.status_pagamento = 'quitado' THEN p.valor_total ELSE 0 END) as total_gasto,
+      MAX(p.data) as ultima_compra
+    FROM clientes c
+    LEFT JOIN pedido p ON p.cliente = c.nome AND p.tenant_id = c.tenant_id
+    WHERE c.tenant_id = $1 AND c.filial_id = $2
+  `;
+  
+  const queryParams = [tenantId, filialId];
+  let paramIndex = 3;
+  
+  if (search) {
+    sql += ` AND (c.nome ILIKE $${paramIndex} OR c.telefone LIKE $${paramIndex})`;
+    queryParams.push(`%${search}%`);
+    paramIndex++;
+  }
+  
+  if (ativo !== null) {
+    sql += ` AND c.ativo = $${paramIndex}`;
+    queryParams.push(ativo);
+    paramIndex++;
+  }
+  
+  sql += `
+    GROUP BY c.id, c.nome, c.telefone, c.whatsapp, c.email, c.endereco, c.cpf, c.data_nascimento, c.ativo, c.observacoes
+    ORDER BY c.nome
+    LIMIT $${paramIndex}
+  `;
+  queryParams.push(limit);
+  
+  const result = await pool.query(sql, queryParams);
+  
+  return {
+    customers: result.rows,
+    total: result.rows.length
+  };
+}
+
+async function createCustomer(params, tenantId, filialId) {
+  const { nome, telefone, whatsapp, email, endereco, cpf, data_nascimento, observacoes } = params;
+  
+  if (!nome) {
+    throw new Error('Nome do cliente é obrigatório');
+  }
+  
+  const sql = `
+    INSERT INTO clientes (
+      nome, telefone, whatsapp, email, endereco, cpf, 
+      data_nascimento, observacoes, ativo, tenant_id, filial_id
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9, $10)
+    RETURNING id, nome, telefone, whatsapp, email, ativo
+  `;
+  
+  const result = await pool.query(sql, [
+    nome,
+    telefone || null,
+    whatsapp || telefone || null,
+    email || null,
+    endereco || null,
+    cpf || null,
+    data_nascimento || null,
+    observacoes || null,
+    tenantId,
+    filialId
+  ]);
+  
+  return {
+    success: true,
+    message: 'Cliente criado com sucesso!',
+    customer: result.rows[0]
+  };
+}
+
+async function updateCustomer(params, tenantId, filialId) {
+  const { customer_id, nome, telefone, whatsapp, email, endereco, cpf, data_nascimento, observacoes } = params;
+  
+  if (!customer_id) {
+    throw new Error('ID do cliente é obrigatório');
+  }
+  
+  // Build dynamic update
+  const updates = [];
+  const values = [];
+  let paramIndex = 1;
+  
+  if (nome !== undefined) {
+    updates.push(`nome = $${paramIndex++}`);
+    values.push(nome);
+  }
+  if (telefone !== undefined) {
+    updates.push(`telefone = $${paramIndex++}`);
+    values.push(telefone);
+  }
+  if (whatsapp !== undefined) {
+    updates.push(`whatsapp = $${paramIndex++}`);
+    values.push(whatsapp);
+  }
+  if (email !== undefined) {
+    updates.push(`email = $${paramIndex++}`);
+    values.push(email);
+  }
+  if (endereco !== undefined) {
+    updates.push(`endereco = $${paramIndex++}`);
+    values.push(endereco);
+  }
+  if (cpf !== undefined) {
+    updates.push(`cpf = $${paramIndex++}`);
+    values.push(cpf);
+  }
+  if (data_nascimento !== undefined) {
+    updates.push(`data_nascimento = $${paramIndex++}`);
+    values.push(data_nascimento);
+  }
+  if (observacoes !== undefined) {
+    updates.push(`observacoes = $${paramIndex++}`);
+    values.push(observacoes);
+  }
+  
+  if (updates.length === 0) {
+    throw new Error('Nenhum campo para atualizar');
+  }
+  
+  updates.push(`updated_at = CURRENT_TIMESTAMP`);
+  
+  // Add WHERE conditions
+  values.push(customer_id, tenantId, filialId);
+  
+  const sql = `
+    UPDATE clientes 
+    SET ${updates.join(', ')}
+    WHERE id = $${paramIndex} AND tenant_id = $${paramIndex + 1} AND filial_id = $${paramIndex + 2}
+    RETURNING id, nome, telefone, whatsapp, email, endereco
+  `;
+  
+  const result = await pool.query(sql, values);
+  
+  if (result.rows.length === 0) {
+    throw new Error('Cliente não encontrado ou sem permissão para atualizar');
+  }
+  
+  return {
+    success: true,
+    message: 'Cliente atualizado com sucesso!',
+    customer: result.rows[0]
+  };
+}
+
+async function deleteCustomer(params, tenantId, filialId) {
+  const { customer_id } = params;
+  
+  if (!customer_id) {
+    throw new Error('ID do cliente é obrigatório');
+  }
+  
+  // Soft delete - set ativo = false
+  const sql = `
+    UPDATE clientes 
+    SET ativo = false, updated_at = CURRENT_TIMESTAMP
+    WHERE id = $1 AND tenant_id = $2 AND filial_id = $3
+    RETURNING id, nome, telefone
+  `;
+  
+  const result = await pool.query(sql, [customer_id, tenantId, filialId]);
+  
+  if (result.rows.length === 0) {
+    throw new Error('Cliente não encontrado ou sem permissão para excluir');
+  }
+  
+  return {
+    success: true,
+    message: 'Cliente excluído com sucesso!',
+    deleted_customer: result.rows[0]
   };
 }
 
