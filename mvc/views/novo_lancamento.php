@@ -577,7 +577,8 @@ $pedidos = $db->fetchAll(
     <script>
         // Inicializar Select2
         $(document).ready(function() {
-            $('.form-select').select2({
+            // Excluir selects dos modais do Select2 (usar apenas native select)
+            $('.form-select:not(#nova_cat_tipo):not(#nova_conta_tipo)').select2({
                 theme: 'bootstrap-5'
             });
             
