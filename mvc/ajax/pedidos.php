@@ -90,8 +90,18 @@ try {
             
             $db = \System\Database::getInstance();
             $session = \System\Session::getInstance();
-            $tenantId = $session->getTenantId() ?? 1;
-            $filialId = $session->getFilialId() ?? 1;
+            $tenantId = $session->getTenantId();
+            
+            if (!$tenantId) {
+                throw new \Exception("Tenant ID não encontrado na sessão. Faça login novamente.");
+            }
+            
+            $filialId = $session->getFilialId();
+            if ($filialId === null) {
+                $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+                $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+            }
+            
             $usuarioId = $session->getUserId();
             
             // Process customer data if provided
@@ -383,8 +393,17 @@ try {
             
             $db = \System\Database::getInstance();
             $session = \System\Session::getInstance();
-            $tenantId = $session->getTenantId() ?? 1;
-            $filialId = $session->getFilialId() ?? 1;
+            $tenantId = $session->getTenantId();
+            
+            if (!$tenantId) {
+                throw new \Exception("Tenant ID não encontrado na sessão. Faça login novamente.");
+            }
+            
+            $filialId = $session->getFilialId();
+            if ($filialId === null) {
+                $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+                $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+            }
             
             // Buscar usuário na tabela usuarios primeiro
             $usuario = $db->fetch(
@@ -430,8 +449,17 @@ try {
             
             $db = \System\Database::getInstance();
             $session = \System\Session::getInstance();
-            $tenantId = $session->getTenantId() ?? 1;
-            $filialId = $session->getFilialId() ?? 1;
+            $tenantId = $session->getTenantId();
+            
+            if (!$tenantId) {
+                throw new \Exception("Tenant ID não encontrado na sessão. Faça login novamente.");
+            }
+            
+            $filialId = $session->getFilialId();
+            if ($filialId === null) {
+                $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+                $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+            }
             
             // Buscar dados do pedido para obter a mesa
             $pedido = $db->fetch(
@@ -485,7 +513,12 @@ try {
             
             $db = \System\Database::getInstance();
             $session = \System\Session::getInstance();
-            $tenantId = $session->getTenantId() ?? 1;
+            $tenantId = $session->getTenantId();
+            
+            if (!$tenantId) {
+                throw new \Exception("Tenant ID não encontrado na sessão. Faça login novamente.");
+            }
+            
             $filialId = $session->getFilialId();
             
             // Se não há filial específica, usar filial padrão do tenant
@@ -525,8 +558,17 @@ try {
             
             $db = \System\Database::getInstance();
             $session = \System\Session::getInstance();
-            $tenantId = $session->getTenantId() ?? 1;
-            $filialId = $session->getFilialId() ?? 1;
+            $tenantId = $session->getTenantId();
+            
+            if (!$tenantId) {
+                throw new \Exception("Tenant ID não encontrado na sessão. Faça login novamente.");
+            }
+            
+            $filialId = $session->getFilialId();
+            if ($filialId === null) {
+                $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+                $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+            }
             
             // Verificar se pedido existe
             $pedidoAtual = $db->fetch(
@@ -578,8 +620,17 @@ try {
             
             $db = \System\Database::getInstance();
             $session = \System\Session::getInstance();
-            $tenantId = $session->getTenantId() ?? 1;
-            $filialId = $session->getFilialId() ?? 1;
+            $tenantId = $session->getTenantId();
+            
+            if (!$tenantId) {
+                throw new \Exception("Tenant ID não encontrado na sessão. Faça login novamente.");
+            }
+            
+            $filialId = $session->getFilialId();
+            if ($filialId === null) {
+                $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+                $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+            }
             
             // Verificar tipo de usuário
             $userType = $_SESSION['user_type'] ?? 'admin';
@@ -656,8 +707,17 @@ try {
             
             $db = \System\Database::getInstance();
             $session = \System\Session::getInstance();
-            $tenantId = $session->getTenantId() ?? 1;
-            $filialId = $session->getFilialId() ?? 1;
+            $tenantId = $session->getTenantId();
+            
+            if (!$tenantId) {
+                throw new \Exception("Tenant ID não encontrado na sessão. Faça login novamente.");
+            }
+            
+            $filialId = $session->getFilialId();
+            if ($filialId === null) {
+                $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+                $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+            }
             
             // Atualizar observação do pedido
             $db->update(
@@ -796,8 +856,17 @@ try {
             
             $db = \System\Database::getInstance();
             $session = \System\Session::getInstance();
-            $tenantId = $session->getTenantId() ?? 1;
-            $filialId = $session->getFilialId() ?? 1;
+            $tenantId = $session->getTenantId();
+            
+            if (!$tenantId) {
+                throw new \Exception("Tenant ID não encontrado na sessão. Faça login novamente.");
+            }
+            
+            $filialId = $session->getFilialId();
+            if ($filialId === null) {
+                $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+                $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+            }
             
             // Calcular novo valor total
             $valorTotal = 0;
@@ -913,8 +982,17 @@ try {
             
             $db = \System\Database::getInstance();
             $session = \System\Session::getInstance();
-            $tenantId = $session->getTenantId() ?? 1;
-            $filialId = $session->getFilialId() ?? 1;
+            $tenantId = $session->getTenantId();
+            
+            if (!$tenantId) {
+                throw new \Exception("Tenant ID não encontrado na sessão. Faça login novamente.");
+            }
+            
+            $filialId = $session->getFilialId();
+            if ($filialId === null) {
+                $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+                $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+            }
             
             // Atualizar mesa do pedido
             $db->update(
@@ -939,7 +1017,12 @@ try {
         
         $db = \System\Database::getInstance();
         $session = \System\Session::getInstance();
-        $tenantId = $session->getTenantId() ?? 1;
+        $tenantId = $session->getTenantId();
+        
+        if (!$tenantId) {
+            throw new \Exception("Tenant ID não encontrado na sessão. Faça login novamente.");
+        }
+        
         $filialId = $session->getFilialId();
         
         // Se não há filial específica, usar filial padrão do tenant
@@ -996,7 +1079,12 @@ try {
         
         $db = \System\Database::getInstance();
         $session = \System\Session::getInstance();
-        $tenantId = $session->getTenantId() ?? 1;
+        $tenantId = $session->getTenantId();
+        
+        if (!$tenantId) {
+            throw new \Exception("Tenant ID não encontrado na sessão. Faça login novamente.");
+        }
+        
         $filialId = $session->getFilialId();
         
         // Se não há filial específica, usar filial padrão do tenant
@@ -1067,7 +1155,12 @@ try {
 
         $db = \System\Database::getInstance();
         $session = \System\Session::getInstance();
-        $tenantId = $session->getTenantId() ?? 1;
+        $tenantId = $session->getTenantId();
+        
+        if (!$tenantId) {
+            throw new \Exception("Tenant ID não encontrado na sessão. Faça login novamente.");
+        }
+        
         $filialId = $session->getFilialId();
         
         // Se não há filial específica, usar filial padrão do tenant

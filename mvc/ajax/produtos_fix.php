@@ -19,8 +19,13 @@ try {
     // Conectar ao banco
     $db = \System\Database::getInstance();
     $session = \System\Session::getInstance();
-    $tenantId = $session->getTenantId() ?? 1;
+    $tenantId = $session->getTenantId();
     $filialId = $session->getFilialId(); // Don't default to 1, keep null if not set
+    
+    // Validar tenant_id
+    if (!$tenantId) {
+        throw new Exception('Tenant ID não encontrado na sessão. Faça login novamente.');
+    }
     
     // Obter ação
     $action = $_POST['action'] ?? $_GET['action'] ?? '';
@@ -215,15 +220,15 @@ try {
                 }
                 
                 // Atualizar ingredientes
-                $db->query("DELETE FROM produto_ingredientes WHERE produto_id = ? AND tenant_id = $tenantId AND filial_id = $filialId", [$produtoId]);
+                $db->query("DELETE FROM produto_ingredientes WHERE produto_id = ? AND tenant_id = ? AND filial_id = ?", [$produtoId, $tenantId, $filialId]);
                 
                 $ingredientesArray = json_decode($ingredientes, true);
                 if (is_array($ingredientesArray)) {
                     foreach ($ingredientesArray as $ingredienteId) {
                         $db->query("
                             INSERT INTO produto_ingredientes (produto_id, ingrediente_id, tenant_id, filial_id) 
-                            VALUES (?, ?, 1, 1)
-                        ", [$produtoId, $ingredienteId]);
+                            VALUES (?, ?, ?, ?)
+                        ", [$produtoId, $ingredienteId, $tenantId, $filialId]);
                     }
                 }
                 

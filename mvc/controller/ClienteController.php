@@ -521,8 +521,14 @@ class ClienteController
     public function registrarInteracaoPedido($clienteId, $pedidoId, $valorPedido)
     {
         try {
-            $tenantId = $this->session->getTenant()['id'] ?? null;
-            $filialId = $this->session->getFilial()['id'] ?? null;
+            $tenantId = $this->session->getTenantId();
+            $filialId = $this->session->getFilialId();
+            
+            // Skip if tenant_id is not available
+            if (!$tenantId) {
+                error_log("ClienteController::registrarInteracaoPedido - tenant_id not found, skipping");
+                return ['success' => true]; // Return success to not break the order flow
+            }
 
             // Register order interaction
             $this->clienteModel->registrarHistorico(

@@ -425,9 +425,17 @@ class Cliente
     public function registrarHistorico($clienteId, $tenantId, $filialId, $tipoInteracao, $descricao, $dadosAnteriores = null, $dadosNovos = null)
     {
         try {
-            // Use default values if tenant_id or filial_id are null
-            $tenantId = $tenantId ?? 1;
-            $filialId = $filialId ?? 1;
+            // Skip history if tenant_id is not provided (tenant_id is required for foreign key)
+            if ($tenantId === null) {
+                error_log("Cliente::registrarHistorico - tenant_id is null, skipping history registration");
+                return;
+            }
+            
+            // Use default filial if not provided
+            if ($filialId === null) {
+                $filial_padrao = $this->db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+                $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+            }
             
             $this->db->insert('cliente_historico', [
                 'usuario_global_id' => $clienteId,
@@ -451,9 +459,17 @@ class Cliente
     public function atualizarVisitaEstabelecimento($clienteId, $tenantId, $filialId, $valorPedido = 0)
     {
         try {
-            // Use default values if null
-            $tenantId = $tenantId ?? 1;
-            $filialId = $filialId ?? 1;
+            // Skip if tenant_id is not provided (required for foreign key)
+            if ($tenantId === null) {
+                error_log("Cliente::atualizarVisitaEstabelecimento - tenant_id is null, skipping");
+                return;
+            }
+            
+            // Use default filial if not provided
+            if ($filialId === null) {
+                $filial_padrao = $this->db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+                $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+            }
             
             // Check if client has visited this establishment before
             $existente = $this->db->fetch(

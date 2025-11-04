@@ -71,13 +71,38 @@ class Database
     public function query($sql, $params = [])
     {
         try {
-            $stmt = $this->getConnection()->prepare($sql);
+            $conn = $this->getConnection();
+            
+            // Check if connection is in a failed transaction state
+            if ($conn->inTransaction()) {
+                try {
+                    // Try a simple query to check transaction state
+                    $conn->query('SELECT 1');
+                } catch (PDOException $e) {
+                    // Transaction is in error state, rollback
+                    error_log('Transaction in error state, rolling back...');
+                    $conn->rollBack();
+                }
+            }
+            
+            $stmt = $conn->prepare($sql);
             $stmt->execute($params);
             return $stmt;
         } catch (PDOException $e) {
             error_log('Database query failed: ' . $e->getMessage());
             error_log('SQL: ' . $sql);
             error_log('Params: ' . json_encode($params));
+            
+            // Rollback if in transaction
+            $conn = $this->getConnection();
+            if ($conn->inTransaction()) {
+                try {
+                    $conn->rollBack();
+                } catch (PDOException $rollbackError) {
+                    error_log('Rollback failed: ' . $rollbackError->getMessage());
+                }
+            }
+            
             throw new \Exception('Database query failed: ' . $e->getMessage());
         }
     }
