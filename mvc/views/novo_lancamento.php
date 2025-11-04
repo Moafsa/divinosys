@@ -494,14 +494,7 @@ $pedidos = $db->fetchAll(
                             <label class="form-label">Nome <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="nova_cat_nome" required placeholder="Ex: Vendas Online">
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Tipo <span class="text-danger">*</span></label>
-                            <select class="form-select" id="nova_cat_tipo" required>
-                                <option value="">Selecione...</option>
-                                <option value="receita">💰 Receita</option>
-                                <option value="despesa">💸 Despesa</option>
-                            </select>
-                        </div>
+                        <input type="hidden" id="nova_cat_tipo">
                         <div class="mb-3">
                             <label class="form-label">Descrição</label>
                             <textarea class="form-control" id="nova_cat_descricao" rows="2" placeholder="Opcional"></textarea>
@@ -896,6 +889,26 @@ $pedidos = $db->fetchAll(
         // ==================================
         
         function openNovaCategoria() {
+            // Get current tipo from main form
+            const tipoLancamento = $('#tipo').val();
+            
+            if (!tipoLancamento) {
+                Swal.fire('Atenção', 'Selecione primeiro o tipo do lançamento (Receita ou Despesa)', 'warning');
+                return;
+            }
+            
+            // Set tipo automatically based on lancamento tipo
+            let tipoCategoria = '';
+            if (tipoLancamento === 'receita') {
+                tipoCategoria = 'receita';
+            } else if (tipoLancamento === 'despesa') {
+                tipoCategoria = 'despesa';
+            } else {
+                Swal.fire('Atenção', 'Selecione Receita ou Despesa para criar uma categoria', 'warning');
+                return;
+            }
+            
+            $('#nova_cat_tipo').val(tipoCategoria);
             $('#modalNovaCategoria').modal('show');
         }
 
