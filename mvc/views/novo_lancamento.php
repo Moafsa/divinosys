@@ -530,17 +530,6 @@ $pedidos = $db->fetchAll(
                             <input type="text" class="form-control" id="nova_conta_nome" required placeholder="Ex: Caixa Loja 2">
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Tipo <span class="text-danger">*</span></label>
-                            <select class="form-select" id="nova_conta_tipo" required>
-                                <option value="">Selecione...</option>
-                                <option value="caixa">🏦 Caixa</option>
-                                <option value="banco">🏛️ Banco</option>
-                                <option value="pix">📱 PIX</option>
-                                <option value="cartao">💳 Cartão</option>
-                                <option value="outros">📊 Outros</option>
-                            </select>
-                        </div>
-                        <div class="mb-3">
                             <label class="form-label">Saldo Inicial</label>
                             <input type="number" class="form-control" id="nova_conta_saldo" step="0.01" value="0.00" placeholder="0.00">
                         </div>
@@ -963,12 +952,12 @@ $pedidos = $db->fetchAll(
 
         function salvarNovaConta() {
             const nome = $('#nova_conta_nome').val().trim();
-            const tipo = $('#nova_conta_tipo').val();
+            const tipo = 'outros'; // Default type - user just wants a simple name
             const saldo = $('#nova_conta_saldo').val() || 0;
             const cor = $('#nova_conta_cor').val();
 
-            if (!nome || !tipo) {
-                Swal.fire('Atenção', 'Preencha os campos obrigatórios', 'warning');
+            if (!nome) {
+                Swal.fire('Atenção', 'Preencha o nome da conta', 'warning');
                 return;
             }
 
