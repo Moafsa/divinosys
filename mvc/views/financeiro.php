@@ -930,8 +930,29 @@ $contas = $db->fetchAll(
                 cancelButtonText: 'Cancelar'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    // Implementar exclusão
-                    Swal.fire('Excluído!', 'Lançamento excluído com sucesso.', 'success');
+                    // Make AJAX call to delete
+                    $.ajax({
+                        url: 'mvc/ajax/financeiro.php',
+                        method: 'POST',
+                        data: {
+                            action: 'excluir_lancamento',
+                            lancamento_id: id
+                        },
+                        dataType: 'json',
+                        success: function(response) {
+                            if (response.success) {
+                                Swal.fire('Excluído!', 'Lançamento excluído com sucesso.', 'success').then(() => {
+                                    location.reload(); // Reload page to update list
+                                });
+                            } else {
+                                Swal.fire('Erro', response.message || 'Erro ao excluir lançamento', 'error');
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            console.error('Erro ao excluir:', error);
+                            Swal.fire('Erro', 'Erro ao excluir lançamento: ' + error, 'error');
+                        }
+                    });
                 }
             });
         }

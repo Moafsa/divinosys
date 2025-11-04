@@ -758,6 +758,36 @@ try {
             ]);
             exit;
             
+        case 'excluir_lancamento':
+            $lancamentoId = $_POST['lancamento_id'] ?? '';
+            
+            if (empty($lancamentoId)) {
+                throw new \Exception('ID do lançamento é obrigatório');
+            }
+            
+            // Check if lancamento belongs to tenant
+            $lancamento = $db->fetch(
+                "SELECT id FROM lancamentos_financeiros WHERE id = ? AND tenant_id = ?",
+                [$lancamentoId, $tenantId]
+            );
+            
+            if (!$lancamento) {
+                throw new \Exception('Lançamento não encontrado ou não pertence a este estabelecimento');
+            }
+            
+            // Delete lancamento (hard delete is OK for financial entries)
+            $db->query(
+                "DELETE FROM lancamentos_financeiros WHERE id = ? AND tenant_id = ?",
+                [$lancamentoId, $tenantId]
+            );
+            
+            ob_end_clean();
+            echo json_encode([
+                'success' => true,
+                'message' => 'Lançamento excluído com sucesso'
+            ]);
+            exit;
+            
         default:
             throw new \Exception('Action not implemented: ' . $action);
     }
