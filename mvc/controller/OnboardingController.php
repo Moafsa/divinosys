@@ -120,15 +120,18 @@ class OnboardingController {
             // 4. Criar categorias padrão
             $this->createDefaultCategories($tenant_id);
             
-            // 5. Criar mesas se configurado
+            // 5. Criar categorias e contas financeiras padrão
+            $this->createDefaultFinancialData($tenant_id);
+            
+            // 6. Criar mesas se configurado
             if (!empty($data['num_mesas']) && $data['tem_mesas']) {
                 $this->createDefaultMesas($tenant_id, intval($data['num_mesas']));
             }
             
-            // 6. Configurar opções do tenant
+            // 7. Configurar opções do tenant
             $this->setupTenantConfig($tenant_id, $data);
             
-            // 7. Enviar email de boas-vindas (opcional)
+            // 8. Enviar email de boas-vindas (opcional)
             // $this->sendWelcomeEmail($data['email'], $data['nome'], $data['subdomain']);
             
             // Commit da transação
@@ -196,6 +199,64 @@ class OnboardingController {
                 'filial_id' => $filial_id,
                 'capacidade' => 4,
                 'status' => '1'
+            ]);
+        }
+    }
+    
+    /**
+     * Create default financial categories and accounts for new tenant
+     */
+    private function createDefaultFinancialData($tenant_id) {
+        // Get first filial for the tenant
+        $filial = $this->conn->fetch("SELECT id FROM filiais WHERE tenant_id = ? ORDER BY id LIMIT 1", [$tenant_id]);
+        $filial_id = $filial['id'] ?? null;
+        
+        // Default financial categories
+        $categorias_financeiras = [
+            ['nome' => 'Vendas Mesa', 'tipo' => 'receita', 'descricao' => 'Receitas de vendas em mesa', 'cor' => '#28a745', 'icone' => 'fas fa-table'],
+            ['nome' => 'Vendas Delivery', 'tipo' => 'receita', 'descricao' => 'Receitas de vendas delivery', 'cor' => '#17a2b8', 'icone' => 'fas fa-motorcycle'],
+            ['nome' => 'Vendas Balcão', 'tipo' => 'receita', 'descricao' => 'Receitas de vendas no balcão', 'cor' => '#20c997', 'icone' => 'fas fa-store'],
+            ['nome' => 'Vendas Fiadas', 'tipo' => 'receita', 'descricao' => 'Receitas de vendas fiadas', 'cor' => '#ffc107', 'icone' => 'fas fa-credit-card'],
+            ['nome' => 'Outras Receitas', 'tipo' => 'receita', 'descricao' => 'Outras receitas diversas', 'cor' => '#6f42c1', 'icone' => 'fas fa-plus-circle'],
+            ['nome' => 'Despesas Operacionais', 'tipo' => 'despesa', 'descricao' => 'Despesas operacionais do estabelecimento', 'cor' => '#dc3545', 'icone' => 'fas fa-tools'],
+            ['nome' => 'Despesas de Marketing', 'tipo' => 'despesa', 'descricao' => 'Despesas de marketing e publicidade', 'cor' => '#fd7e14', 'icone' => 'fas fa-bullhorn'],
+            ['nome' => 'Salários', 'tipo' => 'despesa', 'descricao' => 'Pagamento de salários e encargos', 'cor' => '#6610f2', 'icone' => 'fas fa-users'],
+            ['nome' => 'Aluguel', 'tipo' => 'despesa', 'descricao' => 'Aluguel do estabelecimento', 'cor' => '#e83e8c', 'icone' => 'fas fa-building'],
+            ['nome' => 'Contas (Água, Luz, Internet)', 'tipo' => 'despesa', 'descricao' => 'Contas de consumo', 'cor' => '#6c757d', 'icone' => 'fas fa-file-invoice-dollar']
+        ];
+        
+        foreach ($categorias_financeiras as $categoria) {
+            $this->conn->insert('categorias_financeiras', [
+                'nome' => $categoria['nome'],
+                'tipo' => $categoria['tipo'],
+                'descricao' => $categoria['descricao'],
+                'cor' => $categoria['cor'],
+                'icone' => $categoria['icone'],
+                'tenant_id' => $tenant_id,
+                'filial_id' => $filial_id,
+                'ativo' => true
+            ]);
+        }
+        
+        // Default financial accounts
+        $contas_financeiras = [
+            ['nome' => 'Caixa Principal', 'tipo' => 'caixa', 'cor' => '#28a745', 'icone' => 'fas fa-cash-register'],
+            ['nome' => 'Conta Corrente', 'tipo' => 'banco', 'cor' => '#007bff', 'icone' => 'fas fa-university'],
+            ['nome' => 'PIX', 'tipo' => 'pix', 'cor' => '#17a2b8', 'icone' => 'fas fa-mobile-alt'],
+            ['nome' => 'Cartão de Crédito', 'tipo' => 'cartao', 'cor' => '#dc3545', 'icone' => 'fas fa-credit-card']
+        ];
+        
+        foreach ($contas_financeiras as $conta) {
+            $this->conn->insert('contas_financeiras', [
+                'nome' => $conta['nome'],
+                'tipo' => $conta['tipo'],
+                'saldo_inicial' => 0.00,
+                'saldo_atual' => 0.00,
+                'cor' => $conta['cor'],
+                'icone' => $conta['icone'],
+                'tenant_id' => $tenant_id,
+                'filial_id' => $filial_id,
+                'ativo' => true
             ]);
         }
     }

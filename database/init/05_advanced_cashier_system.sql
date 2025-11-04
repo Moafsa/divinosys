@@ -210,6 +210,9 @@ CREATE INDEX IF NOT EXISTS idx_movimentacoes_tenant_filial ON movimentacoes_fina
 -- =====================================================
 -- DADOS INICIAIS (SEEDS)
 -- =====================================================
+-- NOTE: Financial categories and accounts are now created automatically
+-- during tenant onboarding via OnboardingController::createDefaultFinancialData()
+-- This ensures each tenant gets their own set of financial data.
 
 -- Inserir tipos de desconto padrão
 INSERT INTO tipos_desconto (nome, tipo, percentual, requer_autorizacao, nivel_autorizacao, tenant_id, filial_id) VALUES
@@ -218,22 +221,6 @@ INSERT INTO tipos_desconto (nome, tipo, percentual, requer_autorizacao, nivel_au
 ('Cortesia Gerência', 'cortesia', 100.00, true, 3, 1, 1),
 ('Desconto Funcionário', 'percentual', 20.00, true, 2, 1, 1),
 ('Desconto Especial', 'valor_fixo', 0.00, true, 3, 1, 1)
-ON CONFLICT DO NOTHING;
-
--- Inserir categorias financeiras padrão
-INSERT INTO categorias_financeiras (nome, tipo, descricao, cor, tenant_id, filial_id) VALUES
-('Vendas Mesa', 'receita', 'Receitas de vendas em mesa', '#28a745', 1, 1),
-('Vendas Delivery', 'receita', 'Receitas de vendas delivery', '#17a2b8', 1, 1),
-('Vendas Fiadas', 'receita', 'Receitas de vendas fiadas', '#ffc107', 1, 1),
-('Despesas Operacionais', 'despesa', 'Despesas operacionais do estabelecimento', '#dc3545', 1, 1),
-('Despesas de Marketing', 'despesa', 'Despesas de marketing e publicidade', '#6f42c1', 1, 1)
-ON CONFLICT DO NOTHING;
-
--- Inserir contas financeiras padrão
-INSERT INTO contas_financeiras (nome, tipo, saldo_inicial, saldo_atual, tenant_id, filial_id) VALUES
-('Caixa Principal', 'caixa', 0.00, 0.00, 1, 1),
-('Conta Corrente', 'banco', 0.00, 0.00, 1, 1),
-('PIX', 'pix', 0.00, 0.00, 1, 1)
 ON CONFLICT DO NOTHING;
 
 -- =====================================================
