@@ -70,11 +70,25 @@ try {
                 throw new Exception('Dados do webhook são obrigatórios');
             }
             
+            // Buscar tenant_id e filial_id da instância
+            $instance = $db->fetch(
+                "SELECT tenant_id, filial_id FROM whatsapp_instances WHERE id = ?",
+                [$instanceId]
+            );
+            
+            $tenantIdWebhook = $instance['tenant_id'] ?? null;
+            $filialIdWebhook = $instance['filial_id'] ?? null;
+            
+            if (!$tenantIdWebhook) {
+                error_log("whatsapp_n8n.php - AVISO: Instância $instanceId sem tenant_id, usando tenant da sessão");
+                $tenantIdWebhook = $context['tenant']['id'] ?? null;
+            }
+            
             // Salvar webhook no banco
             $webhookId = $db->insert('whatsapp_webhooks', [
                 'instance_id' => $instanceId,
-                'tenant_id' => 1, // TODO: Obter do contexto
-                'filial_id' => null,
+                'tenant_id' => $tenantIdWebhook,
+                'filial_id' => $filialIdWebhook,
                 'webhook_type' => $webhookType,
                 'webhook_data' => $webhookData,
                 'processed' => false,
