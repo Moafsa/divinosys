@@ -37,27 +37,31 @@ class N8nAIService
      * 
      * @param string $message User message/question
      * @param array $attachments Optional file attachments
+     * @param int $tenantId Optional override tenant ID (for webhook context)
+     * @param int $filialId Optional override filial ID (for webhook context)
+     * @param array $additionalContext Optional additional context data
      * @return array Response from AI
      */
-    public function processMessage($message, $attachments = [])
+    public function processMessage($message, $attachments = [], $tenantId = null, $filialId = null, $additionalContext = [])
     {
         try {
-            $tenantId = $this->session->getTenantId();
-            $filialId = $this->session->getFilialId();
+            // Use provided IDs or get from session
+            $tenantId = $tenantId ?? $this->session->getTenantId();
+            $filialId = $filialId ?? $this->session->getFilialId();
             $userId = $this->session->getUserId();
             
             // Prepare payload - only send question and context
-            $payload = [
+            $payload = array_merge([
                 'message' => $message,
                 'tenant_id' => $tenantId,
                 'filial_id' => $filialId,
                 'user_id' => $userId,
                 'timestamp' => date('Y-m-d H:i:s')
-            ];
+            ], $additionalContext);
             
-            // Validate tenant and filial IDs from session
+            // Validate tenant and filial IDs
             if (!$tenantId || !$filialId) {
-                throw new Exception('Multi-tenant system requires valid tenant_id and filial_id from user session');
+                throw new Exception('Multi-tenant system requires valid tenant_id and filial_id');
             }
             
             // Add attachment info if present

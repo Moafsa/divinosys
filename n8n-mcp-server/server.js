@@ -27,7 +27,8 @@ app.use((req, res, next) => {
       'create_product', 'update_product', 'delete_product',
       'create_ingredient', 'update_ingredient', 'delete_ingredient',
       'create_category', 'update_category', 'delete_category',
-      'create_financial_entry', 'update_order_status', 'create_payment'
+      'create_financial_entry', 'update_order_status', 'create_payment',
+      'create_order'  // Added: create order requires authentication
     ];
     
     if (writeOperations.includes(req.body.tool)) {
@@ -155,6 +156,64 @@ app.get('/tools', (req, res) => {
         parameters: {
           order_id: 'Order ID (required)'
         }
+      },
+      {
+        name: 'create_order',
+        description: 'Create a new order with items',
+        parameters: {
+          cliente: 'Customer name',
+          telefone_cliente: 'Customer phone',
+          tipo_entrega: 'Delivery type: mesa, delivery, or balcao (required)',
+          mesa_id: 'Table ID (required if tipo_entrega=mesa)',
+          endereco: 'Delivery address (required if tipo_entrega=delivery)',
+          itens: 'Array of items: [{produto_id, quantidade, observacao, tamanho}] (required)',
+          observacoes: 'Order notes',
+          forma_pagamento: 'Payment method: PIX, Dinheiro, Cartao, FIADO, etc'
+        },
+        authentication: 'required'
+      },
+      {
+        name: 'get_fiado_customers',
+        description: 'Get customers with pending debt (fiado)',
+        parameters: {
+          limit: 'Maximum number of customers (default: 50)',
+          min_value: 'Minimum debt value filter (default: 0)'
+        }
+      },
+      {
+        name: 'create_product',
+        description: 'Create a new product',
+        authentication: 'required'
+      },
+      {
+        name: 'update_product',
+        description: 'Update existing product',
+        authentication: 'required'
+      },
+      {
+        name: 'delete_product',
+        description: 'Delete (soft) a product',
+        authentication: 'required'
+      },
+      {
+        name: 'create_ingredient',
+        description: 'Create a new ingredient',
+        authentication: 'required'
+      },
+      {
+        name: 'create_category',
+        description: 'Create a new category',
+        authentication: 'required'
+      },
+      {
+        name: 'create_financial_entry',
+        description: 'Create a financial entry (receita or despesa)',
+        authentication: 'required'
+      },
+      {
+        name: 'update_order_status',
+        description: 'Update order status',
+        authentication: 'required'
       }
     ]
   });
@@ -243,6 +302,12 @@ app.post('/execute', async (req, res) => {
         break;
       case 'create_payment':
         result = await createPayment(parameters, tenantId, filialId);
+        break;
+      case 'create_order':
+        result = await createOrder(parameters, tenantId, filialId);
+        break;
+      case 'get_fiado_customers':
+        result = await getFiadoCustomers(parameters, tenantId, filialId);
         break;
         
       default:
@@ -907,6 +972,201 @@ async function createPayment(params, tenantId, filialId) {
     success: true,
     message: 'Pagamento registrado com sucesso!',
     payment: result.rows[0]
+  };
+}
+
+async function createOrder(params, tenantId, filialId) {
+  const { 
+    cliente, 
+    telefone_cliente, 
+    tipo_entrega,  // 'mesa', 'delivery', 'balcao'
+    mesa_id,       // required if tipo_entrega = 'mesa'
+    endereco,      // required if tipo_entrega = 'delivery'
+    itens,         // array of { produto_id, quantidade, observacao, ingredientes_adicionais, ingredientes_removidos }
+    observacoes,
+    forma_pagamento
+  } = params;
+  
+  // Validation
+  if (!itens || !Array.isArray(itens) || itens.length === 0) {
+    throw new Error('Itens do pedido são obrigatórios');
+  }
+  
+  if (!tipo_entrega || !['mesa', 'delivery', 'balcao'].includes(tipo_entrega)) {
+    throw new Error('Tipo de entrega inválido. Use: mesa, delivery ou balcao');
+  }
+  
+  if (tipo_entrega === 'mesa' && !mesa_id) {
+    throw new Error('Mesa ID é obrigatório para pedidos de mesa');
+  }
+  
+  if (tipo_entrega === 'delivery' && !endereco) {
+    throw new Error('Endereço é obrigatório para delivery');
+  }
+  
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    // Calculate total
+    let valorTotal = 0;
+    const itensDetalhados = [];
+    
+    for (const item of itens) {
+      const produto = await client.query(
+        'SELECT id, nome, preco_normal, preco_mini FROM produtos WHERE id = $1 AND tenant_id = $2',
+        [item.produto_id, tenantId]
+      );
+      
+      if (produto.rows.length === 0) {
+        throw new Error(`Produto ID ${item.produto_id} não encontrado`);
+      }
+      
+      const prod = produto.rows[0];
+      const preco = item.tamanho === 'mini' ? (prod.preco_mini || prod.preco_normal) : prod.preco_normal;
+      const subtotal = preco * item.quantidade;
+      
+      valorTotal += subtotal;
+      
+      itensDetalhados.push({
+        ...item,
+        nome: prod.nome,
+        preco_unitario: preco,
+        subtotal: subtotal
+      });
+    }
+    
+    // Create order
+    const orderSql = `
+      INSERT INTO pedido (
+        cliente, telefone_cliente, idmesa, endereco, tipo_entrega,
+        valor_total, observacao, status, status_pagamento,
+        tenant_id, filial_id, data, hora_pedido
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_DATE, CURRENT_TIME)
+      RETURNING idpedido, cliente, valor_total, status, data, hora_pedido
+    `;
+    
+    const orderResult = await client.query(orderSql, [
+      cliente || 'Cliente WhatsApp',
+      telefone_cliente || '',
+      mesa_id || null,
+      endereco || null,
+      tipo_entrega,
+      valorTotal,
+      observacoes || '',
+      'Pendente',
+      forma_pagamento === 'FIADO' ? 'pendente' : 'pendente',
+      tenantId,
+      filialId
+    ]);
+    
+    const pedidoId = orderResult.rows[0].idpedido;
+    
+    // Insert order items
+    for (const item of itensDetalhados) {
+      const itemSql = `
+        INSERT INTO pedido_item (
+          pedido_id, produto_id, quantidade, preco_unitario, 
+          subtotal, observacao, tenant_id, filial_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING id
+      `;
+      
+      await client.query(itemSql, [
+        pedidoId,
+        item.produto_id,
+        item.quantidade,
+        item.preco_unitario,
+        item.subtotal,
+        item.observacao || '',
+        tenantId,
+        filialId
+      ]);
+    }
+    
+    // Update mesa status if applicable
+    if (tipo_entrega === 'mesa' && mesa_id) {
+      await client.query(
+        'UPDATE mesas SET status = $1 WHERE id_mesa = $2 AND tenant_id = $3 AND filial_id = $4',
+        ['2', mesa_id, tenantId, filialId] // '2' = ocupada
+      );
+    }
+    
+    // Register payment if specified
+    if (forma_pagamento && forma_pagamento !== 'A combinar') {
+      const paymentSql = `
+        INSERT INTO pagamentos_pedido (
+          pedido_id, valor_pago, forma_pagamento, 
+          tenant_id, filial_id, created_at
+        ) VALUES ($1, $2, $3, $4, $5, NOW())
+      `;
+      
+      await client.query(paymentSql, [
+        pedidoId,
+        forma_pagamento === 'FIADO' ? 0 : valorTotal,
+        forma_pagamento,
+        tenantId,
+        filialId
+      ]);
+    }
+    
+    await client.query('COMMIT');
+    
+    return {
+      success: true,
+      message: 'Pedido criado com sucesso!',
+      order: {
+        id: pedidoId,
+        cliente: orderResult.rows[0].cliente,
+        valor_total: valorTotal,
+        quantidade_itens: itens.length,
+        status: 'Pendente',
+        itens: itensDetalhados
+      }
+    };
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function getFiadoCustomers(params, tenantId, filialId) {
+  const limit = params.limit || 50;
+  const minValue = params.min_value || 0;
+  
+  const sql = `
+    SELECT 
+      c.id,
+      c.nome,
+      c.telefone,
+      c.whatsapp,
+      COUNT(DISTINCT p.idpedido) as quantidade_pedidos,
+      SUM(p.saldo_devedor) as total_devedor,
+      MAX(p.data) as ultima_compra,
+      MIN(p.data) as primeira_compra,
+      ARRAY_AGG(DISTINCT p.idpedido ORDER BY p.idpedido) as pedidos_ids
+    FROM clientes c
+    INNER JOIN pedido p ON p.cliente = c.nome AND p.tenant_id = c.tenant_id
+    WHERE c.tenant_id = $1 
+      AND c.filial_id = $2
+      AND p.saldo_devedor > 0
+      AND p.status_pagamento != 'quitado'
+    GROUP BY c.id, c.nome, c.telefone, c.whatsapp
+    HAVING SUM(p.saldo_devedor) > $3
+    ORDER BY total_devedor DESC
+    LIMIT $4
+  `;
+  
+  const result = await pool.query(sql, [tenantId, filialId, minValue, limit]);
+  
+  return {
+    customers: result.rows,
+    total_customers: result.rows.length,
+    total_debt: result.rows.reduce((sum, c) => sum + parseFloat(c.total_devedor || 0), 0)
   };
 }
 
