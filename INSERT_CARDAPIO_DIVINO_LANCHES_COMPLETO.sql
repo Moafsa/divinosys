@@ -25,62 +25,71 @@ INSERT INTO categorias (nome, descricao, tenant_id, filial_id, status, created_a
 ON CONFLICT DO NOTHING;
 
 -- ============================================
--- 2. CRIAR INGREDIENTES (37 ingredientes)
+-- 2. CRIAR INGREDIENTES (45 ingredientes)
 -- ============================================
 -- Tipos permitidos: 'pao', 'proteina', 'queijo', 'salada', 'molho', 'complemento'
+-- IMPORTANTE: Todos com preco_adicional = 0.00 conforme sistema atual
 
 DO $$
 BEGIN
     INSERT INTO ingredientes (nome, tipo, preco_adicional, disponivel, tenant_id, filial_id, created_at) VALUES
-    -- Pães (3)
+    -- Pães (4)
+    ('Pão', 'pao', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
     ('Pão de Xis', 'pao', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
     ('Pão de Hot Dog', 'pao', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
     ('Pão Torrado', 'pao', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
     
-    -- Proteínas (10)
-    ('Hambúrguer', 'proteina', 5.00, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Coração de Frango', 'proteina', 7.00, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Calabresa', 'proteina', 6.00, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Bacon', 'proteina', 6.00, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Filé', 'proteina', 15.00, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Frango', 'proteina', 6.00, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Salsicha', 'proteina', 3.00, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Patinho', 'proteina', 10.00, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Alcatra', 'proteina', 15.00, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Coxão Mole', 'proteina', 12.00, true, 5, 4, CURRENT_TIMESTAMP),
+    -- Proteínas (11)
+    ('Hambúrguer', 'proteina', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Coração de Frango', 'proteina', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Calabresa', 'proteina', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Bacon', 'proteina', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Filé', 'proteina', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Frango', 'proteina', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Salsicha', 'proteina', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Salsicha Vegetariana', 'proteina', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Patinho', 'proteina', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Alcatra', 'proteina', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Coxão Mole', 'proteina', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
     
-    -- Queijos (3)
-    ('Queijo Fatiado', 'queijo', 3.00, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Queijo Ralado', 'queijo', 1.00, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Cheddar', 'queijo', 4.00, true, 5, 4, CURRENT_TIMESTAMP),
+    -- Queijos (4)
+    ('Queijo', 'queijo', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Queijo Fatiado', 'queijo', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Queijo Ralado', 'queijo', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Cheddar', 'queijo', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
     
     -- Saladas (6)
-    ('Alface', 'salada', 0.50, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Tomate', 'salada', 0.50, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Pepino', 'salada', 0.50, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Rúcula', 'salada', 2.00, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Cebola', 'salada', 0.50, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Salada Mista', 'salada', 3.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Alface', 'salada', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Tomate', 'salada', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Pepino', 'salada', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Rúcula', 'salada', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Cebola', 'salada', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Salada Mista', 'salada', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
     
     -- Molhos (2)
-    ('Maionese', 'molho', 0.50, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Molho Especial', 'molho', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Maionese', 'molho', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Molho', 'molho', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
     
-    -- Complementos (13)
-    ('Ovo', 'complemento', 2.00, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Presunto', 'complemento', 3.00, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Milho', 'complemento', 1.00, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Ervilha', 'complemento', 1.00, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Palmito', 'complemento', 4.00, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Tomate Seco', 'complemento', 3.00, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Batata Palha', 'complemento', 1.00, true, 5, 4, CURRENT_TIMESTAMP),
+    -- Complementos/Bebidas (18)
+    ('Ovo', 'complemento', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Presunto', 'complemento', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Milho', 'complemento', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Ervilha', 'complemento', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Palmito', 'complemento', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Tomate Seco', 'complemento', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Batata Palha', 'complemento', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
     ('Arroz', 'complemento', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
     ('Feijão', 'complemento', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Batata Frita', 'complemento', 5.00, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Massa', 'complemento', 8.00, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Polenta', 'complemento', 5.00, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Azeitona', 'complemento', 2.00, true, 5, 4, CURRENT_TIMESTAMP),
-    ('Ovo de Codorna', 'complemento', 1.50, true, 5, 4, CURRENT_TIMESTAMP)
+    ('Batata Frita', 'complemento', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Massa', 'complemento', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Polenta', 'complemento', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Azeitona', 'complemento', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Ovo de Codorna', 'complemento', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Água Mineral', 'complemento', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('H2O', 'complemento', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Coca-Cola', 'complemento', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Refrigerante', 'complemento', 0.00, true, 5, 4, CURRENT_TIMESTAMP),
+    ('Suco Natural', 'complemento', 0.00, true, 5, 4, CURRENT_TIMESTAMP)
     ON CONFLICT DO NOTHING;
 END $$;
 
@@ -388,8 +397,18 @@ SELECT COUNT(*) as total_vinculos FROM produto_ingredientes WHERE tenant_id = 5 
 --   - ADICIONAIS: 0 (categoria vazia para adicionar itens avulsos depois)
 --
 -- TOTAL PRODUTOS: 73
--- TOTAL INGREDIENTES: 37
+-- TOTAL INGREDIENTES: 45 (COMPLETO conforme sistema)
 -- TOTAL VÍNCULOS: ~130 (apenas produtos XIS)
+--
+-- INGREDIENTES ADICIONADOS QUE FALTAVAM:
+-- - Pão (genérico)
+-- - Queijo (genérico)
+-- - Salsicha Vegetariana
+-- - Água Mineral
+-- - H2O
+-- - Coca-Cola
+-- - Refrigerante
+-- - Suco Natural
 -- ============================================
 
 -- ============================================
