@@ -50,18 +50,130 @@ class N8nAIService
             $filialId = $filialId ?? $this->session->getFilialId();
             $userId = $this->session->getUserId();
             
-            // Prepare payload - only send question and context
-            $payload = array_merge([
-                'message' => $message,
-                'tenant_id' => $tenantId,
-                'filial_id' => $filialId,
-                'user_id' => $userId,
-                'timestamp' => date('Y-m-d H:i:s')
-            ], $additionalContext);
-            
             // Validate tenant and filial IDs
             if (!$tenantId || !$filialId) {
                 throw new Exception('Multi-tenant system requires valid tenant_id and filial_id');
+            }
+            
+            // Get rich context data
+            $db = \System\Database::getInstance();
+            
+            // Get tenant info
+            $tenant = $db->fetch("SELECT id, nome, subdomain, cnpj, telefone, email FROM tenants WHERE id = ?", [$tenantId]);
+            
+            // Get filial info
+            $filial = $db->fetch("SELECT id, nome, endereco, telefone FROM filiais WHERE id = ?", [$filialId]);
+            
+            // Get user info if available
+            $user = null;
+            if ($userId) {
+                $user = $db->fetch("SELECT id, login, nivel FROM usuarios WHERE id = ?", [$userId]);
+            }
+            
+            // Determine message source/type
+            $source = $additionalContext['source'] ?? 'web';
+            $messageType = $additionalContext['message_type'] ?? 'chat';
+            
+            // Get business hours and operational info
+            $currentHour = (int) date('H');
+            $isBusinessHours = ($currentHour >= 9 && $currentHour < 22);
+            $dayOfWeek = date('w'); // 0 = Sunday, 6 = Saturday
+            
+            // Get some statistics for context
+            $stats = $db->fetch("
+                SELECT 
+                    COUNT(DISTINCT CASE WHEN p.data = CURRENT_DATE THEN p.idpedido END) as pedidos_hoje,
+                    COUNT(DISTINCT CASE WHEN m.status = '2' THEN m.id_mesa END) as mesas_ocupadas,
+                    COUNT(DISTINCT CASE WHEN m.status = '1' THEN m.id_mesa END) as mesas_disponiveis,
+                    COUNT(DISTINCT CASE WHEN p.status IN ('Pendente', 'Em Preparo') THEN p.idpedido END) as pedidos_ativos
+                FROM mesas m
+                LEFT JOIN pedido p ON p.tenant_id = m.tenant_id AND p.filial_id = m.filial_id
+                WHERE m.tenant_id = ? AND m.filial_id = ?
+            ", [$tenantId, $filialId]);
+            
+            // Build enriched payload
+            $payload = [
+                // Core message
+                'message' => $message,
+                'timestamp' => date('Y-m-d H:i:s'),
+                
+                // Context IDs (for MCP queries)
+                'tenant_id' => $tenantId,
+                'filial_id' => $filialId,
+                'user_id' => $userId,
+                
+                // Rich context
+                'context' => [
+                    // Business info
+                    'tenant' => [
+                        'id' => $tenant['id'] ?? $tenantId,
+                        'nome' => $tenant['nome'] ?? 'Unknown',
+                        'subdomain' => $tenant['subdomain'] ?? '',
+                        'telefone' => $tenant['telefone'] ?? '',
+                        'email' => $tenant['email'] ?? '',
+                        'cnpj' => $tenant['cnpj'] ?? ''
+                    ],
+                    'filial' => [
+                        'id' => $filial['id'] ?? $filialId,
+                        'nome' => $filial['nome'] ?? 'Matriz',
+                        'endereco' => $filial['endereco'] ?? '',
+                        'telefone' => $filial['telefone'] ?? ''
+                    ],
+                    
+                    // User/Agent info
+                    'user' => $user ? [
+                        'id' => $user['id'],
+                        'login' => $user['login'],
+                        'nivel' => $user['nivel'],
+                        'is_admin' => $user['nivel'] == 1,
+                        'role' => $user['nivel'] == 1 ? 'admin' : ($user['nivel'] == 2 ? 'manager' : 'operator')
+                    ] : null,
+                    
+                    // Message metadata
+                    'source' => $source, // 'web', 'whatsapp', 'api', 'n8n'
+                    'message_type' => $messageType, // 'chat', 'command', 'order', 'query', 'billing'
+                    'channel' => $source === 'whatsapp' ? 'whatsapp' : 'web',
+                    
+                    // Operational context
+                    'operational' => [
+                        'is_business_hours' => $isBusinessHours,
+                        'current_hour' => $currentHour,
+                        'day_of_week' => $dayOfWeek,
+                        'is_weekend' => in_array($dayOfWeek, [0, 6]),
+                        'pedidos_hoje' => (int) ($stats['pedidos_hoje'] ?? 0),
+                        'mesas_ocupadas' => (int) ($stats['mesas_ocupadas'] ?? 0),
+                        'mesas_disponiveis' => (int) ($stats['mesas_disponiveis'] ?? 0),
+                        'pedidos_ativos' => (int) ($stats['pedidos_ativos'] ?? 0)
+                    ],
+                    
+                    // Service type hints (helps AI decide prompt)
+                    'service_type' => $this->detectServiceType($message, $source),
+                ],
+                
+                // Customer context (if from WhatsApp)
+                'customer' => isset($additionalContext['customer_phone']) ? [
+                    'phone' => $additionalContext['customer_phone'] ?? '',
+                    'name' => $additionalContext['customer_name'] ?? '',
+                    'whatsapp' => $additionalContext['customer_phone'] ?? '',
+                    'is_new' => $additionalContext['is_new_customer'] ?? false
+                ] : null,
+                
+                // Session metadata
+                'session' => [
+                    'conversation_id' => $additionalContext['conversation_id'] ?? uniqid('conv_'),
+                    'platform' => $source,
+                    'language' => 'pt-BR',
+                    'timezone' => 'America/Sao_Paulo'
+                ]
+            ];
+            
+            // Merge any additional context
+            if (!empty($additionalContext)) {
+                foreach ($additionalContext as $key => $value) {
+                    if (!isset($payload[$key]) && !in_array($key, ['source', 'message_type', 'customer_phone', 'customer_name', 'conversation_id'])) {
+                        $payload[$key] = $value;
+                    }
+                }
             }
             
             // Add attachment info if present
@@ -254,6 +366,62 @@ class N8nAIService
             'success' => false,
             'message' => 'Erro ao executar operação'
         ];
+    }
+    
+    /**
+     * Detect service type from message content
+     * Helps AI choose the right prompt and behavior
+     * 
+     * @param string $message User message
+     * @param string $source Message source
+     * @return string Service type
+     */
+    private function detectServiceType($message, $source)
+    {
+        $messageLower = mb_strtolower($message);
+        
+        // Order keywords
+        $orderKeywords = ['quero', 'pedir', 'fazer pedido', 'mandar', 'delivery', 'entregar', 'levar'];
+        foreach ($orderKeywords as $keyword) {
+            if (strpos($messageLower, $keyword) !== false) {
+                return 'order';
+            }
+        }
+        
+        // Query/Info keywords
+        $queryKeywords = ['quanto custa', 'preço', 'valor', 'cardápio', 'menu', 'tem ', 'quais', 'horário', 'aberto'];
+        foreach ($queryKeywords as $keyword) {
+            if (strpos($messageLower, $keyword) !== false) {
+                return 'query';
+            }
+        }
+        
+        // Billing keywords
+        $billingKeywords = ['pagar', 'dívida', 'débito', 'quanto devo', 'pendente', 'fiado'];
+        foreach ($billingKeywords as $keyword) {
+            if (strpos($messageLower, $keyword) !== false) {
+                return 'billing';
+            }
+        }
+        
+        // Management keywords (admin only)
+        $managementKeywords = ['cadastrar', 'adicionar produto', 'criar categoria', 'excluir', 'editar'];
+        foreach ($managementKeywords as $keyword) {
+            if (strpos($messageLower, $keyword) !== false) {
+                return 'management';
+            }
+        }
+        
+        // Support keywords
+        $supportKeywords = ['ajuda', 'suporte', 'problema', 'erro', 'não funciona'];
+        foreach ($supportKeywords as $keyword) {
+            if (strpos($messageLower, $keyword) !== false) {
+                return 'support';
+            }
+        }
+        
+        // Default
+        return 'chat';
     }
     
     /**
