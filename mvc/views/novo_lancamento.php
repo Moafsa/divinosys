@@ -277,25 +277,35 @@ $pedidos = $db->fetchAll(
                                     <div class="row">
                                         <div class="col-md-6">
                                             <label class="form-label">Categoria</label>
-                                            <select class="form-select" name="categoria_id" id="categoria_id">
-                                                <option value="">Selecione uma categoria</option>
-                                                <?php foreach ($categorias as $categoria): ?>
-                                                    <option value="<?= $categoria['id'] ?>" data-tipo="<?= $categoria['tipo'] ?>">
-                                                        <?= htmlspecialchars($categoria['nome']) ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
+                                            <div class="input-group">
+                                                <select class="form-select select2-categoria" name="categoria_id" id="categoria_id">
+                                                    <option value="">Selecione uma categoria</option>
+                                                    <?php foreach ($categorias as $categoria): ?>
+                                                        <option value="<?= $categoria['id'] ?>" data-tipo="<?= $categoria['tipo'] ?>">
+                                                            <?= $categoria['tipo'] === 'receita' ? '💰' : '💸' ?> <?= htmlspecialchars($categoria['nome']) ?>
+                                                        </option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                                <button type="button" class="btn btn-primary" onclick="openNovaCategoria()" title="Criar nova categoria">
+                                                    <i class="fas fa-plus"></i>
+                                                </button>
+                                            </div>
                                         </div>
                                         <div class="col-md-6">
                                             <label class="form-label">Conta <span class="text-danger">*</span></label>
-                                            <select class="form-select" name="conta_id" id="conta_id" required>
-                                                <option value="">Selecione uma conta</option>
-                                                <?php foreach ($contas as $conta): ?>
-                                                    <option value="<?= $conta['id'] ?>" data-tipo="<?= $conta['tipo'] ?>">
-                                                        <?= htmlspecialchars($conta['nome']) ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
+                                            <div class="input-group">
+                                                <select class="form-select select2-conta" name="conta_id" id="conta_id" required>
+                                                    <option value="">Selecione uma conta</option>
+                                                    <?php foreach ($contas as $conta): ?>
+                                                        <option value="<?= $conta['id'] ?>" data-tipo="<?= $conta['tipo'] ?>">
+                                                            <?= htmlspecialchars($conta['nome']) ?>
+                                                        </option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                                <button type="button" class="btn btn-primary" onclick="openNovaConta()" title="Criar nova conta">
+                                                    <i class="fas fa-plus"></i>
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                     <div class="row mt-3" id="conta_destino_section" style="display: none;">
@@ -465,6 +475,93 @@ $pedidos = $db->fetchAll(
                             </div>
                         </div>
                     </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Nova Categoria -->
+    <div class="modal fade" id="modalNovaCategoria" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-tags me-2"></i>Nova Categoria Financeira</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="formNovaCategoria">
+                        <div class="mb-3">
+                            <label class="form-label">Nome <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="nova_cat_nome" required placeholder="Ex: Vendas Online">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Tipo <span class="text-danger">*</span></label>
+                            <select class="form-select" id="nova_cat_tipo" required>
+                                <option value="">Selecione...</option>
+                                <option value="receita">💰 Receita</option>
+                                <option value="despesa">💸 Despesa</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Descrição</label>
+                            <textarea class="form-control" id="nova_cat_descricao" rows="2" placeholder="Opcional"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Cor</label>
+                            <input type="color" class="form-control form-control-color" id="nova_cat_cor" value="#007bff">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="salvarNovaCategoria()">
+                        <i class="fas fa-save me-1"></i>Salvar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Nova Conta -->
+    <div class="modal fade" id="modalNovaConta" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-wallet me-2"></i>Nova Conta Financeira</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="formNovaConta">
+                        <div class="mb-3">
+                            <label class="form-label">Nome <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="nova_conta_nome" required placeholder="Ex: Caixa Loja 2">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Tipo <span class="text-danger">*</span></label>
+                            <select class="form-select" id="nova_conta_tipo" required>
+                                <option value="">Selecione...</option>
+                                <option value="caixa">🏦 Caixa</option>
+                                <option value="banco">🏛️ Banco</option>
+                                <option value="pix">📱 PIX</option>
+                                <option value="cartao">💳 Cartão</option>
+                                <option value="outros">📊 Outros</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Saldo Inicial</label>
+                            <input type="number" class="form-control" id="nova_conta_saldo" step="0.01" value="0.00" placeholder="0.00">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Cor</label>
+                            <input type="color" class="form-control form-control-color" id="nova_conta_cor" value="#28a745">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="salvarNovaConta()">
+                        <i class="fas fa-save me-1"></i>Salvar
+                    </button>
                 </div>
             </div>
         </div>
@@ -792,6 +889,107 @@ $pedidos = $db->fetchAll(
             
             console.log('Página inicializada com sucesso');
         });
+
+        // ==================================
+        // FUNCTIONS TO CREATE CATEGORY/ACCOUNT ON THE FLY
+        // ==================================
+        
+        function openNovaCategoria() {
+            $('#modalNovaCategoria').modal('show');
+        }
+
+        function openNovaConta() {
+            $('#modalNovaConta').modal('show');
+        }
+
+        function salvarNovaCategoria() {
+            const nome = $('#nova_cat_nome').val().trim();
+            const tipo = $('#nova_cat_tipo').val();
+            const descricao = $('#nova_cat_descricao').val().trim();
+            const cor = $('#nova_cat_cor').val();
+
+            if (!nome || !tipo) {
+                Swal.fire('Atenção', 'Preencha os campos obrigatórios', 'warning');
+                return;
+            }
+
+            $.ajax({
+                url: 'mvc/ajax/financeiro.php',
+                method: 'POST',
+                data: {
+                    action: 'criar_categoria',
+                    nome: nome,
+                    tipo: tipo,
+                    descricao: descricao,
+                    cor: cor
+                },
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success) {
+                        Swal.fire('Sucesso', 'Categoria criada com sucesso!', 'success');
+                        
+                        // Add new option to select
+                        const emoji = tipo === 'receita' ? '💰' : '💸';
+                        const newOption = new Option(`${emoji} ${nome}`, response.categoria_id, true, true);
+                        $('#categoria_id').append(newOption).trigger('change');
+                        
+                        // Close modal and reset form
+                        $('#modalNovaCategoria').modal('hide');
+                        $('#formNovaCategoria')[0].reset();
+                    } else {
+                        Swal.fire('Erro', response.message || 'Erro ao criar categoria', 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Erro:', error);
+                    Swal.fire('Erro', 'Erro ao criar categoria: ' + error, 'error');
+                }
+            });
+        }
+
+        function salvarNovaConta() {
+            const nome = $('#nova_conta_nome').val().trim();
+            const tipo = $('#nova_conta_tipo').val();
+            const saldo = $('#nova_conta_saldo').val() || 0;
+            const cor = $('#nova_conta_cor').val();
+
+            if (!nome || !tipo) {
+                Swal.fire('Atenção', 'Preencha os campos obrigatórios', 'warning');
+                return;
+            }
+
+            $.ajax({
+                url: 'mvc/ajax/financeiro.php',
+                method: 'POST',
+                data: {
+                    action: 'criar_conta',
+                    nome: nome,
+                    tipo: tipo,
+                    saldo_inicial: saldo,
+                    cor: cor
+                },
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success) {
+                        Swal.fire('Sucesso', 'Conta criada com sucesso!', 'success');
+                        
+                        // Add new option to select
+                        const newOption = new Option(nome, response.conta_id, true, true);
+                        $('#conta_id').append(newOption).trigger('change');
+                        
+                        // Close modal and reset form
+                        $('#modalNovaConta').modal('hide');
+                        $('#formNovaConta')[0].reset();
+                    } else {
+                        Swal.fire('Erro', response.message || 'Erro ao criar conta', 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Erro:', error);
+                    Swal.fire('Erro', 'Erro ao criar conta: ' + error, 'error');
+                }
+            });
+        }
     </script>
 </body>
 </html>

@@ -612,6 +612,92 @@ try {
             ]);
             exit;
             
+        case 'criar_categoria':
+            $nome = $_POST['nome'] ?? '';
+            $tipo = $_POST['tipo'] ?? '';
+            $descricao = $_POST['descricao'] ?? '';
+            $cor = $_POST['cor'] ?? '#007bff';
+            
+            if (empty($nome) || empty($tipo)) {
+                throw new \Exception('Nome e tipo são obrigatórios');
+            }
+            
+            if (!in_array($tipo, ['receita', 'despesa'])) {
+                throw new \Exception('Tipo inválido. Use: receita ou despesa');
+            }
+            
+            // Create category
+            $categoria_id = $db->insert('categorias_financeiras', [
+                'nome' => $nome,
+                'tipo' => $tipo,
+                'descricao' => $descricao,
+                'cor' => $cor,
+                'icone' => $tipo === 'receita' ? 'fas fa-plus-circle' : 'fas fa-minus-circle',
+                'tenant_id' => $tenantId,
+                'filial_id' => $filialId,
+                'ativo' => true
+            ]);
+            
+            if (!$categoria_id) {
+                throw new \Exception('Erro ao criar categoria');
+            }
+            
+            ob_end_clean();
+            echo json_encode([
+                'success' => true,
+                'message' => 'Categoria criada com sucesso',
+                'categoria_id' => $categoria_id
+            ]);
+            exit;
+            
+        case 'criar_conta':
+            $nome = $_POST['nome'] ?? '';
+            $tipo = $_POST['tipo'] ?? '';
+            $saldoInicial = floatval($_POST['saldo_inicial'] ?? 0);
+            $cor = $_POST['cor'] ?? '#28a745';
+            
+            if (empty($nome) || empty($tipo)) {
+                throw new \Exception('Nome e tipo são obrigatórios');
+            }
+            
+            if (!in_array($tipo, ['caixa', 'banco', 'pix', 'cartao', 'outros'])) {
+                throw new \Exception('Tipo inválido');
+            }
+            
+            // Icon mapping
+            $icones = [
+                'caixa' => 'fas fa-cash-register',
+                'banco' => 'fas fa-university',
+                'pix' => 'fas fa-mobile-alt',
+                'cartao' => 'fas fa-credit-card',
+                'outros' => 'fas fa-wallet'
+            ];
+            
+            // Create account
+            $conta_id = $db->insert('contas_financeiras', [
+                'nome' => $nome,
+                'tipo' => $tipo,
+                'saldo_inicial' => $saldoInicial,
+                'saldo_atual' => $saldoInicial,
+                'cor' => $cor,
+                'icone' => $icones[$tipo] ?? 'fas fa-wallet',
+                'tenant_id' => $tenantId,
+                'filial_id' => $filialId,
+                'ativo' => true
+            ]);
+            
+            if (!$conta_id) {
+                throw new \Exception('Erro ao criar conta');
+            }
+            
+            ob_end_clean();
+            echo json_encode([
+                'success' => true,
+                'message' => 'Conta criada com sucesso',
+                'conta_id' => $conta_id
+            ]);
+            exit;
+            
         default:
             throw new \Exception('Action not implemented: ' . $action);
     }
