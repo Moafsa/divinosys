@@ -41,27 +41,44 @@ require_once __DIR__ . '/../../system/N8nAIService.php';
 try {
     $action = $_POST['action'] ?? $_GET['action'] ?? '';
     
+    error_log("ai_chat.php - Action: $action");
+    
     // Determine which AI service to use based on environment
     $config = \System\Config::getInstance();
     $useN8n = $config->getEnv('USE_N8N_AI') === 'true';
+    
+    error_log("ai_chat.php - USE_N8N_AI: " . ($useN8n ? 'true' : 'false'));
     
     switch ($action) {
         case 'send_message':
             $message = $_POST['message'] ?? '';
             $attachments = $_POST['attachments'] ?? [];
             
+            error_log("ai_chat.php - Message: $message");
+            
             if (empty($message)) {
                 throw new Exception('Mensagem é obrigatória');
             }
             
             // Use n8n service if configured, otherwise fallback to OpenAI
-            if ($useN8n) {
-                $aiService = new \System\N8nAIService();
-            } else {
-                $aiService = new \System\OpenAIService();
+            try {
+                if ($useN8n) {
+                    error_log("ai_chat.php - Using N8nAIService");
+                    $aiService = new \System\N8nAIService();
+                } else {
+                    error_log("ai_chat.php - Using OpenAIService");
+                    $aiService = new \System\OpenAIService();
+                }
+                
+                error_log("ai_chat.php - Calling processMessage...");
+                $response = $aiService->processMessage($message, $attachments);
+                error_log("ai_chat.php - Response received: " . json_encode($response));
+                
+            } catch (Exception $serviceError) {
+                error_log("ai_chat.php - Service Error: " . $serviceError->getMessage());
+                error_log("ai_chat.php - Stack trace: " . $serviceError->getTraceAsString());
+                throw new Exception('Erro ao processar mensagem: ' . $serviceError->getMessage());
             }
-            
-            $response = $aiService->processMessage($message, $attachments);
             
             ob_end_clean();
             echo json_encode([

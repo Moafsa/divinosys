@@ -79,17 +79,28 @@ class N8nAIService
             $isBusinessHours = ($currentHour >= 9 && $currentHour < 22);
             $dayOfWeek = date('w'); // 0 = Sunday, 6 = Saturday
             
-            // Get some statistics for context
-            $stats = $db->fetch("
-                SELECT 
-                    COUNT(DISTINCT CASE WHEN p.data = CURRENT_DATE THEN p.idpedido END) as pedidos_hoje,
-                    COUNT(DISTINCT CASE WHEN m.status = '2' THEN m.id_mesa END) as mesas_ocupadas,
-                    COUNT(DISTINCT CASE WHEN m.status = '1' THEN m.id_mesa END) as mesas_disponiveis,
-                    COUNT(DISTINCT CASE WHEN p.status IN ('Pendente', 'Em Preparo') THEN p.idpedido END) as pedidos_ativos
-                FROM mesas m
-                LEFT JOIN pedido p ON p.tenant_id = m.tenant_id AND p.filial_id = m.filial_id
-                WHERE m.tenant_id = ? AND m.filial_id = ?
-            ", [$tenantId, $filialId]);
+            // Get some statistics for context (with error handling)
+            $stats = ['pedidos_hoje' => 0, 'mesas_ocupadas' => 0, 'mesas_disponiveis' => 0, 'pedidos_ativos' => 0];
+            
+            try {
+                $statsQuery = $db->fetch("
+                    SELECT 
+                        COUNT(DISTINCT CASE WHEN p.data = CURRENT_DATE THEN p.idpedido END) as pedidos_hoje,
+                        COUNT(DISTINCT CASE WHEN m.status = '2' THEN m.id_mesa END) as mesas_ocupadas,
+                        COUNT(DISTINCT CASE WHEN m.status = '1' THEN m.id_mesa END) as mesas_disponiveis,
+                        COUNT(DISTINCT CASE WHEN p.status IN ('Pendente', 'Em Preparo') THEN p.idpedido END) as pedidos_ativos
+                    FROM mesas m
+                    LEFT JOIN pedido p ON p.tenant_id = m.tenant_id AND p.filial_id = m.filial_id
+                    WHERE m.tenant_id = ? AND m.filial_id = ?
+                ", [$tenantId, $filialId]);
+                
+                if ($statsQuery) {
+                    $stats = $statsQuery;
+                }
+            } catch (Exception $statsError) {
+                error_log("N8nAIService - Stats query failed: " . $statsError->getMessage());
+                // Continue with default values
+            }
             
             // Build enriched payload
             $payload = [
