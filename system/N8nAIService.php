@@ -122,11 +122,30 @@ class N8nAIService
                 // Continue with default values
             }
             
+            // Extract chat history from additional context
+            $chatHistory = $additionalContext['chat_history'] ?? [];
+            
+            // Format history for AI (convert to OpenAI format: role + content)
+            $formattedHistory = [];
+            if (!empty($chatHistory) && is_array($chatHistory)) {
+                foreach ($chatHistory as $histMsg) {
+                    if (isset($histMsg['role']) && isset($histMsg['content'])) {
+                        $formattedHistory[] = [
+                            'role' => $histMsg['role'], // 'user' or 'assistant'
+                            'content' => $histMsg['content']
+                        ];
+                    }
+                }
+            }
+            
             // Build enriched payload
             $payload = [
                 // Core message
                 'message' => $message,
                 'timestamp' => date('Y-m-d H:i:s'),
+                
+                // Chat history for context
+                'chat_history' => $formattedHistory,
                 
                 // Context IDs (for MCP queries)
                 'tenant_id' => $tenantId,

@@ -53,8 +53,16 @@ try {
         case 'send_message':
             $message = $_POST['message'] ?? '';
             $attachments = $_POST['attachments'] ?? [];
+            $historyJson = $_POST['history'] ?? '[]';
+            
+            // Parse chat history
+            $chatHistory = json_decode($historyJson, true);
+            if (!is_array($chatHistory)) {
+                $chatHistory = [];
+            }
             
             error_log("ai_chat.php - Message: $message");
+            error_log("ai_chat.php - History count: " . count($chatHistory));
             
             if (empty($message)) {
                 throw new Exception('Mensagem é obrigatória');
@@ -112,7 +120,14 @@ try {
                 }
                 
                 error_log("ai_chat.php - Calling processMessage...");
-                $response = $aiService->processMessage($message, [], $tenantId, $filialId);
+                
+                // Pass chat history as additional context
+                $additionalContext = [
+                    'chat_history' => $chatHistory,
+                    'source' => 'web'
+                ];
+                
+                $response = $aiService->processMessage($message, [], $tenantId, $filialId, $additionalContext);
                 error_log("ai_chat.php - Response received: " . json_encode($response));
                 
             } catch (Exception $serviceError) {

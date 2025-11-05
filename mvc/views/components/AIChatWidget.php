@@ -617,12 +617,18 @@ class AIChatWidget {
         this.showTypingIndicator();
 
         try {
+            // Prepare chat history (last 10 messages to avoid payload too large)
+            const chatHistory = this.messages.slice(-10).map(msg => ({
+                role: msg.sender === 'user' ? 'user' : 'assistant',
+                content: msg.content
+            }));
+            
             const response = await fetch('mvc/ajax/ai_chat.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 },
-                body: `action=send_message&message=${encodeURIComponent(message)}`
+                body: `action=send_message&message=${encodeURIComponent(message)}&history=${encodeURIComponent(JSON.stringify(chatHistory))}`
             });
 
             const data = await response.json();
