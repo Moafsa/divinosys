@@ -622,13 +622,14 @@ Qual categoria? (Lanches, Porções, Bebidas, etc)\"",
                 ];
                 
             case 'support':
+                $tenantEmail = $tenant['email'] ?? 'contato@estabelecimento.com';
                 return [
                     'system' => $basePrompt .
 "**SUA MISSÃO:** Oferecer suporte e resolver problemas.
 
 **INFORMAÇÕES DE CONTATO:**
 - Telefone: {$filialTelefone}
-- Email: {$tenant['email'] ?? 'contato@estabelecimento.com'}
+- Email: {$tenantEmail}
 
 **INSTRUÇÕES:**
 - Seja empático e prestativo
