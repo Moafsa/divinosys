@@ -384,12 +384,45 @@ class AIChatWidget {
         this.isRecording = false;
         this.mediaRecorder = null;
         this.audioChunks = [];
+        this.storageKey = 'ai_chat_history';
         this.init();
     }
 
     init() {
         this.setupEventListeners();
-        this.addWelcomeMessage();
+        this.loadChatHistory(); // Load from localStorage first
+        
+        // Only add welcome if no history
+        if (this.messages.length === 0) {
+            this.addWelcomeMessage();
+        }
+    }
+    
+    loadChatHistory() {
+        try {
+            const saved = localStorage.getItem(this.storageKey);
+            if (saved) {
+                const history = JSON.parse(saved);
+                this.messages = history;
+                
+                // Render saved messages
+                history.forEach(msg => {
+                    this.renderMessageToDOM(msg.sender, msg.content, msg.attachments || []);
+                });
+                
+                console.log(`✅ Loaded ${history.length} messages from localStorage - Conversa restaurada!`);
+            }
+        } catch (error) {
+            console.error('Error loading chat history:', error);
+        }
+    }
+    
+    saveChatHistory() {
+        try {
+            localStorage.setItem(this.storageKey, JSON.stringify(this.messages));
+        } catch (error) {
+            console.error('Error saving chat history:', error);
+        }
     }
 
     setupEventListeners() {
@@ -486,8 +519,8 @@ class AIChatWidget {
     addWelcomeMessage() {
         this.addMessage('ai', 'Olá! Sou seu assistente IA para o sistema Divino Lanches. Posso ajudar você a gerenciar produtos, ingredientes, pedidos e muito mais. Como posso ajudar?');
     }
-
-    addMessage(sender, content, attachments = []) {
+    
+    renderMessageToDOM(sender, content, attachments = []) {
         const messagesContainer = document.getElementById('aiChatMessages');
         if (!messagesContainer) return;
         
@@ -495,7 +528,7 @@ class AIChatWidget {
         messageDiv.className = `message ${sender}`;
 
         let attachmentHtml = '';
-        if (attachments.length > 0) {
+        if (attachments && attachments.length > 0) {
             attachmentHtml = '<div class="message-attachments" style="margin-top: 5px;">';
             attachments.forEach(attachment => {
                 attachmentHtml += `<span class="attachment-item" style="display: inline-block; padding: 2px 6px; background: rgba(0,123,255,0.1); border-radius: 10px; font-size: 10px; margin-right: 3px;">
@@ -515,13 +548,22 @@ class AIChatWidget {
 
         messagesContainer.appendChild(messageDiv);
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
 
+    addMessage(sender, content, attachments = []) {
+        // Save to messages array
         this.messages.push({
             sender,
             content,
             attachments,
-            timestamp: new Date()
+            timestamp: new Date().toISOString()
         });
+        
+        // Save to localStorage
+        this.saveChatHistory();
+        
+        // Render to DOM
+        this.renderMessageToDOM(sender, content, attachments);
 
         // Show notification badge if chat is closed
         if (!this.isOpen) {
@@ -802,6 +844,11 @@ class AIChatWidget {
         if (messagesContainer) {
             messagesContainer.innerHTML = '';
             this.messages = [];
+            
+            // Clear localStorage
+            localStorage.removeItem(this.storageKey);
+            console.log('🗑️ Chat history cleared from localStorage');
+            
             this.addWelcomeMessage();
         }
     }
