@@ -60,6 +60,47 @@ try {
                 throw new Exception('Mensagem é obrigatória');
             }
             
+            // Get session
+            $session = \System\Session::getInstance();
+            $db = \System\Database::getInstance();
+            
+            // Get or set tenant/filial context
+            $tenantId = $session->getTenantId();
+            $filialId = $session->getFilialId();
+            
+            // If no tenant in session, try to get from user
+            if (!$tenantId && $session->isLoggedIn()) {
+                $user = $session->getUser();
+                if ($user && isset($user['tenant_id'])) {
+                    $tenantId = $user['tenant_id'];
+                    $tenant = $db->fetch("SELECT * FROM tenants WHERE id = ?", [$tenantId]);
+                    if ($tenant) {
+                        $session->setTenant($tenant);
+                    }
+                }
+            }
+            
+            // If still no tenant, use first active tenant as fallback
+            if (!$tenantId) {
+                $tenant = $db->fetch("SELECT * FROM tenants WHERE status = 'ativo' LIMIT 1");
+                if ($tenant) {
+                    $tenantId = $tenant['id'];
+                    $session->setTenant($tenant);
+                    error_log("ai_chat.php - Using fallback tenant: {$tenant['nome']} (ID: $tenantId)");
+                }
+            }
+            
+            // Get or set filial
+            if (!$filialId && $tenantId) {
+                $filial = $db->fetch("SELECT * FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+                if ($filial) {
+                    $filialId = $filial['id'];
+                    $session->setFilial($filial);
+                }
+            }
+            
+            error_log("ai_chat.php - Context: Tenant=$tenantId, Filial=$filialId");
+            
             // Use n8n service if configured, otherwise fallback to OpenAI
             try {
                 if ($useN8n) {
@@ -71,7 +112,7 @@ try {
                 }
                 
                 error_log("ai_chat.php - Calling processMessage...");
-                $response = $aiService->processMessage($message, $attachments);
+                $response = $aiService->processMessage($message, [], $tenantId, $filialId);
                 error_log("ai_chat.php - Response received: " . json_encode($response));
                 
             } catch (Exception $serviceError) {
