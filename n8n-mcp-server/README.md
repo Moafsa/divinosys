@@ -21,6 +21,7 @@ Divino Lanches System → n8n Workflow → MCP Server → PostgreSQL
 - **Tenant Isolation**: Multi-tenant support built-in
 - **Performance**: Connection pooling and optimized queries
 - **Security**: Input validation and prepared statements
+- **Dual Transport Support**: HTTP REST and Server Sent Events (SSE)
 
 ## Available Tools
 
@@ -199,7 +200,9 @@ Response:
 ```json
 {
   "status": "ok",
-  "timestamp": "2025-01-08T10:30:00.000Z"
+  "timestamp": "2025-01-08T10:30:00.000Z",
+  "security": "enabled",
+  "write_operations_protected": true
 }
 ```
 
@@ -209,11 +212,12 @@ List all available tools
 curl http://localhost:3100/tools
 ```
 
-### POST /execute
-Execute a tool
+### POST /execute (HTTP REST)
+Execute a tool via HTTP REST
 ```bash
 curl -X POST http://localhost:3100/execute \
   -H "Content-Type: application/json" \
+  -H "x-api-key: your_api_key" \
   -d '{
     "tool": "get_products",
     "parameters": {"limit": 5},
@@ -221,9 +225,61 @@ curl -X POST http://localhost:3100/execute \
   }'
 ```
 
+### GET /sse (Server Sent Events)
+Connect to SSE stream for real-time updates
+```bash
+curl -N http://localhost:3100/sse
+```
+
+This endpoint:
+- Establishes a persistent connection using Server Sent Events
+- Sends a heartbeat every 30 seconds to keep connection alive
+- Returns connection status and available tools information
+
+### POST /sse/execute (SSE Execute)
+Execute a tool and get response via SSE
+```bash
+curl -X POST http://localhost:3100/sse/execute \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: your_api_key" \
+  -d '{
+    "tool": "get_products",
+    "parameters": {"limit": 5},
+    "context": {"tenant_id": 1, "filial_id": 1}
+  }'
+```
+
+**Note**: Both `/execute` (HTTP REST) and `/sse/execute` endpoints support the same tools and parameters. Choose based on your integration needs.
+
 ## Integration with n8n
 
-### Setup Workflow
+### Method 1: Using MCP Client Node (Recommended)
+
+The n8n MCP Client node supports **both** transport methods:
+
+#### Option A: HTTP REST Transport
+```
+Endpoint: https://your-domain.com/execute
+Server Transport: HTTP or REST
+Authentication: Header Auth
+  - Header Name: x-api-key
+  - Header Value: your_mcp_api_key
+```
+
+#### Option B: Server Sent Events (SSE) Transport
+```
+Endpoint: https://your-domain.com/sse
+Server Transport: Server Sent Events (SSE)
+Authentication: Header Auth
+  - Header Name: x-api-key
+  - Header Value: your_mcp_api_key
+```
+
+**Both methods work identically** - choose based on your preference or n8n version compatibility.
+
+### Method 2: Manual HTTP Request Node
+
+If you prefer manual setup:
 
 1. Create new workflow in n8n
 2. Add **Webhook** trigger
@@ -287,15 +343,28 @@ Consider adding:
 - Error rate
 - Database query performance
 
+## Transport Methods Comparison
+
+| Feature | HTTP REST (`/execute`) | SSE (`/sse`) |
+|---------|------------------------|--------------|
+| **Connection Type** | Request/Response | Persistent Stream |
+| **Latency** | Standard | Low (persistent connection) |
+| **Real-time Updates** | No | Yes (via heartbeats) |
+| **Compatibility** | All n8n versions | n8n with SSE support |
+| **Use Case** | Simple integrations | Real-time monitoring |
+| **Recommended For** | Most scenarios | Advanced use cases |
+
+**Recommendation**: Start with **HTTP REST** (`/execute`) for simplicity. Use **SSE** (`/sse`) if you need real-time capabilities or if required by your n8n configuration.
+
 ## Next Steps
 
 1. ✅ Basic MCP server implementation
-2. ⏳ Add caching layer (Redis)
-3. ⏳ Implement API key authentication
-4. ⏳ Add rate limiting
-5. ⏳ Implement vector search for semantic queries
-6. ⏳ Add more specialized tools (reports, analytics)
-7. ⏳ Implement WebSocket support for real-time updates
+2. ✅ Server Sent Events (SSE) support
+3. ✅ API key authentication for write operations
+4. ⏳ Add caching layer (Redis)
+5. ⏳ Add rate limiting
+6. ⏳ Implement vector search for semantic queries
+7. ⏳ Add more specialized tools (reports, analytics)
 
 ## License
 

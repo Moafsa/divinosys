@@ -267,7 +267,159 @@ app.get('/tools', (req, res) => {
   });
 });
 
-// Execute MCP tool
+// SSE (Server Sent Events) endpoint for real-time streaming
+app.get('/sse', (req, res) => {
+  // Set headers for SSE
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  
+  // Send initial connection success event
+  res.write('event: connected\n');
+  res.write('data: {"status":"connected","timestamp":"' + new Date().toISOString() + '"}\n\n');
+  
+  // Send available tools info
+  res.write('event: tools\n');
+  res.write('data: {"message":"MCP Server ready. Use POST /sse/execute to execute tools."}\n\n');
+  
+  // Keep connection alive with heartbeat
+  const heartbeatInterval = setInterval(() => {
+    res.write('event: heartbeat\n');
+    res.write('data: {"timestamp":"' + new Date().toISOString() + '"}\n\n');
+  }, 30000); // Every 30 seconds
+  
+  // Cleanup on connection close
+  req.on('close', () => {
+    clearInterval(heartbeatInterval);
+    res.end();
+  });
+});
+
+// SSE Execute endpoint - executes tool and streams response
+app.post('/sse/execute', async (req, res) => {
+  const { tool, parameters, context } = req.body;
+  
+  if (!tool) {
+    return res.status(400).json({ error: 'Tool name is required' });
+  }
+
+  const tenantId = context?.tenant_id;
+  const filialId = context?.filial_id;
+  
+  if (!tenantId || !filialId) {
+    return res.status(400).json({ 
+      error: 'tenant_id and filial_id are required in context',
+      message: 'Multi-tenant system requires tenant_id and filial_id from user session'
+    });
+  }
+
+  try {
+    let result;
+    
+    switch (tool) {
+      case 'get_products':
+        result = await getProducts(parameters, tenantId, filialId);
+        break;
+      case 'get_ingredients':
+        result = await getIngredients(parameters, tenantId, filialId);
+        break;
+      case 'get_categories':
+        result = await getCategories(tenantId, filialId);
+        break;
+      case 'get_orders':
+        result = await getOrders(parameters, tenantId, filialId);
+        break;
+      case 'get_tables':
+        result = await getTables(parameters, tenantId, filialId);
+        break;
+      case 'search_products':
+        result = await searchProducts(parameters, tenantId, filialId);
+        break;
+      case 'get_product_details':
+        result = await getProductDetails(parameters, tenantId, filialId);
+        break;
+      case 'get_order_details':
+        result = await getOrderDetails(parameters, tenantId, filialId);
+        break;
+        
+      // Operações de escrita (requerem autenticação)
+      case 'create_product':
+        result = await createProduct(parameters, tenantId, filialId);
+        break;
+      case 'update_product':
+        result = await updateProduct(parameters, tenantId, filialId);
+        break;
+      case 'delete_product':
+        result = await deleteProduct(parameters, tenantId, filialId);
+        break;
+      case 'create_ingredient':
+        result = await createIngredient(parameters, tenantId, filialId);
+        break;
+      case 'update_ingredient':
+        result = await updateIngredient(parameters, tenantId, filialId);
+        break;
+      case 'delete_ingredient':
+        result = await deleteIngredient(parameters, tenantId, filialId);
+        break;
+      case 'create_category':
+        result = await createCategory(parameters, tenantId, filialId);
+        break;
+      case 'update_category':
+        result = await updateCategory(parameters, tenantId, filialId);
+        break;
+      case 'delete_category':
+        result = await deleteCategory(parameters, tenantId, filialId);
+        break;
+      case 'create_financial_entry':
+        result = await createFinancialEntry(parameters, tenantId, filialId);
+        break;
+      case 'update_order_status':
+        result = await updateOrderStatus(parameters, tenantId, filialId);
+        break;
+      case 'create_payment':
+        result = await createPayment(parameters, tenantId, filialId);
+        break;
+      case 'create_order':
+        result = await createOrder(parameters, tenantId, filialId);
+        break;
+      case 'get_fiado_customers':
+        result = await getFiadoCustomers(parameters, tenantId, filialId);
+        break;
+      case 'get_customers':
+        result = await getCustomers(parameters, tenantId, filialId);
+        break;
+      case 'create_customer':
+        result = await createCustomer(parameters, tenantId, filialId);
+        break;
+      case 'update_customer':
+        result = await updateCustomer(parameters, tenantId, filialId);
+        break;
+      case 'delete_customer':
+        result = await deleteCustomer(parameters, tenantId, filialId);
+        break;
+        
+      default:
+        return res.status(400).json({ error: `Unknown tool: ${tool}` });
+    }
+
+    res.json({
+      success: true,
+      tool,
+      result,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error(`Error executing tool ${tool}:`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      tool
+    });
+  }
+});
+
+// Execute MCP tool (HTTP REST - original endpoint)
 app.post('/execute', async (req, res) => {
   const { tool, parameters, context } = req.body;
   
@@ -1428,6 +1580,10 @@ app.listen(PORT, () => {
   console.log(`🔒 Security enabled for write operations`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
   console.log(`🔧 Tools endpoint: http://localhost:${PORT}/tools`);
+  console.log(`📡 HTTP REST endpoint: POST http://localhost:${PORT}/execute`);
+  console.log(`⚡ SSE endpoint: GET http://localhost:${PORT}/sse`);
+  console.log(`⚡ SSE Execute endpoint: POST http://localhost:${PORT}/sse/execute`);
+  console.log(`✅ Server supports both HTTP REST and Server Sent Events (SSE)`);
 });
 
 // Graceful shutdown
