@@ -2,25 +2,15 @@
 FROM golang:1.23-alpine AS builder
 
 # Instalar dependências
-RUN apk add --no-cache git ca-certificates
-
-# Configurar Go para usar proxy e permitir fallback
-ENV GOPROXY=https://proxy.golang.org,https://goproxy.io,direct
-ENV GOSUMDB=off
-ENV CGO_ENABLED=0
+RUN apk add --no-cache git
 
 # Clonar repositório
 WORKDIR /app
 RUN git clone https://github.com/pedroherpeto/wuzapi.git .
 
-# Verificar se go.mod existe e compilar
-RUN if [ -f "go.mod" ]; then \
-        go mod download || go mod vendor; \
-        go build -o wuzapi . || go build -mod=vendor -o wuzapi .; \
-    else \
-        echo "ERROR: go.mod not found!"; \
-        exit 1; \
-    fi
+# Compilar backend Go
+RUN go mod download
+RUN go build -o wuzapi .
 
 # Imagem final
 FROM alpine:latest
