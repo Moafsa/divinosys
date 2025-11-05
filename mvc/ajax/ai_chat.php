@@ -144,10 +144,71 @@ try {
             exit;
             
         case 'execute_operation':
-            $operation = json_decode($_POST['operation'] ?? '{}', true);
+            $operationData = json_decode($_POST['operation'] ?? '{}', true);
             
-            if (empty($operation)) {
+            if (empty($operationData)) {
                 throw new Exception('Operação é obrigatória');
+            }
+            
+            error_log("ai_chat.php - execute_operation: " . json_encode($operationData));
+            
+            // Extract the actual operation from confirmation response
+            // The confirmation response contains the operation in 'operation' field
+            $operation = $operationData['operation'] ?? $operationData;
+            
+            // If operation type is 'confirmation', extract the nested operation
+            if (isset($operation['type']) && $operation['type'] === 'confirmation') {
+                $operation = $operation['operation'] ?? $operation;
+                error_log("ai_chat.php - Extracted nested operation: " . json_encode($operation));
+            }
+            
+            if (!isset($operation['type'])) {
+                throw new Exception('Tipo de operação não especificado');
+            }
+            
+            // Get session for tenant/filial context
+            $session = \System\Session::getInstance();
+            $db = \System\Database::getInstance();
+            
+            // Ensure tenant/filial context
+            $tenantId = $session->getTenantId();
+            $filialId = $session->getFilialId();
+            
+            if (!$tenantId && $session->isLoggedIn()) {
+                $user = $session->getUser();
+                if ($user && isset($user['tenant_id'])) {
+                    $tenantId = $user['tenant_id'];
+                    $tenant = $db->fetch("SELECT * FROM tenants WHERE id = ?", [$tenantId]);
+                    if ($tenant) {
+                        $session->setTenant($tenant);
+                    }
+                }
+            }
+            
+            if (!$tenantId) {
+                $tenant = $db->fetch("SELECT * FROM tenants WHERE status = 'ativo' LIMIT 1");
+                if ($tenant) {
+                    $tenantId = $tenant['id'];
+                    $session->setTenant($tenant);
+                }
+            }
+            
+            if (!$filialId && $tenantId) {
+                $filial = $db->fetch("SELECT * FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+                if ($filial) {
+                    $filialId = $filial['id'];
+                    $session->setFilial($filial);
+                }
+            }
+            
+            error_log("ai_chat.php - execute_operation Context: Tenant=$tenantId, Filial=$filialId, Type={$operation['type']}");
+            
+            // Add tenant/filial to operation if not present
+            if (!isset($operation['tenant_id'])) {
+                $operation['tenant_id'] = $tenantId;
+            }
+            if (!isset($operation['filial_id'])) {
+                $operation['filial_id'] = $filialId;
             }
             
             $aiService = new \System\OpenAIService();
