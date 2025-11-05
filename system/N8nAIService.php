@@ -55,19 +55,39 @@ class N8nAIService
                 throw new Exception('Multi-tenant system requires valid tenant_id and filial_id');
             }
             
-            // Get rich context data
+            // Get rich context data with error handling
             $db = \System\Database::getInstance();
             
-            // Get tenant info
-            $tenant = $db->fetch("SELECT id, nome, subdomain, cnpj, telefone, email FROM tenants WHERE id = ?", [$tenantId]);
+            // Get tenant info (with fallback)
+            $tenant = ['id' => $tenantId, 'nome' => 'Estabelecimento', 'subdomain' => '', 'cnpj' => '', 'telefone' => '', 'email' => ''];
+            try {
+                $tenantData = $db->fetch("SELECT id, nome, subdomain, cnpj, telefone, email FROM tenants WHERE id = ?", [$tenantId]);
+                if ($tenantData) {
+                    $tenant = $tenantData;
+                }
+            } catch (Exception $e) {
+                error_log("N8nAIService - Error fetching tenant: " . $e->getMessage());
+            }
             
-            // Get filial info
-            $filial = $db->fetch("SELECT id, nome, endereco, telefone FROM filiais WHERE id = ?", [$filialId]);
+            // Get filial info (with fallback)
+            $filial = ['id' => $filialId, 'nome' => 'Matriz', 'endereco' => '', 'telefone' => ''];
+            try {
+                $filialData = $db->fetch("SELECT id, nome, endereco, telefone FROM filiais WHERE id = ?", [$filialId]);
+                if ($filialData) {
+                    $filial = $filialData;
+                }
+            } catch (Exception $e) {
+                error_log("N8nAIService - Error fetching filial: " . $e->getMessage());
+            }
             
-            // Get user info if available
+            // Get user info if available (with fallback)
             $user = null;
             if ($userId) {
-                $user = $db->fetch("SELECT id, login, nivel FROM usuarios WHERE id = ?", [$userId]);
+                try {
+                    $user = $db->fetch("SELECT id, login, nivel FROM usuarios WHERE id = ?", [$userId]);
+                } catch (Exception $e) {
+                    error_log("N8nAIService - Error fetching user: " . $e->getMessage());
+                }
             }
             
             // Determine message source/type
