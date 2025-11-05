@@ -704,3 +704,5 @@ O sistema aceita:
 
 Configure as variáveis de ambiente e coloque para rodar!
 
+
+

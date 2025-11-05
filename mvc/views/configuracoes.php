@@ -1975,7 +1975,10 @@ if ($tenant && $filial) {
 
         // Carregar configuração atual do Asaas
         function carregarConfiguracaoAsaas() {
-            fetch('mvc/ajax/asaas_config.php?action=getConfig', {
+            const tenantId = <?php echo $tenant['id']; ?>;
+            const filialId = <?php echo $filial['id'] ?? 'null'; ?>;
+            
+            fetch(`mvc/ajax/asaas_config.php?action=getConfig&tenant_id=${tenantId}&filial_id=${filialId}`, {
                 method: 'GET',
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest',
@@ -1983,16 +1986,16 @@ if ($tenant && $filial) {
             })
             .then(response => response.json())
             .then(data => {
-                if (data.success) {
+                if (data.success && data.data) {
                     const config = data.data;
-                    document.getElementById('asaas-api-key').value = config.asaas_api_key || '';
+                    // Never show API key for security
                     document.getElementById('asaas-customer-id').value = config.asaas_customer_id || '';
                     document.getElementById('asaas-environment').value = config.asaas_environment || 'sandbox';
                     document.getElementById('asaas-enabled').checked = config.asaas_enabled || false;
                     
-                    // Atualizar status badge
+                    // Update status badge
                     const statusBadge = document.getElementById('asaas-status-badge');
-                    if (config.asaas_enabled && config.asaas_api_key) {
+                    if (config.asaas_enabled) {
                         statusBadge.className = 'badge bg-success me-2';
                         statusBadge.innerHTML = '<i class="fas fa-check-circle me-1"></i>Configurado';
                     } else {
@@ -2098,21 +2101,76 @@ if ($tenant && $filial) {
             }
         }
 
+        // Load fiscal information
+        function carregarInformacoesFiscais() {
+            const tenantId = <?php echo $tenant['id']; ?>;
+            const filialId = <?php echo $filial['id'] ?? 'null'; ?>;
+            
+            fetch(`mvc/ajax/fiscal_info.php?action=getFiscalInfo&tenant_id=${tenantId}&filial_id=${filialId}&source=db`, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.data) {
+                    const info = data.data;
+                    if (document.getElementById('fiscal-cnpj')) {
+                        document.getElementById('fiscal-cnpj').value = info.cnpj || '';
+                        document.getElementById('fiscal-razao-social').value = info.razao_social || '';
+                        document.getElementById('fiscal-nome-fantasia').value = info.nome_fantasia || '';
+                        document.getElementById('fiscal-inscricao-estadual').value = info.inscricao_estadual || '';
+                        document.getElementById('fiscal-municipal-service-id').value = info.municipal_service_id || '';
+                        document.getElementById('fiscal-municipal-service-code').value = info.municipal_service_code || '';
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao carregar informações fiscais:', error);
+            });
+        }
+
         // Salvar informações fiscais
         function salvarInformacoesFiscais() {
+            const cnpj = document.getElementById('fiscal-cnpj').value;
+            const razaoSocial = document.getElementById('fiscal-razao-social').value;
+            const municipalServiceId = document.getElementById('fiscal-municipal-service-id').value;
+            const municipalServiceCode = document.getElementById('fiscal-municipal-service-code').value;
+
+            if (!cnpj || !razaoSocial || !municipalServiceId || !municipalServiceCode) {
+                Swal.fire('Atenção', 'Preencha todos os campos obrigatórios (CNPJ, Razão Social, ID e Código do Serviço Municipal)', 'warning');
+                return;
+            }
+
             const data = {
                 tenant_id: <?php echo $tenant['id']; ?>,
                 filial_id: <?php echo $filial['id'] ?? 'null'; ?>,
-                cnpj: document.getElementById('fiscal-cnpj').value,
-                razao_social: document.getElementById('fiscal-razao-social').value,
+                cnpj: cnpj,
+                razao_social: razaoSocial,
                 nome_fantasia: document.getElementById('fiscal-nome-fantasia').value,
                 inscricao_estadual: document.getElementById('fiscal-inscricao-estadual').value,
-                municipal_service_id: document.getElementById('fiscal-municipal-service-id').value,
-                municipal_service_code: document.getElementById('fiscal-municipal-service-code').value,
+                municipal_service_id: municipalServiceId,
+                municipal_service_code: municipalServiceCode,
                 endereco: {
-                    // Aqui você pode adicionar campos de endereço se necessário
+                    logradouro: '',
+                    numero: '',
+                    complemento: '',
+                    bairro: '',
+                    cidade: '',
+                    uf: '',
+                    cep: ''
                 }
             };
+
+            Swal.fire({
+                title: 'Salvando...',
+                text: 'Aguarde enquanto salvamos suas informações fiscais',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
 
             fetch('mvc/ajax/fiscal_info.php?action=createOrUpdateFiscalInfo', {
                 method: 'POST',
@@ -2126,6 +2184,7 @@ if ($tenant && $filial) {
             .then(data => {
                 if (data.success) {
                     Swal.fire('Sucesso', 'Informações fiscais salvas com sucesso!', 'success');
+                    carregarInformacoesFiscais(); // Reload data
                 } else {
                     Swal.fire('Erro', data.error || 'Erro ao salvar informações fiscais', 'error');
                 }
@@ -2232,6 +2291,9 @@ if ($tenant && $filial) {
         document.addEventListener('DOMContentLoaded', function() {
             // Carregar configuração do Asaas
             carregarConfiguracaoAsaas();
+            
+            // Carregar informações fiscais
+            carregarInformacoesFiscais();
             
             // Adicionar formatação de CNPJ
             const cnpjInput = document.getElementById('fiscal-cnpj');

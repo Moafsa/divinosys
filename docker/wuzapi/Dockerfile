@@ -4,9 +4,11 @@ FROM golang:1.23-alpine AS builder
 # Instalar dependências
 RUN apk add --no-cache git
 
-# Clonar repositório
+# Clonar repositório e fixar em commit antes do Go 1.24
 WORKDIR /app
-RUN git clone https://github.com/pedroherpeto/wuzapi.git .
+RUN git clone https://github.com/pedroherpeto/wuzapi.git . && \
+    (git log --before="2024-10-01" --pretty=format:"%H" -1 | head -1 | xargs -I {} git checkout {} || \
+    sed -i 's/go 1\.24/go 1.23/g' go.mod || true)
 
 # Compilar backend Go
 RUN go mod download
@@ -18,27 +20,33 @@ FROM alpine:latest
 # Instalar dependências runtime (incluindo Node.js para frontend)
 RUN apk add --no-cache ca-certificates tzdata nodejs npm
 
-# Copiar binário e migrações
+# Copiar binário
 COPY --from=builder /app/wuzapi /usr/local/bin/wuzapi
-COPY --from=builder /app/migrations /usr/local/bin/migrations
 
-# Copiar frontend
-COPY --from=builder /app/frontend /app/frontend
-COPY --from=builder /app/static /app/static
+# Copiar tudo e depois limpar o que não precisamos
+COPY --from=builder /app /tmp/wuzapi-build
 
-# Copiar arquivo de configuração do frontend (usa URL INTERNA do Docker)
-COPY frontend.env /app/frontend/.env
+# Organizar arquivos
+RUN mkdir -p /app/sessions /app/logs /app/data /usr/local/bin/migrations && \
+    if [ -d /tmp/wuzapi-build/migrations ]; then cp -r /tmp/wuzapi-build/migrations/* /usr/local/bin/migrations/ 2>/dev/null || true; fi && \
+    if [ -d /tmp/wuzapi-build/frontend ]; then cp -r /tmp/wuzapi-build/frontend /app/; fi && \
+    if [ -d /tmp/wuzapi-build/static ]; then cp -r /tmp/wuzapi-build/static /app/; fi && \
+    rm -rf /tmp/wuzapi-build
 
-# Build do frontend React (como root)
-RUN cd /app/frontend && npm install && npm run build
+# Build do frontend se existir
+RUN if [ -d /app/frontend ]; then \
+        cd /app/frontend && \
+        echo "REACT_APP_API_URL=http://localhost:8081" > .env && \
+        npm install && \
+        npm run build; \
+    fi
 
-# Criar usuário não-root e dar permissões
-RUN adduser -D -s /bin/sh wuzapi
-RUN chown -R wuzapi:wuzapi /app/frontend /app/static
+# Criar usuário não-root
+RUN adduser -D -s /bin/sh wuzapi && \
+    chown -R wuzapi:wuzapi /app
 
-# Expor portas (backend API:8080 e frontend:3000)
+# Expor portas
 EXPOSE 8080 3000
 
 # Comando de inicialização
-# Backend API na porta 8080, Frontend na porta 3000
-CMD ["sh", "-c", "wuzapi -port=8080 -address=0.0.0.0 -admintoken=${API_KEY:-admin123456} & cd /app/frontend && npx serve -s build -l 3000"]
+CMD ["sh", "-c", "wuzapi -port=8080 -address=0.0.0.0 -admintoken=${WUZAPI_ADMIN_TOKEN:-admin123456} & if [ -d /app/frontend/build ]; then cd /app/frontend && npx serve -s build -l 3000; else sleep infinity; fi"]

@@ -110,3 +110,5 @@ WHERE t.status = 'ativo'
 GROUP BY t.id, t.nome
 ORDER BY t.id;
 
+
+

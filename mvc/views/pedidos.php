@@ -75,6 +75,22 @@ if ($tenant && $filial) {
     );
 }
 
+// Check if NFe is enabled in plan
+$planoRecursos = [];
+$nfeHabilitado = false;
+if ($tenant && isset($tenant['plano_id'])) {
+    $plano = $db->fetch(
+        "SELECT recursos FROM planos WHERE id = ?",
+        [$tenant['plano_id']]
+    );
+    if ($plano && !empty($plano['recursos'])) {
+        $planoRecursos = is_string($plano['recursos']) 
+            ? json_decode($plano['recursos'], true) 
+            : $plano['recursos'];
+        $nfeHabilitado = isset($planoRecursos['emissao_nfe']) && $planoRecursos['emissao_nfe'] === true;
+    }
+}
+
 // Group pedidos by status
 $pedidos_por_status = [
     'Pendente' => [],
@@ -515,6 +531,11 @@ $stats = [
                                         <button type="button" class="btn btn-outline-success btn-sm" onclick="imprimirPedido(${pedido.idpedido})" title="Imprimir Pedido">
                                             <i class="fas fa-print"></i> Imprimir
                                         </button>
+                                        <?php if ($nfeHabilitado): ?>
+                                        <button type="button" class="btn btn-outline-info btn-sm" onclick="emitirNotaFiscal(${pedido.idpedido})" title="Emitir Nota Fiscal">
+                                            <i class="fas fa-file-invoice"></i> Emitir NF
+                                        </button>
+                                        <?php endif; ?>
                                         <button type="button" class="btn btn-outline-danger btn-sm" onclick="excluirPedido(${pedido.idpedido})">
                                             <i class="fas fa-trash"></i> <?php echo $_SESSION['user_type'] === 'cozinha' ? 'Cancelar' : 'Excluir'; ?>
                                         </button>
@@ -697,6 +718,84 @@ $stats = [
             .catch(error => {
                 console.error('Error:', error);
                 Swal.fire('Erro', 'Erro ao atualizar status do pedido', 'error');
+            });
+        }
+
+        function emitirNotaFiscal(pedidoId) {
+            Swal.fire({
+                title: 'Emitir Nota Fiscal',
+                html: `
+                    <p>Deseja emitir a nota fiscal para o pedido #${pedidoId}?</p>
+                    <div class="form-check text-start mt-3">
+                        <input class="form-check-input" type="checkbox" id="retainIss" checked>
+                        <label class="form-check-label" for="retainIss">
+                            Reter ISS
+                        </label>
+                    </div>
+                `,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Sim, emitir',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#17a2b8',
+                preConfirm: () => {
+                    return {
+                        pedidoId: pedidoId,
+                        retainIss: document.getElementById('retainIss').checked
+                    };
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const data = {
+                        tenant_id: <?php echo $tenant['id']; ?>,
+                        filial_id: <?php echo $filial['id'] ?? 'null'; ?>,
+                        pedido_id: pedidoId,
+                        retain_iss: result.value.retainIss
+                    };
+                    
+                    Swal.fire({
+                        title: 'Processando...',
+                        text: 'Criando nota fiscal no Asaas',
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+                    
+                    fetch('mvc/ajax/invoices.php?action=createInvoiceFromOrder', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: JSON.stringify(data)
+                    })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                Swal.fire({
+                                    title: 'Nota Fiscal Criada!',
+                                    html: `
+                                        <p>A nota fiscal foi agendada com sucesso no Asaas.</p>
+                                        <p class="text-muted">Acesse <strong>Configurações > Asaas > Ver Notas Fiscais</strong> para emitir a nota.</p>
+                                    `,
+                                    icon: 'success',
+                                    confirmButtonText: 'OK'
+                                });
+                            } else {
+                                Swal.fire({
+                                    title: 'Erro',
+                                    text: data.error || 'Erro ao criar nota fiscal',
+                                    icon: 'error',
+                                    confirmButtonText: 'OK'
+                                });
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            Swal.fire('Erro', 'Erro ao processar requisição', 'error');
+                        });
+                }
             });
         }
 

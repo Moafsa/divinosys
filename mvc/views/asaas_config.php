@@ -279,8 +279,24 @@ $(document).ready(function() {
 });
 
 function loadAsaasConfig() {
-    // This would load current configuration from database
-    // Implementation depends on your existing API structure
+    const tenantId = $('#tenant_id').val();
+    const filialId = $('#filial_id').val();
+    
+    $.ajax({
+        url: `mvc/ajax/asaas_config.php?action=getConfig&tenant_id=${tenantId}&filial_id=${filialId}`,
+        method: 'GET',
+        success: function(response) {
+            if (response.success && response.data) {
+                // Never show API key for security
+                $('#asaas_customer_id').val(response.data.asaas_customer_id || '');
+                $('#asaas_environment').val(response.data.asaas_environment || 'sandbox');
+                $('#asaas_enabled').prop('checked', response.data.asaas_enabled || false);
+            }
+        },
+        error: function() {
+            showAlert('Erro ao carregar configuração', 'danger');
+        }
+    });
 }
 
 function saveAsaasConfig() {
@@ -334,6 +350,29 @@ function testAsaasConnection() {
     });
 }
 
+function loadFiscalInfo() {
+    const tenantId = $('#tenant_id').val();
+    const filialId = $('#filial_id').val();
+    
+    $.ajax({
+        url: `mvc/ajax/fiscal_info.php?action=getFiscalInfo&tenant_id=${tenantId}&filial_id=${filialId}&source=db`,
+        method: 'GET',
+        success: function(response) {
+            if (response.success && response.data) {
+                $('#cnpj').val(response.data.cnpj || '');
+                $('#razao_social').val(response.data.razao_social || '');
+                $('#nome_fantasia').val(response.data.nome_fantasia || '');
+                $('#inscricao_estadual').val(response.data.inscricao_estadual || '');
+                $('#municipal_service_id').val(response.data.municipal_service_id || '');
+                $('#municipal_service_code').val(response.data.municipal_service_code || '');
+            }
+        },
+        error: function() {
+            console.error('Erro ao carregar informações fiscais');
+        }
+    });
+}
+
 function saveFiscalInfo() {
     const data = {
         tenant_id: $('#tenant_id').val(),
@@ -345,7 +384,13 @@ function saveFiscalInfo() {
         municipal_service_id: $('#municipal_service_id').val(),
         municipal_service_code: $('#municipal_service_code').val(),
         endereco: {
-            // This would be populated from address fields
+            logradouro: '',
+            numero: '',
+            complemento: '',
+            bairro: '',
+            cidade: '',
+            uf: '',
+            cep: ''
         }
     };
     
@@ -357,6 +402,7 @@ function saveFiscalInfo() {
         success: function(response) {
             if (response.success) {
                 showAlert('Informações fiscais salvas com sucesso!', 'success');
+                loadFiscalInfo(); // Reload data
             } else {
                 showAlert('Erro ao salvar informações fiscais: ' + response.error, 'danger');
             }
@@ -508,6 +554,176 @@ function cancelInvoice(invoiceId) {
         },
         error: function() {
             showAlert('Erro ao cancelar nota fiscal', 'danger');
+        }
+    });
+}
+
+function showCreateInvoiceModal() {
+    const tenantId = $('#tenant_id').val();
+    const filialId = $('#filial_id').val();
+    
+    // Create modal HTML
+    const modalHtml = `
+        <div class="modal fade" id="createInvoiceModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Criar Nota Fiscal de Pedido</h5>
+                        <button type="button" class="close" data-dismiss="modal">
+                            <span>&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label for="pedidoId">ID do Pedido</label>
+                            <input type="number" class="form-control" id="pedidoId" placeholder="Digite o ID do pedido">
+                            <small class="form-text text-muted">Informe o número do pedido para emitir a nota fiscal</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="paymentId">ID do Pagamento (Opcional)</label>
+                            <input type="text" class="form-control" id="paymentId" placeholder="ID do pagamento no Asaas">
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="retainIss" checked>
+                            <label class="form-check-label" for="retainIss">
+                                Reter ISS
+                            </label>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-primary" onclick="createInvoiceFromOrderSubmit()">Criar Nota Fiscal</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if any
+    $('#createInvoiceModal').remove();
+    
+    // Add modal to body
+    $('body').append(modalHtml);
+    
+    // Show modal
+    $('#createInvoiceModal').modal('show');
+}
+
+function createInvoiceFromOrderSubmit() {
+    const pedidoId = $('#pedidoId').val();
+    
+    if (!pedidoId) {
+        showAlert('Por favor, informe o ID do pedido', 'warning');
+        return;
+    }
+    
+    const data = {
+        tenant_id: $('#tenant_id').val(),
+        filial_id: $('#filial_id').val(),
+        pedido_id: parseInt(pedidoId),
+        payment_id: $('#paymentId').val() || null,
+        retain_iss: $('#retainIss').is(':checked')
+    };
+    
+    // Close modal
+    $('#createInvoiceModal').modal('hide');
+    
+    // Show loading
+    showAlert('Criando nota fiscal...', 'info');
+    
+    $.ajax({
+        url: 'mvc/ajax/invoices.php?action=createInvoiceFromOrder',
+        method: 'POST',
+        data: JSON.stringify(data),
+        contentType: 'application/json',
+        success: function(response) {
+            if (response.success) {
+                showAlert('Nota fiscal criada com sucesso!', 'success');
+                loadInvoices();
+            } else {
+                showAlert('Erro ao criar nota fiscal: ' + response.error, 'danger');
+            }
+        },
+        error: function() {
+            showAlert('Erro ao criar nota fiscal', 'danger');
+        }
+    });
+}
+
+function viewInvoice(invoiceId) {
+    const tenantId = $('#tenant_id').val();
+    const filialId = $('#filial_id').val();
+    
+    $.ajax({
+        url: `mvc/ajax/invoices.php?action=getInvoice&tenant_id=${tenantId}&filial_id=${filialId}&invoice_id=${invoiceId}`,
+        method: 'GET',
+        success: function(response) {
+            if (response.success && response.data) {
+                const invoice = response.data;
+                
+                // Show invoice details in a modal
+                const modalHtml = `
+                    <div class="modal fade" id="viewInvoiceModal" tabindex="-1">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Detalhes da Nota Fiscal</h5>
+                                    <button type="button" class="close" data-dismiss="modal">
+                                        <span>&times;</span>
+                                    </button>
+                                </div>
+                                <div class="modal-body">
+                                    <dl class="row">
+                                        <dt class="col-sm-4">ID Asaas:</dt>
+                                        <dd class="col-sm-8">${invoice.id || invoice.asaas_invoice_id || '-'}</dd>
+                                        
+                                        <dt class="col-sm-4">Número:</dt>
+                                        <dd class="col-sm-8">${invoice.number || '-'}</dd>
+                                        
+                                        <dt class="col-sm-4">Status:</dt>
+                                        <dd class="col-sm-8"><span class="badge badge-${getStatusBadgeClass(invoice.status)}">${getStatusText(invoice.status)}</span></dd>
+                                        
+                                        <dt class="col-sm-4">Valor:</dt>
+                                        <dd class="col-sm-8">R$ ${parseFloat(invoice.value || 0).toFixed(2)}</dd>
+                                        
+                                        <dt class="col-sm-4">Data de Emissão:</dt>
+                                        <dd class="col-sm-8">${invoice.effectiveDate ? formatDate(invoice.effectiveDate) : '-'}</dd>
+                                        
+                                        <dt class="col-sm-4">Descrição:</dt>
+                                        <dd class="col-sm-8">${invoice.description || invoice.observations || '-'}</dd>
+                                    </dl>
+                                    
+                                    ${invoice.pdfUrl ? `
+                                        <div class="mt-3">
+                                            <a href="${invoice.pdfUrl}" target="_blank" class="btn btn-primary">
+                                                <i class="fas fa-file-pdf me-1"></i>
+                                                Baixar PDF
+                                            </a>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Fechar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Remove existing modal if any
+                $('#viewInvoiceModal').remove();
+                
+                // Add modal to body
+                $('body').append(modalHtml);
+                
+                // Show modal
+                $('#viewInvoiceModal').modal('show');
+            } else {
+                showAlert('Erro ao carregar detalhes da nota fiscal', 'danger');
+            }
+        },
+        error: function() {
+            showAlert('Erro ao carregar detalhes da nota fiscal', 'danger');
         }
     });
 }

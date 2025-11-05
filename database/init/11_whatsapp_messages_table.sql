@@ -32,3 +32,5 @@ COMMENT ON COLUMN whatsapp_messages.message_out IS 'Response sent by AI';
 COMMENT ON COLUMN whatsapp_messages.ai_context IS 'AI processing context and metadata';
 COMMENT ON COLUMN whatsapp_messages.processed IS 'Whether message was successfully processed';
 
+
+

@@ -1,6 +1,6 @@
 <?php
 /**
- * AJAX Handler for Invoices
+ * AJAX Handler for Invoice Management
  * Processes invoice-related requests
  */
 
@@ -12,8 +12,12 @@ try {
     $controller = new InvoiceController();
     
     switch ($action) {
-        case 'scheduleInvoice':
-            $controller->scheduleInvoice();
+        case 'listInvoices':
+            $controller->listInvoices();
+            break;
+            
+        case 'getInvoice':
+            $controller->getInvoice();
             break;
             
         case 'issueInvoice':
@@ -24,20 +28,16 @@ try {
             $controller->cancelInvoice();
             break;
             
-        case 'listInvoices':
-            $controller->listInvoices();
+        case 'createInvoiceFromOrder':
+            $controller->createInvoiceFromOrder();
             break;
             
-        case 'getInvoice':
-            $controller->getInvoice();
+        case 'downloadPdf':
+            $controller->downloadPdf();
             break;
             
         case 'getInvoiceStats':
             $controller->getInvoiceStats();
-            break;
-            
-        case 'createInvoiceFromOrder':
-            $controller->createInvoiceFromOrder();
             break;
             
         default:
@@ -49,5 +49,5 @@ try {
 } catch (Exception $e) {
     error_log('Invoice AJAX Error: ' . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['error' => 'Internal server error']);
+    echo json_encode(['error' => 'Internal server error', 'message' => $e->getMessage()]);
 }
