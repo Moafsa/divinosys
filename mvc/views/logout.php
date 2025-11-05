@@ -25,8 +25,20 @@ if (class_exists('\App\Auth\AuthService')) {
 session_destroy();
 session_start();
 session_regenerate_id(true);
-
-// Redirect to login
-$router = \System\Router::getInstance();
-$router->redirect('login');
 ?>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Saindo...</title>
+</head>
+<body>
+    <script>
+        // Clear AI chat localStorage on logout
+        localStorage.removeItem('ai_chat_history');
+        console.log('🗑️ AI chat history cleared on logout');
+        
+        // Redirect to login
+        window.location.href = 'index.php?view=login';
+    </script>
+</body>
+</html>
