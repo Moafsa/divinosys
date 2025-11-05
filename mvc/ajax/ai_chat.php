@@ -1,4 +1,12 @@
 <?php
+// Disable error display in output (to prevent JSON corruption)
+ini_set('display_errors', 0);
+ini_set('display_startup_errors', 0);
+error_reporting(E_ALL); // Still log errors, but don't display
+
+// Start output buffering to capture any unexpected output
+ob_start();
+
 session_start();
 header('Content-Type: application/json');
 
@@ -55,11 +63,12 @@ try {
             
             $response = $aiService->processMessage($message, $attachments);
             
+            ob_end_clean();
             echo json_encode([
                 'success' => true,
                 'response' => $response
             ]);
-            break;
+            exit;
             
         case 'execute_operation':
             $operation = json_decode($_POST['operation'] ?? '{}', true);
@@ -71,11 +80,12 @@ try {
             $aiService = new \System\OpenAIService();
             $result = $aiService->executeOperation($operation);
             
+            ob_end_clean();
             echo json_encode([
                 'success' => true,
                 'result' => $result
             ]);
-            break;
+            exit;
             
         case 'upload_file':
             $uploadedFile = $_FILES['file'] ?? null;
@@ -123,6 +133,7 @@ try {
                 $type = 'spreadsheet';
             }
             
+            ob_end_clean();
             echo json_encode([
                 'success' => true,
                 'file' => [
@@ -132,7 +143,7 @@ try {
                     'size' => $uploadedFile['size']
                 ]
             ]);
-            break;
+            exit;
             
         case 'get_context':
             $aiService = new \System\OpenAIService();
@@ -143,11 +154,12 @@ try {
             $method->setAccessible(true);
             $context = $method->invoke($aiService);
             
+            ob_end_clean();
             echo json_encode([
                 'success' => true,
                 'context' => json_decode($context, true)
             ]);
-            break;
+            exit;
             
         case 'search_products':
             $query = $_GET['q'] ?? '';
@@ -172,11 +184,12 @@ try {
                 [$tenantId, $filialId, "%{$query}%", "%{$query}%"]
             );
             
+            ob_end_clean();
             echo json_encode([
                 'success' => true,
                 'products' => $products
             ]);
-            break;
+            exit;
             
         case 'search_ingredients':
             $query = $_GET['q'] ?? '';
@@ -200,11 +213,12 @@ try {
                 [$tenantId, $filialId, "%{$query}%"]
             );
             
+            ob_end_clean();
             echo json_encode([
                 'success' => true,
                 'ingredients' => $ingredients
             ]);
-            break;
+            exit;
             
         case 'search_categories':
             $query = $_GET['q'] ?? '';
@@ -228,11 +242,12 @@ try {
                 [$tenantId, $filialId, "%{$query}%"]
             );
             
+            ob_end_clean();
             echo json_encode([
                 'success' => true,
                 'categories' => $categories
             ]);
-            break;
+            exit;
             
         default:
             throw new Exception('Ação não encontrada: ' . $action);
@@ -240,9 +255,11 @@ try {
     
 } catch (\Exception $e) {
     error_log('AI Chat Error: ' . $e->getMessage());
+    ob_end_clean();
     echo json_encode([
         'success' => false,
         'message' => $e->getMessage()
     ]);
+    exit;
 }
 ?>
