@@ -365,7 +365,10 @@ class N8nAIService
      */
     private function parseN8nResponse($response)
     {
+        error_log("N8nAIService - parseN8nResponse input: " . json_encode($response));
+        
         if (!isset($response['success']) || !$response['success']) {
+            error_log("N8nAIService - Response not successful");
             return [
                 'type' => 'error',
                 'message' => $response['message'] ?? 'Erro desconhecido'
@@ -373,12 +376,14 @@ class N8nAIService
         }
         
         if (!isset($response['response'])) {
+            error_log("N8nAIService - No 'response' key found in: " . json_encode($response));
             return [
                 'type' => 'error',
                 'message' => 'Resposta inválida do servidor'
             ];
         }
         
+        error_log("N8nAIService - Returning parsed response: " . json_encode($response['response']));
         return $response['response'];
     }
     
