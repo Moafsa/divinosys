@@ -195,6 +195,11 @@ $publicPages = ['login', 'register', 'login_admin', 'onboarding', 'subscription_
 $currentView = $_GET['view'] ?? 'dashboard';
 
 if (!in_array($currentView, $publicPages)) {
-    include __DIR__ . '/AIChatWidget.php';
+    $chatWidgetPath = __DIR__ . '/AIChatWidget.php';
+    if (file_exists($chatWidgetPath)) {
+        include $chatWidgetPath;
+    } else {
+        error_log("AI Chat Widget not found at: " . $chatWidgetPath);
+    }
 }
 ?>
