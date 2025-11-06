@@ -268,31 +268,45 @@ app.get('/tools', (req, res) => {
 });
 
 // SSE (Server Sent Events) endpoint for n8n MCP Client compatibility
-app.get('/sse', (req, res) => {
-  // Set headers for SSE
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'close'); // Close connection after sending data
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  
-  // Send initial connection success event
-  res.write('event: connected\n');
-  res.write('data: {"status":"connected","timestamp":"' + new Date().toISOString() + '"}\n\n');
-  
-  // Send available tools list
-  res.write('event: tools\n');
-  res.write('data: {"tools":["get_products","get_ingredients","get_categories","get_orders","get_tables","search_products","get_product_details","get_order_details","create_order","get_fiado_customers","get_customers","create_customer","update_customer","delete_customer","create_product","update_product","delete_product","create_ingredient","create_category","create_financial_entry","update_order_status"]}\n\n');
-  
-  // Send ready message and close connection (n8n compatibility)
-  res.write('event: ready\n');
-  res.write('data: {"status":"ready","message":"MCP Server ready. Use POST /execute or /sse/execute for tool execution."}\n\n');
-  
-  // Close connection immediately (n8n expects this)
-  res.end();
-});
+// Handles both GET (for connection info) and POST (for tool execution)
+const sseHandler = (req, res) => {
+  // If GET request, send SSE connection info
+  if (req.method === 'GET') {
+    // Set headers for SSE
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'close');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    
+    // Send initial connection success event
+    res.write('event: connected\n');
+    res.write('data: {"status":"connected","timestamp":"' + new Date().toISOString() + '"}\n\n');
+    
+    // Send available tools list
+    res.write('event: tools\n');
+    res.write('data: {"tools":["get_products","get_ingredients","get_categories","get_orders","get_tables","search_products","get_product_details","get_order_details","create_order","get_fiado_customers","get_customers","create_customer","update_customer","delete_customer","create_product","update_product","delete_product","create_ingredient","create_category","create_financial_entry","update_order_status"]}\n\n');
+    
+    // Send ready message and close connection
+    res.write('event: ready\n');
+    res.write('data: {"status":"ready","message":"MCP Server ready"}\n\n');
+    
+    // Close connection immediately (n8n compatibility)
+    res.end();
+  }
+  // If POST request, execute tool (same as /sse/execute)
+  else if (req.method === 'POST') {
+    return executeToolSSE(req, res);
+  }
+  else {
+    res.status(405).json({ error: `Method ${req.method} not allowed on /sse` });
+  }
+};
 
-// SSE Execute endpoint - executes tool and streams response
-app.post('/sse/execute', async (req, res) => {
+app.get('/sse', sseHandler);
+app.post('/sse', sseHandler);
+
+// Shared function to execute tools (used by both POST /sse and POST /sse/execute)
+async function executeToolSSE(req, res) {
   const { tool, parameters, context } = req.body;
   
   if (!tool) {
@@ -412,6 +426,11 @@ app.post('/sse/execute', async (req, res) => {
       tool
     });
   }
+}
+
+// SSE Execute endpoint - wrapper for executeToolSSE
+app.post('/sse/execute', async (req, res) => {
+  return executeToolSSE(req, res);
 });
 
 // Execute MCP tool (HTTP REST - original endpoint)
