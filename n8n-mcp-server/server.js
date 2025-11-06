@@ -1304,11 +1304,25 @@ async function createOrder(params, tenantId, filialId) {
     
     // Insert order items
     for (const item of itensDetalhados) {
+      // Process ingredients
+      const ingredientesCom = item.ingredientes_adicionados 
+        ? (Array.isArray(item.ingredientes_adicionados) 
+            ? item.ingredientes_adicionados.map(ing => typeof ing === 'string' ? ing : ing.nome).join(', ')
+            : item.ingredientes_adicionados)
+        : '';
+      
+      const ingredientesSem = item.ingredientes_removidos
+        ? (Array.isArray(item.ingredientes_removidos)
+            ? item.ingredientes_removidos.map(ing => typeof ing === 'string' ? ing : ing.nome).join(', ')
+            : item.ingredientes_removidos)
+        : '';
+      
       const itemSql = `
-        INSERT INTO pedido_item (
-          pedido_id, produto_id, quantidade, preco_unitario, 
-          subtotal, observacao, tenant_id, filial_id
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO pedido_itens (
+          pedido_id, produto_id, quantidade, valor_unitario, 
+          valor_total, tamanho, observacao, ingredientes_com, ingredientes_sem,
+          tenant_id, filial_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING id
       `;
       
@@ -1318,7 +1332,10 @@ async function createOrder(params, tenantId, filialId) {
         item.quantidade,
         item.preco_unitario,
         item.subtotal,
+        item.tamanho || 'normal',
         item.observacao || '',
+        ingredientesCom,
+        ingredientesSem,
         tenantId,
         filialId
       ]);
