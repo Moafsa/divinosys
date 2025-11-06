@@ -27,7 +27,8 @@ app.use((req, res, next) => {
       'create_product', 'update_product', 'delete_product',
       'create_ingredient', 'update_ingredient', 'delete_ingredient',
       'create_category', 'update_category', 'delete_category',
-      'create_financial_entry', 'update_order_status', 'create_payment',
+      'create_financial_entry', 'delete_financial_entry',
+      'update_order_status', 'create_payment',
       'create_order',
       'create_customer', 'update_customer', 'delete_customer'
     ];
@@ -246,16 +247,87 @@ app.get('/tools', (req, res) => {
       {
         name: 'create_ingredient',
         description: 'Create a new ingredient',
+        parameters: {
+          nome: 'Ingredient name (required)',
+          tipo: 'Type: pao, proteina, queijo, salada, molho, complemento (default: complemento)',
+          preco_adicional: 'Additional price (default: 0)',
+          disponivel: 'Available status (default: true)'
+        },
+        authentication: 'required'
+      },
+      {
+        name: 'update_ingredient',
+        description: 'Update existing ingredient',
+        parameters: {
+          id: 'Ingredient ID (required)',
+          nome: 'Ingredient name',
+          tipo: 'Type: pao, proteina, queijo, salada, molho, complemento',
+          preco_adicional: 'Additional price',
+          disponivel: 'Available status'
+        },
+        authentication: 'required'
+      },
+      {
+        name: 'delete_ingredient',
+        description: 'Delete an ingredient',
+        parameters: {
+          id: 'Ingredient ID (required)'
+        },
         authentication: 'required'
       },
       {
         name: 'create_category',
         description: 'Create a new category',
+        parameters: {
+          nome: 'Category name (required)'
+        },
         authentication: 'required'
+      },
+      {
+        name: 'update_category',
+        description: 'Update existing category',
+        parameters: {
+          id: 'Category ID (required)',
+          nome: 'Category name (required)'
+        },
+        authentication: 'required'
+      },
+      {
+        name: 'delete_category',
+        description: 'Delete a category',
+        parameters: {
+          id: 'Category ID (required)'
+        },
+        authentication: 'required'
+      },
+      {
+        name: 'get_financial_entries',
+        description: 'Get financial entries with optional filters',
+        parameters: {
+          tipo: 'Type filter: receita or despesa',
+          categoria: 'Category filter',
+          data_inicio: 'Start date filter (YYYY-MM-DD)',
+          data_fim: 'End date filter (YYYY-MM-DD)',
+          limit: 'Maximum number of results (default: 50)'
+        }
       },
       {
         name: 'create_financial_entry',
         description: 'Create a financial entry (receita or despesa)',
+        parameters: {
+          tipo: 'Type: receita or despesa (required)',
+          valor: 'Amount value (required)',
+          descricao: 'Description (required)',
+          categoria: 'Category (default: outros)'
+        },
+        authentication: 'required'
+      },
+      {
+        name: 'delete_financial_entry',
+        description: 'Delete a financial entry',
+        parameters: {
+          id: 'Financial entry ID (required)'
+        },
         authentication: 'required'
       },
       {
@@ -284,7 +356,7 @@ const sseHandler = (req, res) => {
     
     // Send available tools list
     res.write('event: tools\n');
-    res.write('data: {"tools":["get_products","get_ingredients","get_categories","get_orders","get_tables","search_products","get_product_details","get_order_details","create_order","get_fiado_customers","get_customers","create_customer","update_customer","delete_customer","create_product","update_product","delete_product","create_ingredient","create_category","create_financial_entry","update_order_status"]}\n\n');
+    res.write('data: {"tools":["get_products","get_ingredients","get_categories","get_orders","get_tables","search_products","get_product_details","get_order_details","create_order","get_fiado_customers","get_customers","create_customer","update_customer","delete_customer","create_product","update_product","delete_product","create_ingredient","update_ingredient","delete_ingredient","create_category","update_category","delete_category","get_financial_entries","create_financial_entry","delete_financial_entry","update_order_status"]}\n\n');
     
     // Send ready message and close connection
     res.write('event: ready\n');
@@ -380,8 +452,14 @@ async function executeToolSSE(req, res) {
       case 'delete_category':
         result = await deleteCategory(parameters, tenantId, filialId);
         break;
+      case 'get_financial_entries':
+        result = await getFinancialEntries(parameters, tenantId, filialId);
+        break;
       case 'create_financial_entry':
         result = await createFinancialEntry(parameters, tenantId, filialId);
+        break;
+      case 'delete_financial_entry':
+        result = await deleteFinancialEntry(parameters, tenantId, filialId);
         break;
       case 'update_order_status':
         result = await updateOrderStatus(parameters, tenantId, filialId);
@@ -521,8 +599,14 @@ app.post('/execute', async (req, res) => {
       case 'delete_category':
         result = await deleteCategory(parameters, tenantId, filialId);
         break;
+      case 'get_financial_entries':
+        result = await getFinancialEntries(parameters, tenantId, filialId);
+        break;
       case 'create_financial_entry':
         result = await createFinancialEntry(parameters, tenantId, filialId);
+        break;
+      case 'delete_financial_entry':
+        result = await deleteFinancialEntry(parameters, tenantId, filialId);
         break;
       case 'update_order_status':
         result = await updateOrderStatus(parameters, tenantId, filialId);
@@ -1134,11 +1218,62 @@ async function deleteCategory(params, tenantId, filialId) {
   };
 }
 
+async function getFinancialEntries(params, tenantId, filialId) {
+  const { tipo, data_inicio, data_fim, categoria, limit = 50 } = params;
+  
+  let sql = `
+    SELECT id, tipo, valor, descricao, categoria, data
+    FROM lancamentos_financeiros
+    WHERE tenant_id = $1 AND filial_id = $2
+  `;
+  
+  const queryParams = [tenantId, filialId];
+  let paramIndex = 3;
+  
+  if (tipo) {
+    sql += ` AND tipo = $${paramIndex}`;
+    queryParams.push(tipo);
+    paramIndex++;
+  }
+  
+  if (categoria) {
+    sql += ` AND categoria = $${paramIndex}`;
+    queryParams.push(categoria);
+    paramIndex++;
+  }
+  
+  if (data_inicio) {
+    sql += ` AND data >= $${paramIndex}`;
+    queryParams.push(data_inicio);
+    paramIndex++;
+  }
+  
+  if (data_fim) {
+    sql += ` AND data <= $${paramIndex}`;
+    queryParams.push(data_fim);
+    paramIndex++;
+  }
+  
+  sql += ` ORDER BY data DESC, id DESC LIMIT $${paramIndex}`;
+  queryParams.push(limit);
+  
+  const result = await pool.query(sql, queryParams);
+  
+  return {
+    count: result.rows.length,
+    entries: result.rows
+  };
+}
+
 async function createFinancialEntry(params, tenantId, filialId) {
   const { tipo, valor, descricao, categoria } = params;
   
   if (!tipo || !valor || !descricao) {
     throw new Error('Tipo, valor e descrição são obrigatórios');
+  }
+  
+  if (!['receita', 'despesa'].includes(tipo)) {
+    throw new Error('Tipo inválido. Use: receita ou despesa');
   }
   
   const sql = `
@@ -1155,6 +1290,32 @@ async function createFinancialEntry(params, tenantId, filialId) {
     success: true,
     message: 'Lançamento financeiro criado com sucesso!',
     entry: result.rows[0]
+  };
+}
+
+async function deleteFinancialEntry(params, tenantId, filialId) {
+  const { id } = params;
+  
+  if (!id) {
+    throw new Error('ID do lançamento financeiro é obrigatório');
+  }
+  
+  const sql = `
+    DELETE FROM lancamentos_financeiros 
+    WHERE id = $1 AND tenant_id = $2 AND filial_id = $3
+    RETURNING id, tipo, valor, descricao, data
+  `;
+  
+  const result = await pool.query(sql, [id, tenantId, filialId]);
+  
+  if (result.rows.length === 0) {
+    throw new Error('Lançamento financeiro não encontrado ou sem permissão para excluir');
+  }
+  
+  return {
+    success: true,
+    message: 'Lançamento financeiro excluído com sucesso!',
+    deleted_entry: result.rows[0]
   };
 }
 
