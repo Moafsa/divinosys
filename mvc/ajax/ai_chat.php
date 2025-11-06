@@ -137,10 +137,15 @@ try {
             }
             
             ob_end_clean();
-            echo json_encode([
+            
+            $finalResponse = [
                 'success' => true,
                 'response' => $response
-            ]);
+            ];
+            
+            error_log("ai_chat.php - Final response to frontend: " . json_encode($finalResponse));
+            
+            echo json_encode($finalResponse);
             exit;
             
         case 'execute_operation':

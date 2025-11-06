@@ -632,11 +632,15 @@ class AIChatWidget {
             });
 
             const data = await response.json();
+            console.log('AI Chat - Response from PHP:', data);
+            
             this.hideTypingIndicator();
 
             if (data.success) {
+                console.log('AI Chat - Handling response:', data.response);
                 this.handleAIResponse(data.response);
             } else {
+                console.error('AI Chat - Error response:', data.message);
                 this.addMessage('ai', 'Desculpe, ocorreu um erro: ' + data.message);
             }
         } catch (error) {
@@ -647,9 +651,13 @@ class AIChatWidget {
     }
 
     handleAIResponse(response) {
+        console.log('AI Chat - handleAIResponse called with:', response);
+        
         if (response.type === 'confirmation' && response.confirm) {
+            console.log('AI Chat - Adding confirmation message');
             this.addConfirmationMessage(response);
         } else {
+            console.log('AI Chat - Adding regular message:', response.message);
             this.addMessage('ai', response.message);
         }
     }
