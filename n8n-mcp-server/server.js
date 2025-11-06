@@ -267,33 +267,28 @@ app.get('/tools', (req, res) => {
   });
 });
 
-// SSE (Server Sent Events) endpoint for real-time streaming
+// SSE (Server Sent Events) endpoint for n8n MCP Client compatibility
 app.get('/sse', (req, res) => {
   // Set headers for SSE
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Connection', 'close'); // Close connection after sending data
   res.setHeader('Access-Control-Allow-Origin', '*');
   
   // Send initial connection success event
   res.write('event: connected\n');
   res.write('data: {"status":"connected","timestamp":"' + new Date().toISOString() + '"}\n\n');
   
-  // Send available tools info
+  // Send available tools list
   res.write('event: tools\n');
-  res.write('data: {"message":"MCP Server ready. Use POST /sse/execute to execute tools."}\n\n');
+  res.write('data: {"tools":["get_products","get_ingredients","get_categories","get_orders","get_tables","search_products","get_product_details","get_order_details","create_order","get_fiado_customers","get_customers","create_customer","update_customer","delete_customer","create_product","update_product","delete_product","create_ingredient","create_category","create_financial_entry","update_order_status"]}\n\n');
   
-  // Keep connection alive with heartbeat
-  const heartbeatInterval = setInterval(() => {
-    res.write('event: heartbeat\n');
-    res.write('data: {"timestamp":"' + new Date().toISOString() + '"}\n\n');
-  }, 30000); // Every 30 seconds
+  // Send ready message and close connection (n8n compatibility)
+  res.write('event: ready\n');
+  res.write('data: {"status":"ready","message":"MCP Server ready. Use POST /execute or /sse/execute for tool execution."}\n\n');
   
-  // Cleanup on connection close
-  req.on('close', () => {
-    clearInterval(heartbeatInterval);
-    res.end();
-  });
+  // Close connection immediately (n8n expects this)
+  res.end();
 });
 
 // SSE Execute endpoint - executes tool and streams response
