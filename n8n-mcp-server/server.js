@@ -428,7 +428,20 @@ async function executeToolSSE(req, res) {
   }
 }
 
-// SSE Execute endpoint - wrapper for executeToolSSE
+// SSE Execute endpoint - handles both GET and POST
+app.get('/sse/execute', (req, res) => {
+  res.status(405).json({ 
+    error: 'This endpoint requires POST method',
+    message: 'Use POST with JSON body containing: { "tool": "tool_name", "parameters": {}, "context": { "tenant_id": "from_session", "filial_id": "from_session" } }',
+    example: {
+      tool: 'get_products',
+      parameters: { limit: 5 },
+      context: { tenant_id: '$session->getTenantId()', filial_id: '$session->getFilialId()' }
+    },
+    note: 'For SSE connection, use GET /sse. For tool execution, use POST /sse or POST /sse/execute'
+  });
+});
+
 app.post('/sse/execute', async (req, res) => {
   return executeToolSSE(req, res);
 });
