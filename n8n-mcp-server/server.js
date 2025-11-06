@@ -544,7 +544,7 @@ async function getProducts(params = {}, tenantId, filialId) {
   
   let sql = `
     SELECT p.id, p.nome, p.preco_normal, p.preco_mini, p.descricao,
-           c.nome as categoria, p.disponivel
+           c.nome as categoria
     FROM produtos p
     LEFT JOIN categorias c ON p.categoria_id = c.id
     WHERE p.tenant_id = $1 AND p.filial_id = $2
@@ -687,7 +687,7 @@ async function searchProducts(params = {}, tenantId, filialId) {
   
   const sql = `
     SELECT p.id, p.nome, p.preco_normal, p.descricao,
-           c.nome as categoria, p.disponivel
+           c.nome as categoria
     FROM produtos p
     LEFT JOIN categorias c ON p.categoria_id = c.id
     WHERE p.tenant_id = $1 AND p.filial_id = $2
