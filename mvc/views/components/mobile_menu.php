@@ -187,3 +187,14 @@ $tenantName = $tenant['nome'] ?? 'Divino Lanches';
         window.addEventListener('resize', checkScreenSize);
     });
 </script>
+
+<!-- AI Chat Widget - Available on all pages -->
+<?php 
+// Only include AI chat widget on authenticated pages (not on login/register)
+$publicPages = ['login', 'register', 'login_admin', 'onboarding', 'subscription_expired'];
+$currentView = $_GET['view'] ?? 'dashboard';
+
+if (!in_array($currentView, $publicPages)) {
+    include __DIR__ . '/AIChatWidget.php';
+}
+?>

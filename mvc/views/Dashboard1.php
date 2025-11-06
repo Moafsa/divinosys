@@ -2269,16 +2269,13 @@ if ($tenant && $filial) {
         }
     </script>
     
-    <!-- AI Chat Widget -->
-    <?php include __DIR__ . '/components/AIChatWidget.php'; ?>
-
     <!-- Partial Payment System -->
     <script src="assets/js/pagamentos-parciais.js"></script>
 
     <!-- Sidebar JavaScript -->
     <script src="assets/js/sidebar.js"></script>
     
-    <!-- Mobile Menu Component -->
+    <!-- Mobile Menu Component (includes AI Chat Widget) -->
     <?php include __DIR__ . '/components/mobile_menu.php'; ?>
                 </div>
             </div>
