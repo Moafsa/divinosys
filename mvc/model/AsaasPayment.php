@@ -281,13 +281,18 @@ class AsaasPayment {
             // Atualizar data de próxima cobrança
             $nextBilling = date('Y-m-d', strtotime('+1 month'));
             
+            // Remove trial_ate after first payment confirmed
+            // This prevents trial warning from showing after payment
             $query = "UPDATE assinaturas SET 
                       data_proxima_cobranca = $1,
                       status = 'ativa',
+                      trial_ate = NULL,
                       updated_at = CURRENT_TIMESTAMP
                       WHERE id = $2";
             
             pg_query_params($this->conn, $query, [$nextBilling, $subscription['id']]);
+            
+            error_log("Subscription renewed for tenant {$tenantId} - trial_ate removed");
         }
     }
     
