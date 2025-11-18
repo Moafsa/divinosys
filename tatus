@@ -1,10 +1,10 @@
-[33m5b4b842[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m fix: Correção de erros críticos no sistema de pedidos
-[33mbf6336c[m feat: Implementação completa do sistema de delivery e correções gerais
-[33m3573d6e[m fix: Corrigir múltiplos problemas no sistema de pedidos
-[33mefa185a[m Add: Complete category and ingredient management with tabs and CRUD operations
-[33m32f1ec9[m Fix: Integrate categories and ingredients into single products page with modals
-[33m2d5ac7e[m Implement multiple orders per table system with individual payment and division features
-[33m181246d[m Add complete categories and ingredients management system with image uploads
-[33mee48dd9[m Add automatic fix for missing filial_id column in pedido_itens table
-[33mc853ef7[m Fix database migration: add filial_id to pedido_itens table and improve SQL parsing for PostgreSQL functions
-[33m407951c[m Fix dashboard popup actions by properly detecting action parameters in pedidos.php
+[33m291b4a0[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m docs: add troubleshooting guide for AI chat widget not showing
+[33m0380bbf[m fix: add file_exists check for AIChatWidget inclusion - Add error logging if chat widget file not found - Helps debug why chat is not appearing on pages
+[33ma244bbe[m feat: add AI chat widget to all authenticated pages - Include AIChatWidget in mobile_menu.php for global availability - Exclude from public pages (login, register, onboarding) - Remove duplicate inclusion from Dashboard1.php - AI chat now accessible from: pedidos, delivery, produtos, clientes, financeiro, relatorios, estoque, configuracoes
+[33mb56770d[m debug: add detailed logging to n8n response parsing - Log parseN8nResponse input to see exact n8n response - Log when success check fails - Log when response key is missing - Log final parsed response - Will identify where response becomes error message
+[33m2d82b1b[m debug: add detailed logging to AI chat response flow - Add console.log in frontend to track response processing - Add error_log in PHP to track n8n response - Track handleAIResponse execution - Track addMessage calls - Will help identify where response is lost between n8n and frontend
+[33mc6e764c[m fix: automatically remove trial_ate after first payment confirmed - Update renewSubscription to set trial_ate = NULL - Prevents trial warning from showing after payment for all tenants - Add logging for subscription renewal tracking - Fixes issue permanently for all future tenants
+[33m38ecb04[m fix: add SQL script and guide to remove trial warning after payment - Create fix_trial_after_payment.sql to remove trial_ate - Create FIX_TRIAL_WARNING.md with 3 solutions - Issue: trial_ate not removed after first payment confirmed - Solution: Update assinaturas table to set trial_ate = NULL
+[33m7dc76c6[m feat: add complete financial management tools - Add get_financial_entries to list and query financial entries - Add delete_financial_entry function and endpoint - Add update_ingredient and delete_ingredient to tools list - Add update_category and delete_category to tools list - Update SSE tools list with all 28 tools - Add detailed parameters documentation for all tools - Create AI Agent prompt optimization guide - Create financial tools documentation with examples
+[33mefc6bdf[m docs: add tools reference guide for AI agent prompts - Create concise reference for agent system prompts - Explain ingredients use names not IDs - Provide strategies to reduce prompt size - Add example prompts for different approaches
+[33m2da8ad8[m feat: add ingredients support to create_order - Save ingredientes_adicionados as ingredientes_com - Save ingredientes_removidos as ingredientes_sem - Support both array and string formats for ingredients - Save tamanho field correctly in pedido_itens table

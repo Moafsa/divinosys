@@ -1,0 +1,3 @@
+[33m56ded5c[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m feat: Adicionar pesquisa de produtos vendidos, pagamentos de funcionários e histórico de recebimentos
+[33m86f82b7[m fix: add GET handler for /sse/execute and improve error messages - Add GET handler to /sse/execute returning 405 with helpful message - Prevents 'Cannot GET' errors when n8n tries GET requests - Add comprehensive configuration guide for n8n MCP Client
+[33m836cb02[m fix: add POST method support to /sse endpoint for n8n MCP Client compatibility

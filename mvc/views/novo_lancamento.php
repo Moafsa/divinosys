@@ -25,15 +25,57 @@ if (!$filial) {
 }
 
 // Buscar categorias e contas para o formulário
-$categorias = $db->fetchAll(
-    "SELECT * FROM categorias_financeiras WHERE tenant_id = ? AND filial_id = ? AND ativo = true ORDER BY tipo, nome",
-    [$tenant['id'], $filial['id']]
-);
+try {
+    $categorias = $db->fetchAll(
+        "SELECT * FROM categorias_financeiras WHERE tenant_id = ? AND filial_id = ? AND ativo = true ORDER BY tipo, nome",
+        [$tenant['id'], $filial['id']]
+    );
+} catch (Exception $e) {
+    error_log("Erro ao buscar categorias financeiras: " . $e->getMessage());
+    $categorias = [];
+}
 
-$contas = $db->fetchAll(
-    "SELECT * FROM contas_financeiras WHERE tenant_id = ? AND filial_id = ? AND ativo = true ORDER BY nome",
-    [$tenant['id'], $filial['id']]
-);
+try {
+    $contas = $db->fetchAll(
+        "SELECT * FROM contas_financeiras WHERE tenant_id = ? AND filial_id = ? AND ativo = true ORDER BY nome",
+        [$tenant['id'], $filial['id']]
+    );
+    
+    // Se não encontrou contas, criar contas padrão automaticamente
+    if (empty($contas) && $tenant && $filial) {
+        error_log("Nenhuma conta encontrada para tenant {$tenant['id']}/filial {$filial['id']}, criando contas padrão...");
+        
+        $contasPadrao = [
+            ['nome' => 'Caixa Principal', 'tipo' => 'caixa', 'cor' => '#28a745', 'icone' => 'fas fa-cash-register'],
+            ['nome' => 'Conta Corrente', 'tipo' => 'banco', 'cor' => '#007bff', 'icone' => 'fas fa-university'],
+            ['nome' => 'PIX', 'tipo' => 'pix', 'cor' => '#17a2b8', 'icone' => 'fas fa-mobile-alt'],
+            ['nome' => 'Cartão de Crédito', 'tipo' => 'cartao', 'cor' => '#dc3545', 'icone' => 'fas fa-credit-card']
+        ];
+        
+        foreach ($contasPadrao as $conta) {
+            try {
+                $db->insert('contas_financeiras', array_merge($conta, [
+                    'tenant_id' => $tenant['id'],
+                    'filial_id' => $filial['id'],
+                    'saldo_inicial' => 0.00,
+                    'saldo_atual' => 0.00,
+                    'ativo' => true
+                ]));
+            } catch (Exception $e) {
+                error_log("Erro ao criar conta padrão {$conta['nome']}: " . $e->getMessage());
+            }
+        }
+        
+        // Buscar novamente após criar
+        $contas = $db->fetchAll(
+            "SELECT * FROM contas_financeiras WHERE tenant_id = ? AND filial_id = ? AND ativo = true ORDER BY nome",
+            [$tenant['id'], $filial['id']]
+        );
+    }
+} catch (Exception $e) {
+    error_log("Erro ao buscar contas financeiras: " . $e->getMessage());
+    $contas = [];
+}
 
 // Buscar pedidos em aberto para vincular lançamentos
 $pedidos = $db->fetchAll(
@@ -235,7 +277,7 @@ $pedidos = $db->fetchAll(
                     </div>
 
                     <!-- Formulário -->
-                    <form id="lancamentoForm" enctype="multipart/form-data">
+                    <form id="lancamentoForm" enctype="multipart/form-data" novalidate>
                         <div class="row">
                             <!-- Informações Básicas -->
                             <div class="col-md-8">
@@ -278,26 +320,23 @@ $pedidos = $db->fetchAll(
                                         <div class="col-md-6">
                                             <label class="form-label">Categoria</label>
                                             <div class="input-group">
-                                                <select class="form-select select2-categoria" name="categoria_id" id="categoria_id">
+                                                <select class="form-select" name="categoria_id" id="categoria_id">
                                                     <option value="">Selecione uma categoria</option>
                                                     <?php foreach ($categorias as $categoria): ?>
                                                         <option value="<?= $categoria['id'] ?>" data-tipo="<?= $categoria['tipo'] ?>">
-                                                            <?= $categoria['tipo'] === 'receita' ? '💰' : '💸' ?> <?= htmlspecialchars($categoria['nome']) ?>
+                                                            <?= htmlspecialchars($categoria['nome']) ?>
                                                         </option>
                                                     <?php endforeach; ?>
                                                 </select>
-                                                <button type="button" class="btn btn-primary" onclick="openNovaCategoria()" title="Criar nova categoria">
+                                                <button type="button" class="btn btn-outline-primary" onclick="abrirModalCategoriaRapida()" title="Adicionar nova categoria">
                                                     <i class="fas fa-plus"></i>
-                                                </button>
-                                                <button type="button" class="btn btn-outline-danger" onclick="gerenciarCategorias()" title="Gerenciar categorias">
-                                                    <i class="fas fa-cog"></i>
                                                 </button>
                                             </div>
                                         </div>
                                         <div class="col-md-6">
                                             <label class="form-label">Conta <span class="text-danger">*</span></label>
                                             <div class="input-group">
-                                                <select class="form-select select2-conta" name="conta_id" id="conta_id" required>
+                                                <select class="form-select" name="conta_id" id="conta_id" required>
                                                     <option value="">Selecione uma conta</option>
                                                     <?php foreach ($contas as $conta): ?>
                                                         <option value="<?= $conta['id'] ?>" data-tipo="<?= $conta['tipo'] ?>">
@@ -305,11 +344,8 @@ $pedidos = $db->fetchAll(
                                                         </option>
                                                     <?php endforeach; ?>
                                                 </select>
-                                                <button type="button" class="btn btn-primary" onclick="openNovaConta()" title="Criar nova conta">
+                                                <button type="button" class="btn btn-outline-primary" onclick="abrirModalContaRapida()" title="Adicionar nova conta">
                                                     <i class="fas fa-plus"></i>
-                                                </button>
-                                                <button type="button" class="btn btn-outline-danger" onclick="gerenciarContas()" title="Gerenciar contas">
-                                                    <i class="fas fa-cog"></i>
                                                 </button>
                                             </div>
                                         </div>
@@ -486,107 +522,73 @@ $pedidos = $db->fetchAll(
         </div>
     </div>
 
-    <!-- Modal Gerenciar Categorias -->
-    <div class="modal fade" id="modalGerenciarCategorias" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="fas fa-tags me-2"></i>Gerenciar Categorias</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div id="listaCategorias"></div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal Gerenciar Contas -->
-    <div class="modal fade" id="modalGerenciarContas" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="fas fa-wallet me-2"></i>Gerenciar Contas</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div id="listaContas"></div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal Nova Categoria -->
-    <div class="modal fade" id="modalNovaCategoria" tabindex="-1">
+    <!-- Modal Categoria Rápida -->
+    <div class="modal fade" id="modalCategoriaRapida" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title"><i class="fas fa-tags me-2"></i>Nova Categoria Financeira</h5>
+                    <h5 class="modal-title">
+                        <i class="fas fa-tags me-2"></i>
+                        Nova Categoria
+                    </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body">
-                    <form id="formNovaCategoria">
+                <form id="formCategoriaRapida" novalidate>
+                    <div class="modal-body">
                         <div class="mb-3">
                             <label class="form-label">Nome <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="nova_cat_nome" required placeholder="Ex: Vendas Online">
-                        </div>
-                        <input type="hidden" id="nova_cat_tipo">
-                        <div class="mb-3">
-                            <label class="form-label">Descrição</label>
-                            <textarea class="form-control" id="nova_cat_descricao" rows="2" placeholder="Opcional"></textarea>
+                            <input type="text" class="form-control" id="categoriaRapidaNome" name="nome" required>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Cor</label>
-                            <input type="color" class="form-control form-control-color" id="nova_cat_cor" value="#007bff">
+                            <input type="color" class="form-control form-control-color" id="categoriaRapidaCor" name="cor" value="#007bff">
                         </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-primary" onclick="salvarNovaCategoria()">
-                        <i class="fas fa-save me-1"></i>Salvar
-                    </button>
-                </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i>
+                            Salvar
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
 
-    <!-- Modal Nova Conta -->
-    <div class="modal fade" id="modalNovaConta" tabindex="-1">
+    <!-- Modal Conta Rápida -->
+    <div class="modal fade" id="modalContaRapida" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title"><i class="fas fa-wallet me-2"></i>Nova Conta Financeira</h5>
+                    <h5 class="modal-title">
+                        <i class="fas fa-wallet me-2"></i>
+                        Nova Conta
+                    </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body">
-                    <form id="formNovaConta">
+                <form id="formContaRapida" novalidate>
+                    <div class="modal-body">
                         <div class="mb-3">
                             <label class="form-label">Nome <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="nova_conta_nome" required placeholder="Ex: Caixa Loja 2">
+                            <input type="text" class="form-control" id="contaRapidaNome" name="nome" required>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Saldo Inicial</label>
-                            <input type="number" class="form-control" id="nova_conta_saldo" step="0.01" value="0.00" placeholder="0.00">
+                            <div class="input-group">
+                                <span class="input-group-text">R$</span>
+                                <input type="number" class="form-control" id="contaRapidaSaldo" name="saldo_inicial" step="0.01" value="0.00">
+                            </div>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Cor</label>
-                            <input type="color" class="form-control form-control-color" id="nova_conta_cor" value="#28a745">
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-primary" onclick="salvarNovaConta()">
-                        <i class="fas fa-save me-1"></i>Salvar
-                    </button>
-                </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i>
+                            Salvar
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
@@ -601,9 +603,19 @@ $pedidos = $db->fetchAll(
     <script>
         // Inicializar Select2
         $(document).ready(function() {
-            // Excluir selects dos modais do Select2 (usar apenas native select)
-            $('.form-select:not(#nova_cat_tipo):not(#nova_conta_tipo)').select2({
-                theme: 'bootstrap-5'
+            $('.form-select').select2({
+                theme: 'bootstrap-5',
+                allowClear: false
+            });
+            
+            // Ensure Select2 syncs values with native select on change
+            $('.form-select').on('change', function() {
+                const $select = $(this);
+                const nativeSelect = this;
+                // Force sync Select2 value with native select
+                if ($select.data('select2')) {
+                    nativeSelect.value = $select.val() || '';
+                }
             });
             
             // Definir data atual por padrão
@@ -738,28 +750,59 @@ $pedidos = $db->fetchAll(
 
         // Salvar lançamento
         $('#lancamentoForm').off('submit').on('submit', function(e) {
-            console.log('Formulário submetido!');
+            // Don't process if event came from a modal
+            if ($(e.target).closest('.modal').length > 0) {
+                console.log('Submit ignorado - veio de um modal');
+                return;
+            }
+            
+            console.log('Formulário principal submetido!');
             e.preventDefault();
             e.stopImmediatePropagation();
             
-            // Validação dos campos obrigatórios
-            const tipoLancamento = $('#tipo').val();
-            const valor = $('#valor').val();
-            const dataLancamento = $('#data_lancamento').val();
-            const descricao = $('#descricao').val();
-            const contaId = $('#conta_id').val();
-            const categoriaId = $('#categoria_id').val();
-            
-            console.log('Validação:', {
-                tipoLancamento, valor, dataLancamento, descricao, contaId, categoriaId
+            // Ensure Select2 values are synced with native select elements before validation
+            $('#conta_id, #categoria_id, #conta_destino_id, #tipo').each(function() {
+                const $select = $(this);
+                const nativeSelect = this;
+                if ($select.data('select2')) {
+                    // Sync Select2 value back to native select
+                    const select2Value = $select.val();
+                    if (select2Value !== null && select2Value !== undefined) {
+                        nativeSelect.value = select2Value;
+                    }
+                }
             });
             
-            if (!tipoLancamento || !valor || !dataLancamento || !descricao || !contaId) {
+            // Validação dos campos obrigatórios - use both Select2 and native methods
+            const tipoSelect = document.getElementById('tipo');
+            const valorInput = document.getElementById('valor');
+            const dataInput = document.getElementById('data_lancamento');
+            const descricaoTextarea = document.getElementById('descricao');
+            const contaSelect = document.getElementById('conta_id');
+            const categoriaSelect = document.getElementById('categoria_id');
+            
+            const tipoLancamento = $('#tipo').val() || tipoSelect.value;
+            const valor = $('#valor').val() || valorInput.value;
+            const dataLancamento = $('#data_lancamento').val() || dataInput.value;
+            const descricao = $('#descricao').val() || descricaoTextarea.value;
+            const contaId = $('#conta_id').val() || contaSelect.value;
+            const categoriaId = $('#categoria_id').val() || categoriaSelect.value;
+            
+            // Trim string values
+            const descricaoTrimmed = descricao ? descricao.trim() : '';
+            const valorNum = valor ? parseFloat(valor.toString().replace(',', '.')) : 0;
+            
+            console.log('Validação:', {
+                tipoLancamento, valor, valorNum, dataLancamento, descricao: descricaoTrimmed, contaId, categoriaId
+            });
+            
+            if (!tipoLancamento || !valor || valorNum <= 0 || isNaN(valorNum) || !dataLancamento || !descricaoTrimmed || !contaId) {
                 console.log('Campos obrigatórios não preenchidos:', {
                     tipoLancamento: !tipoLancamento,
                     valor: !valor,
+                    valorNum: valorNum,
                     dataLancamento: !dataLancamento,
-                    descricao: !descricao,
+                    descricao: !descricaoTrimmed,
                     contaId: !contaId
                 });
                 Swal.fire('Erro!', 'Todos os campos obrigatórios devem ser preenchidos', 'error');
@@ -768,7 +811,7 @@ $pedidos = $db->fetchAll(
             
             // Validação específica para transferências
             if (tipoLancamento === 'transferencia') {
-                const contaDestinoId = $('#conta_destino_id').val();
+                const contaDestinoId = $('#conta_destino_id').val() || document.getElementById('conta_destino_id').value;
                 if (!contaDestinoId) {
                     Swal.fire('Erro!', 'Para transferências, a conta destino é obrigatória', 'error');
                     return;
@@ -779,13 +822,83 @@ $pedidos = $db->fetchAll(
                 }
             }
             
-            if (parseFloat(valor) <= 0) {
-                Swal.fire('Erro!', 'O valor deve ser maior que zero', 'error');
-                return;
+            // Create FormData manually to ensure all values are included
+            const formData = new FormData();
+            
+            // Add all required fields explicitly
+            formData.append('tipo_lancamento', tipoLancamento);
+            formData.append('valor', valorNum.toString().replace(',', '.'));
+            formData.append('data_lancamento', dataLancamento);
+            formData.append('descricao', descricaoTrimmed);
+            formData.append('conta_id', contaId);
+            
+            // Add optional fields
+            if (categoriaId) {
+                formData.append('categoria_id', categoriaId);
             }
             
-            const formData = new FormData(this);
+            // Add other form fields
+            const status = $('#status').val() || document.getElementById('status').value || 'confirmado';
+            formData.append('status', status);
+            
+            const observacoes = $('#observacoes').val() || document.getElementById('observacoes').value || '';
+            if (observacoes) {
+                formData.append('observacoes', observacoes);
+            }
+            
+            const pedidoId = $('#pedido_id').val() || document.getElementById('pedido_id').value || '';
+            if (pedidoId) {
+                formData.append('pedido_id', pedidoId);
+            }
+            
+            const dataVencimento = $('#data_vencimento').val() || document.getElementById('data_vencimento').value || '';
+            if (dataVencimento) {
+                formData.append('data_vencimento', dataVencimento);
+            }
+            
+            const dataPagamento = $('#data_pagamento').val() || document.getElementById('data_pagamento').value || '';
+            if (dataPagamento) {
+                formData.append('data_pagamento', dataPagamento);
+            }
+            
+            const formaPagamento = $('#forma_pagamento').val() || document.getElementById('forma_pagamento').value || '';
+            if (formaPagamento) {
+                formData.append('forma_pagamento', formaPagamento);
+            }
+            
+            const recorrencia = $('#recorrencia').val() || document.getElementById('recorrencia').value || '';
+            if (recorrencia && recorrencia !== 'nenhuma') {
+                formData.append('recorrencia', recorrencia);
+            }
+            
+            const dataFimRecorrencia = $('#data_fim_recorrencia').val() || document.getElementById('data_fim_recorrencia').value || '';
+            if (dataFimRecorrencia) {
+                formData.append('data_fim_recorrencia', dataFimRecorrencia);
+            }
+            
+            // Handle transfer specific field
+            if (tipoLancamento === 'transferencia') {
+                const contaDestinoId = $('#conta_destino_id').val() || document.getElementById('conta_destino_id').value;
+                if (contaDestinoId) {
+                    formData.append('conta_destino_id', contaDestinoId);
+                }
+            }
+            
+            // Add file attachments if any
+            const fileInput = document.getElementById('anexos');
+            if (fileInput && fileInput.files) {
+                for (let i = 0; i < fileInput.files.length; i++) {
+                    formData.append('anexos[]', fileInput.files[i]);
+                }
+            }
+            
             formData.append('action', 'criar_lancamento');
+            
+            // Debug: Log all FormData values
+            console.log('FormData contents:');
+            for (let pair of formData.entries()) {
+                console.log(pair[0] + ': ' + (pair[1] instanceof File ? '[File: ' + pair[1].name + ']' : pair[1]));
+            }
 
             // Mostrar loading
             Swal.fire({
@@ -801,23 +914,29 @@ $pedidos = $db->fetchAll(
                 method: 'POST',
                 body: formData
             })
-            .then(response => {
+            .then(async response => {
                 console.log('Resposta recebida:', response.status);
                 console.log('Headers da resposta:', response.headers);
+                
+                const text = await response.text();
+                console.log('Resposta em texto:', text);
+                
+                let data;
+                try {
+                    data = JSON.parse(text);
+                } catch (e) {
+                    console.error('Erro ao fazer parse do JSON:', e);
+                    console.error('Texto da resposta:', text);
+                    throw new Error('Resposta não é um JSON válido: ' + text.substring(0, 200));
+                }
+                
                 if (!response.ok) {
                     console.error('Erro HTTP:', response.status, response.statusText);
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    console.error('Dados do erro:', data);
+                    throw new Error(data.message || `HTTP ${response.status}: ${response.statusText}`);
                 }
-                return response.text().then(text => {
-                    console.log('Resposta em texto:', text);
-                    try {
-                        return JSON.parse(text);
-                    } catch (e) {
-                        console.error('Erro ao fazer parse do JSON:', e);
-                        console.error('Texto da resposta:', text);
-                        throw new Error('Resposta não é um JSON válido: ' + text);
-                    }
-                });
+                
+                return data;
             })
             .then(data => {
                 console.log('Dados recebidos:', data);
@@ -834,7 +953,12 @@ $pedidos = $db->fetchAll(
                 } else {
                     console.error('Erro ao criar lançamento:', data.message);
                     console.error('Dados completos da resposta:', data);
-                    Swal.fire('Erro!', data.message || 'Erro ao criar lançamento', 'error');
+                    Swal.fire({
+                        title: 'Erro!',
+                        text: data.message || 'Erro ao criar lançamento',
+                        icon: 'error',
+                        confirmButtonText: 'OK'
+                    });
                 }
             })
             .catch(error => {
@@ -894,6 +1018,221 @@ $pedidos = $db->fetchAll(
             });
         }
         
+        // Funções para criar categoria/conta rapidamente
+        function abrirModalCategoriaRapida() {
+            $('#formCategoriaRapida')[0].reset();
+            $('#categoriaRapidaCor').val('#007bff');
+            new bootstrap.Modal(document.getElementById('modalCategoriaRapida')).show();
+        }
+
+        function abrirModalContaRapida() {
+            $('#formContaRapida')[0].reset();
+            $('#contaRapidaSaldo').val('0.00');
+            new bootstrap.Modal(document.getElementById('modalContaRapida')).show();
+        }
+
+        // Salvar categoria rápida
+        $('#formCategoriaRapida').off('submit').on('submit', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            
+            console.log('=== FORMULARIO CATEGORIA RAPIDA SUBMETIDO ===');
+            
+            // Get values directly from inputs
+            const nomeInput = document.getElementById('categoriaRapidaNome');
+            const corInput = document.getElementById('categoriaRapidaCor');
+            const tipoSelect = document.getElementById('tipo');
+            
+            if (!nomeInput) {
+                console.error('Campo nomeInput não encontrado!');
+                Swal.fire('Erro!', 'Erro ao acessar campo nome', 'error');
+                return;
+            }
+            
+            const nome = (nomeInput.value || $('#categoriaRapidaNome').val() || '').trim();
+            const cor = (corInput ? corInput.value : null) || $('#categoriaRapidaCor').val() || '#007bff';
+            const tipoLancamento = (tipoSelect ? tipoSelect.value : null) || $('#tipo').val() || '';
+            
+            console.log('Valores capturados:', {
+                nome: nome,
+                cor: cor,
+                tipoLancamento: tipoLancamento,
+                nomeInputValue: nomeInput.value,
+                nomeInputExists: !!nomeInput
+            });
+            
+            if (!nome) {
+                console.error('Nome vazio!');
+                Swal.fire('Erro!', 'O nome é obrigatório', 'error');
+                return;
+            }
+            
+            // Create FormData manually to ensure values are included
+            const formData = new FormData();
+            formData.append('action', 'criar_categoria_rapida');
+            formData.append('nome', nome);
+            formData.append('cor', cor);
+            if (tipoLancamento) {
+                formData.append('tipo_lancamento', tipoLancamento);
+            }
+            
+            // Debug: Log all FormData values
+            console.log('FormData contents (categoria):');
+            for (let pair of formData.entries()) {
+                console.log(pair[0] + ': ' + pair[1]);
+            }
+            
+            fetch('mvc/ajax/financeiro.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(async response => {
+                const text = await response.text();
+                console.log('Resposta do servidor (categoria):', text);
+                console.log('Status HTTP:', response.status);
+                
+                if (!response.ok) {
+                    try {
+                        const json = JSON.parse(text);
+                        console.error('Erro JSON:', json);
+                        throw new Error(json.message || `HTTP ${response.status}: ${response.statusText}`);
+                    } catch (e) {
+                        if (e instanceof Error && e.message && e.message !== text) {
+                            throw e;
+                        }
+                        console.error('Erro texto:', text);
+                        throw new Error(text || `HTTP ${response.status}: ${response.statusText}`);
+                    }
+                }
+                
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    console.error('Erro ao fazer parse do JSON:', e);
+                    throw new Error('Resposta inválida do servidor: ' + text.substring(0, 100));
+                }
+            })
+            .then(data => {
+                console.log('Dados recebidos:', data);
+                if (data.success) {
+                    // Adicionar nova categoria ao select
+                    const categoria = data.categoria;
+                    const option = new Option(categoria.nome, categoria.id, true, true);
+                    option.setAttribute('data-tipo', categoria.tipo);
+                    $('#categoria_id').append(option).trigger('change');
+                    
+                    Swal.fire('Sucesso!', 'Categoria criada com sucesso!', 'success');
+                    bootstrap.Modal.getInstance(document.getElementById('modalCategoriaRapida')).hide();
+                    $('#formCategoriaRapida')[0].reset();
+                } else {
+                    Swal.fire('Erro!', data.message || 'Erro ao criar categoria', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro completo:', error);
+                Swal.fire('Erro!', error.message || 'Erro ao processar solicitação', 'error');
+            });
+        });
+
+        // Salvar conta rápida
+        $('#formContaRapida').off('submit').on('submit', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            
+            console.log('=== FORMULARIO CONTA RAPIDA SUBMETIDO ===');
+            
+            // Get values directly from inputs
+            const nomeInput = document.getElementById('contaRapidaNome');
+            const saldoInput = document.getElementById('contaRapidaSaldo');
+            
+            if (!nomeInput) {
+                console.error('Campo nomeInput não encontrado!');
+                Swal.fire('Erro!', 'Erro ao acessar campo nome', 'error');
+                return;
+            }
+            
+            const nome = (nomeInput.value || $('#contaRapidaNome').val() || '').trim();
+            const saldoInicial = (saldoInput ? saldoInput.value : null) || $('#contaRapidaSaldo').val() || '0.00';
+            
+            console.log('Valores capturados (conta):', {
+                nome: nome,
+                saldoInicial: saldoInicial,
+                nomeInputValue: nomeInput.value,
+                nomeInputExists: !!nomeInput
+            });
+            
+            if (!nome) {
+                console.error('Nome vazio!');
+                Swal.fire('Erro!', 'O nome é obrigatório', 'error');
+                return;
+            }
+            
+            // Create FormData manually to ensure values are included
+            const formData = new FormData();
+            formData.append('action', 'criar_conta_rapida');
+            formData.append('nome', nome);
+            formData.append('saldo_inicial', saldoInicial);
+            
+            // Debug: Log all FormData values
+            console.log('FormData contents (conta):');
+            for (let pair of formData.entries()) {
+                console.log(pair[0] + ': ' + pair[1]);
+            }
+            
+            fetch('mvc/ajax/financeiro.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(async response => {
+                const text = await response.text();
+                console.log('Resposta do servidor (conta):', text);
+                console.log('Status HTTP:', response.status);
+                
+                if (!response.ok) {
+                    try {
+                        const json = JSON.parse(text);
+                        console.error('Erro JSON:', json);
+                        throw new Error(json.message || `HTTP ${response.status}: ${response.statusText}`);
+                    } catch (e) {
+                        if (e instanceof Error && e.message && e.message !== text) {
+                            throw e;
+                        }
+                        console.error('Erro texto:', text);
+                        throw new Error(text || `HTTP ${response.status}: ${response.statusText}`);
+                    }
+                }
+                
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    console.error('Erro ao fazer parse do JSON:', e);
+                    throw new Error('Resposta inválida do servidor: ' + text.substring(0, 100));
+                }
+            })
+            .then(data => {
+                if (data.success) {
+                    // Adicionar nova conta aos selects
+                    const conta = data.conta;
+                    const option = new Option(conta.nome, conta.id, true, true);
+                    option.setAttribute('data-tipo', conta.tipo);
+                    $('#conta_id').append(option).trigger('change');
+                    $('#conta_destino_id').append(new Option(conta.nome, conta.id));
+                    
+                    Swal.fire('Sucesso!', 'Conta criada com sucesso!', 'success');
+                    bootstrap.Modal.getInstance(document.getElementById('modalContaRapida')).hide();
+                    $('#formContaRapida')[0].reset();
+                } else {
+                    Swal.fire('Erro!', data.message || 'Erro ao criar conta', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire('Erro!', error.message || 'Erro ao processar solicitação', 'error');
+            });
+        });
+
         // Inicializar página
         $(document).ready(function() {
             console.log('Inicializando página de lançamento financeiro');
@@ -905,269 +1244,16 @@ $pedidos = $db->fetchAll(
             // Inicializar resumo
             atualizarResumo();
             
-            // Adicionar event handler direto para o botão
-            $('button[type="submit"]').on('click', function(e) {
-                console.log('Botão clicado!');
+            // Adicionar event handler direto para o botão do formulário principal apenas
+            $('#lancamentoForm button[type="submit"]').on('click', function(e) {
+                console.log('Botão do formulário principal clicado!');
                 e.preventDefault();
+                e.stopPropagation();
                 $('#lancamentoForm').trigger('submit');
             });
             
             console.log('Página inicializada com sucesso');
         });
-
-        // ==================================
-        // FUNCTIONS TO CREATE CATEGORY/ACCOUNT ON THE FLY
-        // ==================================
-        
-        function openNovaCategoria() {
-            // Get current tipo from main form
-            const tipoLancamento = $('#tipo').val();
-            
-            if (!tipoLancamento) {
-                Swal.fire('Atenção', 'Selecione primeiro o tipo do lançamento (Receita ou Despesa)', 'warning');
-                return;
-            }
-            
-            // Set tipo automatically based on lancamento tipo
-            let tipoCategoria = '';
-            if (tipoLancamento === 'receita') {
-                tipoCategoria = 'receita';
-            } else if (tipoLancamento === 'despesa') {
-                tipoCategoria = 'despesa';
-            } else {
-                Swal.fire('Atenção', 'Selecione Receita ou Despesa para criar uma categoria', 'warning');
-                return;
-            }
-            
-            $('#nova_cat_tipo').val(tipoCategoria);
-            $('#modalNovaCategoria').modal('show');
-        }
-
-        function openNovaConta() {
-            $('#modalNovaConta').modal('show');
-        }
-
-        function salvarNovaCategoria() {
-            const nome = $('#nova_cat_nome').val().trim();
-            const tipo = $('#nova_cat_tipo').val();
-            const descricao = $('#nova_cat_descricao').val().trim();
-            const cor = $('#nova_cat_cor').val();
-
-            if (!nome || !tipo) {
-                Swal.fire('Atenção', 'Preencha os campos obrigatórios', 'warning');
-                return;
-            }
-
-            $.ajax({
-                url: 'mvc/ajax/financeiro.php',
-                method: 'POST',
-                data: {
-                    action: 'criar_categoria',
-                    nome: nome,
-                    tipo: tipo,
-                    descricao: descricao,
-                    cor: cor
-                },
-                dataType: 'json',
-                success: function(response) {
-                    if (response.success) {
-                        Swal.fire('Sucesso', 'Categoria criada com sucesso!', 'success');
-                        
-                        // Add new option to select
-                        const emoji = tipo === 'receita' ? '💰' : '💸';
-                        const newOption = new Option(`${emoji} ${nome}`, response.categoria_id, true, true);
-                        $('#categoria_id').append(newOption).trigger('change');
-                        
-                        // Close modal and reset form
-                        $('#modalNovaCategoria').modal('hide');
-                        $('#formNovaCategoria')[0].reset();
-                    } else {
-                        Swal.fire('Erro', response.message || 'Erro ao criar categoria', 'error');
-                    }
-                },
-                error: function(xhr, status, error) {
-                    console.error('Erro:', error);
-                    Swal.fire('Erro', 'Erro ao criar categoria: ' + error, 'error');
-                }
-            });
-        }
-
-        function salvarNovaConta() {
-            const nome = $('#nova_conta_nome').val().trim();
-            const tipo = 'outros'; // Default type - user just wants a simple name
-            const saldo = $('#nova_conta_saldo').val() || 0;
-            const cor = $('#nova_conta_cor').val();
-
-            if (!nome) {
-                Swal.fire('Atenção', 'Preencha o nome da conta', 'warning');
-                return;
-            }
-
-            $.ajax({
-                url: 'mvc/ajax/financeiro.php',
-                method: 'POST',
-                data: {
-                    action: 'criar_conta',
-                    nome: nome,
-                    tipo: tipo,
-                    saldo_inicial: saldo,
-                    cor: cor
-                },
-                dataType: 'json',
-                success: function(response) {
-                    if (response.success) {
-                        Swal.fire('Sucesso', 'Conta criada com sucesso!', 'success');
-                        
-                        // Add new option to select
-                        const newOption = new Option(nome, response.conta_id, true, true);
-                        $('#conta_id').append(newOption).trigger('change');
-                        
-                        // Close modal and reset form
-                        $('#modalNovaConta').modal('hide');
-                        $('#formNovaConta')[0].reset();
-                    } else {
-                        Swal.fire('Erro', response.message || 'Erro ao criar conta', 'error');
-                    }
-                },
-                error: function(xhr, status, error) {
-                    console.error('Erro:', error);
-                    Swal.fire('Erro', 'Erro ao criar conta: ' + error, 'error');
-                }
-            });
-        }
-
-        // ==================================
-        // MANAGE CATEGORIES AND ACCOUNTS
-        // ==================================
-        
-        function gerenciarCategorias() {
-            // Load categories list
-            const categorias = <?= json_encode($categorias) ?>;
-            let html = '<div class="list-group">';
-            
-            categorias.forEach(cat => {
-                const emoji = cat.tipo === 'receita' ? '💰' : '💸';
-                html += `
-                    <div class="list-group-item d-flex justify-content-between align-items-center">
-                        <div>
-                            <span style="background:${cat.cor}; color:white; padding:2px 8px; border-radius:3px; margin-right:8px;">${emoji}</span>
-                            <strong>${cat.nome}</strong>
-                            ${cat.descricao ? `<br><small class="text-muted">${cat.descricao}</small>` : ''}
-                        </div>
-                        <button class="btn btn-sm btn-danger" onclick="excluirCategoria(${cat.id}, '${cat.nome}')">
-                            <i class="fas fa-trash"></i> Excluir
-                        </button>
-                    </div>
-                `;
-            });
-            
-            html += '</div>';
-            $('#listaCategorias').html(html);
-            $('#modalGerenciarCategorias').modal('show');
-        }
-
-        function gerenciarContas() {
-            // Load accounts list
-            const contas = <?= json_encode($contas) ?>;
-            let html = '<div class="list-group">';
-            
-            contas.forEach(conta => {
-                html += `
-                    <div class="list-group-item d-flex justify-content-between align-items-center">
-                        <div>
-                            <span style="background:${conta.cor}; color:white; padding:2px 8px; border-radius:3px; margin-right:8px;">
-                                <i class="fas fa-wallet"></i>
-                            </span>
-                            <strong>${conta.nome}</strong>
-                            <br><small class="text-muted">Saldo: R$ ${parseFloat(conta.saldo_atual || 0).toFixed(2)}</small>
-                        </div>
-                        <button class="btn btn-sm btn-danger" onclick="excluirConta(${conta.id}, '${conta.nome}')">
-                            <i class="fas fa-trash"></i> Excluir
-                        </button>
-                    </div>
-                `;
-            });
-            
-            html += '</div>';
-            $('#listaContas').html(html);
-            $('#modalGerenciarContas').modal('show');
-        }
-
-        function excluirCategoria(id, nome) {
-            Swal.fire({
-                title: 'Confirmar exclusão?',
-                text: `Deseja realmente excluir a categoria "${nome}"?`,
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#d33',
-                cancelButtonColor: '#3085d6',
-                confirmButtonText: 'Sim, excluir!',
-                cancelButtonText: 'Cancelar'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    $.ajax({
-                        url: 'mvc/ajax/financeiro.php',
-                        method: 'POST',
-                        data: {
-                            action: 'excluir_categoria',
-                            categoria_id: id
-                        },
-                        dataType: 'json',
-                        success: function(response) {
-                            if (response.success) {
-                                Swal.fire('Excluído!', response.message, 'success').then(() => {
-                                    location.reload(); // Reload to update the list
-                                });
-                            } else {
-                                Swal.fire('Erro', response.message || 'Erro ao excluir categoria', 'error');
-                            }
-                        },
-                        error: function(xhr, status, error) {
-                            console.error('Erro:', error);
-                            Swal.fire('Erro', 'Erro ao excluir categoria: ' + error, 'error');
-                        }
-                    });
-                }
-            });
-        }
-
-        function excluirConta(id, nome) {
-            Swal.fire({
-                title: 'Confirmar exclusão?',
-                text: `Deseja realmente excluir a conta "${nome}"?`,
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#d33',
-                cancelButtonColor: '#3085d6',
-                confirmButtonText: 'Sim, excluir!',
-                cancelButtonText: 'Cancelar'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    $.ajax({
-                        url: 'mvc/ajax/financeiro.php',
-                        method: 'POST',
-                        data: {
-                            action: 'excluir_conta',
-                            conta_id: id
-                        },
-                        dataType: 'json',
-                        success: function(response) {
-                            if (response.success) {
-                                Swal.fire('Excluído!', response.message, 'success').then(() => {
-                                    location.reload(); // Reload to update the list
-                                });
-                            } else {
-                                Swal.fire('Erro', response.message || 'Erro ao excluir conta', 'error');
-                            }
-                        },
-                        error: function(xhr, status, error) {
-                            console.error('Erro:', error);
-                            Swal.fire('Erro', 'Erro ao excluir conta: ' + error, 'error');
-                        }
-                    });
-                }
-            });
-        }
     </script>
 </body>
 </html>

@@ -41,6 +41,77 @@ $establishments = $db->fetchAll(
      WHERE ue.usuario_global_id = ? AND ue.ativo = true",
     [$userId]
 );
+
+// Verificar se é funcionário e buscar histórico de recebimentos
+$funcionario = null;
+$historicoRecebimentos = [];
+try {
+    // Verificar se existe na tabela usuarios (funcionários antigos)
+    $funcionario = $db->fetch(
+        "SELECT id FROM usuarios WHERE id = ? LIMIT 1",
+        [$userId]
+    );
+    
+    // Se não encontrou, verificar em usuarios_estabelecimento (funcionários novos)
+    if (!$funcionario) {
+        try {
+            $tabelaExiste = $db->fetch(
+                "SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_name = 'usuarios_estabelecimento'
+                )"
+            );
+            
+            if ($tabelaExiste && $tabelaExiste['exists']) {
+                $funcionario = $db->fetch(
+                    "SELECT usuario_global_id as id 
+                     FROM usuarios_estabelecimento 
+                     WHERE usuario_global_id = ? AND ativo = true 
+                     LIMIT 1",
+                    [$userId]
+                );
+            }
+        } catch (\Exception $e) {
+            error_log("Erro ao verificar usuarios_estabelecimento: " . $e->getMessage());
+        }
+    }
+    
+    if ($funcionario) {
+        // Buscar histórico de recebimentos (funciona para ambos os tipos de ID)
+        try {
+            $tabelaExiste = $db->fetch(
+                "SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_name = 'pagamentos_funcionarios'
+                )"
+            );
+            
+            if ($tabelaExiste && $tabelaExiste['exists']) {
+                $historicoRecebimentos = $db->fetchAll(
+                    "SELECT pf.*, 
+                            cf.nome as conta_nome,
+                            COALESCE(
+                                u_pagamento.login,
+                                ug_pagamento.email,
+                                'Sistema'
+                            ) as pagado_por
+                     FROM pagamentos_funcionarios pf
+                     LEFT JOIN contas_financeiras cf ON pf.conta_id = cf.id
+                     LEFT JOIN usuarios u_pagamento ON pf.usuario_pagamento_id = u_pagamento.id
+                     LEFT JOIN usuarios_globais ug_pagamento ON pf.usuario_pagamento_id = ug_pagamento.id
+                     WHERE pf.usuario_id = ?
+                     ORDER BY pf.data_pagamento DESC, pf.created_at DESC
+                     LIMIT 50",
+                    [$userId]
+                );
+            }
+        } catch (\Exception $e) {
+            error_log("Erro ao buscar histórico de recebimentos: " . $e->getMessage());
+        }
+    }
+} catch (\Exception $e) {
+    error_log("Erro ao verificar funcionário: " . $e->getMessage());
+}
 ?>
 
 <!DOCTYPE html>
@@ -266,6 +337,86 @@ $establishments = $db->fetchAll(
                             <span class="badge bg-secondary ms-2"><?php echo htmlspecialchars($est['tipo_usuario']); ?></span>
                         </div>
                     <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+
+            <!-- Histórico de Recebimentos (para funcionários) -->
+            <?php if ($funcionario && !empty($historicoRecebimentos)): ?>
+                <h4 class="section-title mt-4">
+                    <i class="fas fa-money-bill-wave me-2"></i>Histórico de Recebimentos
+                </h4>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Tipo</th>
+                                <th>Valor</th>
+                                <th>Forma de Pagamento</th>
+                                <th>Conta</th>
+                                <th>Status</th>
+                                <th>Descrição</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php 
+                            $totalRecebido = 0;
+                            foreach ($historicoRecebimentos as $recebimento): 
+                                $totalRecebido += (float) $recebimento['valor'];
+                                $tipoLabels = [
+                                    'salario' => 'Salário',
+                                    'adiantamento' => 'Adiantamento',
+                                    'bonus' => 'Bônus',
+                                    'outros' => 'Outros'
+                                ];
+                                $statusLabels = [
+                                    'pendente' => 'Pendente',
+                                    'pago' => 'Pago',
+                                    'cancelado' => 'Cancelado'
+                                ];
+                                $statusClass = [
+                                    'pendente' => 'warning',
+                                    'pago' => 'success',
+                                    'cancelado' => 'danger'
+                                ];
+                            ?>
+                                <tr>
+                                    <td><?= date('d/m/Y', strtotime($recebimento['data_pagamento'])) ?></td>
+                                    <td>
+                                        <span class="badge bg-info">
+                                            <?= $tipoLabels[$recebimento['tipo_pagamento']] ?? $recebimento['tipo_pagamento'] ?>
+                                        </span>
+                                    </td>
+                                    <td class="fw-bold text-success">
+                                        R$ <?= number_format($recebimento['valor'], 2, ',', '.') ?>
+                                    </td>
+                                    <td><?= htmlspecialchars($recebimento['forma_pagamento'] ?? '-') ?></td>
+                                    <td><?= htmlspecialchars($recebimento['conta_nome'] ?? '-') ?></td>
+                                    <td>
+                                        <span class="badge bg-<?= $statusClass[$recebimento['status']] ?? 'secondary' ?>">
+                                            <?= $statusLabels[$recebimento['status']] ?? $recebimento['status'] ?>
+                                        </span>
+                                    </td>
+                                    <td><?= htmlspecialchars($recebimento['descricao'] ?? '-') ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                        <tfoot>
+                            <tr class="table-primary">
+                                <th colspan="2">Total Recebido</th>
+                                <th class="text-success">R$ <?= number_format($totalRecebido, 2, ',', '.') ?></th>
+                                <th colspan="4"></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            <?php elseif ($funcionario && empty($historicoRecebimentos)): ?>
+                <h4 class="section-title mt-4">
+                    <i class="fas fa-money-bill-wave me-2"></i>Histórico de Recebimentos
+                </h4>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    Nenhum recebimento registrado ainda.
                 </div>
             <?php endif; ?>
 

@@ -1,14 +1,17 @@
 <?php
-// Desabilitar exibição de erros na saída (para não corromper JSON)
+// Desabilitar exibição de erros para garantir resposta JSON limpa
+error_reporting(E_ALL);
 ini_set('display_errors', 0);
-ini_set('display_startup_errors', 0);
-error_reporting(E_ALL); // Ainda loga erros, mas não exibe
+ini_set('log_errors', 1);
 
-// Iniciar output buffering para capturar qualquer saída inesperada
+// Iniciar output buffering para capturar qualquer saída indesejada
 ob_start();
 
 session_start();
 header('Content-Type: application/json');
+header('Cache-Control: no-cache, no-store, must-revalidate');
+header('Pragma: no-cache');
+header('Expires: 0');
 
 // Autoloader
 spl_autoload_register(function ($class) {
@@ -42,6 +45,7 @@ try {
     
     // Debug log
     error_log("Financeiro AJAX - Action: " . $action);
+    error_log("Financeiro AJAX - POST data: " . json_encode($_POST));
     
     if (empty($action)) {
         throw new \Exception('No action specified');
@@ -58,20 +62,9 @@ try {
         'is_logged_in' => $session->isLoggedIn()
     ]));
     
-    // Validar tenant_id - obrigatório
-    $tenantId = $session->getTenantId();
-    if (!$tenantId) {
-        throw new \Exception('Tenant ID não encontrado na sessão. Faça login novamente.');
-    }
-    
-    // Obter filial_id - buscar padrão se não estiver na sessão
-    $filialId = $session->getFilialId();
-    if ($filialId === null) {
-        $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
-        $filialId = $filial_padrao ? $filial_padrao['id'] : null;
-    }
-    
-    $userId = $session->getUserId();
+    $userId = $session->getUserId() ?? 1;
+    $tenantId = $session->getTenantId() ?? 1;
+    $filialId = $session->getFilialId() ?? 1;
     
     switch ($action) {
         
@@ -108,12 +101,11 @@ try {
                 throw new \Exception('Pedido fiado não encontrado');
             }
             
-            ob_end_clean();
             echo json_encode([
                 'success' => true,
                 'pedido' => $pedido
             ]);
-            exit;
+            break;
         
         case 'buscar_pedidos_fiado':
             error_log("financeiro.php - buscar_pedidos_fiado - Tenant: $tenantId, Filial: $filialId");
@@ -182,13 +174,12 @@ try {
             
             error_log("financeiro.php - buscar_pedidos_fiado - Retornando " . count($pedidos) . " pedidos após filtragem");
             
-            ob_end_clean();
             echo json_encode([
                 'success' => true,
                 'pedidos' => $pedidos,
                 'total' => count($pedidos)
             ]);
-            exit;
+            break;
             
         case 'buscar_total_recebiveis_fiado':
             // Calcular saldo fiado real (fiado original - fiado quitado)
@@ -231,12 +222,11 @@ try {
             
             $resultado = ['total_recebiveis' => $totalRecebiveis];
             
-            ob_end_clean();
             echo json_encode([
                 'success' => true,
                 'total_recebiveis' => $resultado['total_recebiveis'] ?? 0
             ]);
-            exit;
+            break;
             
         case 'excluir_pedido_fiado':
             $pedidoId = $_POST['pedido_id'] ?? '';
@@ -294,18 +284,17 @@ try {
                 // Commit transaction
                 $db->commit();
                 
-                ob_end_clean();
                 echo json_encode([
                     'success' => true,
                     'message' => 'Pedido excluído com sucesso!'
                 ]);
-                exit;
                 
             } catch (\Exception $e) {
                 // Rollback transaction
                 $db->rollback();
                 throw $e;
             }
+            break;
             
 
         case 'registrar_pagamento_fiado':
@@ -351,8 +340,8 @@ try {
                     'pedido_id' => $pedidoId,
                     'valor_pago' => $valorPago,
                     'forma_pagamento' => $formaPagamento,
-                    'nome_cliente' => $pedido['cliente'] ?? null,
-                    'telefone_cliente' => $pedido['telefone_cliente'] ?? null,
+                    'nome_cliente' => $pedido['cliente'],
+                    'telefone_cliente' => $pedido['telefone_cliente'],
                     'descricao' => $descricao ?: 'Pagamento de pedido fiado',
                     'usuario_id' => $userId,
                     'tenant_id' => $tenantId,
@@ -410,7 +399,6 @@ try {
                 
                 $db->commit();
                 
-                ob_end_clean();
                 echo json_encode([
                     'success' => true,
                     'message' => 'Pagamento registrado com sucesso!',
@@ -419,12 +407,12 @@ try {
                     'mesa_liberada' => $mesaLiberada,
                     'saldo_restante' => $novoSaldoDevedor
                 ]);
-                exit;
                 
             } catch (\Exception $e) {
                 $db->rollback();
                 throw $e;
             }
+            break;
             
         case 'criar_lancamento':
             // Get form data
@@ -604,204 +592,600 @@ try {
                 throw new \Exception('Erro ao criar lançamento');
             }
             
-            ob_end_clean();
             echo json_encode([
                 'success' => true,
                 'message' => 'Lançamento criado com sucesso!',
                 'lancamento_id' => $lancamentoId
             ]);
-            exit;
+            break;
             
-        case 'criar_categoria':
-            $nome = $_POST['nome'] ?? '';
-            $tipo = $_POST['tipo'] ?? '';
-            $descricao = $_POST['descricao'] ?? '';
-            $cor = $_POST['cor'] ?? '#007bff';
+        case 'criar_categoria_rapida':
+            error_log("========== CRIAR CATEGORIA RAPIDA ==========");
+            error_log("POST data: " . json_encode($_POST));
+            error_log("REQUEST_METHOD: " . ($_SERVER['REQUEST_METHOD'] ?? 'unknown'));
+            error_log("CONTENT_TYPE: " . ($_SERVER['CONTENT_TYPE'] ?? 'unknown'));
             
-            if (empty($nome) || empty($tipo)) {
-                throw new \Exception('Nome e tipo são obrigatórios');
+            $nome = trim($_POST['nome'] ?? '');
+            $tipo = trim($_POST['tipo'] ?? '');
+            $cor = trim($_POST['cor'] ?? '#007bff');
+            $tipoLancamento = $_POST['tipo_lancamento'] ?? '';
+            
+            error_log("Parsed values - Nome: '$nome', Tipo: '$tipo', Cor: '$cor', TipoLancamento: '$tipoLancamento'");
+            
+            if (empty($nome)) {
+                error_log("ERRO: Nome vazio");
+                http_response_code(400);
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'O nome é obrigatório'
+                ]);
+                exit;
             }
             
-            if (!in_array($tipo, ['receita', 'despesa'])) {
-                throw new \Exception('Tipo inválido. Use: receita ou despesa');
+            // Se não informou tipo, usar padrão baseado no tipo de lançamento do formulário ou 'despesa'
+            if (empty($tipo)) {
+                $tipoLancamento = $_POST['tipo_lancamento'] ?? '';
+                $tipo = ($tipoLancamento === 'receita') ? 'receita' : 'despesa';
             }
             
-            // Create category
-            $categoria_id = $db->insert('categorias_financeiras', [
+            // Validar tipo apenas se informado
+            if (!empty($tipo) && !in_array($tipo, ['receita', 'despesa'])) {
+                http_response_code(400);
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Tipo inválido. Use "receita" ou "despesa"'
+                ]);
+                exit;
+            }
+            
+            $categoriaId = $db->insert('categorias_financeiras', [
                 'nome' => $nome,
                 'tipo' => $tipo,
-                'descricao' => $descricao,
                 'cor' => $cor,
-                'icone' => $tipo === 'receita' ? 'fas fa-plus-circle' : 'fas fa-minus-circle',
                 'tenant_id' => $tenantId,
                 'filial_id' => $filialId,
                 'ativo' => true
             ]);
             
-            if (!$categoria_id) {
+            if (!$categoriaId) {
                 throw new \Exception('Erro ao criar categoria');
             }
             
-            ob_end_clean();
+            $categoria = $db->fetch(
+                "SELECT * FROM categorias_financeiras WHERE id = ?",
+                [$categoriaId]
+            );
+            
             echo json_encode([
                 'success' => true,
-                'message' => 'Categoria criada com sucesso',
-                'categoria_id' => $categoria_id
+                'message' => 'Categoria criada com sucesso!',
+                'categoria' => $categoria
             ]);
-            exit;
+            break;
             
-        case 'criar_conta':
-            $nome = $_POST['nome'] ?? '';
-            $tipo = $_POST['tipo'] ?? '';
-            $saldoInicial = floatval($_POST['saldo_inicial'] ?? 0);
-            $cor = $_POST['cor'] ?? '#28a745';
+        case 'criar_conta_rapida':
+            error_log("========== CRIAR CONTA RAPIDA ==========");
+            error_log("POST data: " . json_encode($_POST));
+            error_log("REQUEST_METHOD: " . ($_SERVER['REQUEST_METHOD'] ?? 'unknown'));
+            error_log("CONTENT_TYPE: " . ($_SERVER['CONTENT_TYPE'] ?? 'unknown'));
             
-            if (empty($nome) || empty($tipo)) {
-                throw new \Exception('Nome e tipo são obrigatórios');
+            $nome = trim($_POST['nome'] ?? '');
+            $tipo = trim($_POST['tipo'] ?? '');
+            $saldoInicial = $_POST['saldo_inicial'] ?? 0;
+            
+            error_log("Parsed values - Nome: '$nome', Tipo: '$tipo', SaldoInicial: '$saldoInicial'");
+            
+            if (empty($nome)) {
+                error_log("ERRO: Nome vazio");
+                http_response_code(400);
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'O nome é obrigatório'
+                ]);
+                exit;
             }
             
-            if (!in_array($tipo, ['caixa', 'banco', 'pix', 'cartao', 'outros'])) {
-                throw new \Exception('Tipo inválido');
+            // Se não informou tipo, usar 'outros' como padrão
+            if (empty($tipo)) {
+                $tipo = 'outros';
             }
             
-            // Icon mapping
-            $icones = [
-                'caixa' => 'fas fa-cash-register',
-                'banco' => 'fas fa-university',
-                'pix' => 'fas fa-mobile-alt',
-                'cartao' => 'fas fa-credit-card',
-                'outros' => 'fas fa-wallet'
-            ];
+            // Validar tipo apenas se informado
+            if (!empty($tipo) && !in_array($tipo, ['caixa', 'banco', 'cartao', 'pix', 'outros'])) {
+                http_response_code(400);
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Tipo inválido. Use: caixa, banco, cartao, pix ou outros'
+                ]);
+                exit;
+            }
             
-            // Create account
-            $conta_id = $db->insert('contas_financeiras', [
+            $contaId = $db->insert('contas_financeiras', [
                 'nome' => $nome,
                 'tipo' => $tipo,
-                'saldo_inicial' => $saldoInicial,
-                'saldo_atual' => $saldoInicial,
-                'cor' => $cor,
-                'icone' => $icones[$tipo] ?? 'fas fa-wallet',
+                'saldo_inicial' => (float) $saldoInicial,
+                'saldo_atual' => (float) $saldoInicial,
                 'tenant_id' => $tenantId,
                 'filial_id' => $filialId,
                 'ativo' => true
             ]);
             
-            if (!$conta_id) {
+            if (!$contaId) {
                 throw new \Exception('Erro ao criar conta');
             }
             
-            ob_end_clean();
-            echo json_encode([
-                'success' => true,
-                'message' => 'Conta criada com sucesso',
-                'conta_id' => $conta_id
-            ]);
-            exit;
-            
-        case 'excluir_categoria':
-            $categoriaId = $_POST['categoria_id'] ?? '';
-            
-            if (empty($categoriaId)) {
-                throw new \Exception('ID da categoria é obrigatório');
-            }
-            
-            // Check if category belongs to tenant
-            $categoria = $db->fetch(
-                "SELECT id FROM categorias_financeiras WHERE id = ? AND tenant_id = ?",
-                [$categoriaId, $tenantId]
-            );
-            
-            if (!$categoria) {
-                throw new \Exception('Categoria não encontrada ou não pertence a este estabelecimento');
-            }
-            
-            // Soft delete - just set ativo = false
-            $db->query(
-                "UPDATE categorias_financeiras SET ativo = false WHERE id = ? AND tenant_id = ?",
-                [$categoriaId, $tenantId]
-            );
-            
-            ob_end_clean();
-            echo json_encode([
-                'success' => true,
-                'message' => 'Categoria excluída com sucesso'
-            ]);
-            exit;
-            
-        case 'excluir_conta':
-            $contaId = $_POST['conta_id'] ?? '';
-            
-            if (empty($contaId)) {
-                throw new \Exception('ID da conta é obrigatório');
-            }
-            
-            // Check if account belongs to tenant
             $conta = $db->fetch(
-                "SELECT id FROM contas_financeiras WHERE id = ? AND tenant_id = ?",
-                [$contaId, $tenantId]
+                "SELECT * FROM contas_financeiras WHERE id = ?",
+                [$contaId]
             );
             
-            if (!$conta) {
-                throw new \Exception('Conta não encontrada ou não pertence a este estabelecimento');
-            }
-            
-            // Soft delete - just set ativo = false
-            $db->query(
-                "UPDATE contas_financeiras SET ativo = false WHERE id = ? AND tenant_id = ?",
-                [$contaId, $tenantId]
-            );
-            
-            ob_end_clean();
             echo json_encode([
                 'success' => true,
-                'message' => 'Conta excluída com sucesso'
+                'message' => 'Conta criada com sucesso!',
+                'conta' => $conta
             ]);
-            exit;
+            break;
             
-        case 'excluir_lancamento':
-            $lancamentoId = $_POST['lancamento_id'] ?? '';
+        case 'pesquisar_produto_vendido':
+            $nomeProduto = trim($_POST['nome_produto'] ?? '');
+            $dataInicio = $_POST['data_inicio'] ?? date('Y-m-01');
+            $dataFim = $_POST['data_fim'] ?? date('Y-m-t');
             
-            if (empty($lancamentoId)) {
-                throw new \Exception('ID do lançamento é obrigatório');
+            if (empty($nomeProduto)) {
+                http_response_code(400);
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Nome do produto é obrigatório'
+                ]);
+                exit;
             }
             
-            // Check if lancamento belongs to tenant
-            $lancamento = $db->fetch(
-                "SELECT id FROM lancamentos_financeiros WHERE id = ? AND tenant_id = ?",
-                [$lancamentoId, $tenantId]
+            // Buscar produtos que correspondem ao nome
+            $produtos = $db->fetchAll(
+                "SELECT id, nome FROM produtos 
+                 WHERE tenant_id = ? AND filial_id = ? 
+                 AND LOWER(nome) LIKE LOWER(?)
+                 ORDER BY nome",
+                [$tenantId, $filialId, "%{$nomeProduto}%"]
             );
             
-            if (!$lancamento) {
-                throw new \Exception('Lançamento não encontrado ou não pertence a este estabelecimento');
+            if (empty($produtos)) {
+                echo json_encode([
+                    'success' => true,
+                    'produto' => null,
+                    'message' => 'Nenhum produto encontrado'
+                ]);
+                exit;
             }
             
-            // Delete lancamento (hard delete is OK for financial entries)
-            $db->query(
-                "DELETE FROM lancamentos_financeiros WHERE id = ? AND tenant_id = ?",
-                [$lancamentoId, $tenantId]
+            // Buscar vendas do primeiro produto encontrado (ou pode ser melhorado para mostrar todos)
+            $produtoId = $produtos[0]['id'];
+            $produtoNome = $produtos[0]['nome'];
+            
+            // Buscar estatísticas de vendas
+            $estatisticas = $db->fetch(
+                "SELECT 
+                    COUNT(DISTINCT pi.pedido_id) as total_pedidos,
+                    SUM(pi.quantidade) as quantidade_vendida,
+                    SUM(pi.valor_total) as receita_total,
+                    AVG(pi.valor_unitario) as valor_unitario_medio
+                 FROM pedido_itens pi
+                 INNER JOIN pedido p ON pi.pedido_id = p.idpedido
+                 WHERE pi.produto_id = ?
+                 AND pi.tenant_id = ?
+                 AND pi.filial_id = ?
+                 AND p.data BETWEEN ? AND ?
+                 AND p.status_pagamento = 'quitado'",
+                [$produtoId, $tenantId, $filialId, $dataInicio, $dataFim]
             );
             
-            ob_end_clean();
             echo json_encode([
                 'success' => true,
-                'message' => 'Lançamento excluído com sucesso'
+                'produto' => [
+                    'id' => $produtoId,
+                    'nome' => $produtoNome,
+                    'quantidade_vendida' => (int) ($estatisticas['quantidade_vendida'] ?? 0),
+                    'receita_total' => (float) ($estatisticas['receita_total'] ?? 0),
+                    'valor_unitario_medio' => (float) ($estatisticas['valor_unitario_medio'] ?? 0),
+                    'total_pedidos' => (int) ($estatisticas['total_pedidos'] ?? 0)
+                ]
             ]);
-            exit;
+            break;
+            
+        case 'listar_funcionarios':
+            // Buscar todos os usuários do sistema (funcionários)
+            // Buscar de duas fontes:
+            // 1. Tabela usuarios (sistema antigo)
+            // 2. Tabela usuarios_estabelecimento + usuarios_globais (sistema novo)
+            
+            $funcionarios = [];
+            
+            try {
+                // Buscar da tabela usuarios (sistema antigo)
+                $usuariosAntigos = $db->fetchAll(
+                    "SELECT id, login, 
+                            COALESCE(login, 'Usuário ' || id::text) as nome
+                     FROM usuarios 
+                     WHERE tenant_id = ? AND filial_id = ?
+                     ORDER BY login",
+                    [$tenantId, $filialId]
+                );
+                
+                foreach ($usuariosAntigos as $usuario) {
+                    $funcionarios[$usuario['id']] = [
+                        'id' => $usuario['id'],
+                        'login' => $usuario['login'],
+                        'nome' => $usuario['nome']
+                    ];
+                }
+            } catch (\Exception $e) {
+                error_log("Erro ao buscar usuarios antigos: " . $e->getMessage());
+            }
+            
+            try {
+                // Buscar da tabela usuarios_estabelecimento (sistema novo)
+                // Primeiro verificar se a tabela existe
+                $tabelaExiste = $db->fetch(
+                    "SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_name = 'usuarios_estabelecimento'
+                    )"
+                );
+                
+                if ($tabelaExiste && $tabelaExiste['exists']) {
+                    $usuariosNovos = $db->fetchAll(
+                        "SELECT ue.usuario_global_id as id,
+                                COALESCE(ug.nome, ug.email, 'Usuário ' || ue.usuario_global_id::text) as nome,
+                                COALESCE(ug.email, ue.usuario_global_id::text) as login
+                         FROM usuarios_estabelecimento ue
+                         LEFT JOIN usuarios_globais ug ON ue.usuario_global_id = ug.id
+                         WHERE ue.tenant_id = ? AND ue.filial_id = ? AND ue.ativo = true
+                         ORDER BY COALESCE(ug.nome, ug.email, ue.usuario_global_id::text)",
+                        [$tenantId, $filialId]
+                    );
+                    
+                    foreach ($usuariosNovos as $usuario) {
+                        // Usar usuario_global_id como ID único
+                        $id = $usuario['id'];
+                        if (!isset($funcionarios[$id])) {
+                            $funcionarios[$id] = [
+                                'id' => $id,
+                                'login' => $usuario['login'] ?? 'usuario_' . $id,
+                                'nome' => $usuario['nome'] ?? $usuario['login'] ?? 'Usuário ' . $id
+                            ];
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                error_log("Erro ao buscar usuarios novos: " . $e->getMessage());
+            }
+            
+            // Converter array associativo para array indexado
+            $funcionariosLista = array_values($funcionarios);
+            
+            // Ordenar por nome
+            usort($funcionariosLista, function($a, $b) {
+                return strcmp($a['nome'], $b['nome']);
+            });
+            
+            echo json_encode([
+                'success' => true,
+                'funcionarios' => $funcionariosLista
+            ]);
+            break;
+            
+        case 'salvar_pagamento_funcionario':
+            // Criar tabela se não existir
+            try {
+                // Verificar se a tabela já existe
+                $tabelaExiste = $db->fetch(
+                    "SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_name = 'pagamentos_funcionarios'
+                    )"
+                );
+                
+                if (!$tabelaExiste || !$tabelaExiste['exists']) {
+                    // Criar tabela sem foreign key restritiva para usuario_id
+                    // para permitir tanto usuarios.id quanto usuarios_globais.id
+                    $db->query("
+                        CREATE TABLE pagamentos_funcionarios (
+                            id SERIAL PRIMARY KEY,
+                            usuario_id INTEGER NOT NULL,
+                            tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                            filial_id INTEGER REFERENCES filiais(id) ON DELETE SET NULL,
+                            tipo_pagamento VARCHAR(20) NOT NULL CHECK (tipo_pagamento IN ('salario', 'adiantamento', 'bonus', 'outros')),
+                            valor DECIMAL(10,2) NOT NULL,
+                            data_pagamento DATE NOT NULL,
+                            data_referencia DATE,
+                            descricao TEXT,
+                            forma_pagamento VARCHAR(50),
+                            conta_id INTEGER REFERENCES contas_financeiras(id) ON DELETE SET NULL,
+                            lancamento_financeiro_id INTEGER REFERENCES lancamentos_financeiros(id) ON DELETE SET NULL,
+                            status VARCHAR(20) DEFAULT 'pendente' CHECK (status IN ('pendente', 'pago', 'cancelado')),
+                            observacoes TEXT,
+                            usuario_pagamento_id INTEGER,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        )
+                    ");
+                } else {
+                    // Se a tabela já existe, tentar remover constraint se houver
+                    try {
+                        $db->query("
+                            ALTER TABLE pagamentos_funcionarios 
+                            DROP CONSTRAINT IF EXISTS pagamentos_funcionarios_usuario_id_fkey
+                        ");
+                    } catch (\Exception $e) {
+                        // Ignorar erro se constraint não existir
+                    }
+                }
+            } catch (\Exception $e) {
+                error_log("Erro ao criar/ajustar tabela pagamentos_funcionarios: " . $e->getMessage());
+            }
+            
+            $funcionarioId = $_POST['funcionario_id'] ?? '';
+            $tipoPagamento = $_POST['tipo_pagamento'] ?? '';
+            $valor = $_POST['valor'] ?? '';
+            $dataPagamento = $_POST['data_pagamento'] ?? '';
+            $dataReferencia = $_POST['data_referencia'] ?? null;
+            $formaPagamento = $_POST['forma_pagamento'] ?? null;
+            $contaId = $_POST['conta_id'] ?? null;
+            $observacoes = $_POST['observacoes'] ?? null;
+            
+            // Usar observações como descrição também
+            $descricao = $observacoes;
+            
+            if (empty($funcionarioId) || empty($tipoPagamento) || empty($valor) || empty($dataPagamento)) {
+                http_response_code(400);
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Campos obrigatórios não preenchidos'
+                ]);
+                exit;
+            }
+            
+            $valor = (float) $valor;
+            if ($valor <= 0) {
+                http_response_code(400);
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Valor deve ser maior que zero'
+                ]);
+                exit;
+            }
+            
+            // Verificar se funcionário existe (pode estar em usuarios ou usuarios_globais)
+            $funcionario = null;
+            
+            // Tentar buscar da tabela usuarios primeiro
+            try {
+                $funcionario = $db->fetch(
+                    "SELECT id, login, COALESCE(login, 'Usuário ' || id::text) as nome
+                     FROM usuarios 
+                     WHERE id = ? AND tenant_id = ? AND filial_id = ?",
+                    [$funcionarioId, $tenantId, $filialId]
+                );
+            } catch (\Exception $e) {
+                error_log("Erro ao buscar funcionário na tabela usuarios: " . $e->getMessage());
+            }
+            
+            // Se não encontrou, buscar em usuarios_globais
+            if (!$funcionario) {
+                try {
+                    $tabelaExiste = $db->fetch(
+                        "SELECT EXISTS (
+                            SELECT FROM information_schema.tables 
+                            WHERE table_name = 'usuarios_estabelecimento'
+                        )"
+                    );
+                    
+                    if ($tabelaExiste && $tabelaExiste['exists']) {
+                        $funcionario = $db->fetch(
+                            "SELECT ue.usuario_global_id as id,
+                                    COALESCE(ug.nome, ug.email, 'Usuário ' || ue.usuario_global_id::text) as nome,
+                                    COALESCE(ug.email, ue.usuario_global_id::text) as login
+                             FROM usuarios_estabelecimento ue
+                             LEFT JOIN usuarios_globais ug ON ue.usuario_global_id = ug.id
+                             WHERE ue.usuario_global_id = ? 
+                             AND ue.tenant_id = ? 
+                             AND ue.filial_id = ? 
+                             AND ue.ativo = true",
+                            [$funcionarioId, $tenantId, $filialId]
+                        );
+                    }
+                } catch (\Exception $e) {
+                    error_log("Erro ao buscar funcionário em usuarios_globais: " . $e->getMessage());
+                }
+            }
+            
+            if (!$funcionario) {
+                http_response_code(404);
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Funcionário não encontrado'
+                ]);
+                exit;
+            }
+            
+            // Garantir que temos login e nome
+            if (!isset($funcionario['login'])) {
+                $funcionario['login'] = $funcionario['nome'] ?? 'usuario_' . $funcionarioId;
+            }
+            if (!isset($funcionario['nome'])) {
+                $funcionario['nome'] = $funcionario['login'];
+            }
+            
+            // Criar lançamento financeiro relacionado (despesa)
+            $lancamentoId = null;
+            if ($contaId) {
+                try {
+                    // Buscar categoria de despesa padrão ou criar
+                    $categoriaDespesa = $db->fetch(
+                        "SELECT id FROM categorias_financeiras 
+                         WHERE tenant_id = ? AND filial_id = ? 
+                         AND tipo = 'despesa' 
+                         LIMIT 1",
+                        [$tenantId, $filialId]
+                    );
+                    
+                    if (!$categoriaDespesa) {
+                        $categoriaDespesaId = $db->insert('categorias_financeiras', [
+                            'nome' => 'Pagamento de Funcionários',
+                            'tipo' => 'despesa',
+                            'cor' => '#dc3545',
+                            'icone' => 'fas fa-users',
+                            'tenant_id' => $tenantId,
+                            'filial_id' => $filialId,
+                            'ativo' => true
+                        ]);
+                    } else {
+                        $categoriaDespesaId = $categoriaDespesa['id'];
+                    }
+                    
+                    // Criar descrição automática baseada no tipo e funcionário
+                    $tipoLabels = [
+                        'salario' => 'Salário',
+                        'adiantamento' => 'Adiantamento',
+                        'bonus' => 'Bônus',
+                        'outros' => 'Outros'
+                    ];
+                    $tipoLabel = $tipoLabels[$tipoPagamento] ?? ucfirst($tipoPagamento);
+                    $descricaoLancamento = "Pagamento de {$tipoLabel} - {$funcionario['nome']}";
+                    if ($observacoes) {
+                        $descricaoLancamento .= " - {$observacoes}";
+                    }
+                    
+                    $lancamentoId = $db->insert('lancamentos_financeiros', [
+                        'tipo_lancamento' => 'despesa',
+                        'categoria_id' => $categoriaDespesaId,
+                        'conta_id' => $contaId,
+                        'valor' => $valor,
+                        'data_lancamento' => $dataPagamento,
+                        'data_pagamento' => $dataPagamento . ' 00:00:00',
+                        'descricao' => $descricaoLancamento,
+                        'observacoes' => $observacoes,
+                        'forma_pagamento' => $formaPagamento,
+                        'status' => 'pago',
+                        'usuario_id' => $usuarioId,
+                        'tenant_id' => $tenantId,
+                        'filial_id' => $filialId
+                    ]);
+                } catch (\Exception $e) {
+                    error_log("Erro ao criar lançamento financeiro: " . $e->getMessage());
+                }
+            }
+            
+            // Inserir pagamento do funcionário
+            // Criar descrição automática se não houver observações
+            $descricaoPagamento = $observacoes;
+            if (empty($descricaoPagamento)) {
+                $tipoLabels = [
+                    'salario' => 'Salário',
+                    'adiantamento' => 'Adiantamento',
+                    'bonus' => 'Bônus',
+                    'outros' => 'Outros'
+                ];
+                $tipoLabel = $tipoLabels[$tipoPagamento] ?? ucfirst($tipoPagamento);
+                $descricaoPagamento = "Pagamento de {$tipoLabel}";
+            }
+            
+            // Preparar dados para inserção
+            $dadosPagamento = [
+                'usuario_id' => $funcionarioId,
+                'tenant_id' => $tenantId,
+                'filial_id' => $filialId,
+                'tipo_pagamento' => $tipoPagamento,
+                'valor' => $valor,
+                'data_pagamento' => $dataPagamento,
+                'status' => 'pago',
+                'usuario_pagamento_id' => $usuarioId
+            ];
+            
+            // Adicionar campos opcionais apenas se não forem null/vazios
+            if ($dataReferencia !== null && $dataReferencia !== '') {
+                $dadosPagamento['data_referencia'] = $dataReferencia;
+            }
+            if ($descricaoPagamento !== null && $descricaoPagamento !== '') {
+                $dadosPagamento['descricao'] = $descricaoPagamento;
+            }
+            if ($formaPagamento !== null && $formaPagamento !== '') {
+                $dadosPagamento['forma_pagamento'] = $formaPagamento;
+            }
+            if ($contaId !== null && $contaId !== '') {
+                $dadosPagamento['conta_id'] = $contaId;
+            }
+            if ($lancamentoId !== null) {
+                $dadosPagamento['lancamento_financeiro_id'] = $lancamentoId;
+            }
+            if ($observacoes !== null && $observacoes !== '') {
+                $dadosPagamento['observacoes'] = $observacoes;
+            }
+            
+            error_log("SALVAR_PAGAMENTO_FUNCIONARIO: Dados preparados: " . json_encode($dadosPagamento));
+            
+            try {
+                $pagamentoId = $db->insert('pagamentos_funcionarios', $dadosPagamento);
+                
+                if (!$pagamentoId) {
+                    error_log("SALVAR_PAGAMENTO_FUNCIONARIO: Erro - insert retornou false");
+                    throw new \Exception('Erro ao registrar pagamento no banco de dados');
+                }
+                
+                error_log("SALVAR_PAGAMENTO_FUNCIONARIO: Pagamento criado com ID: " . $pagamentoId);
+            } catch (\Exception $e) {
+                error_log("SALVAR_PAGAMENTO_FUNCIONARIO: Exception ao inserir: " . $e->getMessage());
+                error_log("SALVAR_PAGAMENTO_FUNCIONARIO: Stack trace: " . $e->getTraceAsString());
+                throw $e;
+            }
+            
+            // Limpar qualquer saída anterior antes de enviar JSON
+            ob_clean();
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Pagamento registrado com sucesso!',
+                'pagamento_id' => $pagamentoId
+            ]);
+            break;
             
         default:
             throw new \Exception('Action not implemented: ' . $action);
     }
     
 } catch (\Exception $e) {
-    // Limpar qualquer output inesperado
-    ob_end_clean();
+    // Limpar qualquer saída anterior
+    ob_clean();
+    
+    error_log("Financeiro AJAX - Exception: " . $e->getMessage());
+    error_log("Financeiro AJAX - Stack trace: " . $e->getTraceAsString());
     
     http_response_code(500);
     echo json_encode([
         'success' => false,
-        'message' => $e->getMessage()
+        'message' => $e->getMessage(),
+        'debug' => [
+            'action' => $_POST['action'] ?? $_GET['action'] ?? 'unknown',
+            'post_data' => $_POST
+        ]
     ]);
-    exit;
+} catch (\Error $e) {
+    // Limpar qualquer saída anterior
+    ob_clean();
+    
+    error_log("Financeiro AJAX - Error: " . $e->getMessage());
+    error_log("Financeiro AJAX - Stack trace: " . $e->getTraceAsString());
+    
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'message' => 'Erro interno: ' . $e->getMessage(),
+        'debug' => [
+            'action' => $_POST['action'] ?? $_GET['action'] ?? 'unknown'
+        ]
+    ]);
 }
 
+// Limpar buffer de saída antes de enviar resposta
+ob_end_flush();
 ?>

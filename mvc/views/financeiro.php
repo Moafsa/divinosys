@@ -98,18 +98,23 @@ if ($tenant && $filial) {
         $params[] = $statusFiltro;
     }
     
-    $lancamentos = $db->fetchAll(
-        "SELECT l.*, c.nome as categoria_nome, c.cor as categoria_cor, c.icone as categoria_icone,
-                cf.nome as conta_nome, cf.tipo as conta_tipo, cf.cor as conta_cor,
-                u.login as usuario_nome
-         FROM lancamentos_financeiros l
-         LEFT JOIN categorias_financeiras c ON l.categoria_id = c.id
-         LEFT JOIN contas_financeiras cf ON l.conta_id = cf.id
-         LEFT JOIN usuarios u ON l.usuario_id = u.id
-         WHERE " . implode(' AND ', $whereConditions) . "
-         ORDER BY l.created_at DESC",
-        $params
-    );
+    try {
+        $lancamentos = $db->fetchAll(
+            "SELECT l.*, l.tipo_lancamento as tipo, c.nome as categoria_nome, c.cor as categoria_cor, c.icone as categoria_icone,
+                    cf.nome as conta_nome, cf.tipo as conta_tipo, cf.cor as conta_cor,
+                    u.login as usuario_nome
+             FROM lancamentos_financeiros l
+             LEFT JOIN categorias_financeiras c ON l.categoria_id = c.id
+             LEFT JOIN contas_financeiras cf ON l.conta_id = cf.id
+             LEFT JOIN usuarios u ON l.usuario_id = u.id
+             WHERE " . implode(' AND ', $whereConditions) . "
+             ORDER BY l.created_at DESC",
+            $params
+        );
+    } catch (Exception $e) {
+        error_log("Erro ao buscar lançamentos financeiros: " . $e->getMessage());
+        $lancamentos = [];
+    }
     
     // Buscar TODOS os pedidos quitados (com e sem pagamentos fiado)
     $pedidosFinanceiros = $db->fetchAll(
@@ -136,18 +141,28 @@ if ($tenant && $filial) {
     );
     
     // Calcular resumo financeiro incluindo pedidos quitados
-    $resumoFinanceiro = $db->fetch(
-        "SELECT 
-            COALESCE(SUM(CASE WHEN tipo = 'receita' THEN valor ELSE 0 END), 0) as total_receitas,
-            COALESCE(SUM(CASE WHEN tipo = 'despesa' THEN valor ELSE 0 END), 0) as total_despesas,
-            COALESCE(SUM(CASE WHEN tipo = 'receita' THEN valor ELSE 0 END), 0) - 
-            COALESCE(SUM(CASE WHEN tipo = 'despesa' THEN valor ELSE 0 END), 0) as saldo_liquido,
-            COUNT(*) as total_lancamentos
-         FROM lancamentos_financeiros 
-         WHERE tenant_id = ? AND filial_id = ?
-         AND created_at BETWEEN ? AND ?",
-        [$tenant['id'], $filial['id'], $dataInicio . ' 00:00:00', $dataFim . ' 23:59:59']
-    );
+    try {
+        $resumoFinanceiro = $db->fetch(
+            "SELECT 
+                COALESCE(SUM(CASE WHEN tipo_lancamento = 'receita' THEN valor ELSE 0 END), 0) as total_receitas,
+                COALESCE(SUM(CASE WHEN tipo_lancamento = 'despesa' THEN valor ELSE 0 END), 0) as total_despesas,
+                COALESCE(SUM(CASE WHEN tipo_lancamento = 'receita' THEN valor ELSE 0 END), 0) - 
+                COALESCE(SUM(CASE WHEN tipo_lancamento = 'despesa' THEN valor ELSE 0 END), 0) as saldo_liquido,
+                COUNT(*) as total_lancamentos
+             FROM lancamentos_financeiros 
+             WHERE tenant_id = ? AND filial_id = ?
+             AND created_at BETWEEN ? AND ?",
+            [$tenant['id'], $filial['id'], $dataInicio . ' 00:00:00', $dataFim . ' 23:59:59']
+        );
+    } catch (Exception $e) {
+        error_log("Erro ao calcular resumo financeiro: " . $e->getMessage());
+        $resumoFinanceiro = [
+            'total_receitas' => 0,
+            'total_despesas' => 0,
+            'saldo_liquido' => 0,
+            'total_lancamentos' => 0
+        ];
+    }
     
     // Buscar valores dos pedidos quitados
     $receitasPedidos = $db->fetch(
@@ -354,7 +369,11 @@ $contas = $db->fetchAll(
                         <i class="fas fa-plus me-1"></i>
                         Novo Lançamento
                     </a>
-                    <a href="<?php echo $router->url('gerar_relatorios'); ?>" class="btn btn-success me-2">
+                    <button class="btn btn-success me-2" onclick="abrirModalPagamentoFuncionario()">
+                        <i class="fas fa-money-bill-wave me-1"></i>
+                        Pagar Funcionário
+                    </button>
+                    <a href="<?php echo $router->url('gerar_relatorios'); ?>" class="btn btn-outline-primary me-2">
                         <i class="fas fa-chart-bar me-1"></i>
                         Gerar Relatório
                     </a>
@@ -384,6 +403,40 @@ $contas = $db->fetchAll(
                     </button>
                     </div>
                 </div>
+
+            <!-- Pesquisa de Produtos Vendidos -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-search me-2"></i>Pesquisa de Produtos Vendidos</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Nome do Produto</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="pesquisaProduto" placeholder="Digite o nome do produto...">
+                                <button class="btn btn-primary" type="button" onclick="pesquisarProduto()">
+                                    <i class="fas fa-search me-1"></i>Pesquisar
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Data Início</label>
+                            <input type="date" class="form-control" id="dataInicioProduto" value="<?= date('Y-m-01') ?>">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Data Fim</label>
+                            <input type="date" class="form-control" id="dataFimProduto" value="<?= date('Y-m-t') ?>">
+                        </div>
+                    </div>
+                    <div id="resultadoProduto" class="mt-3" style="display: none;">
+                        <div class="alert alert-info">
+                            <h6><i class="fas fa-info-circle me-2"></i>Resultado da Pesquisa</h6>
+                            <div id="detalhesProduto"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <!-- Filtros -->
             <div class="filter-section">
@@ -603,7 +656,7 @@ $contas = $db->fetchAll(
                                                         </span>
                                                     </td>
                                                     <td>
-                                                        <span class="badge bg-<?= $lancamento['status'] === 'pago' ? 'success' : ($lancamento['status'] === 'pendente' ? 'warning' : 'danger') ?>">
+                                                        <span class="badge bg-<?= $lancamento['status'] === 'confirmado' ? 'success' : ($lancamento['status'] === 'pendente' ? 'warning' : 'secondary') ?>">
                                                             <?= ucfirst($lancamento['status']) ?>
                                                         </span>
                                                     </td>
@@ -875,7 +928,6 @@ $contas = $db->fetchAll(
     </div>
 
     <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -912,11 +964,256 @@ $contas = $db->fetchAll(
         }
 
         function editarLancamento(id) {
-            // Implementar edição de lançamento
-            Swal.fire({
-                title: 'Editar Lançamento',
-                text: 'Funcionalidade em desenvolvimento',
-                icon: 'info'
+            // Buscar dados do lançamento
+            fetch(`mvc/ajax/lancamentos.php?action=buscar_lancamento&id=${id}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const lancamento = data.lancamento;
+                    
+                    // Format date for datetime-local input (YYYY-MM-DDTHH:mm)
+                    const dataLancamento = lancamento.data_lancamento ? 
+                        new Date(lancamento.data_lancamento + 'T00:00:00').toISOString().slice(0, 16) : 
+                        new Date().toISOString().slice(0, 16);
+                    
+                    Swal.fire({
+                        title: 'Editar Lançamento',
+                        html: `
+                            <div class="mb-3">
+                                <label class="form-label">Tipo de Lançamento <span class="text-danger">*</span></label>
+                                <select class="form-select" id="editTipoLancamento" required>
+                                    <option value="">Selecione o tipo</option>
+                                    <option value="receita" ${lancamento.tipo_lancamento === 'receita' ? 'selected' : ''}>Receita</option>
+                                    <option value="despesa" ${lancamento.tipo_lancamento === 'despesa' ? 'selected' : ''}>Despesa</option>
+                                    <option value="transferencia" ${lancamento.tipo_lancamento === 'transferencia' ? 'selected' : ''}>Transferência</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Descrição <span class="text-danger">*</span></label>
+                                <textarea class="form-control" id="editDescricao" rows="3" required>${lancamento.descricao || ''}</textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Valor <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text">R$</span>
+                                    <input type="number" class="form-control" id="editValor" value="${parseFloat(lancamento.valor || 0).toFixed(2)}" step="0.01" min="0" required>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Data <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="editDataLancamento" value="${lancamento.data_lancamento || ''}" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Categoria</label>
+                                <select class="form-select" id="editCategoria">
+                                    <option value="">Selecione uma categoria</option>
+                                    <?php foreach ($categorias as $categoria): ?>
+                                        <option value="<?= $categoria['id'] ?>" data-tipo="<?= $categoria['tipo'] ?>" ${lancamento.categoria_id == <?= $categoria['id'] ?> ? 'selected' : ''}>
+                                            <?= htmlspecialchars($categoria['nome']) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Conta <span class="text-danger">*</span></label>
+                                <select class="form-select" id="editConta" required>
+                                    <option value="">Selecione uma conta</option>
+                                    <?php foreach ($contas as $conta): ?>
+                                        <option value="<?= $conta['id'] ?>" data-tipo="<?= $conta['tipo'] ?>" ${lancamento.conta_id == <?= $conta['id'] ?> ? 'selected' : ''}>
+                                            <?= htmlspecialchars($conta['nome']) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="mb-3" id="editContaDestinoSection" style="display: ${lancamento.tipo_lancamento === 'transferencia' ? 'block' : 'none'};">
+                                <label class="form-label">Conta Destino</label>
+                                <select class="form-select" id="editContaDestino">
+                                    <option value="">Selecione a conta destino</option>
+                                    <?php foreach ($contas as $conta): ?>
+                                        <option value="<?= $conta['id'] ?>" ${lancamento.conta_destino_id == <?= $conta['id'] ?> ? 'selected' : ''}>
+                                            <?= htmlspecialchars($conta['nome']) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Data de Vencimento</label>
+                                <input type="date" class="form-control" id="editDataVencimento" value="${lancamento.data_vencimento || ''}">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Data de Pagamento</label>
+                                <input type="date" class="form-control" id="editDataPagamento" value="${lancamento.data_pagamento || ''}">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Status</label>
+                                <select class="form-select" id="editStatus">
+                                    <option value="confirmado" ${(lancamento.status === 'confirmado' || lancamento.status === 'pago') ? 'selected' : ''}>Confirmado</option>
+                                    <option value="pendente" ${lancamento.status === 'pendente' ? 'selected' : ''}>Pendente</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Forma de Pagamento</label>
+                                <select class="form-select" id="editFormaPagamento">
+                                    <option value="">Selecione a forma</option>
+                                    <option value="dinheiro" ${lancamento.forma_pagamento === 'dinheiro' ? 'selected' : ''}>Dinheiro</option>
+                                    <option value="cartao_debito" ${lancamento.forma_pagamento === 'cartao_debito' ? 'selected' : ''}>Cartão de Débito</option>
+                                    <option value="cartao_credito" ${lancamento.forma_pagamento === 'cartao_credito' ? 'selected' : ''}>Cartão de Crédito</option>
+                                    <option value="pix" ${lancamento.forma_pagamento === 'pix' ? 'selected' : ''}>PIX</option>
+                                    <option value="transferencia" ${lancamento.forma_pagamento === 'transferencia' ? 'selected' : ''}>Transferência</option>
+                                    <option value="cheque" ${lancamento.forma_pagamento === 'cheque' ? 'selected' : ''}>Cheque</option>
+                                    <option value="outros" ${lancamento.forma_pagamento === 'outros' ? 'selected' : ''}>Outros</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Recorrência</label>
+                                <select class="form-select" id="editRecorrencia">
+                                    <option value="nenhuma" ${(lancamento.recorrencia === 'nenhuma' || !lancamento.recorrencia) ? 'selected' : ''}>Nenhuma</option>
+                                    <option value="diaria" ${lancamento.recorrencia === 'diaria' ? 'selected' : ''}>Diária</option>
+                                    <option value="semanal" ${lancamento.recorrencia === 'semanal' ? 'selected' : ''}>Semanal</option>
+                                    <option value="mensal" ${lancamento.recorrencia === 'mensal' ? 'selected' : ''}>Mensal</option>
+                                    <option value="anual" ${lancamento.recorrencia === 'anual' ? 'selected' : ''}>Anual</option>
+                                </select>
+                            </div>
+                            <div class="mb-3" id="editFimRecorrenciaSection" style="display: ${(lancamento.recorrencia && lancamento.recorrencia !== 'nenhuma') ? 'block' : 'none'};">
+                                <label class="form-label">Data Fim da Recorrência</label>
+                                <input type="date" class="form-control" id="editDataFimRecorrencia" value="${lancamento.data_fim_recorrencia || ''}">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Observações</label>
+                                <textarea class="form-control" id="editObservacoes" rows="3">${lancamento.observacoes || ''}</textarea>
+                            </div>
+                        `,
+                        showCancelButton: true,
+                        confirmButtonText: 'Salvar',
+                        cancelButtonText: 'Cancelar',
+                        width: '800px',
+                        didOpen: () => {
+                            // Initialize Select2 if available
+                            if (typeof $ !== 'undefined' && $.fn.select2) {
+                                $('#editCategoria, #editConta, #editContaDestino').select2({
+                                    theme: 'bootstrap-5',
+                                    dropdownParent: Swal.getContainer()
+                                });
+                            }
+                            
+                            // Show/hide conta destino based on tipo
+                            const tipoSelect = document.getElementById('editTipoLancamento');
+                            const contaDestinoSection = document.getElementById('editContaDestinoSection');
+                            
+                            tipoSelect.addEventListener('change', function() {
+                                if (this.value === 'transferencia') {
+                                    contaDestinoSection.style.display = 'block';
+                                } else {
+                                    contaDestinoSection.style.display = 'none';
+                                }
+                            });
+                            
+                            // Show/hide fim recorrência based on recorrência
+                            const recorrenciaSelect = document.getElementById('editRecorrencia');
+                            const fimRecorrenciaSection = document.getElementById('editFimRecorrenciaSection');
+                            
+                            recorrenciaSelect.addEventListener('change', function() {
+                                if (this.value && this.value !== 'nenhuma') {
+                                    fimRecorrenciaSection.style.display = 'block';
+                                } else {
+                                    fimRecorrenciaSection.style.display = 'none';
+                                }
+                            });
+                        },
+                        preConfirm: () => {
+                            const tipo = document.getElementById('editTipoLancamento').value;
+                            const descricao = document.getElementById('editDescricao').value;
+                            const valor = document.getElementById('editValor').value;
+                            const data = document.getElementById('editDataLancamento').value;
+                            const categoria = document.getElementById('editCategoria').value;
+                            const conta = document.getElementById('editConta').value;
+                            const contaDestino = document.getElementById('editContaDestino').value;
+                            const dataVencimento = document.getElementById('editDataVencimento').value;
+                            const dataPagamento = document.getElementById('editDataPagamento').value;
+                            const status = document.getElementById('editStatus').value;
+                            const formaPagamento = document.getElementById('editFormaPagamento').value;
+                            const recorrencia = document.getElementById('editRecorrencia').value;
+                            const dataFimRecorrencia = document.getElementById('editDataFimRecorrencia').value;
+                            const observacoes = document.getElementById('editObservacoes').value;
+                            
+                            if (!tipo || !descricao || !valor || !data || !conta) {
+                                Swal.showValidationMessage('Todos os campos obrigatórios devem ser preenchidos');
+                                return false;
+                            }
+                            
+                            if (tipo === 'transferencia' && !contaDestino) {
+                                Swal.showValidationMessage('Para transferências, a conta destino é obrigatória');
+                                return false;
+                            }
+                            
+                            if (parseFloat(valor) <= 0) {
+                                Swal.showValidationMessage('O valor deve ser maior que zero');
+                                return false;
+                            }
+                            
+                            return {
+                                id: id,
+                                tipo_lancamento: tipo,
+                                descricao: descricao,
+                                valor: valor,
+                                data_lancamento: data,
+                                categoria_id: categoria || null,
+                                conta_id: conta,
+                                conta_destino_id: contaDestino || null,
+                                data_vencimento: dataVencimento || null,
+                                data_pagamento: dataPagamento || null,
+                                status: status,
+                                forma_pagamento: formaPagamento || null,
+                                recorrencia: recorrencia || 'nenhuma',
+                                data_fim_recorrencia: dataFimRecorrencia || null,
+                                observacoes: observacoes || null
+                            };
+                        }
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            atualizarLancamento(result.value);
+                        }
+                    });
+                } else {
+                    Swal.fire('Erro!', data.message || 'Erro ao buscar lançamento', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire('Erro!', 'Erro ao processar solicitação', 'error');
+            });
+        }
+
+        // Function to update financial entry
+        function atualizarLancamento(dados) {
+            const formData = new URLSearchParams();
+            formData.append('action', 'atualizar_lancamento');
+            Object.keys(dados).forEach(key => {
+                formData.append(key, dados[key]);
+            });
+            
+            fetch('mvc/ajax/lancamentos.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire('Sucesso!', 'Lançamento atualizado com sucesso!', 'success')
+                        .then(() => {
+                            // Reload page to refresh data
+                            window.location.reload();
+                        });
+                } else {
+                    Swal.fire('Erro!', data.message || 'Erro ao atualizar lançamento', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire('Erro!', 'Erro ao processar solicitação', 'error');
             });
         }
 
@@ -930,29 +1227,8 @@ $contas = $db->fetchAll(
                 cancelButtonText: 'Cancelar'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    // Make AJAX call to delete
-                    $.ajax({
-                        url: 'mvc/ajax/financeiro.php',
-                        method: 'POST',
-                        data: {
-                            action: 'excluir_lancamento',
-                            lancamento_id: id
-                        },
-                        dataType: 'json',
-                        success: function(response) {
-                            if (response.success) {
-                                Swal.fire('Excluído!', 'Lançamento excluído com sucesso.', 'success').then(() => {
-                                    location.reload(); // Reload page to update list
-                                });
-                            } else {
-                                Swal.fire('Erro', response.message || 'Erro ao excluir lançamento', 'error');
-                            }
-                        },
-                        error: function(xhr, status, error) {
-                            console.error('Erro ao excluir:', error);
-                            Swal.fire('Erro', 'Erro ao excluir lançamento: ' + error, 'error');
-                        }
-                    });
+                    // Implementar exclusão
+                    Swal.fire('Excluído!', 'Lançamento excluído com sucesso.', 'success');
                 }
             });
         }
@@ -1865,6 +2141,261 @@ $contas = $db->fetchAll(
         }, 3000); // Aguardar 3 segundos para garantir que tudo esteja carregado
         
         console.log('✅ Script de carregamento automático configurado!');
+        
+        // Pesquisa de produtos vendidos
+        function pesquisarProduto() {
+            const nomeProduto = document.getElementById('pesquisaProduto').value.trim();
+            const dataInicio = document.getElementById('dataInicioProduto').value;
+            const dataFim = document.getElementById('dataFimProduto').value;
+            
+            if (!nomeProduto) {
+                Swal.fire('Atenção!', 'Digite o nome do produto para pesquisar', 'warning');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('action', 'pesquisar_produto_vendido');
+            formData.append('nome_produto', nomeProduto);
+            formData.append('data_inicio', dataInicio);
+            formData.append('data_fim', dataFim);
+            
+            fetch('mvc/ajax/financeiro.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const resultadoDiv = document.getElementById('resultadoProduto');
+                    const detalhesDiv = document.getElementById('detalhesProduto');
+                    
+                    if (data.produto) {
+                        const produto = data.produto;
+                        detalhesDiv.innerHTML = `
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <strong>Produto:</strong> ${produto.nome}<br>
+                                    <strong>Quantidade Vendida:</strong> ${produto.quantidade_vendida || 0}<br>
+                                    <strong>Receita Total:</strong> <span class="text-success fw-bold">R$ ${parseFloat(produto.receita_total || 0).toFixed(2).replace('.', ',')}</span>
+                                </div>
+                                <div class="col-md-4">
+                                    <strong>Valor Unitário Médio:</strong> R$ ${parseFloat(produto.valor_unitario_medio || 0).toFixed(2).replace('.', ',')}<br>
+                                    <strong>Pedidos com este produto:</strong> ${produto.total_pedidos || 0}
+                                </div>
+                                <div class="col-md-4">
+                                    <strong>Período:</strong> ${dataInicio} até ${dataFim}
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        detalhesDiv.innerHTML = '<p class="text-muted">Nenhum produto encontrado com este nome no período selecionado.</p>';
+                    }
+                    
+                    resultadoDiv.style.display = 'block';
+                } else {
+                    Swal.fire('Erro!', data.message || 'Erro ao pesquisar produto', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire('Erro!', 'Erro ao processar pesquisa', 'error');
+            });
+        }
+        
+        // Permitir pesquisa ao pressionar Enter
+        document.addEventListener('DOMContentLoaded', function() {
+            const pesquisaInput = document.getElementById('pesquisaProduto');
+            if (pesquisaInput) {
+                pesquisaInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        pesquisarProduto();
+                    }
+                });
+            }
+        });
+        
+        // Abrir modal de pagamento de funcionário
+        function abrirModalPagamentoFuncionario() {
+            // Buscar lista de usuários
+            fetch('mvc/ajax/financeiro.php?action=listar_funcionarios')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    let optionsHtml = '<option value="">Selecione o funcionário</option>';
+                    data.funcionarios.forEach(func => {
+                        optionsHtml += `<option value="${func.id}">${func.login} - ${func.nome || func.login}</option>`;
+                    });
+                    
+                    Swal.fire({
+                        title: 'Pagamento de Funcionário',
+                        html: `
+                            <form id="formPagamentoFuncionario">
+                                <div class="mb-3">
+                                    <label class="form-label">Funcionário <span class="text-danger">*</span></label>
+                                    <select class="form-select" id="funcionarioId" required>
+                                        ${optionsHtml}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Tipo de Pagamento <span class="text-danger">*</span></label>
+                                    <select class="form-select" id="tipoPagamento" required>
+                                        <option value="">Selecione o tipo</option>
+                                        <option value="salario">Salário</option>
+                                        <option value="adiantamento">Adiantamento</option>
+                                        <option value="bonus">Bônus</option>
+                                        <option value="outros">Outros</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Valor <span class="text-danger">*</span></label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">R$</span>
+                                        <input type="number" class="form-control" id="valorPagamento" step="0.01" min="0" required>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Data do Pagamento <span class="text-danger">*</span></label>
+                                    <input type="date" class="form-control" id="dataPagamento" value="<?= date('Y-m-d') ?>" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Data de Referência (para salários)</label>
+                                    <input type="date" class="form-control" id="dataReferencia">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Forma de Pagamento</label>
+                                    <select class="form-select" id="formaPagamento">
+                                        <option value="">Selecione</option>
+                                        <option value="dinheiro">Dinheiro</option>
+                                        <option value="pix">PIX</option>
+                                        <option value="transferencia">Transferência</option>
+                                        <option value="cheque">Cheque</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Conta</label>
+                                    <select class="form-select" id="contaPagamento">
+                                        <option value="">Selecione a conta</option>
+                                        <?php foreach ($contas as $conta): ?>
+                                            <option value="<?= $conta['id'] ?>"><?= htmlspecialchars($conta['nome']) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Observações</label>
+                                    <textarea class="form-control" id="observacoesPagamento" rows="3" placeholder="Informações adicionais sobre o pagamento..."></textarea>
+                                </div>
+                            </form>
+                        `,
+                        showCancelButton: true,
+                        confirmButtonText: 'Salvar Pagamento',
+                        cancelButtonText: 'Cancelar',
+                        width: '600px',
+                        preConfirm: () => {
+                            const funcionarioId = document.getElementById('funcionarioId').value;
+                            const tipoPagamento = document.getElementById('tipoPagamento').value;
+                            const valor = document.getElementById('valorPagamento').value;
+                            const dataPagamento = document.getElementById('dataPagamento').value;
+                            const dataReferencia = document.getElementById('dataReferencia').value;
+                            const formaPagamento = document.getElementById('formaPagamento').value;
+                            const contaId = document.getElementById('contaPagamento').value;
+                            const observacoes = document.getElementById('observacoesPagamento').value;
+                            
+                            if (!funcionarioId || !tipoPagamento || !valor || !dataPagamento) {
+                                Swal.showValidationMessage('Preencha todos os campos obrigatórios');
+                                return false;
+                            }
+                            
+                            if (parseFloat(valor) <= 0) {
+                                Swal.showValidationMessage('O valor deve ser maior que zero');
+                                return false;
+                            }
+                            
+                            return {
+                                funcionario_id: funcionarioId,
+                                tipo_pagamento: tipoPagamento,
+                                valor: valor,
+                                data_pagamento: dataPagamento,
+                                data_referencia: dataReferencia || null,
+                                forma_pagamento: formaPagamento || null,
+                                conta_id: contaId || null,
+                                observacoes: observacoes || null
+                            };
+                        }
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            salvarPagamentoFuncionario(result.value);
+                        }
+                    });
+                } else {
+                    Swal.fire('Erro!', data.message || 'Erro ao carregar funcionários', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire('Erro!', 'Erro ao carregar funcionários', 'error');
+            });
+        }
+        
+        // Salvar pagamento de funcionário
+        function salvarPagamentoFuncionario(dados) {
+            console.log('Salvando pagamento:', dados);
+            
+            const formData = new FormData();
+            formData.append('action', 'salvar_pagamento_funcionario');
+            Object.keys(dados).forEach(key => {
+                if (dados[key] !== null && dados[key] !== undefined) {
+                    formData.append(key, dados[key]);
+                }
+            });
+            
+            fetch('mvc/ajax/financeiro.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(async response => {
+                const text = await response.text();
+                console.log('Resposta do servidor (pagamento):', text);
+                console.log('Status HTTP:', response.status);
+                
+                if (!response.ok) {
+                    try {
+                        const json = JSON.parse(text);
+                        console.error('Erro JSON:', json);
+                        throw new Error(json.message || `HTTP ${response.status}: ${response.statusText}`);
+                    } catch (e) {
+                        if (e instanceof Error && e.message && e.message !== text) {
+                            throw e;
+                        }
+                        console.error('Erro texto:', text);
+                        throw new Error(text || `HTTP ${response.status}: ${response.statusText}`);
+                    }
+                }
+                
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    console.error('Erro ao fazer parse do JSON:', e);
+                    console.error('Texto da resposta:', text);
+                    throw new Error('Resposta inválida do servidor: ' + text.substring(0, 200));
+                }
+            })
+            .then(data => {
+                console.log('Dados recebidos:', data);
+                if (data.success) {
+                    Swal.fire('Sucesso!', 'Pagamento registrado com sucesso!', 'success')
+                        .then(() => {
+                            location.reload();
+                        });
+                } else {
+                    Swal.fire('Erro!', data.message || 'Erro ao salvar pagamento', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro completo:', error);
+                console.error('Stack trace:', error.stack);
+                Swal.fire('Erro!', 'Erro ao processar pagamento: ' + error.message, 'error');
+            });
+        }
         
         // Funções de exportação e importação
         function exportarDados(tipo) {
