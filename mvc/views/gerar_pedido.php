@@ -1017,14 +1017,13 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                     produtoAtual.preco = produtoAtual.preco_normal;
                 }
                 
-                // Calcular preço total (produto + ingredientes adicionados - ingredientes removidos)
+                // Calcular preço total (produto base + apenas ingredientes adicionados)
+                // IMPORTANTE: Ingredientes removidos NÃO reduzem o preço do produto
                 let precoTotal = produtoAtual.preco;
                 ingredientesAdicionados.forEach(ingrediente => {
                     precoTotal += parseFloat(ingrediente.preco_adicional);
                 });
-                ingredientesRemovidos.forEach(ingrediente => {
-                    precoTotal -= parseFloat(ingrediente.preco_adicional);
-                });
+                // Ingredientes removidos não alteram o preço - o produto mantém seu valor original
                 produtoAtual.preco = precoTotal;
                 
                 // Adicionar ao carrinho
