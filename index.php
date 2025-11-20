@@ -210,12 +210,25 @@ try {
         // Tenant actions
         'mudarPlano' => 'tenant_subscription.php',
         'syncAsaasInvoices' => 'tenant_subscription.php',
+        // Online menu actions
+        'criar_pedido_online' => 'pedidos_online.php',
+        'buscar_produto_cardapio' => 'produtos_cardapio_online.php',
+        'buscar_produtos_cardapio' => 'produtos_cardapio_online.php',
+        'buscar_cliente_cardapio' => 'clientes_cardapio_online.php',
+        'cadastrar_cliente_cardapio' => 'clientes_cardapio_online.php',
+        'adicionar_endereco_cardapio' => 'clientes_cardapio_online.php',
+        // Configuration actions
+        'configuracoes' => 'configuracoes.php',
     ];
         
         $ajaxFile = $ajaxMap[$action] ?? $action . '.php';
         $fullPath = MVC_PATH . '/ajax/' . $ajaxFile;
         
         if (file_exists($fullPath)) {
+            // Clear any output before including
+            if (ob_get_level()) {
+                ob_clean();
+            }
             include $fullPath;
         } else {
             header('Content-Type: application/json');

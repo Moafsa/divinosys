@@ -1,4 +1,7 @@
 <?php
+// Start output buffering to prevent any output before JSON
+ob_start();
+
 // Capturar todos os erros e retornar como JSON
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
@@ -9,6 +12,7 @@ register_shutdown_function(function() {
     $error = error_get_last();
     if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
         error_log("ERRO FATAL: " . json_encode($error));
+        ob_clean();
         if (!headers_sent()) {
             header('Content-Type: application/json');
             http_response_code(500);
@@ -546,11 +550,206 @@ try {
             ]);
             break;
             
+        case 'salvar_cardapio_online':
+            // Clear any previous output
+            ob_clean();
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId();
+            $filialId = $session->getFilialId();
+            
+            error_log("=== SALVAR CARDAPIO ONLINE ===");
+            error_log("Tenant ID: " . $tenantId);
+            error_log("Filial ID: " . $filialId);
+            error_log("POST data: " . json_encode($_POST));
+            
+            if (!$tenantId || !$filialId) {
+                throw new \Exception('Tenant ou Filial não encontrados na sessão');
+            }
+            
+            // Verify filial exists
+            $filialCheck = $db->fetch(
+                "SELECT id, nome, cardapio_online_ativo FROM filiais WHERE id = ? AND tenant_id = ?",
+                [$filialId, $tenantId]
+            );
+            
+            if (!$filialCheck) {
+                error_log("ERRO: Filial não encontrada - ID: $filialId, Tenant: $tenantId");
+                throw new \Exception('Filial não encontrada');
+            }
+            
+            error_log("Filial encontrada: " . json_encode($filialCheck));
+            
+            // Handle logo upload
+            $logoUrl = null;
+            if (isset($_FILES['logo']) && $_FILES['logo']['error'] === UPLOAD_ERR_OK) {
+                $uploadedFile = $_FILES['logo'];
+                
+                // Validate file type
+                $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+                $fileType = mime_content_type($uploadedFile['tmp_name']);
+                
+                if (!in_array($fileType, $allowedTypes)) {
+                    throw new \Exception('Tipo de arquivo não suportado. Use JPG, PNG, GIF ou WEBP');
+                }
+                
+                // Validate file size (max 2MB)
+                if ($uploadedFile['size'] > 2 * 1024 * 1024) {
+                    throw new \Exception('Arquivo muito grande (máximo 2MB)');
+                }
+                
+                // Create uploads directory if not exists
+                $uploadDir = __DIR__ . '/../../uploads/logos/';
+                if (!is_dir($uploadDir)) {
+                    mkdir($uploadDir, 0755, true);
+                }
+                
+                // Generate unique filename
+                $extension = pathinfo($uploadedFile['name'], PATHINFO_EXTENSION);
+                $filename = 'logo_' . $tenantId . '_' . $filialId . '_' . time() . '.' . $extension;
+                $filePath = $uploadDir . $filename;
+                
+                // Move uploaded file
+                if (!move_uploaded_file($uploadedFile['tmp_name'], $filePath)) {
+                    throw new \Exception('Erro ao salvar arquivo');
+                }
+                
+                // Set logo URL (relative to web root)
+                $logoUrl = 'uploads/logos/' . $filename;
+            }
+            
+            // Prepare update data
+            $cardapioAtivo = ($_POST['cardapio_online_ativo'] ?? '0') === '1';
+            $usarCalculo = ($_POST['usar_calculo_distancia'] ?? '0') === '1';
+            
+            error_log("Valores recebidos:");
+            error_log("  cardapio_online_ativo (POST): " . ($_POST['cardapio_online_ativo'] ?? 'não definido'));
+            error_log("  cardapio_online_ativo (bool): " . ($cardapioAtivo ? 'true' : 'false'));
+            error_log("  usar_calculo_distancia (POST): " . ($_POST['usar_calculo_distancia'] ?? 'não definido'));
+            error_log("  usar_calculo_distancia (bool): " . ($usarCalculo ? 'true' : 'false'));
+            
+            // Parse opening hours
+            $horarioFuncionamento = null;
+            if (isset($_POST['horario_funcionamento'])) {
+                $horarioFuncionamento = json_decode($_POST['horario_funcionamento'], true);
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    error_log("Erro ao decodificar horario_funcionamento: " . json_last_error_msg());
+                    $horarioFuncionamento = null;
+                }
+            }
+            
+            $updateData = [
+                'cardapio_online_ativo' => $cardapioAtivo,
+                'taxa_delivery_fixa' => floatval($_POST['taxa_delivery_fixa'] ?? 0),
+                'usar_calculo_distancia' => $usarCalculo,
+                'raio_entrega_km' => floatval($_POST['raio_entrega_km'] ?? 5),
+                'tempo_medio_preparo' => intval($_POST['tempo_medio_preparo'] ?? 30),
+                'aceita_pagamento_online' => ($_POST['aceita_pagamento_online'] ?? '0') === '1',
+                'aceita_pagamento_na_hora' => ($_POST['aceita_pagamento_na_hora'] ?? '0') === '1',
+                'dominio_cardapio_online' => trim($_POST['dominio_cardapio_online'] ?? ''),
+                'updated_at' => date('Y-m-d H:i:s')
+            ];
+            
+            // Add opening hours if provided
+            if ($horarioFuncionamento !== null) {
+                $updateData['horario_funcionamento'] = json_encode($horarioFuncionamento);
+            }
+            
+            error_log("Update data preparado: " . json_encode($updateData));
+            
+            // Add logo URL if uploaded
+            if ($logoUrl) {
+                $updateData['logo_url'] = $logoUrl;
+            }
+            
+            // Build SQL query manually to ensure proper boolean handling
+            $setParts = [];
+            $params = [];
+            
+            foreach ($updateData as $key => $value) {
+                if (is_bool($value)) {
+                    $setParts[] = "{$key} = " . ($value ? 'true' : 'false');
+                } elseif ($key === 'horario_funcionamento' && is_string($value)) {
+                    // JSONB field needs to be cast
+                    $setParts[] = "{$key} = ?::jsonb";
+                    $params[] = $value;
+                } else {
+                    $setParts[] = "{$key} = ?";
+                    $params[] = $value;
+                }
+            }
+            
+            $sql = "UPDATE filiais SET " . implode(', ', $setParts) . " WHERE id = ? AND tenant_id = ?";
+            $params[] = $filialId;
+            $params[] = $tenantId;
+            
+            error_log("SQL a executar: " . $sql);
+            error_log("Parâmetros: " . json_encode($params));
+            
+            $stmt = $db->query($sql, $params);
+            $rowsAffected = $stmt->rowCount();
+            
+            error_log("Linhas afetadas: " . $rowsAffected);
+            
+            if ($rowsAffected === 0) {
+                // Verify if filial still exists
+                $filialAfter = $db->fetch(
+                    "SELECT id, nome, cardapio_online_ativo, usar_calculo_distancia FROM filiais WHERE id = ? AND tenant_id = ?",
+                    [$filialId, $tenantId]
+                );
+                error_log("Filial após tentativa de update: " . json_encode($filialAfter));
+                throw new \Exception('Nenhuma linha foi atualizada. Verifique se a filial existe e você tem permissão.');
+            }
+            
+            // Reload filial from database to update session cache
+            $filialAtualizada = $db->fetch(
+                "SELECT * FROM filiais WHERE id = ? AND tenant_id = ?",
+                [$filialId, $tenantId]
+            );
+            
+            if ($filialAtualizada) {
+                // Update session with fresh data from database
+                $session->setFilial($filialAtualizada);
+                error_log("Sessão atualizada com dados do banco");
+            }
+            
+            // Final verification
+            $filialFinal = $db->fetch(
+                "SELECT cardapio_online_ativo, usar_calculo_distancia FROM filiais WHERE id = ? AND tenant_id = ?",
+                [$filialId, $tenantId]
+            );
+            
+            error_log("Valores finais salvos:");
+            error_log("  cardapio_online_ativo: " . ($filialFinal['cardapio_online_ativo'] ? 'true' : 'false'));
+            error_log("  usar_calculo_distancia: " . ($filialFinal['usar_calculo_distancia'] ? 'true' : 'false'));
+            
+            $response = [
+                'success' => true,
+                'message' => 'Configurações do cardápio online salvas com sucesso!',
+                'debug' => [
+                    'tenant_id' => $tenantId,
+                    'filial_id' => $filialId,
+                    'cardapio_online_ativo' => $filialFinal['cardapio_online_ativo'],
+                    'usar_calculo_distancia' => $filialFinal['usar_calculo_distancia']
+                ]
+            ];
+            
+            error_log("Enviando resposta: " . json_encode($response));
+            echo json_encode($response);
+            break;
+            
         default:
             throw new \Exception('Ação não encontrada: ' . $action);
     }
     
 } catch (\Exception $e) {
+    ob_clean();
+    error_log("Erro em configuracoes.php: " . $e->getMessage());
+    error_log("Stack trace: " . $e->getTraceAsString());
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);
 }
+
+// End output buffering and send JSON
+ob_end_flush();
 ?>

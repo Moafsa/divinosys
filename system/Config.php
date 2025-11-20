@@ -44,7 +44,8 @@ class Config
             'MAIL_MAILER', 'MAIL_HOST', 'MAIL_PORT', 'MAIL_USERNAME', 'MAIL_PASSWORD',
             'MAIL_ENCRYPTION', 'MAIL_FROM_ADDRESS', 'MAIL_FROM_NAME',
             'UPLOAD_MAX_SIZE', 'ALLOWED_EXTENSIONS',
-            'ENABLE_MULTI_TENANT', 'DEFAULT_TENANT_ID'
+            'ENABLE_MULTI_TENANT', 'DEFAULT_TENANT_ID',
+            'DELIVERY_MAPS_WEBHOOK_URL'
         ];
         
         foreach ($envVars as $var) {

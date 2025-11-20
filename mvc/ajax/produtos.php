@@ -31,9 +31,16 @@ require_once __DIR__ . '/../../system/Session.php';
 try {
     $action = $_GET['action'] ?? $_POST['action'] ?? '';
     $buscarProduto = $_GET['buscar_produto'] ?? $_POST['buscar_produto'] ?? '';
+    $buscarTodos = $_GET['buscar_todos'] ?? $_POST['buscar_todos'] ?? '';
+    $buscarProdutos = $_GET['buscar_produtos'] ?? $_POST['buscar_produtos'] ?? '';
     
+    // Normalizar ações baseadas em parâmetros GET/POST
     if ($buscarProduto == '1') {
         $action = 'buscar_produto';
+    } elseif ($buscarTodos == '1') {
+        $action = 'buscar_todos';
+    } elseif ($buscarProdutos == '1') {
+        $action = 'buscar_produtos';
     }
     
     switch ($action) {
@@ -346,6 +353,189 @@ try {
             echo json_encode([
                 'success' => true,
                 'message' => 'Produto excluído com sucesso!'
+            ]);
+            break;
+            
+        case 'buscar_todos':
+        case 'listar_produtos':
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId() ?? 1;
+            $filialId = $session->getFilialId();
+            
+            // Normalizar filial se necessário
+            if ($filialId === null) {
+                $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? ORDER BY id LIMIT 1", [$tenantId]);
+                $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+            }
+            
+            // Buscar produtos com categorias - garantir unicidade absoluta
+            // Primeiro buscar IDs únicos, depois buscar dados completos
+            if ($filialId !== null) {
+                $produtosIds = $db->fetchAll(
+                    "SELECT DISTINCT id FROM produtos 
+                     WHERE tenant_id = ? AND filial_id = ? AND COALESCE(ativo, true) = true
+                     ORDER BY id",
+                    [$tenantId, $filialId]
+                );
+            } else {
+                $produtosIds = $db->fetchAll(
+                    "SELECT DISTINCT id FROM produtos 
+                     WHERE tenant_id = ? AND COALESCE(ativo, true) = true
+                     ORDER BY id",
+                    [$tenantId]
+                );
+            }
+            
+            // Se não encontrou produtos, retornar array vazio
+            if (empty($produtosIds)) {
+                $produtos = [];
+            } else {
+                // Buscar dados completos dos produtos únicos
+                $ids = array_column($produtosIds, 'id');
+                $placeholders = implode(',', array_fill(0, count($ids), '?'));
+                
+                $produtos = $db->fetchAll(
+                    "SELECT p.*, c.nome as categoria_nome 
+                     FROM produtos p 
+                     LEFT JOIN categorias c ON p.categoria_id = c.id 
+                     WHERE p.id IN ($placeholders)
+                     ORDER BY c.nome, p.nome",
+                    $ids
+                );
+            }
+            
+            // Remover produtos duplicados por ID usando array associativo (mais eficiente)
+            $produtosTemp = [];
+            foreach ($produtos as $produto) {
+                $produtoId = (int)$produto['id'];
+                // Se já existe, manter o primeiro (pular duplicado)
+                if (!isset($produtosTemp[$produtoId])) {
+                    $produtosTemp[$produtoId] = $produto;
+                }
+            }
+            // Converter de volta para array indexado numericamente
+            $produtos = array_values($produtosTemp);
+            
+            // Buscar ingredientes para cada produto
+            // IMPORTANTE: Não usar referência (&) para evitar problemas de duplicação
+            foreach ($produtos as $key => $produto) {
+                try {
+                    $ingredientes = $db->fetchAll(
+                        "SELECT i.id, i.nome, i.tipo, i.preco_adicional, COALESCE(pi.padrao, true) as padrao
+                         FROM ingredientes i
+                         INNER JOIN produto_ingredientes pi ON i.id = pi.ingrediente_id
+                         WHERE pi.produto_id = ? AND COALESCE(i.disponivel, true) = true
+                         ORDER BY i.tipo, i.nome",
+                        [$produto['id']]
+                    );
+                    $produtos[$key]['ingredientes'] = $ingredientes;
+                } catch (\Exception $e) {
+                    $produtos[$key]['ingredientes'] = [];
+                }
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'produtos' => $produtos
+            ]);
+            break;
+            
+        case 'buscar_produtos':
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId() ?? 1;
+            $filialId = $session->getFilialId();
+            $query = $_GET['q'] ?? $_POST['q'] ?? '';
+            $categoriaId = $_GET['categoria_id'] ?? $_POST['categoria_id'] ?? '';
+            
+            // Normalizar filial se necessário
+            if ($filialId === null) {
+                $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? ORDER BY id LIMIT 1", [$tenantId]);
+                $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+            }
+            
+            // Construir query para buscar IDs únicos primeiro
+            $sqlIds = "SELECT DISTINCT id FROM produtos WHERE tenant_id = ?";
+            $paramsIds = [$tenantId];
+            
+            if ($filialId !== null) {
+                $sqlIds .= " AND filial_id = ?";
+                $paramsIds[] = $filialId;
+            }
+            
+            $sqlIds .= " AND COALESCE(ativo, true) = true";
+            
+            // Adicionar filtro de busca
+            if (!empty($query)) {
+                $sqlIds .= " AND (LOWER(nome) LIKE LOWER(?) OR LOWER(descricao) LIKE LOWER(?))";
+                $searchTerm = "%{$query}%";
+                $paramsIds[] = $searchTerm;
+                $paramsIds[] = $searchTerm;
+            }
+            
+            // Adicionar filtro de categoria
+            if (!empty($categoriaId)) {
+                $sqlIds .= " AND categoria_id = ?";
+                $paramsIds[] = $categoriaId;
+            }
+            
+            $sqlIds .= " ORDER BY id";
+            
+            // Buscar IDs únicos
+            $produtosIds = $db->fetchAll($sqlIds, $paramsIds);
+            
+            // Se não encontrou produtos, retornar array vazio
+            if (empty($produtosIds)) {
+                $produtos = [];
+            } else {
+                // Buscar dados completos dos produtos únicos
+                $ids = array_column($produtosIds, 'id');
+                $placeholders = implode(',', array_fill(0, count($ids), '?'));
+                
+                $produtos = $db->fetchAll(
+                    "SELECT p.*, c.nome as categoria_nome 
+                     FROM produtos p 
+                     LEFT JOIN categorias c ON p.categoria_id = c.id 
+                     WHERE p.id IN ($placeholders)
+                     ORDER BY c.nome, p.nome",
+                    $ids
+                );
+            }
+            
+            // Remover produtos duplicados por ID (caso haja duplicação na query)
+            // Usar array associativo indexado por ID para garantir unicidade
+            $produtosUnicos = [];
+            foreach ($produtos as $produto) {
+                $produtoId = (int)$produto['id']; // Garantir que ID seja sempre inteiro
+                if (!isset($produtosUnicos[$produtoId])) {
+                    $produtosUnicos[$produtoId] = $produto;
+                }
+            }
+            // Converter de volta para array indexado numericamente
+            $produtos = array_values($produtosUnicos);
+            
+            // Buscar ingredientes para cada produto
+            // IMPORTANTE: Não usar referência (&) para evitar problemas de duplicação
+            foreach ($produtos as $key => $produto) {
+                try {
+                    $ingredientes = $db->fetchAll(
+                        "SELECT i.id, i.nome, i.tipo, i.preco_adicional, COALESCE(pi.padrao, true) as padrao
+                         FROM ingredientes i
+                         INNER JOIN produto_ingredientes pi ON i.id = pi.ingrediente_id
+                         WHERE pi.produto_id = ? AND COALESCE(i.disponivel, true) = true
+                         ORDER BY i.tipo, i.nome",
+                        [$produto['id']]
+                    );
+                    $produtos[$key]['ingredientes'] = $ingredientes;
+                } catch (\Exception $e) {
+                    $produtos[$key]['ingredientes'] = [];
+                }
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'produtos' => $produtos
             ]);
             break;
             

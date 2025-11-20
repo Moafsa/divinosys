@@ -73,6 +73,8 @@ class Router
         'subscription_expired' => 'subscription_expired.php',
         'gerenciar_faturas' => 'gerenciar_faturas.php',
         'asaas_config' => 'asaas_config.php',
+        // Public routes
+        'cardapio_online' => 'cardapio_online.php',
         ];
     }
 
@@ -112,7 +114,8 @@ class Router
             'login_admin',
             'register',
             'onboarding',
-            'subscription_expired'
+            'subscription_expired',
+            'cardapio_online'
         ];
         
         // SuperAdmin dashboard é protegido mas acessível para superadmin

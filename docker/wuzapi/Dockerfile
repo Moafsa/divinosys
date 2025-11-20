@@ -9,6 +9,14 @@ RUN apk add --no-cache git
 WORKDIR /app
 RUN git clone https://github.com/pedroherpeto/wuzapi.git .
 
+# Aplicar correções no frontend antes do build
+# Correção 1: Mudar fallback de API_URL de 'http://localhost:5555' para '' (string vazia)
+RUN sed -i "s|'http://localhost:5555'|''|g" frontend/src/contexts/AuthContext.tsx
+# Correção 2: Mudar rota de /api/validate-token para /api/admin/users  
+RUN sed -i "s|/api/validate-token|/api/admin/users|g" frontend/src/contexts/AuthContext.tsx
+# Correção 3: Mudar validação de response.data.valid para response.data.instances !== undefined
+RUN sed -i "s|response\.data\.valid|response.data.instances !== undefined|g" frontend/src/contexts/AuthContext.tsx
+
 # Compilar backend Go
 RUN go mod download
 RUN go build -o wuzapi .

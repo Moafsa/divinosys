@@ -268,6 +268,60 @@ try {
                 error_log("Erro ao corrigir constraint de status: " . $e->getMessage());
             }
             
+            // PRIMEIRO: Verificar e criar colunas de recorrência ANTES de qualquer operação
+            try {
+                $colunasExistentes = $db->fetchAll(
+                    "SELECT column_name 
+                     FROM information_schema.columns 
+                     WHERE table_name = 'lancamentos_financeiros' 
+                     AND column_name IN ('recorrencia', 'data_fim_recorrencia', 'data_lancamento')"
+                );
+                
+                $colunasNomes = array_column($colunasExistentes, 'column_name');
+                
+                // Adicionar coluna recorrencia se não existir
+                if (!in_array('recorrencia', $colunasNomes)) {
+                    try {
+                        $db->query("
+                            ALTER TABLE lancamentos_financeiros 
+                            ADD COLUMN recorrencia VARCHAR(20) 
+                            CHECK (recorrencia IN ('nenhuma', 'diaria', 'semanal', 'mensal', 'anual'))
+                        ");
+                        error_log("Coluna 'recorrencia' criada com sucesso");
+                    } catch (\Exception $e) {
+                        error_log("Erro ao criar coluna recorrencia: " . $e->getMessage());
+                    }
+                }
+                
+                // Adicionar coluna data_fim_recorrencia se não existir
+                if (!in_array('data_fim_recorrencia', $colunasNomes)) {
+                    try {
+                        $db->query("
+                            ALTER TABLE lancamentos_financeiros 
+                            ADD COLUMN data_fim_recorrencia DATE
+                        ");
+                        error_log("Coluna 'data_fim_recorrencia' criada com sucesso");
+                    } catch (\Exception $e) {
+                        error_log("Erro ao criar coluna data_fim_recorrencia: " . $e->getMessage());
+                    }
+                }
+                
+                // Adicionar coluna data_lancamento se não existir
+                if (!in_array('data_lancamento', $colunasNomes)) {
+                    try {
+                        $db->query("
+                            ALTER TABLE lancamentos_financeiros 
+                            ADD COLUMN data_lancamento DATE
+                        ");
+                        error_log("Coluna 'data_lancamento' criada com sucesso");
+                    } catch (\Exception $e) {
+                        error_log("Erro ao criar coluna data_lancamento: " . $e->getMessage());
+                    }
+                }
+            } catch (\Exception $e) {
+                error_log("Erro ao verificar/criar colunas de recorrência: " . $e->getMessage());
+            }
+            
             $id = $_POST['id'] ?? '';
             $tipoLancamento = $_POST['tipo_lancamento'] ?? '';
             $descricao = $_POST['descricao'] ?? '';
@@ -399,18 +453,42 @@ try {
             if ($formaPagamento !== null && $formaPagamento !== '') {
                 $updateData['forma_pagamento'] = $formaPagamento;
             }
-            if ($recorrencia !== null && $recorrencia !== '') {
+            
+            // Adicionar campos de recorrência (as colunas já foram criadas no início do case)
+            if ($recorrencia !== null && $recorrencia !== '' && $recorrencia !== 'nenhuma') {
                 $updateData['recorrencia'] = $recorrencia;
+            } elseif ($recorrencia === 'nenhuma' || $recorrencia === null || $recorrencia === '') {
+                // Se for nenhuma, não precisa adicionar ao update
             }
+            
             if ($dataFimRecorrencia !== null && $dataFimRecorrencia !== '') {
                 $updateData['data_fim_recorrencia'] = $dataFimRecorrencia;
             }
+            
             if ($observacoes !== null) {
                 $updateData['observacoes'] = $observacoes;
             }
             
-            // Atualizar lançamento
-            $atualizado = $db->update('lancamentos_financeiros', $updateData, 'id = ? AND tenant_id = ? AND filial_id = ?', [$id, $tenantId, $filialId]);
+            // Verificar quais colunas realmente existem antes de fazer o update
+            $colunasExistentes = $db->fetchAll(
+                "SELECT column_name 
+                 FROM information_schema.columns 
+                 WHERE table_name = 'lancamentos_financeiros'"
+            );
+            $colunasNomes = array_column($colunasExistentes, 'column_name');
+            
+            // Filtrar updateData para incluir apenas colunas que existem
+            $updateDataFiltrado = [];
+            foreach ($updateData as $coluna => $valor) {
+                if (in_array($coluna, $colunasNomes)) {
+                    $updateDataFiltrado[$coluna] = $valor;
+                } else {
+                    error_log("Coluna '{$coluna}' não existe na tabela lancamentos_financeiros, ignorando no update");
+                }
+            }
+            
+            // Atualizar lançamento apenas com colunas que existem
+            $atualizado = $db->update('lancamentos_financeiros', $updateDataFiltrado, 'id = ? AND tenant_id = ? AND filial_id = ?', [$id, $tenantId, $filialId]);
             
             if (!$atualizado) {
                 throw new \Exception('Erro ao atualizar lançamento');

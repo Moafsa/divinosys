@@ -396,6 +396,288 @@ if ($tenant && $filial) {
                     </div>
                 </div>
 
+                <!-- Configurações Cardápio Online -->
+                <div class="config-card">
+                    <h5 class="mb-3">
+                        <i class="fas fa-store me-2"></i>
+                        Cardápio Online
+                    </h5>
+                    <p class="text-muted mb-3">Configure seu cardápio online público para clientes fazerem pedidos</p>
+                    
+                    <?php
+                    // Get current cardapio online settings - reload from database to ensure fresh data
+                    if ($filial && isset($filial['id'])) {
+                        $filialFresh = $db->fetch(
+                            "SELECT cardapio_online_ativo, taxa_delivery_fixa, usar_calculo_distancia, raio_entrega_km, tempo_medio_preparo, aceita_pagamento_online, aceita_pagamento_na_hora, logo_url, horario_funcionamento, dominio_cardapio_online 
+                             FROM filiais 
+                             WHERE id = ? AND tenant_id = ?",
+                            [$filial['id'], $tenant['id']]
+                        );
+                        if ($filialFresh) {
+                            $filial = array_merge($filial, $filialFresh);
+                        }
+                    }
+                    
+                    $cardapioAtivo = $filial['cardapio_online_ativo'] ?? false;
+                    $taxaDeliveryFixa = $filial['taxa_delivery_fixa'] ?? 0;
+                    $usarCalculoDistancia = $filial['usar_calculo_distancia'] ?? false;
+                    $raioEntrega = $filial['raio_entrega_km'] ?? 5;
+                    $tempoPreparo = $filial['tempo_medio_preparo'] ?? 30;
+                    $aceitaPagamentoOnline = $filial['aceita_pagamento_online'] ?? true;
+                    $aceitaPagamentoNaHora = $filial['aceita_pagamento_na_hora'] ?? true;
+                    $logoUrl = $filial['logo_url'] ?? $tenant['logo_url'] ?? '';
+                    $dominioPersonalizado = $filial['dominio_cardapio_online'] ?? '';
+                    
+                    // Parse opening hours - support multiple periods per day
+                    try {
+                        $horariosFuncionamento = json_decode($filial['horario_funcionamento'] ?? '{}', true);
+                        if (json_last_error() !== JSON_ERROR_NONE || empty($horariosFuncionamento) || !is_array($horariosFuncionamento)) {
+                            // Default structure with single period
+                            $horariosFuncionamento = [
+                                'segunda' => ['aberto' => true, 'periodos' => [['inicio' => '08:00', 'fim' => '22:00']]],
+                                'terca' => ['aberto' => true, 'periodos' => [['inicio' => '08:00', 'fim' => '22:00']]],
+                                'quarta' => ['aberto' => true, 'periodos' => [['inicio' => '08:00', 'fim' => '22:00']]],
+                                'quinta' => ['aberto' => true, 'periodos' => [['inicio' => '08:00', 'fim' => '22:00']]],
+                                'sexta' => ['aberto' => true, 'periodos' => [['inicio' => '08:00', 'fim' => '22:00']]],
+                                'sabado' => ['aberto' => true, 'periodos' => [['inicio' => '08:00', 'fim' => '22:00']]],
+                                'domingo' => ['aberto' => true, 'periodos' => [['inicio' => '08:00', 'fim' => '22:00']]]
+                            ];
+                        } else {
+                            // Migrate old format to new format if needed
+                            foreach ($horariosFuncionamento as $dia => $configValue) {
+                                if (!is_array($configValue)) {
+                                    $horariosFuncionamento[$dia] = ['aberto' => true, 'periodos' => [['inicio' => '08:00', 'fim' => '22:00']]];
+                                } elseif (isset($configValue['inicio']) && isset($configValue['fim']) && !isset($configValue['periodos'])) {
+                                    // Old format - convert to new format
+                                    $horariosFuncionamento[$dia] = [
+                                        'aberto' => $configValue['aberto'] ?? true,
+                                        'periodos' => [['inicio' => $configValue['inicio'], 'fim' => $configValue['fim']]]
+                                    ];
+                                } elseif (!isset($configValue['periodos'])) {
+                                    // Ensure periodos exists
+                                    $horariosFuncionamento[$dia]['periodos'] = [['inicio' => '08:00', 'fim' => '22:00']];
+                                }
+                                if (!isset($horariosFuncionamento[$dia]['aberto'])) {
+                                    $horariosFuncionamento[$dia]['aberto'] = true;
+                                }
+                            }
+                        }
+                    } catch (Exception $e) {
+                        error_log("Erro ao processar horarios_funcionamento: " . $e->getMessage());
+                        // Fallback to default
+                        $horariosFuncionamento = [
+                            'segunda' => ['aberto' => true, 'periodos' => [['inicio' => '08:00', 'fim' => '22:00']]],
+                            'terca' => ['aberto' => true, 'periodos' => [['inicio' => '08:00', 'fim' => '22:00']]],
+                            'quarta' => ['aberto' => true, 'periodos' => [['inicio' => '08:00', 'fim' => '22:00']]],
+                            'quinta' => ['aberto' => true, 'periodos' => [['inicio' => '08:00', 'fim' => '22:00']]],
+                            'sexta' => ['aberto' => true, 'periodos' => [['inicio' => '08:00', 'fim' => '22:00']]],
+                            'sabado' => ['aberto' => true, 'periodos' => [['inicio' => '08:00', 'fim' => '22:00']]],
+                            'domingo' => ['aberto' => true, 'periodos' => [['inicio' => '08:00', 'fim' => '22:00']]]
+                        ];
+                    }
+                    ?>
+                    
+                    <form id="configCardapioOnline" enctype="multipart/form-data">
+                        <div class="row mb-3">
+                            <div class="col-md-12">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="cardapioOnlineAtivo" <?php echo $cardapioAtivo ? 'checked' : ''; ?>>
+                                    <label class="form-check-label" for="cardapioOnlineAtivo">
+                                        <strong>Ativar Cardápio Online</strong>
+                                    </label>
+                                </div>
+                                <small class="text-muted">Quando ativado, seu cardápio ficará disponível publicamente na internet</small>
+                            </div>
+                        </div>
+                        
+                        <?php if ($cardapioAtivo): ?>
+                        <div class="alert alert-info mb-3">
+                            <i class="fas fa-link me-2"></i>
+                            <strong>Link do Cardápio:</strong>
+                            <?php
+                            $cardapioUrl = $config->getAppUrl() . '/index.php?view=cardapio_online&tenant=' . $tenant['id'] . '&filial=' . $filial['id'];
+                            if ($dominioPersonalizado) {
+                                $cardapioUrl = (strpos($dominioPersonalizado, 'http') === 0 ? '' : 'https://') . $dominioPersonalizado;
+                            }
+                            ?>
+                            <a href="<?php echo htmlspecialchars($cardapioUrl); ?>" target="_blank" class="ms-2">
+                                <?php echo htmlspecialchars($cardapioUrl); ?>
+                            </a>
+                        </div>
+                        <?php endif; ?>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-12">
+                                <div class="mb-3">
+                                    <label class="form-label">Domínio Personalizado (Opcional)</label>
+                                    <input type="text" class="form-control" id="dominioCardapio" 
+                                           value="<?php echo htmlspecialchars($dominioPersonalizado); ?>" 
+                                           placeholder="Ex: cardapio.estabelecimento.com.br">
+                                    <small class="text-muted">Configure um domínio personalizado para seu cardápio. O domínio deve apontar para este servidor.</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Logo do Estabelecimento</label>
+                                    <div class="d-flex align-items-center gap-3">
+                                        <?php if ($logoUrl): ?>
+                                            <img src="<?php echo htmlspecialchars($logoUrl); ?>" alt="Logo" style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 2px solid #ddd;">
+                                        <?php else: ?>
+                                            <div style="width: 80px; height: 80px; background: #f0f0f0; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #999;">
+                                                <i class="fas fa-image fa-2x"></i>
+                                            </div>
+                                        <?php endif; ?>
+                                        <div class="flex-grow-1">
+                                            <input type="file" class="form-control" id="logoUpload" accept="image/*">
+                                            <small class="text-muted">Formatos: JPG, PNG, GIF (máx. 2MB)</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Tempo Médio de Preparo (minutos)</label>
+                                    <input type="number" class="form-control" id="tempoPreparo" value="<?php echo $tempoPreparo; ?>" min="5" max="120">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <hr class="my-4">
+                        <h6 class="mb-3">Configurações de Delivery</h6>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Taxa de Entrega Fixa (R$)</label>
+                                    <input type="number" class="form-control" id="taxaDeliveryFixa" value="<?php echo number_format($taxaDeliveryFixa, 2, '.', ''); ?>" step="0.01" min="0">
+                                    <small class="text-muted">Usada quando cálculo por distância está desativado</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Raio de Entrega (km)</label>
+                                    <input type="number" class="form-control" id="raioEntrega" value="<?php echo $raioEntrega; ?>" step="0.1" min="1" max="50">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-12">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="usarCalculoDistancia" <?php echo $usarCalculoDistancia ? 'checked' : ''; ?>>
+                                    <label class="form-check-label" for="usarCalculoDistancia">
+                                        Usar cálculo automático de distância via webhook
+                                    </label>
+                                </div>
+                                <small class="text-muted">Quando ativado, usa o webhook configurado no sistema para calcular distância e taxa de entrega</small>
+                            </div>
+                        </div>
+                        
+                        <hr class="my-4">
+                        <h6 class="mb-3">Horários de Funcionamento</h6>
+                        <p class="text-muted mb-3">Configure os horários de funcionamento. Você pode adicionar múltiplos períodos por dia (ex: 10h-14h e 18h-22h30).</p>
+                        
+                        <div id="horariosContainer">
+                            <?php
+                            $diasSemana = [
+                                'segunda' => 'Segunda-feira',
+                                'terca' => 'Terça-feira',
+                                'quarta' => 'Quarta-feira',
+                                'quinta' => 'Quinta-feira',
+                                'sexta' => 'Sexta-feira',
+                                'sabado' => 'Sábado',
+                                'domingo' => 'Domingo'
+                            ];
+                            foreach ($diasSemana as $diaKey => $diaNome):
+                                $horario = $horariosFuncionamento[$diaKey] ?? ['aberto' => true, 'periodos' => [['inicio' => '08:00', 'fim' => '22:00']]];
+                                $periodos = $horario['periodos'] ?? [['inicio' => '08:00', 'fim' => '22:00']];
+                            ?>
+                            <div class="card mb-3 horario-dia-card" data-dia="<?php echo $diaKey; ?>">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <h6 class="mb-0"><strong><?php echo $diaNome; ?></strong></h6>
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input horario-aberto" type="checkbox" 
+                                                   data-dia="<?php echo $diaKey; ?>" 
+                                                   <?php echo $horario['aberto'] ? 'checked' : ''; ?>>
+                                            <label class="form-check-label">Aberto</label>
+                                        </div>
+                                    </div>
+                                    <div class="periodos-container" data-dia="<?php echo $diaKey; ?>">
+                                        <?php foreach ($periodos as $index => $periodo): ?>
+                                        <div class="periodo-item mb-2 d-flex align-items-center gap-2">
+                                            <input type="time" class="form-control periodo-inicio" 
+                                                   data-dia="<?php echo $diaKey; ?>" 
+                                                   data-index="<?php echo $index; ?>"
+                                                   value="<?php echo htmlspecialchars($periodo['inicio'] ?? '08:00'); ?>"
+                                                   <?php echo !$horario['aberto'] ? 'disabled' : ''; ?>
+                                                   style="width: 120px;">
+                                            <span>até</span>
+                                            <input type="time" class="form-control periodo-fim" 
+                                                   data-dia="<?php echo $diaKey; ?>" 
+                                                   data-index="<?php echo $index; ?>"
+                                                   value="<?php echo htmlspecialchars($periodo['fim'] ?? '22:00'); ?>"
+                                                   <?php echo !$horario['aberto'] ? 'disabled' : ''; ?>
+                                                   style="width: 120px;">
+                                            <?php if ($index > 0): ?>
+                                            <button type="button" class="btn btn-sm btn-danger remover-periodo" 
+                                                    data-dia="<?php echo $diaKey; ?>" 
+                                                    data-index="<?php echo $index; ?>"
+                                                    <?php echo !$horario['aberto'] ? 'disabled' : ''; ?>>
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                            <?php endif; ?>
+                                        </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-outline-primary adicionar-periodo" 
+                                            data-dia="<?php echo $diaKey; ?>"
+                                            <?php echo !$horario['aberto'] ? 'disabled' : ''; ?>>
+                                        <i class="fas fa-plus me-1"></i> Adicionar Período
+                                    </button>
+                                </div>
+                            </div>
+                            <?php endforeach; ?>
+                        </div>
+                        
+                        <hr class="my-4">
+                        <h6 class="mb-3">Formas de Pagamento</h6>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" id="aceitaPagamentoOnline" <?php echo $aceitaPagamentoOnline ? 'checked' : ''; ?>>
+                                    <label class="form-check-label" for="aceitaPagamentoOnline">
+                                        Aceitar Pagamento Online (via Asaas)
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" id="aceitaPagamentoNaHora" <?php echo $aceitaPagamentoNaHora ? 'checked' : ''; ?>>
+                                    <label class="form-check-label" for="aceitaPagamentoNaHora">
+                                        Aceitar Pagamento na Hora
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-end gap-2">
+                            <button type="button" class="btn btn-outline-secondary" onclick="previewCardapio()">
+                                <i class="fas fa-eye me-2"></i>
+                                Visualizar Cardápio
+                            </button>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-2"></i>
+                                Salvar Configurações
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
                 <!-- Configurações Asaas -->
                 <div class="config-card">
                     <h5 class="mb-3">
@@ -1967,6 +2249,173 @@ if ($tenant && $filial) {
                     });
                 }
             });
+        }
+
+        // ============================================
+        // FUNÇÕES CARDÁPIO ONLINE
+        // ============================================
+        
+        // Initialize cardápio online functions when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            // Toggle time inputs based on "aberto" checkbox
+            document.querySelectorAll('.horario-aberto').forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    const dia = this.dataset.dia;
+                    const card = document.querySelector(`.horario-dia-card[data-dia="${dia}"]`);
+                    if (card) {
+                        const inputs = card.querySelectorAll('.periodo-inicio, .periodo-fim, .adicionar-periodo, .remover-periodo');
+                        inputs.forEach(input => {
+                            input.disabled = !this.checked;
+                        });
+                    }
+                });
+            });
+            
+            // Add period button
+            document.querySelectorAll('.adicionar-periodo').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const dia = this.dataset.dia;
+                    const container = document.querySelector(`.periodos-container[data-dia="${dia}"]`);
+                    if (container) {
+                        const index = container.querySelectorAll('.periodo-item').length;
+                        
+                        const periodoHtml = `
+                            <div class="periodo-item mb-2 d-flex align-items-center gap-2">
+                                <input type="time" class="form-control periodo-inicio" 
+                                       data-dia="${dia}" 
+                                       data-index="${index}"
+                                       value="08:00"
+                                       style="width: 120px;">
+                                <span>até</span>
+                                <input type="time" class="form-control periodo-fim" 
+                                       data-dia="${dia}" 
+                                       data-index="${index}"
+                                       value="22:00"
+                                       style="width: 120px;">
+                                <button type="button" class="btn btn-sm btn-danger remover-periodo" 
+                                        data-dia="${dia}" 
+                                        data-index="${index}">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        `;
+                        
+                        container.insertAdjacentHTML('beforeend', periodoHtml);
+                        
+                        // Add remove event listener to new button
+                        const newBtn = container.querySelector(`.remover-periodo[data-index="${index}"]`);
+                        if (newBtn) {
+                            newBtn.addEventListener('click', function() {
+                                this.closest('.periodo-item').remove();
+                            });
+                        }
+                    }
+                });
+            });
+            
+            // Remove period button
+            document.querySelectorAll('.remover-periodo').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    this.closest('.periodo-item').remove();
+                });
+            });
+            
+            // Salvar configurações do cardápio online
+            const configForm = document.getElementById('configCardapioOnline');
+            if (configForm) {
+                configForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    
+                    const formData = new FormData();
+                    formData.append('action', 'salvar_cardapio_online');
+                    formData.append('cardapio_online_ativo', document.getElementById('cardapioOnlineAtivo').checked ? '1' : '0');
+                    formData.append('taxa_delivery_fixa', document.getElementById('taxaDeliveryFixa').value);
+                    formData.append('usar_calculo_distancia', document.getElementById('usarCalculoDistancia').checked ? '1' : '0');
+                    formData.append('raio_entrega_km', document.getElementById('raioEntrega').value);
+                    formData.append('tempo_medio_preparo', document.getElementById('tempoPreparo').value);
+                    formData.append('aceita_pagamento_online', document.getElementById('aceitaPagamentoOnline').checked ? '1' : '0');
+                    formData.append('aceita_pagamento_na_hora', document.getElementById('aceitaPagamentoNaHora').checked ? '1' : '0');
+                    formData.append('dominio_cardapio_online', document.getElementById('dominioCardapio').value.trim());
+                    
+                    // Add opening hours with multiple periods
+                    const horarios = {};
+                    document.querySelectorAll('.horario-dia-card').forEach(card => {
+                        const dia = card.dataset.dia;
+                        const aberto = card.querySelector('.horario-aberto').checked;
+                        const periodos = [];
+                        
+                        card.querySelectorAll('.periodo-item').forEach(item => {
+                            const inicio = item.querySelector('.periodo-inicio').value;
+                            const fim = item.querySelector('.periodo-fim').value;
+                            if (inicio && fim) {
+                                periodos.push({ inicio: inicio, fim: fim });
+                            }
+                        });
+                        
+                        horarios[dia] = {
+                            aberto: aberto,
+                            periodos: periodos.length > 0 ? periodos : [{ inicio: '08:00', fim: '22:00' }]
+                        };
+                    });
+                    formData.append('horario_funcionamento', JSON.stringify(horarios));
+                    
+                    // Add logo file if selected
+                    const logoFile = document.getElementById('logoUpload').files[0];
+                    if (logoFile) {
+                        formData.append('logo', logoFile);
+                    }
+                    
+                    Swal.fire({
+                        title: 'Salvando...',
+                        text: 'Aguarde enquanto salvamos as configurações',
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+                    
+                    fetch('index.php?action=configuracoes', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => {
+                        console.log('Response status:', response.status);
+                        console.log('Response headers:', response.headers);
+                        return response.text().then(text => {
+                            console.log('Response text:', text);
+                            try {
+                                return JSON.parse(text);
+                            } catch (e) {
+                                console.error('Erro ao parsear JSON:', e);
+                                console.error('Texto recebido:', text);
+                                throw new Error('Resposta inválida do servidor: ' + text.substring(0, 200));
+                            }
+                        });
+                    })
+                    .then(data => {
+                        console.log('Data recebida:', data);
+                        if (data.success) {
+                            Swal.fire('Sucesso', data.message || 'Configurações do cardápio online salvas com sucesso!', 'success').then(() => {
+                                location.reload();
+                            });
+                        } else {
+                            Swal.fire('Erro', data.message || 'Erro ao salvar configurações', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro completo:', error);
+                        Swal.fire('Erro', 'Erro ao salvar configurações: ' + error.message, 'error');
+                    });
+                });
+            }
+        });
+        
+        // Preview cardápio
+        function previewCardapio() {
+            const tenantId = <?php echo $tenant['id']; ?>;
+            const filialId = <?php echo $filial['id'] ?? 'null'; ?>;
+            const url = `index.php?view=cardapio_online&tenant=${tenantId}&filial=${filialId}`;
+            window.open(url, '_blank');
         }
 
         // ============================================

@@ -82,32 +82,73 @@ if ($tenant && $filial) {
 $produtos = [];
 if ($tenant && $filial) {
     try {
-        $produtos = $db->fetchAll(
-            "SELECT p.*, c.nome as categoria_nome 
-             FROM produtos p 
-             LEFT JOIN categorias c ON p.categoria_id = c.id 
-             WHERE p.tenant_id = ? AND p.filial_id = ? AND p.ativo = 1
-             ORDER BY c.nome, p.nome",
+        // Buscar TODOS os produtos - query simples sem JOIN primeiro para garantir unicidade
+        $produtosIds = $db->fetchAll(
+            "SELECT DISTINCT id FROM produtos 
+             WHERE tenant_id = ? AND filial_id = ?
+             ORDER BY id",
             [$tenant['id'], $filial['id']]
         );
+        
+        // Se não encontrou produtos, retornar array vazio
+        if (empty($produtosIds)) {
+            $produtosRaw = [];
+        } else {
+            // Buscar dados completos dos produtos únicos
+            $ids = array_column($produtosIds, 'id');
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+            
+            $produtosRaw = $db->fetchAll(
+                "SELECT p.id, p.nome, p.preco_normal, p.preco_mini, p.descricao, p.imagem, 
+                        p.categoria_id, p.ativo, p.estoque_atual, p.estoque_minimo, p.preco_custo, 
+                        p.tenant_id, p.filial_id, c.nome as categoria_nome 
+                 FROM produtos p 
+                 LEFT JOIN categorias c ON p.categoria_id = c.id 
+                 WHERE p.id IN ($placeholders)
+                 ORDER BY c.nome, p.nome",
+                $ids
+            );
+        }
     } catch (Exception $e) {
-        // Se der erro, buscar sem filtro de ativo
-    $produtos = $db->fetchAll(
-        "SELECT p.*, c.nome as categoria_nome 
-         FROM produtos p 
-         LEFT JOIN categorias c ON p.categoria_id = c.id 
-         WHERE p.tenant_id = ? AND p.filial_id = ? 
-         ORDER BY c.nome, p.nome",
-        [$tenant['id'], $filial['id']]
-    );
+        error_log("Erro ao buscar produtos: " . $e->getMessage());
+        $produtosRaw = [];
     }
+    
+    // Garantir que não há duplicados - usar array associativo indexado por ID
+    // Esta é uma proteção extra caso a query retorne duplicados
+    $produtosTemp = [];
+    $duplicadosEncontrados = [];
+    
+    foreach ($produtosRaw as $produto) {
+        $produtoId = (int)$produto['id'];
+        
+        // Se já existe, logar e pular (manter o primeiro)
+        if (isset($produtosTemp[$produtoId])) {
+            $duplicadosEncontrados[] = "ID {$produtoId} - {$produto['nome']}";
+            continue;
+        }
+        
+        $produtosTemp[$produtoId] = $produto;
+    }
+    
+    // Se encontrou duplicados, logar
+    if (count($duplicadosEncontrados) > 0) {
+        error_log("⚠️ PRODUTOS DUPLICADOS REMOVIDOS: " . implode(', ', $duplicadosEncontrados));
+    }
+    
+    // Converter de volta para array indexado numericamente
+    $produtos = array_values($produtosTemp);
+    
+    // Debug final
+    error_log("✅ Total de produtos únicos: " . count($produtos) . " de " . count($produtosRaw) . " retornados pela query");
+} else {
+    // Se não há tenant/filial, garantir array vazio
+    $produtos = [];
 }
 
-// Isolamento: não buscar todos os produtos se não encontrar com tenant/filial específicos
-// Se não encontrou produtos, manter array vazio para garantir isolamento
-
 // Buscar ingredientes para cada produto
-foreach ($produtos as &$produto) {
+// IMPORTANTE: Não usar referência (&) para evitar problemas de duplicação
+foreach ($produtos as $key => $produto) {
     try {
         $ingredientes = $db->fetchAll(
             "SELECT i.id, i.nome, i.tipo, i.preco_adicional, COALESCE(pi.padrao, true) as padrao
@@ -117,9 +158,9 @@ foreach ($produtos as &$produto) {
              ORDER BY i.tipo, i.nome",
             [$produto['id']]
         );
-        $produto['ingredientes'] = $ingredientes;
+        $produtos[$key]['ingredientes'] = $ingredientes;
     } catch (Exception $e) {
-        $produto['ingredientes'] = [];
+        $produtos[$key]['ingredientes'] = [];
     }
 }
 
@@ -514,8 +555,22 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                             </div>
                             
                             <div class="row" id="produtosGrid">
-                                <?php foreach ($produtos as $produto): ?>
-                                    <div class="col-lg-3 col-md-4 col-sm-6 mb-3 produto-item" data-categoria="<?php echo $produto['categoria_id']; ?>" data-nome="<?php echo strtolower($produto['nome']); ?>">
+                                <?php 
+                                // Proteção extra: garantir que não renderize produtos duplicados
+                                $idsRenderizados = [];
+                                foreach ($produtos as $produto): 
+                                    $produtoId = (int)$produto['id'];
+                                    
+                                    // Se já foi renderizado, pular
+                                    if (in_array($produtoId, $idsRenderizados, true)) {
+                                        continue;
+                                    }
+                                    $idsRenderizados[] = $produtoId;
+                                ?>
+                                    <div class="col-lg-3 col-md-4 col-sm-6 mb-3 produto-item" 
+                                         data-produto-id="<?php echo $produtoId; ?>"
+                                         data-categoria="<?php echo $produto['categoria_id']; ?>" 
+                                         data-nome="<?php echo strtolower($produto['nome']); ?>">
                                         <div class="produto-card" onclick="adicionarProduto(<?php echo $produto['id']; ?>)">
                                             <?php if ($produto['imagem']): ?>
                                                 <img src="<?php echo htmlspecialchars($produto['imagem']); ?>" class="produto-imagem" alt="<?php echo htmlspecialchars($produto['nome']); ?>">
@@ -1716,7 +1771,9 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
         window.tenantData = <?php echo json_encode($tenant); ?>;
         window.filialData = <?php echo json_encode($filial); ?>;
         window.todosIngredientes = <?php echo json_encode($todosIngredientes); ?>;
+        window.categoriasData = <?php echo json_encode($categorias); ?>;
         window.usuarioNome = '<?php echo addslashes($user['login'] ?? 'Garçom'); ?>';
+        window.dashboardUrl = '<?php echo $router->url('dashboard'); ?>';
     </script>
     <script src="assets/js/mobile-pedido.js"></script>
     

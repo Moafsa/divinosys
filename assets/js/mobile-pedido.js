@@ -17,8 +17,12 @@ class MobilePedidoInterface {
         if (window.innerWidth <= 768) {
             console.log('📱 Modo mobile detectado, criando interface...');
             this.createMobileInterface();
-            this.loadData();
-            this.bindEvents();
+            
+            // Aguardar um pouco para garantir que o DOM foi atualizado
+            setTimeout(() => {
+                this.loadData();
+                this.bindEvents();
+            }, 100);
         } else {
             console.log('🖥️ Modo desktop detectado, interface mobile não será criada');
         }
@@ -59,6 +63,20 @@ class MobilePedidoInterface {
             </div>
             
             <div class="mobile-tab-content" id="tab-produtos">
+                <!-- Search and Filter -->
+                <div style="padding: 15px; background: white; border-bottom: 1px solid #eee;">
+                    <div style="margin-bottom: 10px;">
+                        <input type="text" 
+                               id="mobile-search-produtos" 
+                               placeholder="Buscar produtos..." 
+                               style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                    </div>
+                    <div>
+                        <select id="mobile-categoria-filter" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                            <option value="">Todas as categorias</option>
+                        </select>
+                    </div>
+                </div>
                 <div class="mobile-produtos-grid" id="mobile-produtos-grid">
                     <!-- Produtos serão carregados aqui -->
                 </div>
@@ -120,15 +138,9 @@ class MobilePedidoInterface {
     loadData() {
         console.log('📊 Carregando dados...');
         
-        // Usar dados PHP diretamente (mesmo método da página desktop)
-        if (window.produtosData) {
-            console.log('🍔 Usando dados PHP para produtos:', window.produtosData.length);
-            this.produtos = window.produtosData;
-            this.renderProdutos();
-        } else {
-            console.log('🔄 Dados PHP não encontrados, carregando via API...');
-            this.loadProdutos();
-        }
+        // Sempre carregar produtos dinamicamente via AJAX
+        console.log('🔄 Carregando produtos via API...');
+        this.loadProdutos();
         
         if (window.mesasData) {
             console.log('🏢 Usando dados PHP para mesas:', window.mesasData.length);
@@ -138,6 +150,9 @@ class MobilePedidoInterface {
             console.log('🔄 Dados PHP não encontrados, carregando via API...');
             this.loadMesas();
         }
+        
+        // Carregar categorias para filtro
+        this.loadCategorias();
         
         // Limpar seleção de mesa ao carregar
         this.mesaSelecionada = null;
@@ -173,74 +188,94 @@ class MobilePedidoInterface {
         }
     }
     
-    async loadProdutos() {
+    async loadProdutos(query = '', categoriaId = '') {
         try {
-            console.log('🔄 Carregando produtos...');
+            console.log('🔄 Carregando produtos...', { query, categoriaId });
             
-            // Tentar buscar produtos da página desktop (mesmo método)
-            const response = await fetch('index.php?action=produtos&buscar_todos=1', {
+            // Construir URL com parâmetros
+            // Sempre usar buscar_produtos para manter consistência (aceita query vazia)
+            let url = 'index.php?action=produtos&buscar_produtos=1';
+            
+            if (query && query.trim()) {
+                url += `&q=${encodeURIComponent(query.trim())}`;
+            }
+            
+            if (categoriaId && categoriaId.trim()) {
+                url += `&categoria_id=${encodeURIComponent(categoriaId.trim())}`;
+            }
+            
+            console.log('📡 URL da busca:', url);
+            
+            const response = await fetch(url, {
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest'
                 }
             });
             
-            console.log('📡 Resposta da API:', response);
+            console.log('📡 Status da resposta:', response.status, response.statusText);
             
             if (response.ok) {
                 const data = await response.json();
                 console.log('📦 Dados recebidos:', data);
                 
-                this.produtos = data.produtos || [];
-                console.log('🍔 Produtos carregados:', this.produtos.length);
+                if (!data.success) {
+                    console.error('❌ Erro na resposta:', data.message || 'Erro desconhecido');
+                    throw new Error(data.message || 'Erro ao buscar produtos');
+                }
+                
+                let produtosRecebidos = data.produtos || [];
+                console.log('📦 Produtos recebidos da API:', produtosRecebidos.length);
+                
+                // Remover duplicados por ID (caso haja duplicação na query)
+                // Usar Map para garantir unicidade por ID
+                const produtosMap = new Map();
+                
+                produtosRecebidos.forEach(produto => {
+                    const produtoId = parseInt(produto.id); // Garantir que ID seja sempre inteiro
+                    if (!produtosMap.has(produtoId)) {
+                        produtosMap.set(produtoId, produto);
+                    }
+                });
+                
+                this.produtos = Array.from(produtosMap.values());
+                console.log('🍔 Produtos únicos após remoção de duplicados:', this.produtos.length);
+                
+                // Se não encontrou produtos e não há query, tentar usar dados PHP
+                if (this.produtos.length === 0 && !query && window.produtosData && Array.isArray(window.produtosData)) {
+                    console.log('🔄 Usando dados PHP como fallback...', window.produtosData.length, 'produtos');
+                    // Sempre remover duplicados dos dados PHP (mesmo que já venham únicos)
+                    const produtosPHPMap = new Map();
+                    
+                    window.produtosData.forEach(produto => {
+                        const produtoId = parseInt(produto.id); // Garantir que ID seja sempre inteiro
+                        if (!produtosPHPMap.has(produtoId)) {
+                            produtosPHPMap.set(produtoId, produto);
+                        } else {
+                            console.warn('⚠️ Produto duplicado encontrado nos dados PHP:', produtoId, produto.nome);
+                        }
+                    });
+                    
+                    this.produtos = Array.from(produtosPHPMap.values());
+                    console.log('🍔 Produtos únicos do PHP:', this.produtos.length);
+                }
             } else {
-                throw new Error('Erro na resposta da API');
+                const errorText = await response.text();
+                console.error('❌ Erro HTTP:', response.status, errorText);
+                throw new Error(`Erro HTTP ${response.status}: ${errorText}`);
             }
             
             this.renderProdutos();
         } catch (error) {
             console.error('❌ Erro ao carregar produtos:', error);
-            console.log('🔄 Tentando método alternativo...');
             
-            // Tentar método alternativo - buscar da página atual
-            try {
-                const response = await fetch(window.location.href);
-                const html = await response.text();
-                
-                // Extrair produtos do HTML (mesmo que a página desktop)
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(html, 'text/html');
-                const produtoItems = doc.querySelectorAll('.produto-item');
-                
-                this.produtos = Array.from(produtoItems).map(item => {
-                    const nome = item.querySelector('.produto-nome')?.textContent || 'Produto';
-                    const preco = item.querySelector('.produto-preco')?.textContent || '0,00';
-                    const categoria = item.querySelector('.produto-categoria')?.textContent || 'Geral';
-                    const id = item.getAttribute('data-produto-id') || Math.random();
-                    
-                    return {
-                        id: id,
-                        nome: nome,
-                        preco: parseFloat(preco.replace('R$', '').replace(',', '.')),
-                        categoria: categoria
-                    };
-                });
-                
-                console.log('🍔 Produtos extraídos do HTML:', this.produtos.length);
+            // Tentar usar dados PHP se disponíveis
+            if (window.produtosData && window.produtosData.length > 0) {
+                console.log('🔄 Usando dados PHP como fallback...');
+                this.produtos = window.produtosData;
                 this.renderProdutos();
-                
-            } catch (fallbackError) {
-                console.error('❌ Erro no fallback:', fallbackError);
-                console.log('🔄 Usando produtos de fallback...');
-                
-                // Fallback para produtos padrão
-                this.produtos = [
-                    { id: 1, nome: 'Hambúrguer Clássico', preco: 25.90, categoria: 'Lanches' },
-                    { id: 2, nome: 'Batata Frita', preco: 12.90, categoria: 'Acompanhamentos' },
-                    { id: 3, nome: 'Refrigerante', preco: 5.90, categoria: 'Bebidas' },
-                    { id: 4, nome: 'Pizza Margherita', preco: 35.90, categoria: 'Pizzas' },
-                    { id: 5, nome: 'Salada Caesar', preco: 18.90, categoria: 'Saladas' },
-                    { id: 6, nome: 'Suco Natural', preco: 8.90, categoria: 'Bebidas' }
-                ];
+            } else {
+                console.log('⚠️ Nenhum produto encontrado');
+                this.produtos = [];
                 this.renderProdutos();
             }
         }
@@ -282,22 +317,25 @@ class MobilePedidoInterface {
             // Verificar e corrigir dados do produto - usar preco_normal
             const preco = produto.preco_normal || produto.preco || produto.valor || 0;
             const nome = produto.nome || 'Produto';
-            const categoria = produto.categoria || produto.categoria_nome || 'Geral';
+            const categoria = produto.categoria_nome || produto.categoria || 'Geral';
             const id = produto.id || Math.random();
             const ingredientes = produto.ingredientes || [];
             
-            console.log('🔍 Produto:', { id, nome, preco, categoria, ingredientes });
+            // Escapar nome para evitar problemas com aspas
+            const nomeEscapado = nome.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            
+            console.log('🔍 Produto:', { id, nome, preco, categoria, ingredientes: ingredientes.length });
             
             return `
                 <div class="mobile-produto-card">
                     <div class="mobile-produto-categoria">${categoria}</div>
                     <div class="mobile-produto-nome">${nome}</div>
-                    <div class="mobile-produto-preco">R$ ${parseFloat(preco).toFixed(2)}</div>
+                    <div class="mobile-produto-preco">R$ ${parseFloat(preco).toFixed(2).replace('.', ',')}</div>
                     <div class="mobile-produto-botoes">
-                        <button class="mobile-btn-personalizar" onclick="mobilePedido.personalizarProduto(${id}, '${nome}', ${preco}, ${JSON.stringify(ingredientes).replace(/"/g, '&quot;')})">
+                        <button class="mobile-btn-personalizar" onclick="mobilePedido.personalizarProduto(${id}, '${nomeEscapado}', ${preco}, ${JSON.stringify(ingredientes).replace(/"/g, '&quot;')})">
                             <i class="fas fa-cog"></i> Personalizar
                         </button>
-                        <button class="mobile-btn-adicionar" onclick="mobilePedido.adicionarProdutoRapido(${id}, '${nome}', ${preco})">
+                        <button class="mobile-btn-adicionar" onclick="mobilePedido.adicionarProdutoRapido(${id}, '${nomeEscapado}', ${preco})">
                             <i class="fas fa-plus"></i> Adicionar
                         </button>
                     </div>
@@ -336,15 +374,47 @@ class MobilePedidoInterface {
         this.switchTab('produtos');
     }
     
-    personalizarProduto(produtoId, nome, preco, ingredientes) {
+    async personalizarProduto(produtoId, nome, preco, ingredientes) {
         if (!this.mesaSelecionada) {
             alert('Selecione uma mesa primeiro!');
             this.switchTab('mesas');
             return;
         }
         
-        // Mostrar modal de personalização com ingredientes reais
-        this.showPersonalizacaoModal(produtoId, nome, preco, ingredientes);
+        // Buscar dados completos do produto via AJAX (igual desktop)
+        try {
+            console.log('🔄 Buscando dados do produto:', produtoId);
+            const response = await fetch('mvc/ajax/produtos_fix.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'action=buscar_produto&produto_id=' + produtoId
+            });
+            
+            const data = await response.json();
+            console.log('📦 Dados do produto recebidos:', data);
+            
+            if (data.success) {
+                // Usar ingredientes do produto e todos os ingredientes disponíveis
+                const ingredientesProduto = data.ingredientes || ingredientes || [];
+                const todosIngredientes = data.todos_ingredientes || window.todosIngredientes || [];
+                
+                // Atualizar preço se necessário
+                const precoAtualizado = parseFloat(data.produto.preco_normal || preco);
+                const precoMini = parseFloat(data.produto.preco_mini || 0);
+                
+                // Mostrar modal de personalização com ingredientes reais
+                this.showPersonalizacaoModal(produtoId, nome, precoAtualizado, ingredientesProduto, todosIngredientes, precoMini);
+            } else {
+                // Fallback para ingredientes passados
+                this.showPersonalizacaoModal(produtoId, nome, preco, ingredientes || [], window.todosIngredientes || []);
+            }
+        } catch (error) {
+            console.error('❌ Erro ao buscar produto:', error);
+            // Fallback para ingredientes passados
+            this.showPersonalizacaoModal(produtoId, nome, preco, ingredientes || [], window.todosIngredientes || []);
+        }
     }
     
     adicionarProdutoRapido(produtoId, nome, preco) {
@@ -373,17 +443,29 @@ class MobilePedidoInterface {
         this.showFeedback('Produto adicionado!');
     }
     
-    showPersonalizacaoModal(produtoId, nome, preco, ingredientes) {
+    showPersonalizacaoModal(produtoId, nome, preco, ingredientesProduto = [], todosIngredientes = [], precoMini = 0) {
         // Usar TODOS os ingredientes disponíveis (igual desktop)
-        const todosIngredientes = window.todosIngredientes || [];
-        console.log('🍔 Ingredientes do produto:', ingredientes);
-        console.log('🍔 Todos os ingredientes disponíveis:', todosIngredientes);
+        const todosIngredientesDisponiveis = todosIngredientes.length > 0 ? todosIngredientes : (window.todosIngredientes || []);
+        const ingredientesDoProduto = ingredientesProduto.length > 0 ? ingredientesProduto : [];
         
-        if (!todosIngredientes || todosIngredientes.length === 0) {
+        console.log('🍔 Ingredientes do produto:', ingredientesDoProduto);
+        console.log('🍔 Todos os ingredientes disponíveis:', todosIngredientesDisponiveis);
+        
+        if (!todosIngredientesDisponiveis || todosIngredientesDisponiveis.length === 0) {
             // Se não houver ingredientes, mostrar mensagem
             alert('Não há ingredientes disponíveis para personalizar.');
             return;
         }
+        
+        // Salvar dados do produto para uso no modal
+        this.produtoAtualPersonalizacao = {
+            id: produtoId,
+            nome: nome,
+            preco: preco,
+            preco_normal: preco,
+            preco_mini: precoMini,
+            ingredientes_originais: [...ingredientesDoProduto]
+        };
         
         // Criar modal de personalização
         const modal = document.createElement('div');
@@ -401,21 +483,28 @@ class MobilePedidoInterface {
         `;
         
         // Criar lista de ingredientes clicáveis (igual desktop)
-        const ingredientesHTML = todosIngredientes.map(ing => {
+        const ingredientesHTML = todosIngredientesDisponiveis.map(ing => {
             // Verificar se este ingrediente já está no produto
-            const jaEstaNoProduto = ingredientes.some(ingProduto => ingProduto.id === ing.id);
+            const jaEstaNoProduto = ingredientesDoProduto.some(ingProduto => {
+                const ingId = typeof ingProduto === 'object' ? ingProduto.id : ingProduto;
+                return ingId == ing.id;
+            });
             const precoAdicional = parseFloat(ing.preco_adicional || 0);
             
             console.log(`🔍 Inicializando ingrediente: ${ing.nome}`, {
                 id: ing.id,
                 jaEstaNoProduto,
-                ingredientesDoProduto: ingredientes.map(i => ({ id: i.id, nome: i.nome }))
+                ingredientesDoProduto: ingredientesDoProduto.map(i => ({ 
+                    id: typeof i === 'object' ? i.id : i, 
+                    nome: typeof i === 'object' ? i.nome : i 
+                }))
             });
             
             return `
                 <div class="mobile-ingrediente-item" 
                      data-ingrediente-id="${ing.id}" 
                      data-ingrediente-nome="${ing.nome}"
+                     data-preco-adicional="${precoAdicional}"
                      data-ja-estava="${jaEstaNoProduto}"
                      style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #eee; cursor: pointer; transition: all 0.3s;"
                      onclick="mobilePedido.toggleIngrediente(this)">
@@ -444,7 +533,17 @@ class MobilePedidoInterface {
                 
                 <div style="margin-bottom: 20px;">
                     <h4 style="margin: 0 0 10px 0; color: #333;">${nome}</h4>
-                    <p style="margin: 0; color: #666; font-size: 16px;">R$ ${parseFloat(preco).toFixed(2)}</p>
+                    <p style="margin: 0; color: #666; font-size: 16px;">
+                        Normal: R$ ${parseFloat(preco).toFixed(2)}
+                        ${precoMini > 0 ? ` | Mini: R$ ${parseFloat(precoMini).toFixed(2)}` : ''}
+                    </p>
+                    <div style="margin-top: 10px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Tamanho:</label>
+                        <select id="mobile-tamanho-item" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 8px;">
+                            <option value="normal">Normal</option>
+                            ${precoMini > 0 ? '<option value="mini">Mini</option>' : ''}
+                        </select>
+                    </div>
                 </div>
                 
                 <div style="margin-bottom: 20px;">
@@ -519,75 +618,96 @@ class MobilePedidoInterface {
     confirmarPersonalizacao(produtoId, nome, preco, modal) {
         const quantidade = parseInt(modal.querySelector('.qty-value').textContent);
         const observacoes = modal.querySelector('#observacoes').value;
+        const tamanho = modal.querySelector('#mobile-tamanho-item')?.value || 'normal';
         
-        // Capturar apenas as modificações (ingredientes que mudaram)
-        const modificacoes = [];
+        // Obter dados do produto atual
+        const produtoAtual = this.produtoAtualPersonalizacao || { preco_normal: preco, preco_mini: 0 };
+        const precoBase = tamanho === 'mini' && produtoAtual.preco_mini > 0 ? produtoAtual.preco_mini : produtoAtual.preco_normal;
+        
+        // Capturar ingredientes adicionados e removidos (igual desktop)
+        const ingredientesAdicionados = [];
+        const ingredientesRemovidos = [];
         const ingredientesItems = modal.querySelectorAll('.mobile-ingrediente-item');
         
         // Buscar ingredientes originais do produto
-        const produtoOriginal = this.produtos.find(p => p.id === produtoId);
-        const ingredientesOriginais = produtoOriginal?.ingredientes || [];
+        const ingredientesOriginais = produtoAtual.ingredientes_originais || [];
         
         ingredientesItems.forEach(item => {
             const ingredienteId = parseInt(item.dataset.ingredienteId);
             const ingredienteNome = item.dataset.ingredienteNome;
+            const precoAdicional = parseFloat(item.dataset.precoAdicional || 0);
             const jaEstava = item.dataset.jaEstava === 'true';
             
-            // Verificar estado atual (COM ou SEM) - remover quebras de linha
+            // Verificar estado atual (COM ou SEM)
             const tipoDiv = item.querySelector('.mobile-ingrediente-tipo');
             const atualmenteCom = tipoDiv.textContent.trim() === 'COM';
             
-            console.log(`🔍 Verificando modificação: ${ingredienteNome}`, {
-                ingredienteId,
-                jaEstava,
-                atualmenteCom,
-                mudou: jaEstava !== atualmenteCom,
-                tipoDivText: tipoDiv.textContent
-            });
-            
             // Só adicionar modificação se mudou de estado
             if (jaEstava !== atualmenteCom) {
+                const ingredienteObj = {
+                    id: ingredienteId,
+                    nome: ingredienteNome,
+                    preco_adicional: precoAdicional
+                };
+                
                 if (atualmenteCom) {
                     // Estava SEM, agora está COM = adicionado
-                    modificacoes.push(`+ ${ingredienteNome}`);
-                    console.log(`✅ Adicionado: + ${ingredienteNome}`);
+                    ingredientesAdicionados.push(ingredienteObj);
                 } else {
                     // Estava COM, agora está SEM = removido
-                    modificacoes.push(`- ${ingredienteNome}`);
-                    console.log(`❌ Removido: - ${ingredienteNome}`);
+                    ingredientesRemovidos.push(ingredienteObj);
                 }
-            } else {
-                console.log(`➡️ Sem mudança: ${ingredienteNome} (${jaEstava ? 'estava COM' : 'estava SEM'}, continua ${atualmenteCom ? 'COM' : 'SEM'})`);
             }
         });
         
-        console.log('📝 Modificações finais:', modificacoes);
+        // Calcular preço total (produto base + apenas ingredientes adicionados)
+        let precoTotal = precoBase;
+        ingredientesAdicionados.forEach(ing => {
+            precoTotal += parseFloat(ing.preco_adicional);
+        });
         
-        // Se não houve modificações, não adicionar observações vazias
-        const observacoesCompletas = [
-            ...modificacoes,
-            observacoes
-        ].filter(obs => obs.trim()).join(' | ');
+        // Criar item do carrinho (igual desktop)
+        const itemCarrinho = {
+            id: produtoId,
+            nome: nome,
+            preco: precoTotal,
+            preco_normal: produtoAtual.preco_normal,
+            preco_mini: produtoAtual.preco_mini || 0,
+            quantidade: quantidade,
+            tamanho: tamanho,
+            observacao: observacoes,
+            ingredientes_adicionados: ingredientesAdicionados,
+            ingredientes_removidos: ingredientesRemovidos
+        };
         
-        const itemExistente = this.carrinho.find(item => 
-            item.id === produtoId && item.observacao === observacoesCompletas
-        );
+        // Verificar se é produto personalizado (tem ingredientes modificados)
+        const temIngredientesModificados = ingredientesAdicionados.length > 0 || ingredientesRemovidos.length > 0;
         
-        if (itemExistente) {
-            itemExistente.quantidade += quantidade;
+        if (temIngredientesModificados) {
+            // Produto personalizado - sempre adicionar como novo item
+            this.carrinho.push(itemCarrinho);
         } else {
-            this.carrinho.push({
-                id: produtoId,  // Usar 'id' como o desktop
-                nome,
-                preco,
-                quantidade,
-                observacao: observacoesCompletas  // Usar 'observacao' como o desktop
-            });
+            // Produto normal - verificar se já existe
+            const existingIndex = this.carrinho.findIndex(item => 
+                item.id === produtoId && 
+                item.tamanho === tamanho &&
+                (!item.ingredientes_adicionados || item.ingredientes_adicionados.length === 0) &&
+                (!item.ingredientes_removidos || item.ingredientes_removidos.length === 0)
+            );
+            
+            if (existingIndex >= 0) {
+                this.carrinho[existingIndex].quantidade += quantidade;
+            } else {
+                this.carrinho.push(itemCarrinho);
+            }
         }
         
         this.updateCarrinho();
         this.showFeedback('Produto personalizado adicionado!');
         modal.remove();
+        
+        // Limpar produto atual
+        this.produtoAtualPersonalizacao = null;
     }
     
     updateCarrinho() {
@@ -610,35 +730,39 @@ class MobilePedidoInterface {
             return;
         }
         
-        const carrinhoHTML = this.carrinho.map(item => {
-            // Separar modificações das observações
-            const observacoes = item.observacao || '';
-            const modificacoes = observacoes.split(' | ').filter(obs => obs.trim() && (obs.startsWith('+ ') || obs.startsWith('- ')));
-            const obsAdicionais = observacoes.split(' | ').filter(obs => obs.trim() && !obs.startsWith('+ ') && !obs.startsWith('- '));
+        const carrinhoHTML = this.carrinho.map((item, index) => {
+            // Usar estrutura igual ao desktop (ingredientes_adicionados e ingredientes_removidos)
+            const temModificacoes = (item.ingredientes_adicionados && item.ingredientes_adicionados.length > 0) || 
+                                   (item.ingredientes_removidos && item.ingredientes_removidos.length > 0);
             
             return `
                 <div class="mobile-carrinho-item">
                     <div class="mobile-carrinho-item-info">
                         <p class="mobile-carrinho-item-nome">${item.nome}</p>
-                        ${modificacoes.length > 0 ? `
-                            <div style="font-size: 12px; margin: 2px 0;">
-                                ${modificacoes.map(mod => `
-                                    <span style="display: inline-block; margin: 1px 2px; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; ${mod.startsWith('+') ? 'background: #d4edda; color: #155724;' : 'background: #f8d7da; color: #721c24;'}">
-                                        ${mod}
-                                    </span>
-                                `).join('')}
+                        ${item.tamanho ? `<p style="font-size: 11px; color: #666; margin: 2px 0;">Tamanho: ${item.tamanho}</p>` : ''}
+                        ${temModificacoes ? `
+                            <div style="font-size: 12px; margin: 4px 0;">
+                                ${item.ingredientes_adicionados && item.ingredientes_adicionados.length > 0 ? item.ingredientes_adicionados.map(ing => {
+                                    const nome = typeof ing === 'string' ? ing : (ing.nome || 'Ingrediente');
+                                    const preco = typeof ing === 'object' && ing.preco_adicional ? parseFloat(ing.preco_adicional).toFixed(2).replace('.', ',') : '0,00';
+                                    return `<span style="display: inline-block; margin: 1px 2px; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; background: #d4edda; color: #155724;">+${nome} (+R$ ${preco})</span>`;
+                                }).join('') : ''}
+                                ${item.ingredientes_removidos && item.ingredientes_removidos.length > 0 ? item.ingredientes_removidos.map(ing => {
+                                    const nome = typeof ing === 'string' ? ing : (ing.nome || 'Ingrediente');
+                                    return `<span style="display: inline-block; margin: 1px 2px; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; background: #f8d7da; color: #721c24;">-${nome}</span>`;
+                                }).join('') : ''}
                             </div>
                         ` : ''}
-                        ${obsAdicionais.length > 0 ? `<p style="font-size: 12px; color: #666; margin: 2px 0;">${obsAdicionais.join(' | ')}</p>` : ''}
-                        <p class="mobile-carrinho-item-preco">R$ ${(item.preco * item.quantidade).toFixed(2)}</p>
+                        ${item.observacao ? `<p style="font-size: 11px; color: #666; margin: 2px 0;">Obs: ${item.observacao}</p>` : ''}
+                        <p class="mobile-carrinho-item-preco">R$ ${(item.preco * item.quantidade).toFixed(2).replace('.', ',')}</p>
                     </div>
                     <div class="mobile-carrinho-item-controls">
                         <div class="mobile-carrinho-qty">
-                            <button class="mobile-carrinho-btn-qty" onclick="mobilePedido.alterarQuantidade(${item.id}, -1)">-</button>
+                            <button class="mobile-carrinho-btn-qty" onclick="mobilePedido.alterarQuantidadePorIndex(${index}, -1)">-</button>
                             <span class="mobile-carrinho-qty-value">${item.quantidade}</span>
-                            <button class="mobile-carrinho-btn-qty" onclick="mobilePedido.alterarQuantidade(${item.id}, 1)">+</button>
+                            <button class="mobile-carrinho-btn-qty" onclick="mobilePedido.alterarQuantidadePorIndex(${index}, 1)">+</button>
                         </div>
-                        <button class="mobile-carrinho-remove" onclick="mobilePedido.removerItem(${item.id})">
+                        <button class="mobile-carrinho-remove" onclick="mobilePedido.removerItemPorIndex(${index})">
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
@@ -663,8 +787,26 @@ class MobilePedidoInterface {
         }
     }
     
+    alterarQuantidadePorIndex(index, delta) {
+        if (index < 0 || index >= this.carrinho.length) return;
+        
+        this.carrinho[index].quantidade += delta;
+        
+        if (this.carrinho[index].quantidade <= 0) {
+            this.removerItemPorIndex(index);
+        } else {
+            this.updateCarrinho();
+        }
+    }
+    
     removerItem(produtoId) {
         this.carrinho = this.carrinho.filter(item => item.id !== produtoId);
+        this.updateCarrinho();
+    }
+    
+    removerItemPorIndex(index) {
+        if (index < 0 || index >= this.carrinho.length) return;
+        this.carrinho.splice(index, 1);
         this.updateCarrinho();
     }
     
@@ -755,11 +897,19 @@ class MobilePedidoInterface {
                 this.limparCarrinho();
                 
                 // Perguntar se quer imprimir
-                if (confirm('Pedido criado! Deseja imprimir o cupom?')) {
-                    this.imprimirPedido(result.pedido_id, mesaParaImprimir, carrinhoParaImprimir);
+                const deveImprimir = confirm('Pedido criado! Deseja imprimir o cupom?');
+                if (deveImprimir) {
+                    const pedidoId = result.pedido_id || result.pedido?.idpedido || result.pedido?.id;
+                    this.imprimirPedido(pedidoId, mesaParaImprimir, carrinhoParaImprimir);
                 }
+                
+                // Redirecionar para dashboard após 2 segundos (para dar tempo da impressão se necessário)
+                setTimeout(() => {
+                    const dashboardUrl = window.dashboardUrl || 'index.php?view=dashboard';
+                    window.location.href = dashboardUrl;
+                }, 2000);
             } else {
-                throw new Error(result.error || 'Erro ao criar pedido');
+                throw new Error(result.error || result.message || 'Erro ao criar pedido');
             }
         } catch (error) {
             console.error('❌ Erro ao enviar pedido:', error);
@@ -983,6 +1133,64 @@ class MobilePedidoInterface {
                 this.hideCarrinhoModal();
             }
         });
+        
+        // Busca de produtos em tempo real (igual desktop)
+        const searchInput = document.getElementById('mobile-search-produtos');
+        console.log('🔍 Input de busca encontrado:', searchInput);
+        
+        if (searchInput) {
+            let searchTimeout;
+            
+            searchInput.addEventListener('input', (e) => {
+                clearTimeout(searchTimeout);
+                const query = e.target.value.trim();
+                console.log('🔍 Buscando produtos com query:', query);
+                
+                // Buscar em tempo real com debounce mínimo (150ms)
+                searchTimeout = setTimeout(() => {
+                    const categoriaId = document.getElementById('mobile-categoria-filter')?.value || '';
+                    console.log('🔍 Executando busca:', { query, categoriaId });
+                    this.loadProdutos(query, categoriaId);
+                }, 150);
+            });
+            
+            // Também buscar ao pressionar Enter
+            searchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    clearTimeout(searchTimeout);
+                    const query = e.target.value.trim();
+                    const categoriaId = document.getElementById('mobile-categoria-filter')?.value || '';
+                    console.log('🔍 Busca via Enter:', { query, categoriaId });
+                    this.loadProdutos(query, categoriaId);
+                }
+            });
+        } else {
+            console.error('❌ Input de busca não encontrado!');
+        }
+        
+        // Filtro de categoria
+        const categoriaFilter = document.getElementById('mobile-categoria-filter');
+        if (categoriaFilter) {
+            categoriaFilter.addEventListener('change', (e) => {
+                const categoriaId = e.target.value;
+                const query = document.getElementById('mobile-search-produtos')?.value.trim() || '';
+                this.loadProdutos(query, categoriaId);
+            });
+        }
+    }
+    
+    loadCategorias() {
+        // Carregar categorias para o filtro
+        if (window.categoriasData && Array.isArray(window.categoriasData)) {
+            const categoriaFilter = document.getElementById('mobile-categoria-filter');
+            if (categoriaFilter) {
+                const options = window.categoriasData.map(cat => 
+                    `<option value="${cat.id}">${cat.nome}</option>`
+                ).join('');
+                categoriaFilter.innerHTML = '<option value="">Todas as categorias</option>' + options;
+            }
+        }
     }
 }
 

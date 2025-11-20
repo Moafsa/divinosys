@@ -163,11 +163,11 @@ class Database
         $paramIndex = 1;
         
         foreach ($data as $key => $value) {
-            $set[] = "{$key} = ?";
-            // Convert boolean values to proper PostgreSQL boolean format
+            // Convert boolean values directly in SQL for PostgreSQL
             if (is_bool($value)) {
-                $params[] = $value ? 'true' : 'false';
+                $set[] = "{$key} = " . ($value ? 'true' : 'false');
             } else {
+                $set[] = "{$key} = ?";
                 $params[] = $value;
             }
         }

@@ -37,11 +37,22 @@ class WuzAPIManager
             $token = $this->generateRandomToken();
             error_log("WuzAPIManager::createInstance - Token gerado: $token");
             
-            // Conectar ao banco da WuzAPI
+            // Conectar ao banco da WuzAPI usando as mesmas credenciais do sistema
+            // Credentials must be provided via environment variables
+            $dbHost = $_ENV['DB_HOST'] ?? null;
+            $dbPort = $_ENV['DB_PORT'] ?? '5432';
+            $dbName = $_ENV['DB_NAME'] ?? null;
+            $dbUser = $_ENV['DB_USER'] ?? null;
+            $dbPassword = $_ENV['DB_PASSWORD'] ?? null;
+            
+            if (!$dbHost || !$dbName || !$dbUser || !$dbPassword) {
+                throw new Exception('Database credentials not configured. Please set DB_HOST, DB_NAME, DB_USER, and DB_PASSWORD environment variables.');
+            }
+            
             $pdo = new \PDO(
-                "pgsql:host=postgres;port=5432;dbname=wuzapi",
-                "wuzapi",
-                "wuzapi",
+                "pgsql:host={$dbHost};port={$dbPort};dbname={$dbName}",
+                $dbUser,
+                $dbPassword,
                 [
                     \PDO::ATTR_TIMEOUT => 120,
                     \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION
@@ -574,11 +585,22 @@ class WuzAPIManager
     public function deleteInstance($instanceId) 
     {
         try {
-            // Deletar diretamente do banco da WuzAPI
+            // Deletar diretamente do banco da WuzAPI usando as mesmas credenciais do sistema
+            // Credentials must be provided via environment variables
+            $dbHost = $_ENV['DB_HOST'] ?? null;
+            $dbPort = $_ENV['DB_PORT'] ?? '5432';
+            $dbName = $_ENV['DB_NAME'] ?? null;
+            $dbUser = $_ENV['DB_USER'] ?? null;
+            $dbPassword = $_ENV['DB_PASSWORD'] ?? null;
+            
+            if (!$dbHost || !$dbName || !$dbUser || !$dbPassword) {
+                throw new Exception('Database credentials not configured. Please set DB_HOST, DB_NAME, DB_USER, and DB_PASSWORD environment variables.');
+            }
+            
             $pdo = new \PDO(
-                "pgsql:host=postgres;port=5432;dbname=wuzapi",
-                "wuzapi",
-                "wuzapi",
+                "pgsql:host={$dbHost};port={$dbPort};dbname={$dbName}",
+                $dbUser,
+                $dbPassword,
                 [
                     \PDO::ATTR_TIMEOUT => 120,
                     \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION
