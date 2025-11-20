@@ -135,6 +135,7 @@ try {
                     'telefone' => preg_replace('/[^0-9]/', '', $clienteTelefone),
                     'email' => $clienteEmail ?: null,
                     'cpf' => $data['cliente_cpf'] ?? null,
+                    'tipo_usuario' => 'cliente',
                     'ativo' => true,
                     'created_at' => date('Y-m-d H:i:s'),
                     'updated_at' => date('Y-m-d H:i:s')
@@ -196,7 +197,6 @@ try {
         'usuario_global_id' => $clienteId,
         'telefone_cliente' => $clienteTelefone,
         'delivery' => ($tipoEntrega === 'delivery') ? 1 : 0,
-        'endereco' => ($tipoEntrega === 'delivery' && $enderecoEntrega) ? json_encode($enderecoEntrega) : null,
         'tipo_entrega' => $tipoEntrega,
         'data' => date('Y-m-d'),
         'hora_pedido' => date('H:i:s'),
@@ -205,7 +205,7 @@ try {
         'saldo_devedor' => $valorTotal,
         'status_pagamento' => ($formaPagamento === 'online') ? 'pendente' : 'pendente',
         'status' => 'Pendente',
-        'observacao' => $observacao,
+        'observacao' => $observacao, // Endereço completo já está incluído aqui
         'usuario_id' => $clienteId ?? 1, // Use client ID or default admin
         'tenant_id' => $tenantId,
         'filial_id' => $filialId

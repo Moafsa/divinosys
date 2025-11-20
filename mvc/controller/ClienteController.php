@@ -331,6 +331,54 @@ class ClienteController
     }
 
     /**
+     * Sanitize CEP to ensure it doesn't exceed 10 characters
+     * Removes spaces and keeps only numbers and hyphen
+     * Format: 12345-678 (max 10 characters)
+     */
+    private function sanitizeCEP($cep)
+    {
+        if (empty($cep)) {
+            return null;
+        }
+        
+        // Remove all non-numeric characters except hyphen
+        $cep = preg_replace('/[^0-9-]/', '', trim($cep));
+        
+        // Remove all hyphens first
+        $cepNumbers = preg_replace('/[^0-9]/', '', $cep);
+        
+        // If we have 8 digits, format as 12345-678
+        if (strlen($cepNumbers) == 8) {
+            $cep = substr($cepNumbers, 0, 5) . '-' . substr($cepNumbers, 5, 3);
+        } elseif (strlen($cepNumbers) > 8) {
+            // If more than 8 digits, take only first 8
+            $cep = substr($cepNumbers, 0, 5) . '-' . substr($cepNumbers, 5, 3);
+        } else {
+            // If less than 8 digits, return as is (will be validated elsewhere)
+            $cep = $cepNumbers;
+        }
+        
+        // Ensure max 10 characters
+        return substr($cep, 0, 10);
+    }
+
+    /**
+     * Sanitize state to ensure it doesn't exceed 2 characters
+     */
+    private function sanitizeEstado($estado)
+    {
+        if (empty($estado)) {
+            return null;
+        }
+        
+        // Remove spaces and convert to uppercase
+        $estado = strtoupper(trim($estado));
+        
+        // Take only first 2 characters
+        return substr($estado, 0, 2);
+    }
+
+    /**
      * Add client address
      */
     private function adicionarEndereco()
@@ -343,19 +391,69 @@ class ClienteController
 
             $data = [
                 'tipo' => $_POST['tipo'] ?? 'entrega',
-                'cep' => $_POST['cep'] ?? null,
-                'logradouro' => $_POST['logradouro'] ?? null,
-                'numero' => $_POST['numero'] ?? null,
-                'complemento' => $_POST['complemento'] ?? null,
-                'bairro' => $_POST['bairro'] ?? null,
-                'cidade' => $_POST['cidade'] ?? null,
-                'estado' => $_POST['estado'] ?? null,
+                'cep' => $this->sanitizeCEP($_POST['cep'] ?? null),
+                'logradouro' => trim($_POST['logradouro'] ?? null) ?: null,
+                'numero' => trim($_POST['numero'] ?? null) ?: null,
+                'complemento' => trim($_POST['complemento'] ?? null) ?: null,
+                'bairro' => trim($_POST['bairro'] ?? null) ?: null,
+                'cidade' => trim($_POST['cidade'] ?? null) ?: null,
+                'estado' => $this->sanitizeEstado($_POST['estado'] ?? null),
                 'pais' => $_POST['pais'] ?? 'Brasil',
-                'referencia' => $_POST['referencia'] ?? null,
-                'principal' => $_POST['principal'] ?? false
+                'referencia' => trim($_POST['referencia'] ?? null) ?: null,
+                'principal' => !empty($_POST['principal']) ? true : false
             ];
 
             $result = $this->clienteModel->adicionarEndereco($clienteId, $data);
+            return $this->jsonResponse($result);
+        } catch (Exception $e) {
+            return $this->jsonResponse(['success' => false, 'message' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Update client address
+     */
+    private function atualizarEndereco()
+    {
+        try {
+            $enderecoId = $_POST['id'] ?? '';
+            if (empty($enderecoId)) {
+                return $this->jsonResponse(['success' => false, 'message' => 'ID do endereço não informado']);
+            }
+
+            $data = [
+                'tipo' => $_POST['tipo'] ?? 'entrega',
+                'cep' => $this->sanitizeCEP($_POST['cep'] ?? null),
+                'logradouro' => trim($_POST['logradouro'] ?? null) ?: null,
+                'numero' => trim($_POST['numero'] ?? null) ?: null,
+                'complemento' => trim($_POST['complemento'] ?? null) ?: null,
+                'bairro' => trim($_POST['bairro'] ?? null) ?: null,
+                'cidade' => trim($_POST['cidade'] ?? null) ?: null,
+                'estado' => $this->sanitizeEstado($_POST['estado'] ?? null),
+                'pais' => $_POST['pais'] ?? 'Brasil',
+                'referencia' => trim($_POST['referencia'] ?? null) ?: null,
+                'principal' => !empty($_POST['principal']) ? true : false
+            ];
+
+            $result = $this->clienteModel->atualizarEndereco($enderecoId, $data);
+            return $this->jsonResponse($result);
+        } catch (Exception $e) {
+            return $this->jsonResponse(['success' => false, 'message' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Remove client address
+     */
+    private function removerEndereco()
+    {
+        try {
+            $enderecoId = $_POST['id'] ?? '';
+            if (empty($enderecoId)) {
+                return $this->jsonResponse(['success' => false, 'message' => 'ID do endereço não informado']);
+            }
+
+            $result = $this->clienteModel->removerEndereco($enderecoId);
             return $this->jsonResponse($result);
         } catch (Exception $e) {
             return $this->jsonResponse(['success' => false, 'message' => $e->getMessage()]);
