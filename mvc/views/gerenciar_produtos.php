@@ -558,6 +558,16 @@ if ($tenant && $filial) {
                                         </label>
                                     </div>
                                 </div>
+                                
+                                <div class="mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="produtoExibirCardapio" checked>
+                                        <label class="form-check-label" for="produtoExibirCardapio">
+                                            Exibir no Cardápio Online
+                                        </label>
+                                    </div>
+                                    <div class="form-text">Quando desmarcado, o produto não aparecerá na página do cardápio online</div>
+                                </div>
                             </div>
                         </div>
                         
@@ -740,6 +750,9 @@ if ($tenant && $filial) {
                     document.getElementById('produtoPrecoMini').value = data.produto.preco_mini || '0';
                     document.getElementById('produtoCategoria').value = data.produto.categoria_id || '';
                     document.getElementById('produtoAtivo').checked = data.produto.ativo;
+                    // Check if exibir_cardapio_online exists (may not exist if migration not run yet)
+                    const exibirCardapio = data.produto.exibir_cardapio_online !== undefined ? (data.produto.exibir_cardapio_online !== false) : true;
+                    document.getElementById('produtoExibirCardapio').checked = exibirCardapio;
                     document.getElementById('produtoEstoque').value = data.produto.estoque_atual || '0';
                     document.getElementById('produtoEstoqueMinimo').value = data.produto.estoque_minimo || '0';
                     document.getElementById('produtoPrecoCusto').value = data.produto.preco_custo || '0';
@@ -818,6 +831,7 @@ if ($tenant && $filial) {
             const precoMini = document.getElementById('produtoPrecoMini').value || '0';
             const categoriaId = document.getElementById('produtoCategoria').value || null;
             const ativo = document.getElementById('produtoAtivo').checked ? 1 : 0;
+            const exibirCardapio = document.getElementById('produtoExibirCardapio').checked ? 1 : 0;
             const estoqueAtual = document.getElementById('produtoEstoque').value || '0';
             const estoqueMinimo = document.getElementById('produtoEstoqueMinimo').value || '0';
             const precoCusto = document.getElementById('produtoPrecoCusto').value || '0';
@@ -869,6 +883,7 @@ if ($tenant && $filial) {
             formData.append('estoque_atual', estoqueAtual);
             formData.append('estoque_minimo', estoqueMinimo);
             formData.append('preco_custo', precoCusto);
+            formData.append('exibir_cardapio_online', exibirCardapio);
             formData.append('ingredientes', JSON.stringify(ingredientesSelecionados));
             
             // Adicionar imagem se selecionada

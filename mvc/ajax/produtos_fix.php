@@ -123,6 +123,24 @@ try {
             $precoMini = $_POST['preco_mini'] ?? 0;
             $categoriaId = $_POST['categoria_id'] ?? null;
             $ativo = $_POST['ativo'] ?? 0;
+            $exibirCardapioOnline = isset($_POST['exibir_cardapio_online']) ? (int)$_POST['exibir_cardapio_online'] : 1;
+            
+            // Check if column exists
+            $hasExibirCardapioColumn = false;
+            try {
+                $columnCheck = $db->fetch("
+                    SELECT 1 
+                    FROM information_schema.columns 
+                    WHERE table_schema = 'public' 
+                      AND table_name = 'produtos' 
+                      AND column_name = 'exibir_cardapio_online'
+                    LIMIT 1
+                ");
+                $hasExibirCardapioColumn = !empty($columnCheck);
+            } catch (\Exception $e) {
+                $hasExibirCardapioColumn = false;
+            }
+            
             $estoqueAtual = $_POST['estoque_atual'] ?? 0;
             $estoqueMinimo = $_POST['estoque_minimo'] ?? 0;
             $precoCusto = $_POST['preco_custo'] ?? 0;
@@ -182,10 +200,17 @@ try {
                 }
                 $filialId = $filialIdToUse;
                 
-                $db->query("
-                    INSERT INTO produtos (nome, descricao, preco_normal, preco_mini, categoria_id, ativo, estoque_atual, estoque_minimo, preco_custo, imagem, tenant_id, filial_id) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ", [$nome, $descricao, $precoNormal, $precoMini, $categoriaId, $ativo, $estoqueAtual, $estoqueMinimo, $precoCusto, $imagemPath, $tenantId, $filialId]);
+                if ($hasExibirCardapioColumn) {
+                    $db->query("
+                        INSERT INTO produtos (nome, descricao, preco_normal, preco_mini, categoria_id, ativo, exibir_cardapio_online, estoque_atual, estoque_minimo, preco_custo, imagem, tenant_id, filial_id) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ", [$nome, $descricao, $precoNormal, $precoMini, $categoriaId, $ativo, $exibirCardapioOnline, $estoqueAtual, $estoqueMinimo, $precoCusto, $imagemPath, $tenantId, $filialId]);
+                } else {
+                    $db->query("
+                        INSERT INTO produtos (nome, descricao, preco_normal, preco_mini, categoria_id, ativo, estoque_atual, estoque_minimo, preco_custo, imagem, tenant_id, filial_id) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ", [$nome, $descricao, $precoNormal, $precoMini, $categoriaId, $ativo, $estoqueAtual, $estoqueMinimo, $precoCusto, $imagemPath, $tenantId, $filialId]);
+                }
                 
                 $novoProdutoId = $db->lastInsertId();
                 
@@ -203,20 +228,38 @@ try {
                 echo json_encode(['success' => true, 'message' => 'Produto criado com sucesso!']);
             } else {
                 // Atualizar produto existente
-                if ($imagemPath) {
-                    $db->query("
-                        UPDATE produtos 
-                        SET nome = ?, descricao = ?, preco_normal = ?, 
-                            preco_mini = ?, categoria_id = ?, ativo = ?, estoque_atual = ?, estoque_minimo = ?, preco_custo = ?, imagem = ?, updated_at = CURRENT_TIMESTAMP
-                        WHERE id = ? AND tenant_id = $tenantId AND filial_id = $filialId
-                    ", [$nome, $descricao, $precoNormal, $precoMini, $categoriaId, $ativo, $estoqueAtual, $estoqueMinimo, $precoCusto, $imagemPath, $produtoId]);
+                if ($hasExibirCardapioColumn) {
+                    if ($imagemPath) {
+                        $db->query("
+                            UPDATE produtos 
+                            SET nome = ?, descricao = ?, preco_normal = ?, 
+                                preco_mini = ?, categoria_id = ?, ativo = ?, exibir_cardapio_online = ?, estoque_atual = ?, estoque_minimo = ?, preco_custo = ?, imagem = ?, updated_at = CURRENT_TIMESTAMP
+                            WHERE id = ? AND tenant_id = $tenantId AND filial_id = $filialId
+                        ", [$nome, $descricao, $precoNormal, $precoMini, $categoriaId, $ativo, $exibirCardapioOnline, $estoqueAtual, $estoqueMinimo, $precoCusto, $imagemPath, $produtoId]);
+                    } else {
+                        $db->query("
+                            UPDATE produtos 
+                            SET nome = ?, descricao = ?, preco_normal = ?, 
+                                preco_mini = ?, categoria_id = ?, ativo = ?, exibir_cardapio_online = ?, estoque_atual = ?, estoque_minimo = ?, preco_custo = ?, updated_at = CURRENT_TIMESTAMP
+                            WHERE id = ? AND tenant_id = $tenantId AND filial_id = $filialId
+                        ", [$nome, $descricao, $precoNormal, $precoMini, $categoriaId, $ativo, $exibirCardapioOnline, $estoqueAtual, $estoqueMinimo, $precoCusto, $produtoId]);
+                    }
                 } else {
-                    $db->query("
-                        UPDATE produtos 
-                        SET nome = ?, descricao = ?, preco_normal = ?, 
-                            preco_mini = ?, categoria_id = ?, ativo = ?, estoque_atual = ?, estoque_minimo = ?, preco_custo = ?, updated_at = CURRENT_TIMESTAMP
-                        WHERE id = ? AND tenant_id = $tenantId AND filial_id = $filialId
-                    ", [$nome, $descricao, $precoNormal, $precoMini, $categoriaId, $ativo, $estoqueAtual, $estoqueMinimo, $precoCusto, $produtoId]);
+                    if ($imagemPath) {
+                        $db->query("
+                            UPDATE produtos 
+                            SET nome = ?, descricao = ?, preco_normal = ?, 
+                                preco_mini = ?, categoria_id = ?, ativo = ?, estoque_atual = ?, estoque_minimo = ?, preco_custo = ?, imagem = ?, updated_at = CURRENT_TIMESTAMP
+                            WHERE id = ? AND tenant_id = $tenantId AND filial_id = $filialId
+                        ", [$nome, $descricao, $precoNormal, $precoMini, $categoriaId, $ativo, $estoqueAtual, $estoqueMinimo, $precoCusto, $imagemPath, $produtoId]);
+                    } else {
+                        $db->query("
+                            UPDATE produtos 
+                            SET nome = ?, descricao = ?, preco_normal = ?, 
+                                preco_mini = ?, categoria_id = ?, ativo = ?, estoque_atual = ?, estoque_minimo = ?, preco_custo = ?, updated_at = CURRENT_TIMESTAMP
+                            WHERE id = ? AND tenant_id = $tenantId AND filial_id = $filialId
+                        ", [$nome, $descricao, $precoNormal, $precoMini, $categoriaId, $ativo, $estoqueAtual, $estoqueMinimo, $precoCusto, $produtoId]);
+                    }
                 }
                 
                 // Atualizar ingredientes
