@@ -191,7 +191,35 @@ try {
         $observacao = "Pedido Online - Retirada no Balcão";
     }
     
-    $pedidoId = $db->insert('pedido', [
+    // Get a default user from usuarios table for the order
+    // usuario_id references usuarios table, not usuarios_globais
+    // Since the field allows NULL, we can use NULL if no valid user is found
+    $usuarioId = null;
+    try {
+        // Try to find a default admin user for this tenant
+        $usuarioPadrao = $db->fetch(
+            "SELECT id FROM usuarios WHERE tenant_id = ? AND (tipo = 'admin' OR tipo = 'gerente') LIMIT 1",
+            [$tenantId]
+        );
+        if ($usuarioPadrao) {
+            $usuarioId = $usuarioPadrao['id'];
+        } else {
+            // If no admin found, try any user from this tenant
+            $qualquerUsuario = $db->fetch(
+                "SELECT id FROM usuarios WHERE tenant_id = ? LIMIT 1",
+                [$tenantId]
+            );
+            if ($qualquerUsuario) {
+                $usuarioId = $qualquerUsuario['id'];
+            }
+        }
+    } catch (Exception $e) {
+        error_log("Erro ao buscar usuário padrão para pedido online: " . $e->getMessage());
+        // Continue with null - campo permite NULL
+    }
+    
+    // Prepare order data
+    $pedidoData = [
         'idmesa' => $mesaId,
         'cliente' => $clienteNome,
         'usuario_global_id' => $clienteId,
@@ -205,11 +233,17 @@ try {
         'saldo_devedor' => $valorTotal,
         'status_pagamento' => ($formaPagamento === 'online') ? 'pendente' : 'pendente',
         'status' => 'Pendente',
-        'observacao' => $observacao, // Endereço completo já está incluído aqui
-        'usuario_id' => $clienteId ?? 1, // Use client ID or default admin
+        'observacao' => $observacao,
         'tenant_id' => $tenantId,
         'filial_id' => $filialId
-    ]);
+    ];
+    
+    // Only add usuario_id if we found a valid user (field allows NULL)
+    if ($usuarioId) {
+        $pedidoData['usuario_id'] = $usuarioId;
+    }
+    
+    $pedidoId = $db->insert('pedido', $pedidoData);
     
     if (!$pedidoId) {
         throw new Exception('Erro ao criar pedido no banco de dados');

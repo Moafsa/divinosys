@@ -73,7 +73,7 @@ if ($tenant && $filial) {
         // Buscar dados do cliente se o pedido tem um cliente associado
         if (!empty($pedidoRaw['usuario_global_id'])) {
             $cliente = $db->fetch(
-                "SELECT nome, telefone, email, cpf FROM usuarios_globais WHERE id = ? AND tipo_usuario = 'cliente'",
+                "SELECT nome, telefone, email, cpf FROM usuarios_globais WHERE id = ? AND (tipo_usuario = 'cliente' OR tipo_usuario IS NULL)",
                 [$pedidoRaw['usuario_global_id']]
             );
             if ($cliente) {

@@ -92,12 +92,41 @@ try {
                     'enderecos' => $enderecos
                 ]);
             } else {
-                echo json_encode([
-                    'success' => false,
-                    'message' => 'Cliente não encontrado',
-                    'cliente' => null,
-                    'enderecos' => []
+                // Cliente não encontrado - criar automaticamente com apenas o telefone
+                $clienteId = $db->insert('usuarios_globais', [
+                    'nome' => 'Cliente', // Nome temporário, será atualizado depois
+                    'telefone' => $telefoneNormalizado,
+                    'email' => null,
+                    'cpf' => null,
+                    'tipo_usuario' => 'cliente',
+                    'ativo' => true,
+                    'created_at' => date('Y-m-d H:i:s'),
+                    'updated_at' => date('Y-m-d H:i:s')
                 ]);
+                
+                if ($clienteId) {
+                    // Get created client
+                    $cliente = $db->fetch(
+                        "SELECT id, nome, telefone, email, cpf FROM usuarios_globais WHERE id = ?",
+                        [$clienteId]
+                    );
+                    
+                    $enderecos = [];
+                    
+                    echo json_encode([
+                        'success' => true,
+                        'cliente' => $cliente,
+                        'enderecos' => $enderecos,
+                        'message' => 'Cliente criado automaticamente'
+                    ]);
+                } else {
+                    echo json_encode([
+                        'success' => false,
+                        'message' => 'Erro ao criar cliente',
+                        'cliente' => null,
+                        'enderecos' => []
+                    ]);
+                }
             }
             break;
             
@@ -127,18 +156,45 @@ try {
             );
             
             if ($clienteExistente) {
+                // Get full client data
+                $cliente = $db->fetch(
+                    "SELECT id, nome, telefone, email, cpf FROM usuarios_globais WHERE id = ?",
+                    [$clienteExistente['id']]
+                );
+                
+                // Update client data if provided
+                $updateData = [];
+                if (!empty($nome)) $updateData['nome'] = $nome;
+                if (!empty($email)) $updateData['email'] = $email;
+                if (!empty($cpf)) $updateData['cpf'] = $cpf;
+                
+                if (!empty($updateData)) {
+                    $updateData['updated_at'] = date('Y-m-d H:i:s');
+                    $db->update('usuarios_globais', $updateData, 'id = ?', [$clienteExistente['id']]);
+                    // Reload client data
+                    $cliente = $db->fetch(
+                        "SELECT id, nome, telefone, email, cpf FROM usuarios_globais WHERE id = ?",
+                        [$clienteExistente['id']]
+                    );
+                }
+                
+                // Get addresses
+                $enderecos = $clienteModel->getEnderecos($clienteExistente['id']);
+                
                 echo json_encode([
                     'success' => true,
-                    'cliente' => $clienteExistente,
+                    'cliente' => $cliente,
+                    'enderecos' => $enderecos,
                     'message' => 'Cliente já cadastrado'
                 ]);
                 break;
             }
             
             // Create new client
+            $telefoneNormalizado = preg_replace('/[^0-9]/', '', $telefone);
             $clienteId = $db->insert('usuarios_globais', [
                 'nome' => $nome,
-                'telefone' => preg_replace('/[^0-9]/', '', $telefone),
+                'telefone' => $telefoneNormalizado,
                 'email' => $email ?: null,
                 'cpf' => $cpf ?: null,
                 'tipo_usuario' => 'cliente',
@@ -148,7 +204,8 @@ try {
             ]);
             
             if (!$clienteId) {
-                throw new Exception('Erro ao cadastrar cliente');
+                error_log("Erro ao inserir cliente: nome=$nome, telefone=$telefoneNormalizado");
+                throw new Exception('Erro ao cadastrar cliente no banco de dados');
             }
             
             // Get created client
@@ -156,6 +213,11 @@ try {
                 "SELECT id, nome, telefone, email, cpf FROM usuarios_globais WHERE id = ?",
                 [$clienteId]
             );
+            
+            if (!$cliente) {
+                error_log("Cliente criado mas não encontrado: ID=$clienteId");
+                throw new Exception('Cliente criado mas não foi possível recuperar os dados');
+            }
             
             // Add address if provided
             $enderecoId = null;
@@ -204,33 +266,80 @@ try {
         case 'adicionar_endereco':
         case 'adicionar_endereco_cardapio':
             $clienteId = $_POST['cliente_id'] ?? null;
-            $enderecoData = $_POST['endereco'] ?? [];
             
-            if (!$clienteId || empty($enderecoData)) {
-                throw new Exception('Cliente ID e dados do endereço são obrigatórios');
+            // Handle FormData array notation (endereco[logradouro], endereco[cidade], etc.)
+            $enderecoData = [];
+            if (isset($_POST['endereco']) && is_array($_POST['endereco'])) {
+                $enderecoData = $_POST['endereco'];
+            } else {
+                // Try to build from individual fields
+                $enderecoData = [
+                    'logradouro' => $_POST['endereco']['logradouro'] ?? $_POST['logradouro'] ?? null,
+                    'numero' => $_POST['endereco']['numero'] ?? $_POST['numero'] ?? null,
+                    'bairro' => $_POST['endereco']['bairro'] ?? $_POST['bairro'] ?? null,
+                    'cidade' => $_POST['endereco']['cidade'] ?? $_POST['cidade'] ?? null,
+                    'estado' => $_POST['endereco']['estado'] ?? $_POST['estado'] ?? null,
+                    'cep' => $_POST['endereco']['cep'] ?? $_POST['cep'] ?? null,
+                ];
             }
             
-            $enderecoId = $db->insert('enderecos', [
-                'usuario_global_id' => $clienteId,
-                'tenant_id' => $tenantId,
+            if (!$clienteId) {
+                throw new Exception('Cliente ID é obrigatório');
+            }
+            
+            // Validate minimum required fields
+            $logradouro = $enderecoData['logradouro'] ?? $enderecoData['endereco'] ?? null;
+            $cidade = $enderecoData['cidade'] ?? null;
+            
+            if (empty($logradouro) || empty($cidade)) {
+                error_log("Erro ao adicionar endereço - dados incompletos. Cliente ID: $clienteId, Dados recebidos: " . json_encode($_POST));
+                throw new Exception('Endereço e cidade são obrigatórios');
+            }
+            
+            // Log received data for debugging
+            error_log("Adicionar endereço - Cliente ID: $clienteId, Dados recebidos: " . json_encode($_POST));
+            error_log("Endereço processado: " . json_encode($enderecoData));
+            
+            // Prepare data ensuring boolean values are proper booleans, not strings
+            // Convert empty strings to null for optional fields
+            $insertData = [
+                'usuario_global_id' => (int)$clienteId,
+                'tenant_id' => (int)$tenantId,
                 'tipo' => 'entrega',
-                'cep' => $enderecoData['cep'] ?? null,
-                'logradouro' => $enderecoData['logradouro'] ?? $enderecoData['endereco'] ?? null,
-                'numero' => $enderecoData['numero'] ?? null,
-                'complemento' => $enderecoData['complemento'] ?? null,
-                'bairro' => $enderecoData['bairro'] ?? null,
-                'cidade' => $enderecoData['cidade'] ?? null,
-                'estado' => $enderecoData['estado'] ?? null,
+                'logradouro' => $logradouro,
+                'cidade' => $cidade,
                 'pais' => 'Brasil',
-                'referencia' => $enderecoData['referencia'] ?? null,
-                'principal' => false,
-                'ativo' => true,
+                'principal' => false, // Explicit boolean
+                'ativo' => true, // Explicit boolean
                 'created_at' => date('Y-m-d H:i:s'),
                 'updated_at' => date('Y-m-d H:i:s')
-            ]);
+            ];
+            
+            // Add optional fields only if they have values
+            if (!empty($enderecoData['cep'])) {
+                $insertData['cep'] = $enderecoData['cep'];
+            }
+            if (!empty($enderecoData['numero'])) {
+                $insertData['numero'] = $enderecoData['numero'];
+            }
+            if (!empty($enderecoData['complemento'])) {
+                $insertData['complemento'] = $enderecoData['complemento'];
+            }
+            if (!empty($enderecoData['bairro'])) {
+                $insertData['bairro'] = $enderecoData['bairro'];
+            }
+            if (!empty($enderecoData['estado'])) {
+                $insertData['estado'] = $enderecoData['estado'];
+            }
+            if (!empty($enderecoData['referencia'])) {
+                $insertData['referencia'] = $enderecoData['referencia'];
+            }
+            
+            $enderecoId = $db->insert('enderecos', $insertData);
             
             if (!$enderecoId) {
-                throw new Exception('Erro ao adicionar endereço');
+                error_log("Erro ao inserir endereço no banco. Cliente ID: $clienteId");
+                throw new Exception('Erro ao adicionar endereço no banco de dados');
             }
             
             // Get updated addresses
@@ -240,6 +349,52 @@ try {
                 'success' => true,
                 'enderecos' => $enderecos,
                 'message' => 'Endereço adicionado com sucesso'
+            ]);
+            break;
+            
+        case 'atualizar_dados':
+            $clienteId = $_POST['cliente_id'] ?? null;
+            $nome = $_POST['nome'] ?? '';
+            $email = $_POST['email'] ?? '';
+            $cpf = $_POST['cpf'] ?? '';
+            
+            if (!$clienteId) {
+                throw new Exception('Cliente ID é obrigatório');
+            }
+            
+            // Verify client exists
+            $clienteExistente = $db->fetch(
+                "SELECT id FROM usuarios_globais WHERE id = ?",
+                [$clienteId]
+            );
+            
+            if (!$clienteExistente) {
+                throw new Exception('Cliente não encontrado');
+            }
+            
+            // Build update data - always update nome if provided
+            $updateData = ['updated_at' => date('Y-m-d H:i:s')];
+            if (!empty($nome)) {
+                $updateData['nome'] = $nome;
+            }
+            // Always update email (can be empty/null)
+            $updateData['email'] = !empty($email) ? $email : null;
+            // Always update cpf (can be empty/null)
+            $updateData['cpf'] = !empty($cpf) ? $cpf : null;
+            
+            // Update client
+            $db->update('usuarios_globais', $updateData, 'id = ?', [$clienteId]);
+            
+            // Get updated client
+            $cliente = $db->fetch(
+                "SELECT id, nome, telefone, email, cpf FROM usuarios_globais WHERE id = ?",
+                [$clienteId]
+            );
+            
+            echo json_encode([
+                'success' => true,
+                'cliente' => $cliente,
+                'message' => 'Dados atualizados com sucesso'
             ]);
             break;
             

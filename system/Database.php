@@ -144,12 +144,28 @@ class Database
         // Sanitize data before insert
         $data = $this->sanitizeData($data);
         
-        $columns = implode(',', array_keys($data));
-        $placeholders = ':' . implode(', :', array_keys($data));
+        // Handle boolean values for PostgreSQL
+        $columns = [];
+        $placeholders = [];
+        $params = [];
         
-        $sql = "INSERT INTO {$table} ({$columns}) VALUES ({$placeholders})";
+        foreach ($data as $key => $value) {
+            $columns[] = $key;
+            if (is_bool($value)) {
+                // Convert boolean to PostgreSQL boolean literal
+                $placeholders[] = ($value ? 'true' : 'false');
+            } else {
+                $placeholders[] = ':' . $key;
+                $params[$key] = $value;
+            }
+        }
         
-        $stmt = $this->query($sql, $data);
+        $columnsStr = implode(',', $columns);
+        $placeholdersStr = implode(', ', $placeholders);
+        
+        $sql = "INSERT INTO {$table} ({$columnsStr}) VALUES ({$placeholdersStr})";
+        
+        $stmt = $this->query($sql, $params);
         return $this->getConnection()->lastInsertId();
     }
 

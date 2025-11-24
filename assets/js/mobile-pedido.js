@@ -49,6 +49,10 @@ class MobilePedidoInterface {
                     <i class="fas fa-utensils"></i>
                     Produtos
                 </button>
+                <button class="mobile-tab" data-tab="cliente">
+                    <i class="fas fa-user"></i>
+                    Cliente
+                </button>
                 <button class="mobile-tab" data-tab="carrinho">
                     <i class="fas fa-shopping-cart"></i>
                     Carrinho
@@ -79,6 +83,124 @@ class MobilePedidoInterface {
                 </div>
                 <div class="mobile-produtos-grid" id="mobile-produtos-grid">
                     <!-- Produtos serão carregados aqui -->
+                </div>
+            </div>
+            
+            <div class="mobile-tab-content" id="tab-cliente">
+                <div style="padding: 15px;">
+                    <h5 style="margin-bottom: 20px;">
+                        <i class="fas fa-user me-2"></i>
+                        Informações do Cliente
+                    </h5>
+                    
+                    <!-- Nome do Cliente -->
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Nome do Cliente</label>
+                        <input type="text" 
+                               id="mobile-cliente-nome" 
+                               placeholder="Nome completo"
+                               style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                    </div>
+                    
+                    <!-- Telefone com busca -->
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Telefone</label>
+                        <div style="display: flex; gap: 5px;">
+                            <input type="text" 
+                                   id="mobile-cliente-telefone" 
+                                   placeholder="(11) 99999-9999"
+                                   style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                            <button onclick="mobilePedido.buscarClientePorTelefone()" 
+                                    style="padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 8px; cursor: pointer;">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+                        <small style="color: #666; font-size: 12px; display: block; margin-top: 5px;">
+                            Digite o telefone e clique em buscar para carregar dados do cliente
+                        </small>
+                    </div>
+                    
+                    <!-- Email -->
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Email</label>
+                        <input type="email" 
+                               id="mobile-cliente-email" 
+                               placeholder="email@exemplo.com"
+                               style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                    </div>
+                    
+                    <!-- CPF -->
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: 500;">CPF</label>
+                        <input type="text" 
+                               id="mobile-cliente-cpf" 
+                               placeholder="000.000.000-00"
+                               style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                    </div>
+                    
+                    <!-- Mensagem de cliente encontrado -->
+                    <div id="mobile-cliente-encontrado" style="display: none; padding: 10px; background: #d4edda; color: #155724; border-radius: 8px; margin-bottom: 15px; font-size: 14px;">
+                        <i class="fas fa-check-circle me-1"></i>
+                        <span id="mobile-cliente-encontrado-texto">Cliente encontrado e carregado!</span>
+                    </div>
+                    
+                    <!-- Campos de Endereço (apenas para delivery) -->
+                    <div id="mobile-endereco-section" style="display: none; margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd;">
+                        <h6 style="margin-bottom: 15px; color: #007bff;">
+                            <i class="fas fa-map-marker-alt me-2"></i>
+                            Endereço de Entrega
+                        </h6>
+                        
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: 500;">Endereço *</label>
+                            <input type="text" 
+                                   id="mobile-endereco-rua" 
+                                   placeholder="Rua, número"
+                                   style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                        </div>
+                        
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: 500;">Bairro *</label>
+                            <input type="text" 
+                                   id="mobile-endereco-bairro" 
+                                   placeholder="Bairro"
+                                   style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                        </div>
+                        
+                        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px; margin-bottom: 15px;">
+                            <div>
+                                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Cidade *</label>
+                                <input type="text" 
+                                       id="mobile-endereco-cidade" 
+                                       placeholder="Cidade"
+                                       style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Estado *</label>
+                                <input type="text" 
+                                       id="mobile-endereco-estado" 
+                                       placeholder="UF"
+                                       maxlength="2"
+                                       style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                            </div>
+                        </div>
+                        
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: 500;">CEP</label>
+                            <input type="text" 
+                                   id="mobile-endereco-cep" 
+                                   placeholder="00000-000"
+                                   style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                        </div>
+                        
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: 500;">Referência</label>
+                            <input type="text" 
+                                   id="mobile-endereco-referencia" 
+                                   placeholder="Ponto de referência (opcional)"
+                                   style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                        </div>
+                    </div>
                 </div>
             </div>
             
@@ -285,7 +407,7 @@ class MobilePedidoInterface {
         const grid = document.getElementById('mobile-mesas-grid');
         if (!grid) return;
         
-        grid.innerHTML = this.mesas.map(mesa => `
+        let html = this.mesas.map(mesa => `
             <div class="mobile-mesa-card ${mesa.status}" 
                  data-mesa-id="${mesa.id_mesa}" 
                  onclick="mobilePedido.selecionarMesa('${mesa.id_mesa}', '${mesa.nome}')">
@@ -293,6 +415,20 @@ class MobilePedidoInterface {
                 <div class="mobile-mesa-status">${mesa.status === 'livre' ? 'Livre' : 'Ocupada'}</div>
             </div>
         `).join('');
+        
+        // Adicionar opção de Delivery
+        html += `
+            <div class="mobile-mesa-card livre" 
+                 data-mesa-id="delivery" 
+                 onclick="mobilePedido.selecionarMesa('delivery', 'Delivery')">
+                <div class="mobile-mesa-numero">
+                    <i class="fas fa-motorcycle me-1"></i> Delivery
+                </div>
+                <div class="mobile-mesa-status">Disponível</div>
+            </div>
+        `;
+        
+        grid.innerHTML = html;
     }
     
     renderProdutos() {
@@ -349,26 +485,59 @@ class MobilePedidoInterface {
     }
     
     selecionarMesa(mesaId, mesaNome) {
-        // Verificar se a mesa está ocupada
-        const mesaCard = document.querySelector(`[data-mesa-id="${mesaId}"]`);
-        if (mesaCard && mesaCard.classList.contains('ocupada')) {
-            alert('Esta mesa está ocupada! Selecione uma mesa livre.');
-            return;
+        // Verificar se a mesa está ocupada (exceto delivery)
+        if (mesaId !== 'delivery') {
+            const mesaCard = document.querySelector(`[data-mesa-id="${mesaId}"]`);
+            if (mesaCard && mesaCard.classList.contains('ocupada')) {
+                alert('Esta mesa está ocupada! Selecione uma mesa livre.');
+                return;
+            }
         }
         
-        this.mesaSelecionada = { id: mesaId, nome: mesaNome };
+        this.mesaSelecionada = { id: mesaId, nome: mesaNome, tipo: mesaId === 'delivery' ? 'delivery' : 'mesa' };
         
         // Atualizar visual
         document.querySelectorAll('.mobile-mesa-card').forEach(card => {
             card.classList.remove('selected');
         });
         
+        const mesaCard = document.querySelector(`[data-mesa-id="${mesaId}"]`);
         if (mesaCard) {
             mesaCard.classList.add('selected');
         }
         
         // Atualizar header
-        document.getElementById('mesa-info').textContent = mesaNome;
+        const mesaInfo = document.getElementById('mesa-info');
+        if (mesaInfo) {
+            if (mesaId === 'delivery') {
+                mesaInfo.textContent = 'Delivery';
+            } else {
+                mesaInfo.textContent = `Mesa: ${mesaNome}`;
+            }
+        }
+        
+        // Mostrar/ocultar campos de endereço baseado no tipo
+        const enderecoSection = document.getElementById('mobile-endereco-section');
+        if (enderecoSection) {
+            if (mesaId === 'delivery') {
+                enderecoSection.style.display = 'block';
+            } else {
+                enderecoSection.style.display = 'none';
+                // Limpar campos de endereço se não for delivery
+                const camposEndereco = [
+                    'mobile-endereco-rua',
+                    'mobile-endereco-bairro',
+                    'mobile-endereco-cidade',
+                    'mobile-endereco-estado',
+                    'mobile-endereco-cep',
+                    'mobile-endereco-referencia'
+                ];
+                camposEndereco.forEach(id => {
+                    const campo = document.getElementById(id);
+                    if (campo) campo.value = '';
+                });
+            }
+        }
         
         // Ir para aba de produtos
         this.switchTab('produtos');
@@ -834,6 +1003,106 @@ class MobilePedidoInterface {
         document.getElementById('mobile-carrinho-modal').classList.remove('active');
     }
     
+    buscarClientePorTelefone() {
+        const telefone = document.getElementById('mobile-cliente-telefone')?.value.trim();
+        if (!telefone) {
+            this.showFeedback('Digite o telefone do cliente', 'warning');
+            return;
+        }
+        
+        fetch(`mvc/ajax/clientes.php?action=buscar_por_telefone&telefone=${encodeURIComponent(telefone)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.cliente) {
+                    // Carregar dados do cliente nos campos
+                    document.getElementById('mobile-cliente-nome').value = data.cliente.nome || '';
+                    document.getElementById('mobile-cliente-email').value = data.cliente.email || '';
+                    document.getElementById('mobile-cliente-cpf').value = data.cliente.cpf || '';
+                    
+                    // Se o cliente tem endereço e é delivery, preencher campos de endereço
+                    if (this.mesaSelecionada && this.mesaSelecionada.id === 'delivery' && data.cliente.endereco) {
+                        const endereco = typeof data.cliente.endereco === 'string' 
+                            ? JSON.parse(data.cliente.endereco) 
+                            : data.cliente.endereco;
+                        
+                        if (endereco) {
+                            document.getElementById('mobile-endereco-rua').value = endereco.endereco || '';
+                            document.getElementById('mobile-endereco-bairro').value = endereco.bairro || '';
+                            document.getElementById('mobile-endereco-cidade').value = endereco.cidade || '';
+                            document.getElementById('mobile-endereco-estado').value = endereco.estado || '';
+                            document.getElementById('mobile-endereco-cep').value = endereco.cep || '';
+                            document.getElementById('mobile-endereco-referencia').value = endereco.referencia || '';
+                        }
+                    }
+                    
+                    // Mostrar mensagem de sucesso
+                    const alertDiv = document.getElementById('mobile-cliente-encontrado');
+                    const alertTexto = document.getElementById('mobile-cliente-encontrado-texto');
+                    if (alertDiv && alertTexto) {
+                        alertTexto.textContent = `Cliente encontrado: ${data.cliente.nome}`;
+                        alertDiv.style.display = 'block';
+                        setTimeout(() => {
+                            alertDiv.style.display = 'none';
+                        }, 3000);
+                    }
+                    
+                    this.showFeedback(`Cliente encontrado: ${data.cliente.nome}`, 'success');
+                } else {
+                    this.showFeedback('Cliente não encontrado. Você pode cadastrar preenchendo os dados.', 'info');
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao buscar cliente:', error);
+                this.showFeedback('Erro ao buscar cliente', 'error');
+            });
+    }
+    
+    obterDadosCliente() {
+        const nome = document.getElementById('mobile-cliente-nome')?.value.trim() || '';
+        const telefone = document.getElementById('mobile-cliente-telefone')?.value.trim() || '';
+        const email = document.getElementById('mobile-cliente-email')?.value.trim() || '';
+        const cpf = document.getElementById('mobile-cliente-cpf')?.value.trim() || '';
+        
+        // Se não tem nome, retornar null
+        if (!nome) {
+            return null;
+        }
+        
+        const dados = {
+            nome: nome,
+            telefone: telefone || null,
+            email: email || null,
+            cpf: cpf || null
+        };
+        
+        // Se for delivery, adicionar endereço
+        if (this.mesaSelecionada && this.mesaSelecionada.id === 'delivery') {
+            const enderecoRua = document.getElementById('mobile-endereco-rua')?.value.trim() || '';
+            const enderecoBairro = document.getElementById('mobile-endereco-bairro')?.value.trim() || '';
+            const enderecoCidade = document.getElementById('mobile-endereco-cidade')?.value.trim() || '';
+            const enderecoEstado = document.getElementById('mobile-endereco-estado')?.value.trim() || '';
+            const enderecoCep = document.getElementById('mobile-endereco-cep')?.value.trim() || '';
+            const enderecoReferencia = document.getElementById('mobile-endereco-referencia')?.value.trim() || '';
+            
+            // Validar campos obrigatórios de endereço
+            if (!enderecoRua || !enderecoBairro || !enderecoCidade || !enderecoEstado) {
+                this.showFeedback('Preencha todos os campos obrigatórios do endereço (Rua, Bairro, Cidade e Estado)', 'warning');
+                return null;
+            }
+            
+            dados.endereco = {
+                endereco: enderecoRua,
+                bairro: enderecoBairro,
+                cidade: enderecoCidade,
+                estado: enderecoEstado,
+                cep: enderecoCep || null,
+                referencia: enderecoReferencia || null
+            };
+        }
+        
+        return dados;
+    }
+    
     finalizarPedido() {
         if (!this.mesaSelecionada) {
             alert('Selecione uma mesa primeiro!');
@@ -866,12 +1135,27 @@ class MobilePedidoInterface {
             
             console.log('📋 Dados do pedido:', pedidoData);
             
+            // Obter dados do cliente
+            const dadosCliente = this.obterDadosCliente();
+            
+            // Se for delivery e não tiver dados do cliente, avisar
+            if (this.mesaSelecionada.id === 'delivery' && !dadosCliente) {
+                this.showFeedback('Para delivery, é necessário preencher os dados do cliente e endereço', 'warning');
+                this.switchTab('cliente');
+                return;
+            }
+            
             // Usar a mesma API do desktop
             const formData = new URLSearchParams();
             formData.append('action', 'criar_pedido');
             formData.append('mesa_id', this.mesaSelecionada.id);
             formData.append('itens', JSON.stringify(this.carrinho));
             formData.append('observacao', document.getElementById('observacaoPedido')?.value || '');
+            
+            // Adicionar dados do cliente se houver
+            if (dadosCliente) {
+                formData.append('dados_cliente', JSON.stringify(dadosCliente));
+            }
             
             const response = await fetch('index.php?action=pedidos', {
                 method: 'POST',

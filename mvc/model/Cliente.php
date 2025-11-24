@@ -30,6 +30,7 @@ class Cliente
                 'data_nascimento' => !empty($data['data_nascimento']) ? $data['data_nascimento'] : null,
                 'telefone_secundario' => $data['telefone_secundario'] ?? null,
                 'observacoes' => $data['observacoes'] ?? null,
+                'tipo_usuario' => 'cliente',
                 'ativo' => true
             ]);
 
@@ -50,11 +51,30 @@ class Cliente
     public function findByTelefone($telefone)
     {
         try {
-            error_log("Cliente::findByTelefone - Buscando cliente com telefone: " . $telefone);
+            // Normalize phone number (remove non-numeric characters)
+            $telefoneNormalizado = preg_replace('/[^0-9]/', '', $telefone);
+            
+            error_log("Cliente::findByTelefone - Buscando cliente com telefone: $telefone (normalizado: $telefoneNormalizado)");
+            
+            // Try exact match first
             $cliente = $this->db->fetch(
-                "SELECT * FROM usuarios_globais WHERE telefone = ? AND ativo = true",
-                [$telefone]
+                "SELECT * FROM usuarios_globais 
+                 WHERE telefone = ? AND ativo = true 
+                 LIMIT 1",
+                [$telefoneNormalizado]
             );
+            
+            // If not found, try with LIKE
+            if (!$cliente) {
+                $cliente = $this->db->fetch(
+                    "SELECT * FROM usuarios_globais 
+                     WHERE (telefone LIKE ? OR telefone LIKE ?) 
+                     AND ativo = true 
+                     LIMIT 1",
+                    ['%' . $telefoneNormalizado . '%', $telefoneNormalizado . '%']
+                );
+            }
+            
             error_log("Cliente::findByTelefone - Resultado: " . ($cliente ? json_encode($cliente) : 'null'));
             return $cliente;
         } catch (Exception $e) {
@@ -138,7 +158,15 @@ class Cliente
     public function getAll($filters = [], $limit = 50, $offset = 0)
     {
         try {
-            $where = ['ug.ativo = true', "ug.tipo_usuario = 'cliente'"];
+            error_log("Cliente::getAll - Filters: " . json_encode($filters));
+            error_log("Cliente::getAll - Limit: $limit, Offset: $offset");
+            
+            // Filter by tipo_usuario = 'cliente' OR tipo_usuario IS NULL (for backward compatibility)
+            // Also include clients that don't have tipo_usuario set (NULL or empty string)
+            $where = [
+                'ug.ativo = true', 
+                "(ug.tipo_usuario = 'cliente' OR ug.tipo_usuario IS NULL OR ug.tipo_usuario = '')"
+            ];
             $params = [];
 
             if (!empty($filters['search'])) {
@@ -156,9 +184,8 @@ class Cliente
             // }
 
             $whereClause = implode(' AND ', $where);
-
-            $clientes = $this->db->fetchAll(
-                "SELECT ug.*, 
+            
+            $sql = "SELECT ug.*, 
                         COUNT(DISTINCT p.idpedido) as total_pedidos,
                         COALESCE(SUM(p.valor_total), 0) as total_gasto,
                         MAX(p.created_at) as ultimo_pedido,
@@ -170,12 +197,22 @@ class Cliente
                  WHERE $whereClause
                  GROUP BY ug.id
                  ORDER BY ug.nome
-                 LIMIT ? OFFSET ?",
+                 LIMIT ? OFFSET ?";
+            
+            error_log("Cliente::getAll - SQL: $sql");
+            error_log("Cliente::getAll - Params: " . json_encode(array_merge($params, [$limit, $offset])));
+
+            $clientes = $this->db->fetchAll(
+                $sql,
                 array_merge($params, [$limit, $offset])
             );
+            
+            error_log("Cliente::getAll - Found " . count($clientes) . " clients");
 
             return $clientes;
         } catch (Exception $e) {
+            error_log("Cliente::getAll - Error: " . $e->getMessage());
+            error_log("Cliente::getAll - Stack trace: " . $e->getTraceAsString());
             return [];
         }
     }
@@ -583,7 +620,14 @@ class Cliente
     public function search($term, $tenantId = null, $limit = 10)
     {
         try {
-            $where = ['ug.ativo = true'];
+            error_log("Cliente::search - Term: $term, TenantId: $tenantId, Limit: $limit");
+            
+            // Filter by tipo_usuario = 'cliente' OR tipo_usuario IS NULL (for backward compatibility)
+            // Also include clients that don't have tipo_usuario set (NULL or empty string)
+            $where = [
+                'ug.ativo = true', 
+                "(ug.tipo_usuario = 'cliente' OR ug.tipo_usuario IS NULL OR ug.tipo_usuario = '')"
+            ];
             $params = [];
 
             if ($tenantId) {
@@ -597,18 +641,26 @@ class Cliente
             $params[] = $searchTerm;
 
             $whereClause = implode(' AND ', $where);
-
-            $clientes = $this->db->fetchAll(
-                "SELECT ug.id, ug.nome, ug.telefone, ug.email
+            
+            $sql = "SELECT ug.id, ug.nome, ug.telefone, ug.email
                  FROM usuarios_globais ug
                  WHERE $whereClause
                  ORDER BY ug.nome
-                 LIMIT ?",
+                 LIMIT ?";
+            
+            error_log("Cliente::search - SQL: $sql");
+            error_log("Cliente::search - Params: " . json_encode(array_merge($params, [$limit])));
+
+            $clientes = $this->db->fetchAll(
+                $sql,
                 array_merge($params, [$limit])
             );
+            
+            error_log("Cliente::search - Found " . count($clientes) . " clients");
 
             return $clientes;
         } catch (Exception $e) {
+            error_log("Cliente::search - Error: " . $e->getMessage());
             return [];
         }
     }

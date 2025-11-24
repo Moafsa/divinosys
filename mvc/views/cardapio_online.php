@@ -1327,19 +1327,25 @@ if (count($enderecoParts) > 2) {
                                 <select class="form-select mb-3" id="enderecoSelecionado" onchange="preencherEnderecoSelecionado()">
                                     <option value="">-- Selecione um endereço --</option>
                                 </select>
+                                <div id="taxaEntregaInfoSelect" class="alert alert-info mt-2 mb-3" style="display: none;">
+                                    <small><i class="fas fa-info-circle"></i> <span id="taxaEntregaTextoSelect">Calculando taxa de entrega...</span></small>
+                                </div>
                                 <div class="text-center mb-3">
                                     <span class="text-muted">ou</span>
                                 </div>
                                 <button class="btn btn-outline-secondary w-100 mb-3" onclick="mostrarNovoEndereco()">
-                                    <i class="fas fa-plus"></i> Cadastrar Novo Endereço
+                                    <i class="fas fa-plus"></i> Adicionar Novo Endereço
                                 </button>
                             </div>
-                            <div id="enderecoSection" style="display: none;">
+                            <div id="enderecoSection" style="display: block;">
                                 <input type="text" class="form-control mb-2" id="deliveryAddress" placeholder="Rua, número, complemento">
                                 <input type="text" class="form-control mb-2" id="deliveryNeighborhood" placeholder="Bairro">
                                 <input type="text" class="form-control mb-2" id="deliveryCity" placeholder="Cidade">
                                 <input type="text" class="form-control mb-2" id="deliveryCEP" placeholder="CEP">
                                 <input type="text" class="form-control mb-2" id="deliveryEstado" placeholder="Estado (UF)">
+                                <button class="btn btn-primary w-100 mt-2 mb-2" id="btnAdicionarEndereco" onclick="adicionarEndereco()">
+                                    <i class="fas fa-save"></i> Adicionar Endereço
+                                </button>
                                 <div id="taxaEntregaInfo" class="alert alert-info mt-2" style="display: none;">
                                     <small><i class="fas fa-info-circle"></i> <span id="taxaEntregaTexto">Calculando taxa de entrega...</span></small>
                                 </div>
@@ -1416,26 +1422,43 @@ if (count($enderecoParts) > 2) {
                 
                 // Show address section if step 3 and delivery type
                 if (step === 3) {
-                    const deliveryType = document.getElementById('deliveryTypeSelect').value;
+                    // Get delivery type from sidebar (outside modal)
+                    const deliveryTypeSelect = document.getElementById('deliveryTypeSelect');
+                    const deliveryType = deliveryTypeSelect ? deliveryTypeSelect.value : 'delivery'; // Default to delivery if not found
+                    
+                    console.log('Step 3 - Delivery type:', deliveryType, 'Endereços:', clienteEnderecos?.length || 0);
+                    
                     if (deliveryType === 'delivery') {
+                        // Always show address selection/entry for delivery
                         // Show saved addresses if available
                         if (clienteEnderecos && clienteEnderecos.length > 0) {
-                            document.getElementById('enderecosExistentes').style.display = 'block';
-                            document.getElementById('enderecoSection').style.display = 'none';
+                            console.log('Mostrando endereços existentes');
+                            const enderecosExistentesEl = document.getElementById('enderecosExistentes');
+                            const enderecoSectionEl = document.getElementById('enderecoSection');
+                            if (enderecosExistentesEl) enderecosExistentesEl.style.display = 'block';
+                            if (enderecoSectionEl) enderecoSectionEl.style.display = 'none';
                             carregarEnderecosExistentes();
                         } else {
-                            document.getElementById('enderecosExistentes').style.display = 'none';
-                            document.getElementById('enderecoSection').style.display = 'block';
+                            // No saved addresses - show form to add new one
+                            console.log('Mostrando formulário de novo endereço');
+                            const enderecosExistentesEl = document.getElementById('enderecosExistentes');
+                            const enderecoSectionEl = document.getElementById('enderecoSection');
+                            if (enderecosExistentesEl) enderecosExistentesEl.style.display = 'none';
+                            if (enderecoSectionEl) enderecoSectionEl.style.display = 'block';
                         }
                     } else {
-                        document.getElementById('enderecosExistentes').style.display = 'none';
-                        document.getElementById('enderecoSection').style.display = 'none';
+                        // Not delivery - hide address sections
+                        console.log('Não é delivery, escondendo seções de endereço');
+                        const enderecosExistentesEl = document.getElementById('enderecosExistentes');
+                        const enderecoSectionEl = document.getElementById('enderecoSection');
+                        if (enderecosExistentesEl) enderecosExistentesEl.style.display = 'none';
+                        if (enderecoSectionEl) enderecoSectionEl.style.display = 'none';
                     }
                 }
             }
         }
         
-        function proximoPasso(fromStep) {
+        async function proximoPasso(fromStep) {
             if (fromStep === 1) {
                 const phone = document.getElementById('customerPhone').value.trim();
                 if (!phone) {
@@ -1456,13 +1479,9 @@ if (count($enderecoParts) > 2) {
                     const enderecoSectionVisible = document.getElementById('enderecoSection').style.display === 'block';
                     
                     if (enderecoSelecionado === '' && enderecoSectionVisible) {
-                        // New address form is visible, validate it
-                        const address = document.getElementById('deliveryAddress').value.trim();
-                        const city = document.getElementById('deliveryCity').value.trim();
-                        if (!address || !city) {
-                            alert('Por favor, preencha o endereço de entrega');
-                            return;
-                        }
+                        // New address form is visible - user must click "Adicionar Endereço" first
+                        alert('Por favor, clique em "Adicionar Endereço" para salvar o endereço antes de continuar.');
+                        return;
                     } else if (enderecoSelecionado === '' && !enderecoSectionVisible) {
                         // No address selected and form not visible (shouldn't happen, but check anyway)
                         alert('Por favor, selecione ou cadastre um endereço de entrega');
@@ -1517,35 +1536,129 @@ if (count($enderecoParts) > 2) {
                 if (data.success && data.cliente) {
                     clienteData = data.cliente;
                     clienteEnderecos = data.enderecos || [];
-                    document.getElementById('customerName').value = data.cliente.nome || '';
+                    
+                    // Preencher campos com dados do cliente (se existirem)
+                    document.getElementById('customerName').value = data.cliente.nome && data.cliente.nome !== 'Cliente' ? data.cliente.nome : '';
                     document.getElementById('customerEmail').value = data.cliente.email || '';
                     document.getElementById('customerCpf').value = data.cliente.cpf || '';
                     
-                    resultDiv.className = 'alert alert-success';
-                    resultDiv.innerHTML = '✅ Cliente encontrado: ' + data.cliente.nome;
+                    if (data.cliente.nome && data.cliente.nome !== 'Cliente') {
+                        resultDiv.className = 'alert alert-success';
+                        resultDiv.innerHTML = '✅ Cliente encontrado: ' + data.cliente.nome;
+                    } else {
+                        resultDiv.className = 'alert alert-info';
+                        resultDiv.innerHTML = '✅ Cliente registrado. Preencha seus dados abaixo.';
+                    }
+                    
+                    // Atualizar cliente quando nome/email/cpf forem preenchidos
+                    setupCustomerDataUpdate();
                     
                     setTimeout(() => {
                         proximoPasso(1);
                     }, 1000);
                 } else {
-                    // Cliente não encontrado - continuar para cadastro
+                    // Erro ao buscar/criar cliente
                     clienteData = null;
                     clienteEnderecos = [];
-                    resultDiv.className = 'alert alert-warning';
-                    resultDiv.innerHTML = 'ℹ️ Cliente não encontrado. Você será cadastrado ao continuar.';
-                    
-                    document.getElementById('customerName').value = '';
-                    document.getElementById('customerEmail').value = '';
-                    document.getElementById('customerCpf').value = '';
-                    
-                    setTimeout(() => {
-                        proximoPasso(1);
-                    }, 1500);
+                    resultDiv.className = 'alert alert-danger';
+                    resultDiv.innerHTML = '❌ Erro ao processar cliente. Tente novamente.';
                 }
             } catch (error) {
                 console.error('Erro ao buscar cliente:', error);
                 resultDiv.className = 'alert alert-danger';
                 resultDiv.textContent = 'Erro ao buscar cliente. Tente novamente.';
+            }
+        }
+        
+        // Setup automatic customer data update when fields change
+        function setupCustomerDataUpdate() {
+            // Remove existing listeners
+            const nameField = document.getElementById('customerName');
+            const emailField = document.getElementById('customerEmail');
+            const cpfField = document.getElementById('customerCpf');
+            
+            // Debounce function
+            let updateTimeout;
+            const debouncedUpdate = () => {
+                clearTimeout(updateTimeout);
+                updateTimeout = setTimeout(() => {
+                    atualizarDadosCliente();
+                }, 1000); // Wait 1 second after user stops typing
+            };
+            
+            // Add event listeners
+            if (nameField) {
+                nameField.removeEventListener('input', debouncedUpdate);
+                nameField.addEventListener('input', debouncedUpdate);
+            }
+            if (emailField) {
+                emailField.removeEventListener('input', debouncedUpdate);
+                emailField.addEventListener('input', debouncedUpdate);
+            }
+            if (cpfField) {
+                cpfField.removeEventListener('input', debouncedUpdate);
+                cpfField.addEventListener('input', debouncedUpdate);
+            }
+        }
+        
+        // Update customer data automatically
+        async function atualizarDadosCliente() {
+            if (!clienteData || !clienteData.id) {
+                console.log('atualizarDadosCliente: Cliente não encontrado');
+                return; // No customer to update
+            }
+            
+            const nome = document.getElementById('customerName').value.trim();
+            const email = document.getElementById('customerEmail').value.trim();
+            const cpf = document.getElementById('customerCpf').value.trim();
+            
+            // Don't update if name is empty
+            if (!nome) {
+                console.log('atualizarDadosCliente: Nome vazio, não atualizando');
+                return;
+            }
+            
+            // Check if there are any changes
+            const hasChanges = (nome !== clienteData.nome) || 
+                              (email !== (clienteData.email || '')) || 
+                              (cpf !== (clienteData.cpf || ''));
+            
+            if (!hasChanges) {
+                console.log('atualizarDadosCliente: Nenhuma mudança detectada');
+                return;
+            }
+            
+            console.log('atualizarDadosCliente: Atualizando dados do cliente', { nome, email, cpf });
+            
+            try {
+                const formData = new FormData();
+                formData.append('action', 'atualizar_dados');
+                formData.append('cliente_id', clienteData.id);
+                formData.append('tenant_id', <?php echo $tenantId; ?>);
+                formData.append('nome', nome);
+                formData.append('email', email); // Can be empty
+                formData.append('cpf', cpf);
+                
+                const response = await fetch('mvc/ajax/clientes_cardapio_online.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.cliente) {
+                        clienteData = data.cliente;
+                        console.log('Dados do cliente atualizados:', clienteData);
+                    } else {
+                        console.error('Erro ao atualizar dados:', data.message);
+                    }
+                } else {
+                    const errorText = await response.text();
+                    console.error('Erro HTTP ao atualizar dados:', response.status, errorText);
+                }
+            } catch (error) {
+                console.error('Erro ao atualizar dados do cliente:', error);
+                // Don't show error to user, just log it
             }
         }
         
@@ -1556,10 +1669,24 @@ if (count($enderecoParts) > 2) {
         
         async function salvarNovoEnderecoCliente(enderecoData) {
             if (!clienteData || !clienteData.id) {
-                return; // No customer to save address to
+                console.error('Cliente não encontrado. clienteData:', clienteData);
+                throw new Error('Cliente não encontrado. Por favor, preencha os dados do cliente primeiro.');
             }
             
             try {
+                // Check if address already exists
+                const addressExists = clienteEnderecos.some(e => {
+                    const existingAddress = `${e.logradouro || ''}, ${e.numero || ''}`.trim();
+                    const newAddress = enderecoData.endereco.trim();
+                    return existingAddress === newAddress && 
+                           (e.cidade || '').trim() === (enderecoData.cidade || '').trim();
+                });
+                
+                if (addressExists) {
+                    console.log('Endereço já existe na lista');
+                    return true;
+                }
+                
                 const formData = new FormData();
                 formData.append('action', 'adicionar_endereco_cardapio');
                 formData.append('cliente_id', clienteData.id);
@@ -1570,6 +1697,7 @@ if (count($enderecoParts) > 2) {
                 const logradouro = addressParts[0]?.trim() || enderecoData.endereco;
                 const numero = addressParts[1]?.trim() || '';
                 
+                // Send as nested array for PHP to parse correctly
                 formData.append('endereco[logradouro]', logradouro);
                 formData.append('endereco[numero]', numero);
                 formData.append('endereco[bairro]', enderecoData.bairro || '');
@@ -1577,20 +1705,50 @@ if (count($enderecoParts) > 2) {
                 formData.append('endereco[estado]', enderecoData.estado || '');
                 formData.append('endereco[cep]', enderecoData.cep || '');
                 
+                console.log('Enviando endereço:', {
+                    cliente_id: clienteData.id,
+                    logradouro,
+                    numero,
+                    bairro: enderecoData.bairro,
+                    cidade: enderecoData.cidade,
+                    estado: enderecoData.estado,
+                    cep: enderecoData.cep
+                });
+                
                 const response = await fetch('mvc/ajax/clientes_cardapio_online.php', {
                     method: 'POST',
                     body: formData
                 });
                 
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Erro HTTP ao salvar endereço:', response.status, errorText);
+                    let errorMsg = `Erro HTTP: ${response.status} ${response.statusText}`;
+                    try {
+                        const errorData = JSON.parse(errorText);
+                        errorMsg = errorData.message || errorMsg;
+                    } catch (e) {
+                        // Not JSON, use text as is
+                    }
+                    throw new Error(errorMsg);
+                }
+                
                 const data = await response.json();
+                console.log('Resposta do servidor ao salvar endereço:', data);
+                
                 if (data.success && data.enderecos) {
                     // Update local addresses list
                     clienteEnderecos = data.enderecos || [];
-                    console.log('Endereço salvo com sucesso');
+                    console.log('Endereço salvo com sucesso. Total de endereços:', clienteEnderecos.length);
+                    return true;
+                } else {
+                    const errorMsg = data.message || 'Erro desconhecido ao salvar endereço';
+                    console.error('Erro ao salvar endereço:', errorMsg, data);
+                    throw new Error(errorMsg);
                 }
             } catch (error) {
                 console.error('Erro ao salvar endereço do cliente:', error);
-                // Don't block order submission if address save fails
+                throw error; // Re-throw to be caught by caller
             }
         }
         
@@ -1628,8 +1786,10 @@ if (count($enderecoParts) > 2) {
                 return;
             }
             
-            // Show address form and fill it
-            document.getElementById('enderecoSection').style.display = 'block';
+            // Hide address form (user selected from saved addresses)
+            document.getElementById('enderecoSection').style.display = 'none';
+            
+            // Fill hidden fields with selected address data
             const endereco = clienteEnderecos[index];
             const logradouro = endereco.logradouro || '';
             const numero = endereco.numero || '';
@@ -1646,13 +1806,29 @@ if (count($enderecoParts) > 2) {
         function atualizarTaxaEntregaInfo() {
             const infoDiv = document.getElementById('taxaEntregaInfo');
             const textoDiv = document.getElementById('taxaEntregaTexto');
+            const infoDivSelect = document.getElementById('taxaEntregaInfoSelect');
+            const textoDivSelect = document.getElementById('taxaEntregaTextoSelect');
             
+            // Update both info divs (one in address form, one in select section)
             if (deliveryFee > 0) {
-                infoDiv.style.display = 'block';
-                infoDiv.className = 'alert alert-success mt-2';
-                textoDiv.innerHTML = `<i class="fas fa-check-circle"></i> Taxa de entrega: R$ ${deliveryFee.toFixed(2).replace('.', ',')}`;
+                if (infoDiv && textoDiv) {
+                    infoDiv.style.display = 'block';
+                    infoDiv.className = 'alert alert-success mt-2';
+                    textoDiv.innerHTML = `<i class="fas fa-check-circle"></i> Taxa de entrega: R$ ${deliveryFee.toFixed(2).replace('.', ',')}`;
+                }
+                if (infoDivSelect && textoDivSelect) {
+                    infoDivSelect.style.display = 'block';
+                    infoDivSelect.className = 'alert alert-success mt-2 mb-3';
+                    textoDivSelect.innerHTML = `<i class="fas fa-check-circle"></i> Taxa de entrega: R$ ${deliveryFee.toFixed(2).replace('.', ',')}`;
+                }
             } else {
-                infoDiv.style.display = 'none';
+                if (infoDiv) infoDiv.style.display = 'none';
+                if (infoDivSelect) infoDivSelect.style.display = 'none';
+            }
+            
+            // Update order summary if visible
+            if (currentCheckoutStep === 5) {
+                updateOrderSummary();
             }
         }
         
@@ -1666,7 +1842,81 @@ if (count($enderecoParts) > 2) {
             document.getElementById('deliveryCEP').value = '';
             document.getElementById('deliveryEstado').value = '';
             document.getElementById('enderecoSelecionado').value = '';
+            deliveryFee = 0;
+            atualizarTaxaEntregaInfo();
         }
+        
+        async function adicionarEndereco() {
+            const address = document.getElementById('deliveryAddress').value.trim();
+            const city = document.getElementById('deliveryCity').value.trim();
+            
+            if (!address || !city) {
+                alert('Por favor, preencha pelo menos o endereço e a cidade.');
+                return;
+            }
+            
+            // Cliente já foi criado quando inseriu o telefone, não precisa validar novamente
+            
+            const btn = document.getElementById('btnAdicionarEndereco');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
+            
+            try {
+                // Cliente já deve existir (criado quando inseriu o telefone)
+                if (!clienteData || !clienteData.id) {
+                    throw new Error('Cliente não encontrado. Por favor, volte ao passo anterior e insira o telefone.');
+                }
+                
+                // Atualizar dados do cliente se necessário
+                await atualizarDadosCliente();
+                
+                console.log('Cliente pronto para adicionar endereço. ID:', clienteData.id);
+                
+                // Now save the address
+                const enderecoData = {
+                    endereco: address,
+                    bairro: document.getElementById('deliveryNeighborhood').value.trim(),
+                    cidade: city,
+                    cep: document.getElementById('deliveryCEP').value.trim(),
+                    estado: document.getElementById('deliveryEstado').value.trim()
+                };
+                
+                const saved = await salvarNovoEnderecoCliente(enderecoData);
+                
+                // Show success message
+                const infoDiv = document.getElementById('taxaEntregaInfo');
+                const textoDiv = document.getElementById('taxaEntregaTexto');
+                infoDiv.style.display = 'block';
+                infoDiv.className = 'alert alert-success mt-2';
+                textoDiv.innerHTML = '<i class="fas fa-check-circle"></i> Endereço adicionado com sucesso!';
+                
+                // Hide address form and show address selection
+                document.getElementById('enderecoSection').style.display = 'none';
+                document.getElementById('enderecosExistentes').style.display = 'block';
+                
+                // Reload addresses in select
+                carregarEnderecosExistentes();
+                
+                // Find and select the newly added address
+                setTimeout(() => {
+                    const select = document.getElementById('enderecoSelecionado');
+                    if (clienteEnderecos.length > 0) {
+                        // Select the last address (most recently added)
+                        const lastIndex = clienteEnderecos.length - 1;
+                        select.value = lastIndex;
+                        preencherEnderecoSelecionado();
+                    }
+                }, 500);
+            } catch (error) {
+                console.error('Erro ao adicionar endereço:', error);
+                alert('Erro ao adicionar endereço: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
+        
         
         async function calcularTaxaEntregaAutomatico() {
             const address = document.getElementById('deliveryAddress').value.trim();
@@ -1703,13 +1953,21 @@ if (count($enderecoParts) > 2) {
             if (filialData.usar_calculo_distancia) {
                 const deliveryMapsWebhookUrl = <?php echo json_encode($deliveryMapsWebhookUrl); ?>;
                 if (deliveryMapsWebhookUrl) {
-                    // Show loading state in info div
+                    // Show loading state in info divs
                     const infoDiv = document.getElementById('taxaEntregaInfo');
                     const textoDiv = document.getElementById('taxaEntregaTexto');
+                    const infoDivSelect = document.getElementById('taxaEntregaInfoSelect');
+                    const textoDivSelect = document.getElementById('taxaEntregaTextoSelect');
+                    
                     if (infoDiv && textoDiv) {
                         infoDiv.style.display = 'block';
                         infoDiv.className = 'alert alert-info mt-2';
                         textoDiv.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Calculando taxa de entrega...';
+                    }
+                    if (infoDivSelect && textoDivSelect) {
+                        infoDivSelect.style.display = 'block';
+                        infoDivSelect.className = 'alert alert-info mt-2 mb-3';
+                        textoDivSelect.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Calculando taxa de entrega...';
                     }
                     
                     try {
@@ -1924,7 +2182,8 @@ if (count($enderecoParts) > 2) {
                             estado: document.getElementById('deliveryEstado').value.trim()
                         };
                         
-                        // Save new address to customer if customer exists
+                        // Address should already be saved by salvarClienteEEnderecoEAutomatico
+                        // But ensure it's saved if not already
                         if (clienteData && clienteData.id) {
                             await salvarNovoEnderecoCliente(enderecoEntrega);
                         }
