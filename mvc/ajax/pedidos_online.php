@@ -269,19 +269,8 @@ try {
         ]);
     }
     
-    // Add delivery fee as an item if delivery
-    if ($tipoEntrega === 'delivery' && $taxaEntrega > 0) {
-        $db->insert('pedido_itens', [
-            'pedido_id' => $pedidoId,
-            'produto_id' => null, // Special item for delivery fee
-            'quantidade' => 1,
-            'valor_unitario' => $taxaEntrega,
-            'valor_total' => $taxaEntrega,
-            'observacao' => 'Taxa de Entrega',
-            'tenant_id' => $tenantId,
-            'filial_id' => $filialId
-        ]);
-    }
+    // Delivery fee is already included in valor_total, no need to add as separate item
+    // If you need to track delivery fee separately, add a 'taxa_entrega' column to pedido table
     
     $response = [
         'success' => true,

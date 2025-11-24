@@ -234,6 +234,57 @@ if ($tenant && $filial) {
                     </form>
                 </div>
 
+                <!-- Informações do Estabelecimento -->
+                <?php if ($filial): ?>
+                <div class="config-card">
+                    <h5 class="mb-3">
+                        <i class="fas fa-map-marker-alt me-2"></i>
+                        Informações do Estabelecimento
+                    </h5>
+                    <form id="configEstabelecimento">
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="mb-3">
+                                    <label class="form-label">Nome da Filial</label>
+                                    <input type="text" class="form-control" id="nomeFilial" value="<?php echo htmlspecialchars($filial['nome'] ?? ''); ?>">
+                                </div>
+                            </div>
+                            <div class="col-md-12">
+                                <div class="mb-3">
+                                    <label class="form-label">Endereço</label>
+                                    <textarea class="form-control" id="enderecoFilial" rows="3" placeholder="Endereço completo do estabelecimento"><?php echo htmlspecialchars($filial['endereco'] ?? ''); ?></textarea>
+                                    <small class="form-text text-muted">Este endereço é usado para calcular a distância de entrega</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Telefone</label>
+                                    <input type="text" class="form-control" id="telefoneFilial" value="<?php echo htmlspecialchars($filial['telefone'] ?? ''); ?>" placeholder="(00) 00000-0000">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Email</label>
+                                    <input type="email" class="form-control" id="emailFilial" value="<?php echo htmlspecialchars($filial['email'] ?? ''); ?>" placeholder="contato@estabelecimento.com">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">CNPJ</label>
+                                    <input type="text" class="form-control" id="cnpjFilial" value="<?php echo htmlspecialchars($filial['cnpj'] ?? ''); ?>" placeholder="00.000.000/0000-00">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-2"></i>
+                                Salvar Alterações
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                <?php endif; ?>
+
                 <!-- Configurações de Mesas -->
                 <div class="config-card">
                     <h5 class="mb-3">
@@ -893,6 +944,58 @@ if ($tenant && $filial) {
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         // Salvar configurações de aparência
+        // Formulário de Informações do Estabelecimento
+        const configEstabelecimentoForm = document.getElementById('configEstabelecimento');
+        if (configEstabelecimentoForm) {
+            configEstabelecimentoForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const formData = new FormData();
+                formData.append('action', 'salvar_estabelecimento');
+                formData.append('nome', document.getElementById('nomeFilial').value);
+                formData.append('endereco', document.getElementById('enderecoFilial').value);
+                formData.append('telefone', document.getElementById('telefoneFilial').value);
+                formData.append('email', document.getElementById('emailFilial').value);
+                formData.append('cnpj', document.getElementById('cnpjFilial').value);
+                
+                Swal.fire({
+                    title: 'Salvando...',
+                    text: 'Aguarde enquanto salvamos as informações',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+                
+                fetch('mvc/ajax/configuracoes.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        Swal.fire({
+                            title: 'Sucesso!',
+                            text: data.message || 'Informações do estabelecimento salvas com sucesso!',
+                            icon: 'success',
+                            confirmButtonText: 'OK'
+                        });
+                    } else {
+                        Swal.fire({
+                            title: 'Erro',
+                            text: data.message || 'Erro ao salvar informações',
+                            icon: 'error',
+                            confirmButtonText: 'OK'
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Erro:', error);
+                    Swal.fire('Erro', 'Erro ao salvar informações do estabelecimento', 'error');
+                });
+            });
+        }
+        
         document.getElementById('configAparencia').addEventListener('submit', function(e) {
             e.preventDefault();
             

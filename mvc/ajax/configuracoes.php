@@ -76,6 +76,55 @@ try {
             echo json_encode(['success' => true, 'message' => 'Configurações de aparência salvas com sucesso!']);
             break;
             
+        case 'salvar_estabelecimento':
+            $nome = $_POST['nome'] ?? '';
+            $endereco = $_POST['endereco'] ?? '';
+            $telefone = $_POST['telefone'] ?? '';
+            $email = $_POST['email'] ?? '';
+            $cnpj = $_POST['cnpj'] ?? '';
+            
+            if (empty($nome)) {
+                throw new \Exception('Nome do estabelecimento é obrigatório');
+            }
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId();
+            $filialId = $session->getFilialId();
+            
+            if (!$filialId) {
+                throw new \Exception('Filial não encontrada na sessão');
+            }
+            
+            // Atualizar informações da filial
+            $db->update(
+                'filiais',
+                [
+                    'nome' => $nome,
+                    'endereco' => $endereco ?: null,
+                    'telefone' => $telefone ?: null,
+                    'email' => $email ?: null,
+                    'cnpj' => $cnpj ?: null,
+                    'updated_at' => date('Y-m-d H:i:s')
+                ],
+                'id = ? AND tenant_id = ?',
+                [$filialId, $tenantId]
+            );
+            
+            // Atualizar sessão
+            $filial = $session->getFilial();
+            if ($filial) {
+                $filial['nome'] = $nome;
+                $filial['endereco'] = $endereco;
+                $filial['telefone'] = $telefone;
+                $filial['email'] = $email;
+                $filial['cnpj'] = $cnpj;
+                $session->setFilial($filial);
+            }
+            
+            echo json_encode(['success' => true, 'message' => 'Informações do estabelecimento salvas com sucesso!']);
+            break;
+            
         case 'salvar_mesas':
             $numeroMesas = (int) ($_POST['numero_mesas'] ?? 0);
             $capacidadeMesa = (int) ($_POST['capacidade_mesa'] ?? 0);

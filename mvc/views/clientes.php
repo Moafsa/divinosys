@@ -694,6 +694,7 @@ if ($clienteId) {
     <script>
         let clientes = [];
         let clienteAtual = null;
+        let enderecosCliente = [];
         let paginaAtual = 1;
         const itensPorPagina = 20;
 
@@ -1189,6 +1190,9 @@ if ($clienteId) {
             const div = document.getElementById('detalhesClienteEnderecos');
             div.innerHTML = '';
             
+            // Store addresses for editing
+            enderecosCliente = enderecos || [];
+            
             if (enderecos.length === 0) {
                 div.innerHTML = '<p class="text-muted">Nenhum endereço cadastrado</p>';
                 return;
@@ -1457,8 +1461,8 @@ if ($clienteId) {
                 return;
             }
 
-            // Find address in current client data
-            const endereco = clienteAtual.enderecos?.find(e => e.id == enderecoId);
+            // Find address in stored addresses
+            const endereco = enderecosCliente.find(e => e.id == enderecoId);
             if (!endereco) {
                 Swal.fire('Erro', 'Endereço não encontrado', 'error');
                 return;

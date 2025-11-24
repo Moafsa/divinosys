@@ -21,7 +21,22 @@ try {
     $db = \System\Database::getInstance();
     $clienteModel = new \MVC\Model\Cliente();
     
+    // Get action from URL or POST - handle multiple action name variations
     $action = $_GET['action'] ?? $_POST['action'] ?? '';
+    
+    // Map action names to internal actions
+    $actionMap = [
+        'buscar_cliente_cardapio' => 'buscar_por_telefone',
+        'cadastrar_cliente_cardapio' => 'cadastrar',
+        'adicionar_endereco_cardapio' => 'adicionar_endereco'
+    ];
+    
+    if (isset($actionMap[$action])) {
+        $action = $actionMap[$action];
+    }
+    
+    error_log("clientes_cardapio_online - Action recebida: " . ($_GET['action'] ?? $_POST['action'] ?? '') . " -> Mapeada para: $action");
+    
     $tenantId = $_GET['tenant_id'] ?? $_POST['tenant_id'] ?? null;
     
     if (!$tenantId) {
@@ -39,14 +54,33 @@ try {
             // Normalize phone number (remove non-numeric characters)
             $telefoneNormalizado = preg_replace('/[^0-9]/', '', $telefone);
             
-            // Search for client by phone
+            error_log("clientes_cardapio_online::buscar_por_telefone - Telefone original: $telefone, Normalizado: $telefoneNormalizado");
+            
+            // Search for client by phone (include clients with tipo_usuario = 'cliente' or NULL or empty for backward compatibility)
+            // Try multiple search patterns to handle different phone formats
             $cliente = $db->fetch(
                 "SELECT id, nome, telefone, email, cpf 
                  FROM usuarios_globais 
-                 WHERE telefone = ? OR telefone LIKE ? OR telefone LIKE ? 
+                 WHERE (
+                     telefone = ? 
+                     OR telefone = ?
+                     OR telefone LIKE ?
+                     OR telefone LIKE ?
+                     OR REPLACE(REPLACE(REPLACE(REPLACE(telefone, '(', ''), ')', ''), '-', ''), ' ', '') = ?
+                 )
+                 AND (tipo_usuario = 'cliente' OR tipo_usuario IS NULL OR tipo_usuario = '')
+                 AND ativo = true
                  LIMIT 1",
-                [$telefone, '%' . $telefoneNormalizado . '%', $telefoneNormalizado . '%']
+                [
+                    $telefone, 
+                    $telefoneNormalizado,
+                    '%' . $telefoneNormalizado . '%', 
+                    $telefoneNormalizado . '%',
+                    $telefoneNormalizado
+                ]
             );
+            
+            error_log("clientes_cardapio_online::buscar_por_telefone - Cliente encontrado: " . ($cliente ? json_encode($cliente) : 'null'));
             
             if ($cliente) {
                 // Get client addresses
@@ -77,10 +111,19 @@ try {
                 throw new Exception('Nome e telefone são obrigatórios');
             }
             
-            // Check if client already exists
+            // Normalize phone for search
+            $telefoneNormalizado = preg_replace('/[^0-9]/', '', $telefone);
+            
+            // Check if client already exists (try multiple formats)
             $clienteExistente = $db->fetch(
-                "SELECT id FROM usuarios_globais WHERE telefone = ? LIMIT 1",
-                [preg_replace('/[^0-9]/', '', $telefone)]
+                "SELECT id FROM usuarios_globais 
+                 WHERE (
+                     telefone = ? 
+                     OR telefone = ?
+                     OR REPLACE(REPLACE(REPLACE(REPLACE(telefone, '(', ''), ')', ''), '-', ''), ' ', '') = ?
+                 )
+                 LIMIT 1",
+                [$telefone, $telefoneNormalizado, $telefoneNormalizado]
             );
             
             if ($clienteExistente) {
@@ -98,6 +141,7 @@ try {
                 'telefone' => preg_replace('/[^0-9]/', '', $telefone),
                 'email' => $email ?: null,
                 'cpf' => $cpf ?: null,
+                'tipo_usuario' => 'cliente',
                 'ativo' => true,
                 'created_at' => date('Y-m-d H:i:s'),
                 'updated_at' => date('Y-m-d H:i:s')
@@ -158,6 +202,7 @@ try {
             break;
             
         case 'adicionar_endereco':
+        case 'adicionar_endereco_cardapio':
             $clienteId = $_POST['cliente_id'] ?? null;
             $enderecoData = $_POST['endereco'] ?? [];
             
@@ -199,7 +244,9 @@ try {
             break;
             
         default:
-            throw new Exception('Ação não encontrada');
+            // Log unknown action for debugging
+            error_log("clientes_cardapio_online - Ação desconhecida: $action");
+            throw new Exception('Ação não encontrada: ' . $action);
     }
     
 } catch (Exception $e) {

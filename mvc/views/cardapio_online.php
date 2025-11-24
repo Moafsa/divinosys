@@ -224,15 +224,16 @@ if (count($enderecoParts) > 2) {
             --header-bg: <?php echo $primaryColor; ?>;
         }
         
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: #ffffff;
+            overflow-x: hidden;
+        }
+        
+        img, video, iframe {
+            max-width: 100%;
+            height: auto;
         }
         
         /* Header Styles */
@@ -744,9 +745,38 @@ if (count($enderecoParts) > 2) {
         
         /* Responsive */
         @media (max-width: 768px) {
-            .sidebar-right {
-                width: 100%;
-                right: -100%;
+            .header-yellow {
+                padding: 1.5rem 1rem;
+            }
+            
+            .header-yellow .logo-img,
+            .header-yellow .logo-initials {
+                width: 80px;
+                height: 80px;
+                font-size: 1.8rem;
+            }
+            
+            .header-yellow .restaurant-name {
+                font-size: 1.5rem;
+                margin-bottom: 0.5rem;
+            }
+            
+            .status-badge {
+                padding: 0.4rem 1rem;
+                font-size: 0.8rem;
+            }
+            
+            .nav-tabs-custom {
+                flex-wrap: wrap;
+            }
+            
+            .nav-tabs-custom .nav-link {
+                padding: 0.75rem 0.5rem;
+                font-size: 0.9rem;
+            }
+            
+            .main-content-wrapper {
+                padding: 1rem;
             }
             
             .products-grid {
@@ -754,13 +784,148 @@ if (count($enderecoParts) > 2) {
                 gap: 1rem;
             }
             
-            .header-yellow .restaurant-name {
-                font-size: 1.8rem;
+            .product-card {
+                border-radius: 8px;
+            }
+            
+            .product-image {
+                height: 120px;
+            }
+            
+            .product-info {
+                padding: 0.75rem;
+            }
+            
+            .product-name {
+                font-size: 0.9rem;
+            }
+            
+            .product-price {
+                font-size: 1rem;
+            }
+            
+            .sidebar-right {
+                width: 100%;
+                right: -100%;
+                padding: 1rem;
+            }
+            
+            .sidebar-header h3 {
+                font-size: 1.1rem;
             }
             
             .cart-button {
                 bottom: 1rem;
                 right: 1rem;
+                width: 50px;
+                height: 50px;
+            }
+            
+            .cart-button i {
+                font-size: 1.2rem;
+            }
+            
+            .cart-badge {
+                width: 20px;
+                height: 20px;
+                font-size: 0.7rem;
+            }
+            
+            .reservation-form {
+                max-width: 100%;
+            }
+            
+            .hours-list li {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            
+            .checkout-content {
+                width: 95%;
+                padding: 1.5rem;
+                max-height: 95vh;
+            }
+            
+            .checkout-step h5 {
+                font-size: 1.1rem;
+            }
+            
+            .payment-option {
+                padding: 0.75rem;
+            }
+            
+            .info-section {
+                margin-bottom: 1.5rem;
+            }
+            
+            .payment-methods {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .header-yellow {
+                padding: 1rem 0.5rem;
+            }
+            
+            .header-yellow .logo-img,
+            .header-yellow .logo-initials {
+                width: 60px;
+                height: 60px;
+                font-size: 1.5rem;
+            }
+            
+            .header-yellow .restaurant-name {
+                font-size: 1.2rem;
+            }
+            
+            .nav-tabs-custom .nav-link {
+                padding: 0.6rem 0.3rem;
+                font-size: 0.8rem;
+            }
+            
+            .main-content-wrapper {
+                padding: 0.75rem;
+            }
+            
+            .products-grid {
+                grid-template-columns: 1fr;
+                gap: 0.75rem;
+            }
+            
+            .product-image {
+                height: 150px;
+            }
+            
+            h3 {
+                font-size: 1.2rem;
+            }
+            
+            .cart-button {
+                width: 45px;
+                height: 45px;
+                bottom: 0.75rem;
+                right: 0.75rem;
+            }
+            
+            .sidebar-right {
+                padding: 0.75rem;
+            }
+            
+            .checkout-content {
+                width: 98%;
+                padding: 1rem;
+                border-radius: 10px;
+            }
+            
+            .checkout-step h5 {
+                font-size: 1rem;
+            }
+            
+            .close-checkout {
+                top: 0.5rem;
+                right: 0.5rem;
+                font-size: 1.2rem;
             }
         }
     </style>
@@ -1157,13 +1322,27 @@ if (count($enderecoParts) > 2) {
                         
                         <div id="checkoutStep3" class="checkout-step" style="display: none;">
                             <h5 class="mb-3">Endereço de Entrega</h5>
+                            <div id="enderecosExistentes" style="display: none;">
+                                <label class="form-label">Selecione um endereço salvo:</label>
+                                <select class="form-select mb-3" id="enderecoSelecionado" onchange="preencherEnderecoSelecionado()">
+                                    <option value="">-- Selecione um endereço --</option>
+                                </select>
+                                <div class="text-center mb-3">
+                                    <span class="text-muted">ou</span>
+                                </div>
+                                <button class="btn btn-outline-secondary w-100 mb-3" onclick="mostrarNovoEndereco()">
+                                    <i class="fas fa-plus"></i> Cadastrar Novo Endereço
+                                </button>
+                            </div>
                             <div id="enderecoSection" style="display: none;">
                                 <input type="text" class="form-control mb-2" id="deliveryAddress" placeholder="Rua, número, complemento">
                                 <input type="text" class="form-control mb-2" id="deliveryNeighborhood" placeholder="Bairro">
                                 <input type="text" class="form-control mb-2" id="deliveryCity" placeholder="Cidade">
                                 <input type="text" class="form-control mb-2" id="deliveryCEP" placeholder="CEP">
                                 <input type="text" class="form-control mb-2" id="deliveryEstado" placeholder="Estado (UF)">
-                                <button class="btn btn-primary w-100 mt-2" onclick="calcularTaxaEntrega()">Calcular Taxa de Entrega</button>
+                                <div id="taxaEntregaInfo" class="alert alert-info mt-2" style="display: none;">
+                                    <small><i class="fas fa-info-circle"></i> <span id="taxaEntregaTexto">Calculando taxa de entrega...</span></small>
+                                </div>
                             </div>
                             <button class="btn btn-primary w-100 mt-2" onclick="proximoPasso(3)">Continuar</button>
                         </div>
@@ -1221,6 +1400,7 @@ if (count($enderecoParts) > 2) {
         
         let currentCheckoutStep = 1;
         let clienteData = null;
+        let clienteEnderecos = [];
         let deliveryFee = 0;
         let paymentMethod = 'on_delivery';
         
@@ -1233,6 +1413,25 @@ if (count($enderecoParts) > 2) {
             if (currentStepEl) {
                 currentStepEl.style.display = 'block';
                 currentCheckoutStep = step;
+                
+                // Show address section if step 3 and delivery type
+                if (step === 3) {
+                    const deliveryType = document.getElementById('deliveryTypeSelect').value;
+                    if (deliveryType === 'delivery') {
+                        // Show saved addresses if available
+                        if (clienteEnderecos && clienteEnderecos.length > 0) {
+                            document.getElementById('enderecosExistentes').style.display = 'block';
+                            document.getElementById('enderecoSection').style.display = 'none';
+                            carregarEnderecosExistentes();
+                        } else {
+                            document.getElementById('enderecosExistentes').style.display = 'none';
+                            document.getElementById('enderecoSection').style.display = 'block';
+                        }
+                    } else {
+                        document.getElementById('enderecosExistentes').style.display = 'none';
+                        document.getElementById('enderecoSection').style.display = 'none';
+                    }
+                }
             }
         }
         
@@ -1252,19 +1451,23 @@ if (count($enderecoParts) > 2) {
             } else if (fromStep === 3) {
                 const deliveryType = document.getElementById('deliveryTypeSelect').value;
                 if (deliveryType === 'delivery') {
-                    const address = document.getElementById('deliveryAddress').value.trim();
-                    const city = document.getElementById('deliveryCity').value.trim();
-                    if (!address || !city) {
-                        alert('Por favor, preencha o endereço de entrega');
+                    // Check if address was selected from saved addresses
+                    const enderecoSelecionado = document.getElementById('enderecoSelecionado').value;
+                    const enderecoSectionVisible = document.getElementById('enderecoSection').style.display === 'block';
+                    
+                    if (enderecoSelecionado === '' && enderecoSectionVisible) {
+                        // New address form is visible, validate it
+                        const address = document.getElementById('deliveryAddress').value.trim();
+                        const city = document.getElementById('deliveryCity').value.trim();
+                        if (!address || !city) {
+                            alert('Por favor, preencha o endereço de entrega');
+                            return;
+                        }
+                    } else if (enderecoSelecionado === '' && !enderecoSectionVisible) {
+                        // No address selected and form not visible (shouldn't happen, but check anyway)
+                        alert('Por favor, selecione ou cadastre um endereço de entrega');
                         return;
                     }
-                }
-            }
-            
-            if (fromStep === 3) {
-                const deliveryType = document.getElementById('deliveryTypeSelect').value;
-                if (deliveryType === 'delivery') {
-                    document.getElementById('enderecoSection').style.display = 'block';
                 }
             }
             
@@ -1313,6 +1516,7 @@ if (count($enderecoParts) > 2) {
                 
                 if (data.success && data.cliente) {
                     clienteData = data.cliente;
+                    clienteEnderecos = data.enderecos || [];
                     document.getElementById('customerName').value = data.cliente.nome || '';
                     document.getElementById('customerEmail').value = data.cliente.email || '';
                     document.getElementById('customerCpf').value = data.cliente.cpf || '';
@@ -1326,6 +1530,7 @@ if (count($enderecoParts) > 2) {
                 } else {
                     // Cliente não encontrado - continuar para cadastro
                     clienteData = null;
+                    clienteEnderecos = [];
                     resultDiv.className = 'alert alert-warning';
                     resultDiv.innerHTML = 'ℹ️ Cliente não encontrado. Você será cadastrado ao continuar.';
                     
@@ -1349,12 +1554,141 @@ if (count($enderecoParts) > 2) {
             document.getElementById('payment' + (method === 'online' ? 'Online' : 'OnDelivery')).checked = true;
         }
         
-        async function calcularTaxaEntrega() {
-            const address = document.getElementById('deliveryAddress').value;
-            const city = document.getElementById('deliveryCity').value;
+        async function salvarNovoEnderecoCliente(enderecoData) {
+            if (!clienteData || !clienteData.id) {
+                return; // No customer to save address to
+            }
+            
+            try {
+                const formData = new FormData();
+                formData.append('action', 'adicionar_endereco_cardapio');
+                formData.append('cliente_id', clienteData.id);
+                formData.append('tenant_id', <?php echo $tenantId; ?>);
+                
+                // Parse address string to extract logradouro and numero
+                const addressParts = enderecoData.endereco.split(',');
+                const logradouro = addressParts[0]?.trim() || enderecoData.endereco;
+                const numero = addressParts[1]?.trim() || '';
+                
+                formData.append('endereco[logradouro]', logradouro);
+                formData.append('endereco[numero]', numero);
+                formData.append('endereco[bairro]', enderecoData.bairro || '');
+                formData.append('endereco[cidade]', enderecoData.cidade || '');
+                formData.append('endereco[estado]', enderecoData.estado || '');
+                formData.append('endereco[cep]', enderecoData.cep || '');
+                
+                const response = await fetch('mvc/ajax/clientes_cardapio_online.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                if (data.success && data.enderecos) {
+                    // Update local addresses list
+                    clienteEnderecos = data.enderecos || [];
+                    console.log('Endereço salvo com sucesso');
+                }
+            } catch (error) {
+                console.error('Erro ao salvar endereço do cliente:', error);
+                // Don't block order submission if address save fails
+            }
+        }
+        
+        async function carregarEnderecosExistentes() {
+            const select = document.getElementById('enderecoSelecionado');
+            select.innerHTML = '<option value="">-- Selecione um endereço --</option>';
+            
+            clienteEnderecos.forEach((endereco, index) => {
+                const option = document.createElement('option');
+                option.value = index;
+                const logradouro = endereco.logradouro || '';
+                const numero = endereco.numero || '';
+                const bairro = endereco.bairro || '';
+                const cidade = endereco.cidade || '';
+                const estado = endereco.estado || '';
+                const enderecoTexto = `${logradouro}${numero ? ', ' + numero : ''}${bairro ? ' - ' + bairro : ''}${cidade ? ', ' + cidade : ''}${estado ? '/' + estado : ''}`;
+                option.textContent = enderecoTexto.trim() || 'Endereço sem descrição';
+                select.appendChild(option);
+            });
+        }
+        
+        function preencherEnderecoSelecionado() {
+            const select = document.getElementById('enderecoSelecionado');
+            const index = select.value;
+            
+            if (index === '' || !clienteEnderecos[index]) {
+                // Clear fields if no address selected
+                document.getElementById('deliveryAddress').value = '';
+                document.getElementById('deliveryNeighborhood').value = '';
+                document.getElementById('deliveryCity').value = '';
+                document.getElementById('deliveryCEP').value = '';
+                document.getElementById('deliveryEstado').value = '';
+                deliveryFee = 0;
+                atualizarTaxaEntregaInfo();
+                return;
+            }
+            
+            // Show address form and fill it
+            document.getElementById('enderecoSection').style.display = 'block';
+            const endereco = clienteEnderecos[index];
+            const logradouro = endereco.logradouro || '';
+            const numero = endereco.numero || '';
+            document.getElementById('deliveryAddress').value = `${logradouro}${numero ? ', ' + numero : ''}`.trim();
+            document.getElementById('deliveryNeighborhood').value = endereco.bairro || '';
+            document.getElementById('deliveryCity').value = endereco.cidade || '';
+            document.getElementById('deliveryCEP').value = endereco.cep || '';
+            document.getElementById('deliveryEstado').value = endereco.estado || '';
+            
+            // Calculate delivery fee automatically
+            calcularTaxaEntregaAutomatico();
+        }
+        
+        function atualizarTaxaEntregaInfo() {
+            const infoDiv = document.getElementById('taxaEntregaInfo');
+            const textoDiv = document.getElementById('taxaEntregaTexto');
+            
+            if (deliveryFee > 0) {
+                infoDiv.style.display = 'block';
+                infoDiv.className = 'alert alert-success mt-2';
+                textoDiv.innerHTML = `<i class="fas fa-check-circle"></i> Taxa de entrega: R$ ${deliveryFee.toFixed(2).replace('.', ',')}`;
+            } else {
+                infoDiv.style.display = 'none';
+            }
+        }
+        
+        function mostrarNovoEndereco() {
+            document.getElementById('enderecosExistentes').style.display = 'none';
+            document.getElementById('enderecoSection').style.display = 'block';
+            // Clear fields
+            document.getElementById('deliveryAddress').value = '';
+            document.getElementById('deliveryNeighborhood').value = '';
+            document.getElementById('deliveryCity').value = '';
+            document.getElementById('deliveryCEP').value = '';
+            document.getElementById('deliveryEstado').value = '';
+            document.getElementById('enderecoSelecionado').value = '';
+        }
+        
+        async function calcularTaxaEntregaAutomatico() {
+            const address = document.getElementById('deliveryAddress').value.trim();
+            const city = document.getElementById('deliveryCity').value.trim();
             
             if (!address || !city) {
-                alert('Por favor, preencha pelo menos o endereço e a cidade.');
+                deliveryFee = 0;
+                atualizarTaxaEntregaInfo();
+                return;
+            }
+            
+            await calcularTaxaEntrega(true);
+        }
+        
+        async function calcularTaxaEntrega(silent = false) {
+            const address = document.getElementById('deliveryAddress').value.trim();
+            const city = document.getElementById('deliveryCity').value.trim();
+            
+            if (!address || !city) {
+                if (!silent) {
+                    alert('Por favor, preencha pelo menos o endereço e a cidade.');
+                }
                 return;
             }
             
@@ -1369,33 +1703,154 @@ if (count($enderecoParts) > 2) {
             if (filialData.usar_calculo_distancia) {
                 const deliveryMapsWebhookUrl = <?php echo json_encode($deliveryMapsWebhookUrl); ?>;
                 if (deliveryMapsWebhookUrl) {
+                    // Show loading state in info div
+                    const infoDiv = document.getElementById('taxaEntregaInfo');
+                    const textoDiv = document.getElementById('taxaEntregaTexto');
+                    if (infoDiv && textoDiv) {
+                        infoDiv.style.display = 'block';
+                        infoDiv.className = 'alert alert-info mt-2';
+                        textoDiv.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Calculando taxa de entrega...';
+                    }
+                    
                     try {
-                        const response = await fetch(deliveryMapsWebhookUrl, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                origin: filialData.endereco,
-                                destination: `${address}, ${city}`
-                            })
+                        const destination = `${address}, ${city}`;
+                        console.log('Enviando requisição para calcular taxa:', {
+                            origin: filialData.endereco,
+                            destination: destination,
+                            webhookUrl: deliveryMapsWebhookUrl
                         });
                         
+                        // Create AbortController for timeout
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 seconds timeout
+                        
+                        // Build URL with query parameters for GET request
+                        const url = new URL(deliveryMapsWebhookUrl);
+                        url.searchParams.append('origin', filialData.endereco);
+                        url.searchParams.append('destination', destination);
+                        
+                        console.log('URL completa:', url.toString());
+                        
+                        const response = await fetch(url.toString(), {
+                            method: 'GET',
+                            headers: { 
+                                'Accept': 'application/json'
+                            },
+                            signal: controller.signal
+                        });
+                        
+                        clearTimeout(timeoutId);
+                        
+                        if (!response.ok) {
+                            const errorText = await response.text();
+                            throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+                        }
+                        
                         const data = await response.json();
-                        if (data.success && data.distancia && data.valor) {
-                            deliveryFee = parseFloat(data.valor);
-                            alert('Taxa calculada: R$ ' + deliveryFee.toFixed(2).replace('.', ','));
+                        console.log('Resposta do webhook:', data);
+                        
+                        // Try different response formats - n8n returns deliveryFee, distance, deliveryTime
+                        let valor = null;
+                        let distancia = null;
+                        let tempoEntrega = null;
+                        
+                        // Check if data is an array (n8n might return array)
+                        const responseData = Array.isArray(data) && data.length > 0 ? data[0] : data;
+                        
+                        // Check for deliveryFee (primary field from n8n)
+                        if (responseData.deliveryFee !== undefined) {
+                            valor = responseData.deliveryFee;
+                        } else if (responseData.delivery_fee !== undefined) {
+                            valor = responseData.delivery_fee;
+                        } else if (responseData.valor !== undefined) {
+                            valor = responseData.valor;
+                        } else if (responseData.value !== undefined) {
+                            valor = responseData.value;
+                        } else if (responseData.taxa !== undefined) {
+                            valor = responseData.taxa;
+                        }
+                        
+                        // Extract distance and delivery time if available
+                        if (responseData.distance !== undefined) {
+                            distancia = responseData.distance;
+                        }
+                        if (responseData.deliveryTime !== undefined) {
+                            tempoEntrega = responseData.deliveryTime;
+                        }
+                        
+                        if (valor !== null && valor !== undefined) {
+                            deliveryFee = parseFloat(valor);
+                            if (isNaN(deliveryFee)) {
+                                throw new Error('Valor retornado não é um número válido');
+                            }
+                            
+                            // Update UI with delivery fee info
+                            atualizarTaxaEntregaInfo();
+                            
+                            // Update order summary if visible
+                            if (currentCheckoutStep === 5) {
+                                updateOrderSummary();
+                            }
                         } else {
-                            throw new Error('Erro ao calcular distância');
+                            // Try to parse from status string if it's a formatted message
+                            const statusText = responseData.status || '';
+                            const taxaMatch = statusText.match(/Taxa de entrega[:\s]*R\$\s*([\d,]+\.?\d*)/i);
+                            if (taxaMatch) {
+                                deliveryFee = parseFloat(taxaMatch[1].replace(',', '.'));
+                                if (!isNaN(deliveryFee)) {
+                                    atualizarTaxaEntregaInfo();
+                                    if (currentCheckoutStep === 5) {
+                                        updateOrderSummary();
+                                    }
+                                } else {
+                                    throw new Error('Resposta do webhook não contém valor válido. Estrutura recebida: ' + JSON.stringify(data));
+                                }
+                            } else {
+                                throw new Error('Resposta do webhook não contém valor válido. Estrutura recebida: ' + JSON.stringify(data));
+                            }
                         }
                     } catch (error) {
                         console.error('Erro ao calcular distância:', error);
-                        alert('Erro ao calcular taxa de entrega. Usando taxa fixa.');
+                        console.error('Detalhes do erro:', {
+                            message: error.message,
+                            name: error.name,
+                            stack: error.stack
+                        });
+                        
+                        let errorMessage = 'Erro ao calcular taxa de entrega';
+                        if (error.name === 'AbortError') {
+                            errorMessage = 'Timeout ao calcular taxa de entrega. O servidor demorou muito para responder.';
+                        } else if (error.message.includes('Failed to fetch')) {
+                            errorMessage = 'Não foi possível conectar ao servidor de cálculo de distância. Verifique sua conexão ou a configuração do webhook.';
+                        } else {
+                            errorMessage = 'Erro ao calcular taxa de entrega: ' + error.message;
+                        }
+                        
+                        if (!silent) {
+                            alert(errorMessage + ' Usando taxa fixa de R$ ' + filialData.taxa_delivery_fixa.toFixed(2).replace('.', ','));
+                        }
                         deliveryFee = filialData.taxa_delivery_fixa;
+                        atualizarTaxaEntregaInfo();
+                        if (currentCheckoutStep === 5) {
+                            updateOrderSummary();
+                        }
+                    } finally {
+                        // Info div is already updated in atualizarTaxaEntregaInfo or error handler
                     }
                 } else {
+                    if (!silent) {
+                        alert('Webhook de cálculo de distância não configurado. Usando taxa fixa de R$ ' + filialData.taxa_delivery_fixa.toFixed(2).replace('.', ','));
+                    }
                     deliveryFee = filialData.taxa_delivery_fixa;
+                    atualizarTaxaEntregaInfo();
                 }
             } else {
                 deliveryFee = filialData.taxa_delivery_fixa;
+                atualizarTaxaEntregaInfo();
+            }
+            
+            if (currentCheckoutStep === 5) {
+                updateOrderSummary();
             }
         }
         
@@ -1438,20 +1893,47 @@ if (count($enderecoParts) > 2) {
             let enderecoEntrega = null;
             
             if (deliveryType === 'delivery') {
-                const address = document.getElementById('deliveryAddress').value.trim();
-                const city = document.getElementById('deliveryCity').value.trim();
-                if (!address || !city) {
-                    alert('Por favor, preencha o endereço de entrega.');
-                    return;
-                }
+                const enderecoSelecionado = document.getElementById('enderecoSelecionado').value;
                 
-                enderecoEntrega = {
-                    endereco: address,
-                    bairro: document.getElementById('deliveryNeighborhood').value.trim(),
-                    cidade: city,
-                    cep: document.getElementById('deliveryCEP').value.trim(),
-                    estado: document.getElementById('deliveryEstado').value.trim()
-                };
+                if (enderecoSelecionado !== '' && clienteEnderecos[enderecoSelecionado]) {
+                    // Use selected saved address
+                    const endereco = clienteEnderecos[enderecoSelecionado];
+                    const logradouro = endereco.logradouro || '';
+                    const numero = endereco.numero || '';
+                    enderecoEntrega = {
+                        endereco: `${logradouro}${numero ? ', ' + numero : ''}`.trim(),
+                        bairro: endereco.bairro || '',
+                        cidade: endereco.cidade || '',
+                        cep: endereco.cep || '',
+                        estado: endereco.estado || ''
+                    };
+                    } else {
+                        // Use manually entered address - save it to customer
+                        const address = document.getElementById('deliveryAddress').value.trim();
+                        const city = document.getElementById('deliveryCity').value.trim();
+                        if (!address || !city) {
+                            alert('Por favor, preencha o endereço de entrega.');
+                            return;
+                        }
+                        
+                        enderecoEntrega = {
+                            endereco: address,
+                            bairro: document.getElementById('deliveryNeighborhood').value.trim(),
+                            cidade: city,
+                            cep: document.getElementById('deliveryCEP').value.trim(),
+                            estado: document.getElementById('deliveryEstado').value.trim()
+                        };
+                        
+                        // Save new address to customer if customer exists
+                        if (clienteData && clienteData.id) {
+                            await salvarNovoEnderecoCliente(enderecoEntrega);
+                        }
+                        
+                        // Save new address to customer if customer exists
+                        if (clienteData && clienteData.id) {
+                            await salvarNovoEnderecoCliente(enderecoEntrega);
+                        }
+                    }
             }
             
             const itensDetalhados = cart.map(item => ({
