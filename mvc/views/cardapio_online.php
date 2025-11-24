@@ -361,12 +361,65 @@ if (count($enderecoParts) > 2) {
             display: block;
         }
         
+        /* Search Box */
+        .search-container {
+            margin-bottom: 2rem;
+            position: relative;
+        }
+        
+        .search-box {
+            width: 100%;
+            padding: 1rem 1rem 1rem 3.5rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+        
+        .search-box:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+        
+        .search-icon {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #666;
+            font-size: 1.2rem;
+        }
+        
+        .search-box:focus + .search-icon {
+            color: var(--primary-color);
+        }
+        
+        .no-results {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: #666;
+        }
+        
+        .no-results i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            color: #ccc;
+        }
+        
         /* Products Grid */
             .products-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
                 gap: 1.5rem;
             margin-top: 2rem;
+        }
+        
+        .category-section {
+            margin-bottom: 3rem;
+        }
+        
+        .category-section.hidden {
+            display: none;
         }
         
         .product-card {
@@ -551,6 +604,14 @@ if (count($enderecoParts) > 2) {
         
         .cart-item:last-child {
             border-bottom: none;
+        }
+        
+        .cart-item textarea {
+            width: 100%;
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+            resize: vertical;
+            min-height: 50px;
         }
         
         .delivery-options select {
@@ -779,6 +840,16 @@ if (count($enderecoParts) > 2) {
                 padding: 1rem;
             }
             
+            .search-box {
+                padding: 0.75rem 0.75rem 0.75rem 3rem;
+                font-size: 0.9rem;
+            }
+            
+            .search-icon {
+                left: 0.75rem;
+                font-size: 1rem;
+            }
+            
             .products-grid {
                 grid-template-columns: repeat(2, 1fr);
                 gap: 1rem;
@@ -888,6 +959,16 @@ if (count($enderecoParts) > 2) {
                 padding: 0.75rem;
             }
             
+            .search-box {
+                padding: 0.6rem 0.6rem 0.6rem 2.5rem;
+                font-size: 0.85rem;
+            }
+            
+            .search-icon {
+                left: 0.6rem;
+                font-size: 0.9rem;
+            }
+            
             .products-grid {
                 grid-template-columns: 1fr;
                 gap: 0.75rem;
@@ -976,26 +1057,52 @@ if (count($enderecoParts) > 2) {
             <?php if (empty($produtosPorCategoria)): ?>
                 <p class="text-center text-muted mt-4">Nenhum produto disponível no momento.</p>
             <?php else: ?>
-                <?php foreach ($produtosPorCategoria as $categoria => $produtosCategoria): ?>
-                    <h3 class="mt-4 mb-3"><?php echo htmlspecialchars($categoria); ?></h3>
-                    <div class="products-grid">
-                        <?php foreach ($produtosCategoria as $produto): ?>
-                            <div class="product-card" onclick="addToCart(<?php echo htmlspecialchars(json_encode($produto)); ?>)">
-                                <?php if ($produto['imagem']): ?>
-                                    <img src="<?php echo htmlspecialchars($produto['imagem']); ?>" alt="<?php echo htmlspecialchars($produto['nome']); ?>" class="product-image">
-                                <?php else: ?>
-                                    <div class="product-image" style="display: flex; align-items: center; justify-content: center; background: #f5f5f5;">
-                                        <i class="fas fa-image" style="font-size: 3rem; color: #ccc;"></i>
-                    </div>
-                <?php endif; ?>
-                                <div class="product-info">
-                                    <div class="product-name"><?php echo htmlspecialchars($produto['nome']); ?></div>
-                                    <div class="product-price">R$ <?php echo number_format($produto['preco_normal'], 2, ',', '.'); ?></div>
-                    </div>
+                <!-- Search Box -->
+                <div class="search-container">
+                    <i class="fas fa-search search-icon"></i>
+                    <input type="text" id="searchInput" class="search-box" placeholder="Buscar produtos..." autocomplete="off">
                 </div>
-                        <?php endforeach; ?>
+                
+                <!-- Products by Category -->
+                <div id="productsContainer">
+                    <?php foreach ($produtosPorCategoria as $categoria => $produtosCategoria): ?>
+                        <div class="category-section" data-category="<?php echo htmlspecialchars(strtolower($categoria)); ?>">
+                            <h3 class="mt-4 mb-3"><?php echo htmlspecialchars($categoria); ?></h3>
+                            <div class="products-grid">
+                                <?php foreach ($produtosCategoria as $produto): ?>
+                                    <div class="product-card" 
+                                         data-product-name="<?php echo htmlspecialchars(strtolower($produto['nome'])); ?>" 
+                                         data-category="<?php echo htmlspecialchars(strtolower($categoria)); ?>"
+                                         data-product-id="<?php echo $produto['id']; ?>"
+                                         data-product-data="<?php echo htmlspecialchars(json_encode($produto)); ?>"
+                                         style="cursor: pointer;">
+                                        <?php if ($produto['imagem']): ?>
+                                            <img src="<?php echo htmlspecialchars($produto['imagem']); ?>" alt="<?php echo htmlspecialchars($produto['nome']); ?>" class="product-image">
+                                        <?php else: ?>
+                                            <div class="product-image" style="display: flex; align-items: center; justify-content: center; background: #f5f5f5;">
+                                                <i class="fas fa-image" style="font-size: 3rem; color: #ccc;"></i>
+                                            </div>
+                                        <?php endif; ?>
+                                        <div class="product-info">
+                                            <div class="product-name"><?php echo htmlspecialchars($produto['nome']); ?></div>
+                                            <div class="product-price">R$ <?php echo number_format($produto['preco_normal'], 2, ',', '.'); ?></div>
+                                            <button class="btn btn-primary btn-sm w-100 mt-2" onclick="event.stopPropagation(); personalizarProduto(<?php echo $produto['id']; ?>, <?php echo htmlspecialchars(json_encode($produto)); ?>)">
+                                                <i class="fas fa-edit"></i> Editar
+                                            </button>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
                 </div>
-                <?php endforeach; ?>
+                
+                <!-- No Results Message -->
+                <div id="noResults" class="no-results" style="display: none;">
+                    <i class="fas fa-search"></i>
+                    <h4>Nenhum produto encontrado</h4>
+                    <p>Tente buscar com outros termos</p>
+                </div>
             <?php endif; ?>
             </div>
             
@@ -1135,23 +1242,6 @@ if (count($enderecoParts) > 2) {
                 <p class="text-muted">Nenhum item adicionado ainda</p>
             </div>
         </div>
-        
-        <div class="sidebar-section">
-            <h4>
-                <span class="icon"><i class="fas fa-user"></i></span>
-                Opções de entrega
-            </h4>
-            <select class="form-control" id="deliveryTypeSelect">
-                <option value="">(Selecione aqui)</option>
-                <option value="pickup">Retirar no Balcão</option>
-                <option value="delivery">Delivery</option>
-            </select>
-            <?php if (!$isOpen): ?>
-                <div class="alert-closed">
-                    No momento, este comerciante está fechado. Verifique o horário de funcionamento.
-                </div>
-            <?php endif; ?>
-        </div>
     </div>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -1173,6 +1263,74 @@ if (count($enderecoParts) > 2) {
                 document.getElementById('tab-' + tabName).classList.add('active');
             });
         });
+        
+        // Real-time search functionality
+        const searchInput = document.getElementById('searchInput');
+        const productsContainer = document.getElementById('productsContainer');
+        const noResults = document.getElementById('noResults');
+        
+        if (searchInput) {
+            searchInput.addEventListener('input', function() {
+                const searchTerm = this.value.toLowerCase().trim();
+                filterProducts(searchTerm);
+            });
+        }
+        
+        function filterProducts(searchTerm) {
+            if (!productsContainer) return;
+            
+            const productCards = productsContainer.querySelectorAll('.product-card');
+            const categorySections = productsContainer.querySelectorAll('.category-section');
+            let hasVisibleProducts = false;
+            
+            if (searchTerm === '') {
+                // Show all products and categories
+                categorySections.forEach(section => {
+                    section.classList.remove('hidden');
+                    const products = section.querySelectorAll('.product-card');
+                    products.forEach(product => {
+                        product.style.display = '';
+                    });
+                });
+                if (noResults) noResults.style.display = 'none';
+                return;
+            }
+            
+            // Filter products
+            categorySections.forEach(section => {
+                const products = section.querySelectorAll('.product-card');
+                let hasVisibleInCategory = false;
+                
+                products.forEach(product => {
+                    const productName = product.getAttribute('data-product-name') || '';
+                    const category = product.getAttribute('data-category') || '';
+                    
+                    if (productName.includes(searchTerm) || category.includes(searchTerm)) {
+                        product.style.display = '';
+                        hasVisibleInCategory = true;
+                        hasVisibleProducts = true;
+                    } else {
+                        product.style.display = 'none';
+                    }
+                });
+                
+                // Show/hide category section based on visible products
+                if (hasVisibleInCategory) {
+                    section.classList.remove('hidden');
+                } else {
+                    section.classList.add('hidden');
+                }
+            });
+            
+            // Show/hide no results message
+            if (noResults) {
+                if (hasVisibleProducts) {
+                    noResults.style.display = 'none';
+                } else {
+                    noResults.style.display = 'block';
+                }
+            }
+        }
         
         // Cart management
         let cart = JSON.parse(localStorage.getItem('cart_<?php echo $filialId; ?>')) || [];
@@ -1207,20 +1365,63 @@ if (count($enderecoParts) > 2) {
                 const itemTotal = parseFloat(item.preco_normal || 0) * (item.quantity || 1);
                 total += itemTotal;
                 
+                // Mostrar ingredientes personalizados se houver
+                let ingredientesInfo = '';
+                if (item.ingredientes_adicionados && item.ingredientes_adicionados.length > 0) {
+                    const nomesAdicionados = item.ingredientes_adicionados.map(ing => ing.nome || ing).join(', ');
+                    ingredientesInfo += `<small class="text-success d-block">+ ${nomesAdicionados}</small>`;
+                }
+                if (item.ingredientes_removidos && item.ingredientes_removidos.length > 0) {
+                    const nomesRemovidos = item.ingredientes_removidos.map(ing => ing.nome || ing).join(', ');
+                    ingredientesInfo += `<small class="text-danger d-block">- ${nomesRemovidos}</small>`;
+                }
+                
                 html += `
-                    <div class="cart-item">
-                        <div>
-                            <div><strong>${item.nome}</strong></div>
-                            <small>R$ ${parseFloat(item.preco_normal || 0).toFixed(2).replace('.', ',')} x ${item.quantity || 1}</small>
-                        </div>
-                        <div>
-                            <button onclick="removeFromCart(${index})" style="background: none; border: none; color: #dc3545; cursor: pointer;">
-                                <i class="fas fa-trash"></i>
-                            </button>
+                    <div class="cart-item" style="border-bottom: 1px solid #e0e0e0; padding-bottom: 1rem; margin-bottom: 1rem;">
+                        <div style="flex: 1; width: 100%;">
+                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+                                <div style="flex: 1;">
+                                    <div><strong>${item.nome}</strong></div>
+                                    ${ingredientesInfo}
+                                    <small>R$ ${parseFloat(item.preco_normal || 0).toFixed(2).replace('.', ',')} x ${item.quantity || 1}</small>
+                                </div>
+                                <div style="margin-left: 0.5rem;">
+                                    <button onclick="removeFromCart(${index})" style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0.25rem;">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div style="margin-top: 0.5rem;">
+                                <textarea 
+                                    class="form-control" 
+                                    id="observacao_${index}" 
+                                    placeholder="Observação (opcional)" 
+                                    rows="2" 
+                                    style="font-size: 0.85rem; padding: 0.5rem; width: 100%; border: 1px solid #ddd; border-radius: 5px; resize: vertical;"
+                                    onchange="updateItemObservacao(${index}, this.value)"
+                                    onblur="updateItemObservacao(${index}, this.value)">${item.observacao || ''}</textarea>
+                            </div>
                         </div>
                     </div>
                 `;
             });
+            
+            // Add delivery options section before total
+            html += `
+                <div style="margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #e0e0e0;">
+                    <h4 style="font-size: 1rem; margin-bottom: 0.5rem;">
+                        <span class="icon" style="width: 30px; height: 30px; background: var(--primary-color); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #000; margin-right: 0.5rem;">
+                            <i class="fas fa-user"></i>
+                        </span>
+                        Opções de entrega
+                    </h4>
+                    <select class="form-control" id="deliveryTypeSelect" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 1rem;">
+                        <option value="">(Selecione aqui)</option>
+                        <option value="pickup">Retirar no Balcão</option>
+                        <option value="delivery">Delivery</option>
+                    </select>
+                </div>
+            `;
             
             html += `
                 <div style="margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #e0e0e0;">
@@ -1243,13 +1444,210 @@ if (count($enderecoParts) > 2) {
             overlay.classList.toggle('show');
         }
         
+        async function personalizarProduto(produtoId, produto) {
+            try {
+                // Buscar ingredientes do produto
+                const response = await fetch(`mvc/ajax/produtos_cardapio_online.php?action=buscar_produto&produto_id=${produtoId}&tenant_id=<?php echo $tenantId; ?>&filial_id=<?php echo $filialId; ?>`);
+                const data = await response.json();
+                
+                if (!data.success) {
+                    throw new Error(data.message || 'Erro ao buscar produto');
+                }
+                
+                const ingredientesProduto = data.ingredientes || [];
+                const todosIngredientes = data.todos_ingredientes || [];
+                
+                // Mostrar modal de personalização
+                mostrarModalPersonalizacao(produto, ingredientesProduto, todosIngredientes);
+            } catch (error) {
+                console.error('Erro ao buscar produto:', error);
+                alert('Erro ao carregar produto. Adicionando sem personalização.');
+                addToCart(produto);
+            }
+        }
+        
+        function mostrarModalPersonalizacao(produto, ingredientesProduto, todosIngredientes) {
+            // Criar modal HTML
+            const modalHtml = `
+                <div class="checkout-modal" id="personalizacaoModal" style="z-index: 3000;">
+                    <div class="checkout-content" style="max-width: 600px;">
+                        <button class="close-checkout" onclick="fecharModalPersonalizacao()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                        <h3 class="mb-3">Editar ${produto.nome}</h3>
+                        <div class="mb-3">
+                            <strong>Preço base: R$ ${parseFloat(produto.preco_normal || 0).toFixed(2).replace('.', ',')}</strong>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><strong>Ingredientes do Produto (clique para remover):</strong></label>
+                            <div id="ingredientesProduto" class="ingredientes-list" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 5px;">
+                                ${ingredientesProduto.map(ing => `
+                                    <div class="ingrediente-item" data-ingrediente-id="${ing.id}" data-ingrediente-nome="${ing.nome}" data-preco="${ing.preco_adicional || 0}" data-ja-estava="true" style="display: flex; justify-content: space-between; align-items: center; padding: 8px; margin-bottom: 5px; background: #d4edda; border-radius: 5px; cursor: pointer;" onclick="toggleIngrediente(this)">
+                                        <span>${ing.nome}${ing.preco_adicional > 0 ? ` (+R$ ${parseFloat(ing.preco_adicional).toFixed(2).replace('.', ',')})` : ''}</span>
+                                        <span class="badge bg-success">COM</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><strong>Adicionar Ingredientes (clique para adicionar):</strong></label>
+                            <div id="ingredientesDisponiveis" class="ingredientes-list" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 5px;">
+                                ${todosIngredientes.filter(ing => !ingredientesProduto.some(ip => ip.id === ing.id)).map(ing => `
+                                    <div class="ingrediente-item" data-ingrediente-id="${ing.id}" data-ingrediente-nome="${ing.nome}" data-preco="${ing.preco_adicional || 0}" data-ja-estava="false" style="display: flex; justify-content: space-between; align-items: center; padding: 8px; margin-bottom: 5px; background: #f8d7da; border-radius: 5px; cursor: pointer;" onclick="toggleIngrediente(this)">
+                                        <span>${ing.nome}${ing.preco_adicional > 0 ? ` (+R$ ${parseFloat(ing.preco_adicional).toFixed(2).replace('.', ',')})` : ''}</span>
+                                        <span class="badge bg-danger">SEM</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <strong>Preço Total: R$ <span id="precoTotalPersonalizado">${parseFloat(produto.preco_normal || 0).toFixed(2).replace('.', ',')}</span></strong>
+                        </div>
+                        <button class="btn btn-primary w-100" onclick="adicionarProdutoPersonalizado()">
+                            <i class="fas fa-cart-plus"></i> Adicionar ao Carrinho
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            
+            // Armazenar dados do produto para uso posterior
+            window.produtoPersonalizacao = produto;
+            window.ingredientesOriginais = ingredientesProduto.map(ing => ing.id);
+            window.ingredientesOriginaisData = ingredientesProduto.map(ing => ({
+                id: ing.id,
+                nome: ing.nome,
+                preco_adicional: parseFloat(ing.preco_adicional || 0)
+            }));
+            window.ingredientesSelecionados = ingredientesProduto.map(ing => ({
+                id: ing.id,
+                nome: ing.nome,
+                preco_adicional: parseFloat(ing.preco_adicional || 0),
+                ja_estava: true
+            }));
+        }
+        
+        function toggleIngrediente(element) {
+            const ingredienteId = parseInt(element.dataset.ingredienteId);
+            const ingredienteNome = element.dataset.ingredienteNome || element.querySelector('span').textContent.split(' (+')[0];
+            const jaEstava = element.dataset.jaEstava === 'true';
+            const precoAdicional = parseFloat(element.dataset.preco || 0);
+            const eraOriginal = window.ingredientesOriginais.includes(ingredienteId);
+            
+            if (jaEstava) {
+                // Remover ingrediente (estava selecionado, agora vai remover)
+                window.ingredientesSelecionados = window.ingredientesSelecionados.filter(ing => ing.id !== ingredienteId);
+                element.style.background = '#f8d7da';
+                element.querySelector('.badge').className = 'badge bg-danger';
+                element.querySelector('.badge').textContent = 'SEM';
+                element.dataset.jaEstava = 'false';
+            } else {
+                // Adicionar ingrediente
+                window.ingredientesSelecionados.push({
+                    id: ingredienteId,
+                    nome: ingredienteNome,
+                    preco_adicional: precoAdicional,
+                    ja_estava: eraOriginal
+                });
+                element.style.background = '#d4edda';
+                element.querySelector('.badge').className = 'badge bg-success';
+                element.querySelector('.badge').textContent = 'COM';
+                element.dataset.jaEstava = 'true';
+            }
+            
+            atualizarPrecoPersonalizado();
+        }
+        
+        function atualizarPrecoPersonalizado() {
+            if (!window.produtoPersonalizacao) return;
+            
+            let precoTotal = parseFloat(window.produtoPersonalizacao.preco_normal || 0);
+            
+            // Adicionar preços dos ingredientes adicionados (que não estavam originalmente)
+            window.ingredientesSelecionados.forEach(ing => {
+                if (!ing.ja_estava) {
+                    precoTotal += ing.preco_adicional;
+                }
+            });
+            
+            document.getElementById('precoTotalPersonalizado').textContent = precoTotal.toFixed(2).replace('.', ',');
+        }
+        
+        function adicionarProdutoPersonalizado() {
+            if (!window.produtoPersonalizacao) return;
+            
+            // Ingredientes adicionados são os que estão selecionados mas não eram originais
+            const ingredientesAdicionados = window.ingredientesSelecionados
+                .filter(ing => !ing.ja_estava)
+                .map(ing => ({
+                    id: ing.id,
+                    nome: ing.nome,
+                    preco_adicional: ing.preco_adicional
+                }));
+            
+            // Ingredientes removidos são os que eram originais mas não estão mais selecionados
+            const ingredientesRemovidos = window.ingredientesOriginaisData
+                .filter(ingOriginal => !window.ingredientesSelecionados.some(ing => ing.id === ingOriginal.id))
+                .map(ingOriginal => ({
+                    id: ingOriginal.id,
+                    nome: ingOriginal.nome,
+                    preco_adicional: ingOriginal.preco_adicional
+                }));
+            
+            // Calcular preço final
+            let precoFinal = parseFloat(window.produtoPersonalizacao.preco_normal || 0);
+            ingredientesAdicionados.forEach(ing => {
+                precoFinal += ing.preco_adicional;
+            });
+            
+            // Adicionar ao carrinho
+            const existingItem = cart.find(item => 
+                item.id === window.produtoPersonalizacao.id && 
+                JSON.stringify(item.ingredientes_adicionados || []) === JSON.stringify(ingredientesAdicionados) &&
+                JSON.stringify(item.ingredientes_removidos || []) === JSON.stringify(ingredientesRemovidos)
+            );
+            
+            if (existingItem) {
+                existingItem.quantity++;
+            } else {
+                cart.push({
+                    id: window.produtoPersonalizacao.id,
+                    nome: window.produtoPersonalizacao.nome,
+                    preco_normal: precoFinal,
+                    quantity: 1,
+                    ingredientes_adicionados: ingredientesAdicionados,
+                    ingredientes_removidos: ingredientesRemovidos,
+                    observacao: ''
+                });
+            }
+            
+            updateCart();
+            fecharModalPersonalizacao();
+        }
+        
+        function fecharModalPersonalizacao() {
+            const modal = document.getElementById('personalizacaoModal');
+            if (modal) modal.remove();
+            window.produtoPersonalizacao = null;
+            window.ingredientesSelecionados = [];
+            window.ingredientesOriginais = [];
+            window.ingredientesOriginaisData = [];
+        }
+        
         function addToCart(product) {
             if (!product || !product.id) {
                 alert('Erro: Produto inválido');
                 return;
             }
             
-            const existingItem = cart.find(item => item.id === product.id);
+            // Verificar se é produto sem personalização (sem ingredientes_adicionados/removidos)
+            const existingItem = cart.find(item => 
+                item.id === product.id && 
+                (!item.ingredientes_adicionados || item.ingredientes_adicionados.length === 0) &&
+                (!item.ingredientes_removidos || item.ingredientes_removidos.length === 0) &&
+                (!item.observacao || item.observacao.trim() === '')
+            );
             
             if (existingItem) {
                 existingItem.quantity++;
@@ -1258,11 +1656,21 @@ if (count($enderecoParts) > 2) {
                     id: product.id,
                     nome: product.nome,
                     preco_normal: parseFloat(product.preco_normal) || 0,
-                    quantity: 1
+                    quantity: 1,
+                    ingredientes_adicionados: product.ingredientes_adicionados || [],
+                    ingredientes_removidos: product.ingredientes_removidos || [],
+                    observacao: product.observacao || ''
                 });
             }
             
             updateCart();
+        }
+        
+        function updateItemObservacao(index, observacao) {
+            if (cart[index]) {
+                cart[index].observacao = observacao;
+                updateCart();
+            }
         }
         
         function removeFromCart(index) {
@@ -1422,7 +1830,7 @@ if (count($enderecoParts) > 2) {
                 
                 // Show address section if step 3 and delivery type
                 if (step === 3) {
-                    // Get delivery type from sidebar (outside modal)
+                    // Get delivery type from cart items section (inside cartItems)
                     const deliveryTypeSelect = document.getElementById('deliveryTypeSelect');
                     const deliveryType = deliveryTypeSelect ? deliveryTypeSelect.value : 'delivery'; // Default to delivery if not found
                     
@@ -2147,7 +2555,17 @@ if (count($enderecoParts) > 2) {
                 return;
             }
             
-            const deliveryType = document.getElementById('deliveryTypeSelect').value;
+            // Get delivery type from cart (inside cartItems) or fallback to sidebar
+            const deliveryTypeSelect = document.getElementById('deliveryTypeSelect');
+            if (!deliveryTypeSelect) {
+                alert('Por favor, selecione uma opção de entrega no carrinho.');
+                return;
+            }
+            const deliveryType = deliveryTypeSelect.value;
+            if (!deliveryType) {
+                alert('Por favor, selecione uma opção de entrega.');
+                return;
+            }
             let enderecoEntrega = null;
             
             if (deliveryType === 'delivery') {
@@ -2200,9 +2618,11 @@ if (count($enderecoParts) > 2) {
                 quantity: item.quantity,
                 preco: item.preco_normal,
                 observacao: item.observacao || '',
-                ingredientes_adicionados: item.ingredientes || [],
-                ingredientes_removidos: []
+                ingredientes_adicionados: item.ingredientes_adicionados || [],
+                ingredientes_removidos: item.ingredientes_removidos || []
             }));
+            
+            console.log('Enviando itens com ingredientes:', itensDetalhados);
             
             const orderData = {
                 filial_id: <?php echo $filialId; ?>,
@@ -2266,6 +2686,27 @@ if (count($enderecoParts) > 2) {
         
         // Initialize cart UI
         updateCartUI();
+        
+        // Add click event to product cards to add directly to cart
+        document.addEventListener('click', function(e) {
+            const productCard = e.target.closest('.product-card');
+            // Only trigger if clicking on the card itself, not on buttons or their children
+            if (productCard && !e.target.closest('button')) {
+                // Get product data from data attributes
+                const productId = productCard.getAttribute('data-product-id');
+                const productDataStr = productCard.getAttribute('data-product-data');
+                
+                if (productId && productDataStr) {
+                    try {
+                        const produtoData = JSON.parse(productDataStr);
+                        // Add directly to cart when clicking on the card
+                        addToCart(produtoData);
+                    } catch (error) {
+                        console.error('Error parsing product data:', error);
+                    }
+                }
+            }
+        });
     </script>
 </body>
 </html>
