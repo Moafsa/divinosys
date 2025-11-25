@@ -1,6 +1,14 @@
 <?php
+// Iniciar output buffering para capturar qualquer output indesejado
+ob_start();
+
+// Desabilitar exibição de erros para não quebrar o JSON
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+
 session_start();
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 
 // Autoloader
 spl_autoload_register(function ($class) {
@@ -123,9 +131,13 @@ try {
             
             // Atualizar saldo da conta se status for confirmado
             if ($status === 'confirmado') {
+                // Converter valores para float antes de fazer operações
+                $saldoAtual = (float) $conta['saldo_atual'];
+                $valorFloat = (float) $valor;
+                
                 $novoSaldo = $tipoLancamento === 'receita' ? 
-                    $conta['saldo_atual'] + $valor : 
-                    $conta['saldo_atual'] - $valor;
+                    $saldoAtual + $valorFloat : 
+                    $saldoAtual - $valorFloat;
                 
                 $db->update('contas_financeiras', 
                     ['saldo_atual' => $novoSaldo],
@@ -138,10 +150,15 @@ try {
                 'success' => true,
                 'message' => 'Lançamento criado com sucesso!',
                 'lancamento_id' => $lancamentoId
-            ]);
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             break;
             
         case 'buscar_lancamento':
+            // Limpar buffer antes de enviar resposta
+            if (ob_get_level() > 0) {
+                ob_clean();
+            }
+            
             $id = $_GET['id'] ?? '';
             
             if (empty($id)) {
@@ -157,13 +174,23 @@ try {
                 throw new \Exception('Lançamento não encontrado');
             }
             
+            // Limpar buffer novamente antes de enviar JSON
+            if (ob_get_level() > 0) {
+                ob_end_clean();
+            }
+            
             echo json_encode([
                 'success' => true,
                 'lancamento' => $lancamento
-            ]);
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             break;
             
         case 'atualizar_lancamento':
+            // Limpar buffer antes de processar
+            if (ob_get_level() > 0) {
+                ob_clean();
+            }
+            
             // Ensure data_lancamento column exists
             try {
                 $columnExists = $db->fetch("
@@ -327,16 +354,18 @@ try {
             $descricao = $_POST['descricao'] ?? '';
             $valor = $_POST['valor'] ?? '';
             $dataLancamento = $_POST['data_lancamento'] ?? '';
-            $categoriaId = $_POST['categoria_id'] ?? null;
+            
+            // Tratar campos opcionais - converter string "null" para null real
+            $categoriaId = isset($_POST['categoria_id']) && $_POST['categoria_id'] !== '' && $_POST['categoria_id'] !== 'null' ? $_POST['categoria_id'] : null;
             $contaId = $_POST['conta_id'] ?? '';
-            $contaDestinoId = $_POST['conta_destino_id'] ?? null;
-            $dataVencimento = $_POST['data_vencimento'] ?? null;
-            $dataPagamento = $_POST['data_pagamento'] ?? null;
+            $contaDestinoId = isset($_POST['conta_destino_id']) && $_POST['conta_destino_id'] !== '' && $_POST['conta_destino_id'] !== 'null' ? $_POST['conta_destino_id'] : null;
+            $dataVencimento = isset($_POST['data_vencimento']) && $_POST['data_vencimento'] !== '' && $_POST['data_vencimento'] !== 'null' ? $_POST['data_vencimento'] : null;
+            $dataPagamento = isset($_POST['data_pagamento']) && $_POST['data_pagamento'] !== '' && $_POST['data_pagamento'] !== 'null' ? $_POST['data_pagamento'] : null;
             $status = $_POST['status'] ?? 'confirmado';
-            $formaPagamento = $_POST['forma_pagamento'] ?? null;
+            $formaPagamento = isset($_POST['forma_pagamento']) && $_POST['forma_pagamento'] !== '' && $_POST['forma_pagamento'] !== 'null' ? $_POST['forma_pagamento'] : null;
             $recorrencia = $_POST['recorrencia'] ?? 'nenhuma';
-            $dataFimRecorrencia = $_POST['data_fim_recorrencia'] ?? null;
-            $observacoes = $_POST['observacoes'] ?? null;
+            $dataFimRecorrencia = isset($_POST['data_fim_recorrencia']) && $_POST['data_fim_recorrencia'] !== '' && $_POST['data_fim_recorrencia'] !== 'null' ? $_POST['data_fim_recorrencia'] : null;
+            $observacoes = isset($_POST['observacoes']) && $_POST['observacoes'] !== '' && $_POST['observacoes'] !== 'null' ? $_POST['observacoes'] : null;
             
             // Map status values to match database constraint
             // Database accepts: 'pendente', 'pago', 'vencido', 'cancelado'
@@ -357,8 +386,8 @@ try {
             // Map status to database-compatible value
             $status = $statusMap[$status] ?? 'pendente';
             
-            // Validações
-            if (empty($id) || empty($tipoLancamento) || empty($descricao) || empty($valor) || empty($dataLancamento) || empty($categoriaId) || empty($contaId)) {
+            // Validações - categoria_id pode ser null/opcional
+            if (empty($id) || empty($tipoLancamento) || empty($descricao) || empty($valor) || empty($dataLancamento) || empty($contaId)) {
                 throw new \Exception('Todos os campos obrigatórios devem ser preenchidos');
             }
             
@@ -377,16 +406,24 @@ try {
                 throw new \Exception('Valor deve ser maior que zero');
             }
             
-            // Verificar se categoria e conta existem
-            $categoria = $db->fetch(
-                "SELECT * FROM categorias_financeiras WHERE id = ? AND tenant_id = ? AND filial_id = ? AND ativo = true",
-                [$categoriaId, $tenantId, $filialId]
-            );
-            
-            if (!$categoria) {
-                throw new \Exception('Categoria não encontrada ou inativa');
+            // Verificar se categoria existe (se fornecida)
+            // Tratar string vazia como null
+            if (empty($categoriaId)) {
+                $categoriaId = null;
             }
             
+            if ($categoriaId !== null) {
+                $categoria = $db->fetch(
+                    "SELECT * FROM categorias_financeiras WHERE id = ? AND tenant_id = ? AND filial_id = ? AND ativo = true",
+                    [$categoriaId, $tenantId, $filialId]
+                );
+                
+                if (!$categoria) {
+                    throw new \Exception('Categoria não encontrada ou inativa');
+                }
+            }
+            
+            // Verificar se conta existe
             $conta = $db->fetch(
                 "SELECT * FROM contas_financeiras WHERE id = ? AND tenant_id = ? AND filial_id = ? AND ativo = true",
                 [$contaId, $tenantId, $filialId]
@@ -414,9 +451,13 @@ try {
                 );
                 
                 if ($contaAntiga) {
+                    // Converter valores para float antes de fazer operações
+                    $saldoAtualAntigo = (float) $contaAntiga['saldo_atual'];
+                    $valorAntigo = (float) $lancamentoAtual['valor'];
+                    
                     $saldoRevertido = $lancamentoAtual['tipo_lancamento'] === 'receita' ? 
-                        $contaAntiga['saldo_atual'] - $lancamentoAtual['valor'] : 
-                        $contaAntiga['saldo_atual'] + $lancamentoAtual['valor'];
+                        $saldoAtualAntigo - $valorAntigo : 
+                        $saldoAtualAntigo + $valorAntigo;
                     
                     $db->update('contas_financeiras', 
                         ['saldo_atual' => $saldoRevertido],
@@ -437,35 +478,39 @@ try {
                 'updated_at' => date('Y-m-d H:i:s')
             ];
             
-            // Add optional fields if provided
-            if ($categoriaId !== null) {
-                $updateData['categoria_id'] = $categoriaId;
+            // Add optional fields - incluir apenas se foram explicitamente enviados no POST
+            // Isso permite atualizar para NULL quando necessário
+            if (isset($_POST['categoria_id'])) {
+                $updateData['categoria_id'] = $categoriaId; // Pode ser NULL
             }
-            if ($contaDestinoId !== null) {
-                $updateData['conta_destino_id'] = $contaDestinoId;
+            if (isset($_POST['conta_destino_id'])) {
+                $updateData['conta_destino_id'] = $contaDestinoId; // Pode ser NULL
             }
-            if ($dataVencimento !== null && $dataVencimento !== '') {
-                $updateData['data_vencimento'] = $dataVencimento;
+            if (isset($_POST['data_vencimento'])) {
+                $updateData['data_vencimento'] = $dataVencimento !== '' ? $dataVencimento : null;
             }
-            if ($dataPagamento !== null && $dataPagamento !== '') {
-                $updateData['data_pagamento'] = $dataPagamento;
+            if (isset($_POST['data_pagamento'])) {
+                $updateData['data_pagamento'] = $dataPagamento !== '' ? $dataPagamento : null;
             }
-            if ($formaPagamento !== null && $formaPagamento !== '') {
+            if (isset($_POST['forma_pagamento'])) {
                 $updateData['forma_pagamento'] = $formaPagamento;
             }
             
             // Adicionar campos de recorrência (as colunas já foram criadas no início do case)
-            if ($recorrencia !== null && $recorrencia !== '' && $recorrencia !== 'nenhuma') {
-                $updateData['recorrencia'] = $recorrencia;
-            } elseif ($recorrencia === 'nenhuma' || $recorrencia === null || $recorrencia === '') {
-                // Se for nenhuma, não precisa adicionar ao update
+            if (isset($_POST['recorrencia'])) {
+                if ($recorrencia !== null && $recorrencia !== '' && $recorrencia !== 'nenhuma') {
+                    $updateData['recorrencia'] = $recorrencia;
+                } else {
+                    // Se for nenhuma, definir como NULL ou 'nenhuma' dependendo do schema
+                    $updateData['recorrencia'] = 'nenhuma';
+                }
             }
             
-            if ($dataFimRecorrencia !== null && $dataFimRecorrencia !== '') {
-                $updateData['data_fim_recorrencia'] = $dataFimRecorrencia;
+            if (isset($_POST['data_fim_recorrencia'])) {
+                $updateData['data_fim_recorrencia'] = $dataFimRecorrencia !== '' ? $dataFimRecorrencia : null;
             }
             
-            if ($observacoes !== null) {
+            if (isset($_POST['observacoes'])) {
                 $updateData['observacoes'] = $observacoes;
             }
             
@@ -488,17 +533,28 @@ try {
             }
             
             // Atualizar lançamento apenas com colunas que existem
-            $atualizado = $db->update('lancamentos_financeiros', $updateDataFiltrado, 'id = ? AND tenant_id = ? AND filial_id = ?', [$id, $tenantId, $filialId]);
+            try {
+                error_log("Atualizando lançamento ID: $id com dados: " . json_encode($updateDataFiltrado));
+                $atualizado = $db->update('lancamentos_financeiros', $updateDataFiltrado, 'id = ? AND tenant_id = ? AND filial_id = ?', [$id, $tenantId, $filialId]);
+                error_log("Resultado do update: " . ($atualizado ? 'sucesso' : 'falha'));
+            } catch (\Exception $e) {
+                error_log("Erro ao atualizar lançamento: " . $e->getMessage());
+                throw new \Exception('Erro ao atualizar lançamento: ' . $e->getMessage());
+            }
             
             if (!$atualizado) {
-                throw new \Exception('Erro ao atualizar lançamento');
+                throw new \Exception('Erro ao atualizar lançamento - nenhuma linha foi atualizada');
             }
             
             // Atualizar saldo da nova conta se status for pago (confirmado)
             if ($status === 'pago') {
+                // Converter valores para float antes de fazer operações
+                $saldoAtual = (float) $conta['saldo_atual'];
+                $valorFloat = (float) $valor;
+                
                 $novoSaldo = $tipoLancamento === 'receita' ? 
-                    $conta['saldo_atual'] + $valor : 
-                    $conta['saldo_atual'] - $valor;
+                    $saldoAtual + $valorFloat : 
+                    $saldoAtual - $valorFloat;
                 
                 $db->update('contas_financeiras', 
                     ['saldo_atual' => $novoSaldo],
@@ -507,10 +563,15 @@ try {
                 );
             }
             
+            // Limpar buffer antes de enviar resposta
+            if (ob_get_level() > 0) {
+                ob_end_clean();
+            }
+            
             echo json_encode([
                 'success' => true,
                 'message' => 'Lançamento atualizado com sucesso!'
-            ]);
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             break;
             
         case 'excluir_lancamento':
@@ -530,17 +591,23 @@ try {
                 throw new \Exception('Lançamento não encontrado');
             }
             
-            // Reverter saldo da conta se estava confirmado
-            if ($lancamento['status'] === 'confirmado') {
+            // Reverter saldo da conta se estava pago (confirmado)
+            // O banco armazena como 'pago', mas o frontend pode enviar 'confirmado'
+            $statusParaReverter = $lancamento['status'];
+            if ($statusParaReverter === 'confirmado' || $statusParaReverter === 'pago') {
                 $conta = $db->fetch(
                     "SELECT * FROM contas_financeiras WHERE id = ? AND tenant_id = ? AND filial_id = ?",
                     [$lancamento['conta_id'], $tenantId, $filialId]
                 );
                 
                 if ($conta) {
+                    // Converter valores para float antes de fazer operações
+                    $saldoAtual = (float) $conta['saldo_atual'];
+                    $valorLancamento = (float) $lancamento['valor'];
+                    
                     $saldoRevertido = $lancamento['tipo_lancamento'] === 'receita' ? 
-                        $conta['saldo_atual'] - $lancamento['valor'] : 
-                        $conta['saldo_atual'] + $lancamento['valor'];
+                        $saldoAtual - $valorLancamento : 
+                        $saldoAtual + $valorLancamento;
                     
                     $db->update('contas_financeiras', 
                         ['saldo_atual' => $saldoRevertido],
@@ -560,7 +627,7 @@ try {
             echo json_encode([
                 'success' => true,
                 'message' => 'Lançamento excluído com sucesso!'
-            ]);
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             break;
             
         case 'listar_lancamentos':
@@ -633,19 +700,54 @@ try {
                 'success' => true,
                 'lancamentos' => $lancamentos,
                 'total' => $total['total']
-            ]);
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             break;
             
         default:
             throw new \Exception('Ação não reconhecida');
     }
     
+    // Limpar buffer antes de enviar resposta de sucesso
+    if (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    
 } catch (\Exception $e) {
+    // Limpar qualquer output anterior
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    
     http_response_code(400);
     echo json_encode([
         'success' => false,
         'message' => $e->getMessage()
-    ]);
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+} catch (\Error $e) {
+    // Limpar qualquer output anterior
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'message' => 'Erro interno: ' . $e->getMessage()
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+} catch (\Throwable $e) {
+    // Limpar qualquer output anterior
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'message' => 'Erro: ' . $e->getMessage()
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
 }
 ?>
 

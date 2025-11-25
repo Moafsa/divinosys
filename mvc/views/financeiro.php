@@ -964,9 +964,39 @@ $contas = $db->fetchAll(
         }
 
         function editarLancamento(id) {
+            // Mostrar loading
+            Swal.fire({
+                title: 'Carregando...',
+                text: 'Buscando dados do lançamento...',
+                icon: 'info',
+                allowOutsideClick: false,
+                showConfirmButton: false
+            });
+            
             // Buscar dados do lançamento
             fetch(`mvc/ajax/lancamentos.php?action=buscar_lancamento&id=${id}`)
-            .then(response => response.json())
+            .then(async response => {
+                // Verificar se a resposta está ok
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${text.substring(0, 100)}`);
+                }
+                
+                // Verificar se há conteúdo
+                const text = await response.text();
+                if (!text || text.trim() === '') {
+                    throw new Error('Resposta vazia do servidor');
+                }
+                
+                // Tentar fazer parse do JSON
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    console.error('Erro ao fazer parse do JSON:', e);
+                    console.error('Resposta recebida:', text.substring(0, 500));
+                    throw new Error('Resposta inválida do servidor: ' + text.substring(0, 100));
+                }
+            })
             .then(data => {
                 if (data.success) {
                     const lancamento = data.lancamento;
@@ -1179,18 +1209,44 @@ $contas = $db->fetchAll(
                 }
             })
             .catch(error => {
-                console.error('Erro:', error);
-                Swal.fire('Erro!', 'Erro ao processar solicitação', 'error');
+                console.error('Erro ao buscar lançamento:', error);
+                Swal.fire({
+                    title: 'Erro!',
+                    text: error.message || 'Erro ao processar solicitação',
+                    icon: 'error',
+                    confirmButtonText: 'OK'
+                });
             });
         }
 
         // Function to update financial entry
         function atualizarLancamento(dados) {
+            // Mostrar loading
+            Swal.fire({
+                title: 'Salvando...',
+                text: 'Atualizando lançamento...',
+                icon: 'info',
+                allowOutsideClick: false,
+                showConfirmButton: false
+            });
+            
             const formData = new URLSearchParams();
             formData.append('action', 'atualizar_lancamento');
+            
+            // Filtrar valores null/undefined e strings vazias para campos opcionais
             Object.keys(dados).forEach(key => {
-                formData.append(key, dados[key]);
+                const value = dados[key];
+                // Não enviar campos null, undefined, ou string "null"
+                if (value !== null && value !== undefined && value !== 'null' && value !== '') {
+                    formData.append(key, value);
+                } else if (key === 'id' || key === 'tipo_lancamento' || key === 'descricao' || key === 'valor' || key === 'data_lancamento' || key === 'conta_id') {
+                    // Campos obrigatórios sempre devem ser enviados
+                    formData.append(key, value || '');
+                }
+                // Campos opcionais não são enviados se forem null/undefined/vazio
             });
+            
+            console.log('Enviando dados para atualizar:', Object.fromEntries(formData));
             
             fetch('mvc/ajax/lancamentos.php', {
                 method: 'POST',
@@ -1199,7 +1255,28 @@ $contas = $db->fetchAll(
                 },
                 body: formData
             })
-            .then(response => response.json())
+            .then(async response => {
+                // Verificar se a resposta está ok
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${text.substring(0, 100)}`);
+                }
+                
+                // Verificar se há conteúdo
+                const text = await response.text();
+                if (!text || text.trim() === '') {
+                    throw new Error('Resposta vazia do servidor');
+                }
+                
+                // Tentar fazer parse do JSON
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    console.error('Erro ao fazer parse do JSON:', e);
+                    console.error('Resposta recebida:', text.substring(0, 500));
+                    throw new Error('Resposta inválida do servidor: ' + text.substring(0, 100));
+                }
+            })
             .then(data => {
                 if (data.success) {
                     Swal.fire('Sucesso!', 'Lançamento atualizado com sucesso!', 'success')
@@ -1212,8 +1289,13 @@ $contas = $db->fetchAll(
                 }
             })
             .catch(error => {
-                console.error('Erro:', error);
-                Swal.fire('Erro!', 'Erro ao processar solicitação', 'error');
+                console.error('Erro ao atualizar lançamento:', error);
+                Swal.fire({
+                    title: 'Erro!',
+                    text: error.message || 'Erro ao processar solicitação',
+                    icon: 'error',
+                    confirmButtonText: 'OK'
+                });
             });
         }
 
@@ -1227,8 +1309,43 @@ $contas = $db->fetchAll(
                 cancelButtonText: 'Cancelar'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    // Implementar exclusão
-                    Swal.fire('Excluído!', 'Lançamento excluído com sucesso.', 'success');
+                    // Mostrar loading
+                    Swal.fire({
+                        title: 'Excluindo...',
+                        text: 'Excluindo lançamento...',
+                        icon: 'info',
+                        allowOutsideClick: false,
+                        showConfirmButton: false
+                    });
+                    
+                    // Fazer requisição para excluir
+                    const formData = new URLSearchParams();
+                    formData.append('action', 'excluir_lancamento');
+                    formData.append('id', id);
+                    
+                    fetch('mvc/ajax/lancamentos.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Sucesso!', 'Lançamento excluído com sucesso!', 'success')
+                                .then(() => {
+                                    // Reload page to refresh data
+                                    window.location.reload();
+                                });
+                        } else {
+                            Swal.fire('Erro!', data.message || 'Erro ao excluir lançamento', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro:', error);
+                        Swal.fire('Erro!', 'Erro ao processar solicitação', 'error');
+                    });
                 }
             });
         }

@@ -103,6 +103,7 @@ class Database
                 }
             }
             
+            // Re-throw como Exception para ser capturado pelo try/catch do chamador
             throw new \Exception('Database query failed: ' . $e->getMessage());
         }
     }
@@ -126,8 +127,12 @@ class Database
     private function sanitizeData($data)
     {
         foreach ($data as $key => $value) {
+            // Convert string "null" to actual NULL
+            if (is_string($value) && strtolower(trim($value)) === 'null') {
+                $data[$key] = null;
+            }
             // Convert empty strings to NULL for date/datetime/timestamp fields
-            if (is_string($value) && empty($value) && 
+            elseif (is_string($value) && empty($value) && 
                 (stripos($key, 'data_') === 0 || 
                  stripos($key, '_date') !== false || 
                  stripos($key, '_at') !== false ||
@@ -182,6 +187,9 @@ class Database
             // Convert boolean values directly in SQL for PostgreSQL
             if (is_bool($value)) {
                 $set[] = "{$key} = " . ($value ? 'true' : 'false');
+            } elseif ($value === null) {
+                // Handle NULL values explicitly
+                $set[] = "{$key} = NULL";
             } else {
                 $set[] = "{$key} = ?";
                 $params[] = $value;

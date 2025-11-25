@@ -10,7 +10,10 @@ ob_start();
 session_start();
 header('Content-Type: application/json');
 
-// Autoloader
+// Autoloader do Composer (necessário para AWS SDK)
+require_once __DIR__ . '/../../vendor/autoload.php';
+
+// Autoloader customizado do sistema
 spl_autoload_register(function ($class) {
     $prefixes = [
         'System\\' => __DIR__ . '/../../system/',
@@ -246,21 +249,11 @@ try {
                 throw new Exception('Arquivo muito grande (máximo 10MB)');
             }
             
-            // Create uploads directory if not exists
-            $uploadDir = __DIR__ . '/../../uploads/ai_chat/';
-            if (!is_dir($uploadDir)) {
-                mkdir($uploadDir, 0755, true);
-            }
-            
-            // Generate unique filename
-            $extension = pathinfo($uploadedFile['name'], PATHINFO_EXTENSION);
-            $filename = uniqid() . '_' . time() . '.' . $extension;
-            $filePath = $uploadDir . $filename;
-            
-            // Move uploaded file
-            if (!move_uploaded_file($uploadedFile['tmp_name'], $filePath)) {
-                throw new Exception('Erro ao salvar arquivo');
-            }
+            // Upload para MinIO
+            require_once __DIR__ . '/../../system/Storage/MinIO.php';
+            $minio = \System\Storage\MinIO::getInstance();
+            $fileUrl = $minio->uploadFile($uploadedFile, 'ai_chat');
+            $filePath = $fileUrl; // Para compatibilidade com código existente
             
             // Determine file type for processing
             $type = 'unknown';
@@ -272,12 +265,14 @@ try {
                 $type = 'spreadsheet';
             }
             
+            // Retornar informações do arquivo
             ob_end_clean();
             echo json_encode([
                 'success' => true,
                 'file' => [
                     'name' => $uploadedFile['name'],
-                    'path' => $filePath,
+                    'path' => $fileUrl,
+                    'url' => $fileUrl,
                     'type' => $type,
                     'size' => $uploadedFile['size']
                 ]

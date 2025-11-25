@@ -9,11 +9,15 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 
-// Autoloader
+// Autoloader do Composer (necessário para AWS SDK)
+require_once __DIR__ . '/../../vendor/autoload.php';
+
+// Autoloader do sistema
 require_once __DIR__ . '/../../system/Config.php';
 require_once __DIR__ . '/../../system/Database.php';
 require_once __DIR__ . '/../../system/Session.php';
 require_once __DIR__ . '/../../system/Middleware/SubscriptionCheck.php';
+require_once __DIR__ . '/../../system/Storage/MinIO.php';
 
 try {
     // Conectar ao banco
@@ -165,17 +169,12 @@ try {
             // Processar imagem se enviada
             $imagemPath = null;
             if (isset($_FILES['imagem']) && $_FILES['imagem']['error'] === UPLOAD_ERR_OK) {
-                $uploadDir = __DIR__ . '/../../uploads/produtos/';
-                if (!is_dir($uploadDir)) {
-                    mkdir($uploadDir, 0755, true);
-                }
-                
-                $extension = pathinfo($_FILES['imagem']['name'], PATHINFO_EXTENSION);
-                $fileName = uniqid() . '.' . $extension;
-                $imagemPath = 'uploads/produtos/' . $fileName;
-                
-                if (!move_uploaded_file($_FILES['imagem']['tmp_name'], __DIR__ . '/../../' . $imagemPath)) {
-                    throw new Exception('Erro ao fazer upload da imagem');
+                try {
+                    $minio = \System\Storage\MinIO::getInstance();
+                    $imagemPath = $minio->uploadFile($_FILES['imagem'], 'produtos');
+                } catch (Exception $e) {
+                    error_log('Erro ao fazer upload para MinIO: ' . $e->getMessage());
+                    throw new Exception('Erro ao fazer upload da imagem: ' . $e->getMessage());
                 }
             }
             
@@ -230,6 +229,18 @@ try {
                 // Atualizar produto existente
                 if ($hasExibirCardapioColumn) {
                     if ($imagemPath) {
+                        // Deletar imagem antiga se uma nova foi enviada
+                        $produtoAtual = $db->fetch("SELECT imagem FROM produtos WHERE id = ? AND tenant_id = ? AND filial_id = ?", [$produtoId, $tenantId, $filialId]);
+                        if ($produtoAtual && !empty($produtoAtual['imagem'])) {
+                            try {
+                                $minio = \System\Storage\MinIO::getInstance();
+                                $minio->deleteByUrl($produtoAtual['imagem']);
+                            } catch (Exception $e) {
+                                error_log('Erro ao deletar imagem antiga: ' . $e->getMessage());
+                                // Continuar mesmo se falhar a deleção
+                            }
+                        }
+                        
                         $db->query("
                             UPDATE produtos 
                             SET nome = ?, descricao = ?, preco_normal = ?, 
@@ -245,7 +256,19 @@ try {
                         ", [$nome, $descricao, $precoNormal, $precoMini, $categoriaId, $ativo, $exibirCardapioOnline, $estoqueAtual, $estoqueMinimo, $precoCusto, $produtoId]);
                     }
                 } else {
+                    // Deletar imagem antiga se uma nova foi enviada
                     if ($imagemPath) {
+                        $produtoAtual = $db->fetch("SELECT imagem FROM produtos WHERE id = ? AND tenant_id = ? AND filial_id = ?", [$produtoId, $tenantId, $filialId]);
+                        if ($produtoAtual && !empty($produtoAtual['imagem'])) {
+                            try {
+                                $minio = \System\Storage\MinIO::getInstance();
+                                $minio->deleteByUrl($produtoAtual['imagem']);
+                            } catch (Exception $e) {
+                                error_log('Erro ao deletar imagem antiga: ' . $e->getMessage());
+                                // Continuar mesmo se falhar a deleção
+                            }
+                        }
+                        
                         $db->query("
                             UPDATE produtos 
                             SET nome = ?, descricao = ?, preco_normal = ?, 

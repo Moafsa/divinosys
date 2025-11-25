@@ -53,7 +53,9 @@ RUN chown -R www-data:www-data /var/www/html \
 COPY docker/apache/000-default.conf /etc/apache2/sites-available/000-default.conf
 
 # Install PHP dependencies
-RUN composer install --no-dev --optimize-autoloader
+# First update composer.lock if needed, then install
+RUN composer update --no-interaction --no-scripts --no-autoloader || composer install --no-dev --optimize-autoloader --no-scripts || true && \
+    composer install --no-dev --optimize-autoloader
 
 # Create .env file from template if it doesn't exist
 RUN if [ ! -f .env ]; then cp env.example .env; fi

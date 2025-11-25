@@ -39,6 +39,8 @@ try {
     $enderecoEntrega = $data['endereco_entrega'] ?? null;
     $taxaEntrega = floatval($data['taxa_entrega'] ?? 0);
     $formaPagamento = $data['forma_pagamento'] ?? 'on_delivery';
+    $formaPagamentoDetalhada = $data['forma_pagamento_detalhada'] ?? null;
+    $trocoPara = isset($data['troco_para']) ? floatval($data['troco_para']) : null;
     
     if (!$filialId || !$tenantId || empty($itens) || !$clienteNome || !$clienteTelefone) {
         throw new Exception('Dados obrigatórios não fornecidos');
@@ -191,6 +193,14 @@ try {
         $observacao = "Pedido Online - Retirada no Balcão";
     }
     
+    // Add payment details to observation if payment is on delivery
+    if ($formaPagamento === 'on_delivery' && $formaPagamentoDetalhada) {
+        $observacao .= "\nForma de Pagamento: " . $formaPagamentoDetalhada;
+        if ($trocoPara && $trocoPara > 0 && $formaPagamentoDetalhada === 'Dinheiro') {
+            $observacao .= "\nTroco para: R$ " . number_format($trocoPara, 2, ',', '.');
+        }
+    }
+    
     // Get a default user from usuarios table for the order
     // usuario_id references usuarios table, not usuarios_globais
     // Since the field allows NULL, we can use NULL if no valid user is found
@@ -238,6 +248,11 @@ try {
         'filial_id' => $filialId
     ];
     
+    // Add forma_pagamento if payment is on delivery and detailed payment method is provided
+    if ($formaPagamento === 'on_delivery' && $formaPagamentoDetalhada) {
+        $pedidoData['forma_pagamento'] = $formaPagamentoDetalhada;
+    }
+    
     // Only add usuario_id if we found a valid user (field allows NULL)
     if ($usuarioId) {
         $pedidoData['usuario_id'] = $usuarioId;
@@ -255,38 +270,56 @@ try {
         $ingredientesCom = [];
         $ingredientesSem = [];
         
-        if (isset($item['ingredientes_adicionados']) && is_array($item['ingredientes_adicionados'])) {
+        if (isset($item['ingredientes_adicionados']) && is_array($item['ingredientes_adicionados']) && !empty($item['ingredientes_adicionados'])) {
             foreach ($item['ingredientes_adicionados'] as $ing) {
-                if (is_array($ing) && isset($ing['id'])) {
-                    // Get ingredient name from database
-                    $ingrediente = $db->fetch(
-                        "SELECT nome FROM ingredientes WHERE id = ? AND tenant_id = ?",
-                        [$ing['id'], $tenantId]
-                    );
-                    if ($ingrediente) {
-                        $ingredientesCom[] = $ingrediente['nome'];
+                if (is_array($ing)) {
+                    // If it's an object with id and nome
+                    if (isset($ing['id'])) {
+                        // Get ingredient name from database
+                        $ingrediente = $db->fetch(
+                            "SELECT nome FROM ingredientes WHERE id = ? AND tenant_id = ?",
+                            [$ing['id'], $tenantId]
+                        );
+                        if ($ingrediente) {
+                            $ingredientesCom[] = $ingrediente['nome'];
+                        } elseif (isset($ing['nome'])) {
+                            // Use nome from the object if database lookup fails
+                            $ingredientesCom[] = $ing['nome'];
+                        }
+                    } elseif (isset($ing['nome'])) {
+                        $ingredientesCom[] = $ing['nome'];
                     }
-                } elseif (is_string($ing)) {
+                } elseif (is_string($ing) && !empty($ing)) {
                     $ingredientesCom[] = $ing;
                 }
             }
         }
         
-        if (isset($item['ingredientes_removidos']) && is_array($item['ingredientes_removidos'])) {
+        if (isset($item['ingredientes_removidos']) && is_array($item['ingredientes_removidos']) && !empty($item['ingredientes_removidos'])) {
             foreach ($item['ingredientes_removidos'] as $ing) {
-                if (is_array($ing) && isset($ing['id'])) {
-                    $ingrediente = $db->fetch(
-                        "SELECT nome FROM ingredientes WHERE id = ? AND tenant_id = ?",
-                        [$ing['id'], $tenantId]
-                    );
-                    if ($ingrediente) {
-                        $ingredientesSem[] = $ingrediente['nome'];
+                if (is_array($ing)) {
+                    // If it's an object with id and nome
+                    if (isset($ing['id'])) {
+                        $ingrediente = $db->fetch(
+                            "SELECT nome FROM ingredientes WHERE id = ? AND tenant_id = ?",
+                            [$ing['id'], $tenantId]
+                        );
+                        if ($ingrediente) {
+                            $ingredientesSem[] = $ingrediente['nome'];
+                        } elseif (isset($ing['nome'])) {
+                            // Use nome from the object if database lookup fails
+                            $ingredientesSem[] = $ing['nome'];
+                        }
+                    } elseif (isset($ing['nome'])) {
+                        $ingredientesSem[] = $ing['nome'];
                     }
-                } elseif (is_string($ing)) {
+                } elseif (is_string($ing) && !empty($ing)) {
                     $ingredientesSem[] = $ing;
                 }
             }
         }
+        
+        error_log("Item ingredientes - COM: " . implode(', ', $ingredientesCom) . " | SEM: " . implode(', ', $ingredientesSem));
         
         $db->insert('pedido_itens', [
             'pedido_id' => $pedidoId,

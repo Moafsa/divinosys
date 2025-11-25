@@ -26,12 +26,16 @@ register_shutdown_function(function() {
 
 header('Content-Type: application/json');
 
+// Autoloader do Composer (necessário para AWS SDK)
+require_once __DIR__ . '/../../vendor/autoload.php';
+
 // Simples e direto - usar require_once
 require_once __DIR__ . '/../../system/Config.php';
 require_once __DIR__ . '/../../system/Database.php';
 require_once __DIR__ . '/../../system/Session.php';
 require_once __DIR__ . '/../../system/WhatsApp/BaileysManager.php';
 require_once __DIR__ . '/../../system/Middleware/SubscriptionCheck.php';
+require_once __DIR__ . '/../../system/Storage/MinIO.php';
 
 try {
     $action = $_POST['action'] ?? '';
@@ -648,24 +652,14 @@ try {
                     throw new \Exception('Arquivo muito grande (máximo 2MB)');
                 }
                 
-                // Create uploads directory if not exists
-                $uploadDir = __DIR__ . '/../../uploads/logos/';
-                if (!is_dir($uploadDir)) {
-                    mkdir($uploadDir, 0755, true);
+                // Upload para MinIO
+                try {
+                    $minio = \System\Storage\MinIO::getInstance();
+                    $logoUrl = $minio->uploadFile($uploadedFile, 'logos');
+                } catch (\Exception $e) {
+                    error_log('Erro ao fazer upload do logo para MinIO: ' . $e->getMessage());
+                    throw new \Exception('Erro ao fazer upload do logo: ' . $e->getMessage());
                 }
-                
-                // Generate unique filename
-                $extension = pathinfo($uploadedFile['name'], PATHINFO_EXTENSION);
-                $filename = 'logo_' . $tenantId . '_' . $filialId . '_' . time() . '.' . $extension;
-                $filePath = $uploadDir . $filename;
-                
-                // Move uploaded file
-                if (!move_uploaded_file($uploadedFile['tmp_name'], $filePath)) {
-                    throw new \Exception('Erro ao salvar arquivo');
-                }
-                
-                // Set logo URL (relative to web root)
-                $logoUrl = 'uploads/logos/' . $filename;
             }
             
             // Prepare update data

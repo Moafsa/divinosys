@@ -2,9 +2,13 @@
 session_start();
 header('Content-Type: application/json');
 
+// Autoloader do Composer (necessário para AWS SDK)
+require_once __DIR__ . '/../../vendor/autoload.php';
+
 require_once __DIR__ . '/../../system/Config.php';
 require_once __DIR__ . '/../../system/Database.php';
 require_once __DIR__ . '/../../system/Session.php';
+require_once __DIR__ . '/../../system/Storage/MinIO.php';
 
 try {
     // Debug: Log all received data
@@ -310,6 +314,71 @@ try {
     
     if (!$lancamentoId) {
         throw new Exception('Erro ao criar lançamento');
+    }
+    
+    // Processar anexos se houver
+    if (isset($_FILES['anexos']) && is_array($_FILES['anexos']['name'])) {
+        try {
+            $minio = \System\Storage\MinIO::getInstance();
+            $anexos = $_FILES['anexos'];
+            $anexoCount = count($anexos['name']);
+            
+            for ($i = 0; $i < $anexoCount; $i++) {
+                if ($anexos['error'][$i] === UPLOAD_ERR_OK) {
+                    $anexoFile = [
+                        'name' => $anexos['name'][$i],
+                        'type' => $anexos['type'][$i],
+                        'tmp_name' => $anexos['tmp_name'][$i],
+                        'error' => $anexos['error'][$i],
+                        'size' => $anexos['size'][$i]
+                    ];
+                    
+                    // Validar tipo de arquivo
+                    $allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+                    if (!in_array($anexoFile['type'], $allowedTypes)) {
+                        error_log("Tipo de arquivo não permitido: {$anexoFile['type']}");
+                        continue;
+                    }
+                    
+                    // Validar tamanho (max 5MB)
+                    if ($anexoFile['size'] > 5 * 1024 * 1024) {
+                        error_log("Arquivo muito grande: {$anexoFile['name']}");
+                        continue;
+                    }
+                    
+                    // Upload para MinIO
+                    $anexoUrl = $minio->uploadFile($anexoFile, 'financeiro/anexos');
+                    
+                    // Salvar no banco de dados
+                    $db->query("
+                        CREATE TABLE IF NOT EXISTS anexos_financeiros (
+                            id SERIAL PRIMARY KEY,
+                            lancamento_id INTEGER,
+                            nome_arquivo VARCHAR(255) NOT NULL,
+                            caminho_arquivo VARCHAR(500) NOT NULL,
+                            tipo_arquivo VARCHAR(50),
+                            tamanho_arquivo INTEGER,
+                            tenant_id INTEGER NOT NULL,
+                            filial_id INTEGER,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        )
+                    ");
+                    
+                    $db->insert('anexos_financeiros', [
+                        'lancamento_id' => $lancamentoId,
+                        'nome_arquivo' => $anexoFile['name'],
+                        'caminho_arquivo' => $anexoUrl,
+                        'tipo_arquivo' => $anexoFile['type'],
+                        'tamanho_arquivo' => $anexoFile['size'],
+                        'tenant_id' => $tenantId,
+                        'filial_id' => $filialId
+                    ]);
+                }
+            }
+        } catch (Exception $e) {
+            error_log('Erro ao processar anexos: ' . $e->getMessage());
+            // Continuar mesmo se houver erro nos anexos
+        }
     }
     
     // Update account balance if status is 'pago' (paid/confirmed)

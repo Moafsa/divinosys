@@ -691,6 +691,22 @@ if (count($enderecoParts) > 2) {
             opacity: 0.9;
         }
         
+        /* Botões primários usando cor configurada */
+        .btn-primary {
+            background-color: var(--primary-color) !important;
+            border-color: var(--primary-color) !important;
+            color: #000 !important;
+        }
+        
+        .btn-primary:hover,
+        .btn-primary:focus,
+        .btn-primary:active {
+            background-color: var(--primary-color) !important;
+            border-color: var(--primary-color) !important;
+            opacity: 0.9;
+            color: #000 !important;
+        }
+        
         /* Checkout Modal */
         .checkout-modal {
             display: flex;
@@ -1077,7 +1093,10 @@ if (count($enderecoParts) > 2) {
                                          data-product-data="<?php echo htmlspecialchars(json_encode($produto)); ?>"
                                          style="cursor: pointer;">
                                         <?php if ($produto['imagem']): ?>
-                                            <img src="<?php echo htmlspecialchars($produto['imagem']); ?>" alt="<?php echo htmlspecialchars($produto['nome']); ?>" class="product-image">
+                                            <img src="<?php echo htmlspecialchars($produto['imagem']); ?>" alt="<?php echo htmlspecialchars($produto['nome']); ?>" class="product-image" onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                            <div class="product-image" style="display: none; align-items: center; justify-content: center; background: #f5f5f5;">
+                                                <i class="fas fa-image" style="font-size: 3rem; color: #ccc;"></i>
+                                            </div>
                                         <?php else: ?>
                                             <div class="product-image" style="display: flex; align-items: center; justify-content: center; background: #f5f5f5;">
                                                 <i class="fas fa-image" style="font-size: 3rem; color: #ccc;"></i>
@@ -1785,6 +1804,30 @@ if (count($enderecoParts) > 2) {
                         </div>
                         
                         <div id="checkoutStep5" class="checkout-step" style="display: none;">
+                            <h5 class="mb-3">Forma de Pagamento na Entrega</h5>
+                            <div class="mb-3">
+                                <label class="form-label">Selecione a forma de pagamento:</label>
+                                <select class="form-select" id="formaPagamentoDetalhada" required onchange="toggleTrocoField()">
+                                    <option value="">-- Selecione --</option>
+                                    <option value="Dinheiro">Dinheiro</option>
+                                    <option value="Cartão de Débito">Cartão de Débito</option>
+                                    <option value="Cartão de Crédito">Cartão de Crédito</option>
+                                    <option value="PIX">PIX</option>
+                                    <option value="Vale Refeição">Vale Refeição</option>
+                                </select>
+                            </div>
+                            <div class="mb-3" id="trocoField" style="display: none;">
+                                <label class="form-label">Troco para quanto?</label>
+                                <input type="number" class="form-control" id="trocoPara" step="0.01" min="0" placeholder="0,00">
+                                <small class="text-muted">Informe o valor que você vai pagar em dinheiro</small>
+                            </div>
+                            <div class="d-flex gap-2 mt-3">
+                                <button class="btn btn-secondary flex-fill" onclick="voltarPasso()">Voltar</button>
+                                <button class="btn btn-primary flex-fill" onclick="proximoPasso(5)">Continuar</button>
+                            </div>
+                        </div>
+                        
+                        <div id="checkoutStep6" class="checkout-step" style="display: none;">
                             <h5 class="mb-3">Resumo do Pedido</h5>
                             <div id="orderSummary"></div>
                             <div class="d-flex justify-content-between mt-3 pt-3 border-top">
@@ -1817,9 +1860,11 @@ if (count($enderecoParts) > 2) {
         let clienteEnderecos = [];
         let deliveryFee = 0;
         let paymentMethod = 'on_delivery';
+        let formaPagamentoDetalhada = '';
+        let trocoPara = null;
         
         function mostrarPasso(step) {
-            for (let i = 1; i <= 5; i++) {
+            for (let i = 1; i <= 6; i++) {
                 const stepEl = document.getElementById('checkoutStep' + i);
                 if (stepEl) stepEl.style.display = 'none';
             }
@@ -1835,6 +1880,13 @@ if (count($enderecoParts) > 2) {
                     const deliveryType = deliveryTypeSelect ? deliveryTypeSelect.value : 'delivery'; // Default to delivery if not found
                     
                     console.log('Step 3 - Delivery type:', deliveryType, 'Endereços:', clienteEnderecos?.length || 0);
+                    
+                    // If pickup, skip this step and go to payment
+                    if (deliveryType === 'pickup') {
+                        console.log('Pickup selecionado, pulando passo 3');
+                        mostrarPasso(4);
+                        return;
+                    }
                     
                     if (deliveryType === 'delivery') {
                         // Always show address selection/entry for delivery
@@ -1879,6 +1931,12 @@ if (count($enderecoParts) > 2) {
                     alert('Por favor, informe o nome');
                     return;
                 }
+                // Check delivery type - if pickup, skip step 3 (address) and go to step 4 (payment)
+                const deliveryType = document.getElementById('deliveryTypeSelect').value;
+                if (deliveryType === 'pickup') {
+                    mostrarPasso(4);
+                    return;
+                }
             } else if (fromStep === 3) {
                 const deliveryType = document.getElementById('deliveryTypeSelect').value;
                 if (deliveryType === 'delivery') {
@@ -1899,7 +1957,42 @@ if (count($enderecoParts) > 2) {
             }
             
             if (fromStep === 4) {
-                mostrarPasso(5);
+                // Check delivery type and payment method
+                const deliveryType = document.getElementById('deliveryTypeSelect').value;
+                const selectedPayment = document.querySelector('input[name="paymentMethod"]:checked');
+                
+                // Only show step 5 (payment details) if payment is on_delivery AND delivery type is delivery (not pickup)
+                if (selectedPayment && selectedPayment.value === 'on_delivery' && deliveryType === 'delivery') {
+                    mostrarPasso(5);
+                } else {
+                    // For pickup or online payment, go directly to summary
+                    mostrarPasso(6);
+                    updateOrderSummary();
+                }
+                return;
+            }
+            
+            if (fromStep === 5) {
+                // Validate payment details before proceeding
+                const formaPagamento = document.getElementById('formaPagamentoDetalhada').value;
+                if (!formaPagamento) {
+                    alert('Por favor, selecione a forma de pagamento');
+                    return;
+                }
+                
+                if (formaPagamento === 'Dinheiro') {
+                    const troco = document.getElementById('trocoPara').value;
+                    if (!troco || parseFloat(troco) <= 0) {
+                        alert('Por favor, informe o valor do troco');
+                        return;
+                    }
+                    trocoPara = parseFloat(troco);
+                } else {
+                    trocoPara = null;
+                }
+                
+                formaPagamentoDetalhada = formaPagamento;
+                mostrarPasso(6);
                 updateOrderSummary();
                 return;
             }
@@ -1907,9 +2000,71 @@ if (count($enderecoParts) > 2) {
             mostrarPasso(fromStep + 1);
         }
         
+        function toggleTrocoField() {
+            const formaPagamento = document.getElementById('formaPagamentoDetalhada').value;
+            const trocoField = document.getElementById('trocoField');
+            if (formaPagamento === 'Dinheiro') {
+                trocoField.style.display = 'block';
+                document.getElementById('trocoPara').required = true;
+            } else {
+                trocoField.style.display = 'none';
+                document.getElementById('trocoPara').required = false;
+                document.getElementById('trocoPara').value = '';
+            }
+        }
+        
         function voltarPasso() {
             if (currentCheckoutStep > 1) {
-                mostrarPasso(currentCheckoutStep - 1);
+                // If going back from step 6 to step 5, or from step 5 to step 4, handle navigation
+                if (currentCheckoutStep === 6) {
+                    // Going back from summary - determine which step to go to
+                    const deliveryType = document.getElementById('deliveryTypeSelect').value;
+                    const selectedPayment = document.querySelector('input[name="paymentMethod"]:checked');
+                    if (selectedPayment && selectedPayment.value === 'on_delivery' && deliveryType === 'delivery') {
+                        // Go back to step 5 (payment details) - preserve values
+                        mostrarPasso(5);
+                        // Restore values if they exist
+                        if (formaPagamentoDetalhada) {
+                            const formaPagamentoSelect = document.getElementById('formaPagamentoDetalhada');
+                            if (formaPagamentoSelect) formaPagamentoSelect.value = formaPagamentoDetalhada;
+                            toggleTrocoField();
+                            if (trocoPara) {
+                                const trocoInput = document.getElementById('trocoPara');
+                                if (trocoInput) trocoInput.value = trocoPara;
+                            }
+                        }
+                    } else {
+                        // Go back to step 4 (payment method selection)
+                        mostrarPasso(4);
+                    }
+                } else if (currentCheckoutStep === 5) {
+                    // Going back from payment details - clear values and go to step 4
+                    formaPagamentoDetalhada = '';
+                    trocoPara = null;
+                    const formaPagamentoSelect = document.getElementById('formaPagamentoDetalhada');
+                    const trocoInput = document.getElementById('trocoPara');
+                    if (formaPagamentoSelect) formaPagamentoSelect.value = '';
+                    if (trocoInput) {
+                        trocoInput.value = '';
+                        trocoInput.required = false;
+                    }
+                    const trocoField = document.getElementById('trocoField');
+                    if (trocoField) trocoField.style.display = 'none';
+                    mostrarPasso(4);
+                } else if (currentCheckoutStep === 4) {
+                    // Going back from step 4 - check if should go to step 3 (address) or step 2 (customer data)
+                    const deliveryType = document.getElementById('deliveryTypeSelect').value;
+                    if (deliveryType === 'delivery') {
+                        // Go back to step 3 (address)
+                        mostrarPasso(3);
+                    } else {
+                        // Go back to step 2 (customer data) since pickup skips address
+                        mostrarPasso(2);
+                    }
+                } else {
+                    // Normal back navigation
+                    mostrarPasso(currentCheckoutStep - 1);
+                }
             }
         }
         
@@ -2528,6 +2683,24 @@ if (count($enderecoParts) > 2) {
             const deliveryType = document.getElementById('deliveryTypeSelect').value;
             let totalValue = subtotal + (deliveryType === 'delivery' ? deliveryFee : 0);
             
+            let paymentInfo = '';
+            if (paymentMethod === 'on_delivery' && formaPagamentoDetalhada) {
+                paymentInfo = `
+                    <div class="mt-3 pt-3 border-top">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span><strong>Pagamento:</strong></span>
+                            <span>${formaPagamentoDetalhada}</span>
+                        </div>
+                        ${trocoPara && formaPagamentoDetalhada === 'Dinheiro' ? `
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Troco para:</span>
+                                <span>R$ ${trocoPara.toFixed(2).replace('.', ',')}</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+            
             summary.innerHTML = `
                 <div class="d-flex justify-content-between mb-2">
                     <span>Subtotal:</span>
@@ -2539,6 +2712,7 @@ if (count($enderecoParts) > 2) {
                         <span>R$ ${deliveryFee.toFixed(2).replace('.', ',')}</span>
                     </div>
                 ` : ''}
+                ${paymentInfo}
             `;
             
             total.textContent = `R$ ${totalValue.toFixed(2).replace('.', ',')}`;
@@ -2636,7 +2810,10 @@ if (count($enderecoParts) > 2) {
                 cliente_cpf: customerCpf,
                 cliente_id: clienteData ? clienteData.id : null,
                 endereco_entrega: enderecoEntrega,
-                forma_pagamento: paymentMethod
+                forma_pagamento: paymentMethod,
+                // Only send detailed payment info if payment is on_delivery AND delivery type is delivery (not pickup)
+                forma_pagamento_detalhada: (paymentMethod === 'on_delivery' && deliveryType === 'delivery') ? formaPagamentoDetalhada : null,
+                troco_para: (paymentMethod === 'on_delivery' && deliveryType === 'delivery' && formaPagamentoDetalhada === 'Dinheiro') ? trocoPara : null
             };
             
             try {
