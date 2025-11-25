@@ -575,6 +575,11 @@ try {
             break;
             
         case 'excluir_lancamento':
+            // Limpar buffer antes de processar
+            if (ob_get_level() > 0) {
+                ob_clean();
+            }
+            
             $id = $_POST['id'] ?? '';
             
             if (empty($id)) {
@@ -622,6 +627,11 @@ try {
             
             if (!$excluido) {
                 throw new \Exception('Erro ao excluir lançamento');
+            }
+            
+            // Limpar buffer antes de enviar resposta
+            if (ob_get_level() > 0) {
+                ob_end_clean();
             }
             
             echo json_encode([

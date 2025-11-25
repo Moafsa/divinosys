@@ -1330,7 +1330,28 @@ $contas = $db->fetchAll(
                         },
                         body: formData
                     })
-                    .then(response => response.json())
+                    .then(async response => {
+                        // Verificar se a resposta está ok
+                        if (!response.ok) {
+                            const text = await response.text();
+                            throw new Error(`HTTP ${response.status}: ${text.substring(0, 100)}`);
+                        }
+                        
+                        // Verificar se há conteúdo
+                        const text = await response.text();
+                        if (!text || text.trim() === '') {
+                            throw new Error('Resposta vazia do servidor');
+                        }
+                        
+                        // Tentar fazer parse do JSON
+                        try {
+                            return JSON.parse(text);
+                        } catch (e) {
+                            console.error('Erro ao fazer parse do JSON:', e);
+                            console.error('Resposta recebida:', text.substring(0, 500));
+                            throw new Error('Resposta inválida do servidor: ' + text.substring(0, 100));
+                        }
+                    })
                     .then(data => {
                         if (data.success) {
                             Swal.fire('Sucesso!', 'Lançamento excluído com sucesso!', 'success')
@@ -1343,8 +1364,13 @@ $contas = $db->fetchAll(
                         }
                     })
                     .catch(error => {
-                        console.error('Erro:', error);
-                        Swal.fire('Erro!', 'Erro ao processar solicitação', 'error');
+                        console.error('Erro ao excluir lançamento:', error);
+                        Swal.fire({
+                            title: 'Erro!',
+                            text: error.message || 'Erro ao processar solicitação',
+                            icon: 'error',
+                            confirmButtonText: 'OK'
+                        });
                     });
                 }
             });
