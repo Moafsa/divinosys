@@ -94,7 +94,7 @@ if ($hasExibirCardapioColumn) {
     );
 }
 
-// Get most sold products - baseado em vendas reais dos últimos 30 dias
+// Get most sold products - baseado em quantidades vendidas nos últimos 15 dias
 $produtosMaisVendidos = [];
 try {
     // Build WHERE clause for exibir_cardapio_online
@@ -103,31 +103,34 @@ try {
         $whereExibirCardapio = 'AND (p.exibir_cardapio_online IS NULL OR p.exibir_cardapio_online = true)';
     }
     
-    // Query para buscar produtos mais vendidos baseado em pedidos quitados dos últimos 30 dias
+    // Query para buscar os 10 produtos mais vendidos baseado em QUANTIDADE vendida nos últimos 15 dias
+    // Ordenar por total_quantidade DESC (quantidade total vendida) como critério principal
     $produtosMaisVendidos = $db->fetchAll(
         "SELECT p.*, c.nome as categoria_nome, 
-                COUNT(DISTINCT pi.pedido_id) as total_pedidos,
-                COALESCE(SUM(pi.quantidade), 0) as total_quantidade
+                COALESCE(SUM(pi.quantidade), 0) as total_quantidade,
+                COUNT(DISTINCT pi.pedido_id) as total_pedidos
          FROM produtos p
          LEFT JOIN categorias c ON p.categoria_id = c.id
          LEFT JOIN pedido_itens pi ON p.id = pi.produto_id AND pi.tenant_id = ? AND pi.filial_id = ?
          LEFT JOIN pedido ped ON pi.pedido_id = ped.idpedido 
              AND ped.status_pagamento = 'quitado'
-             AND ped.data >= CURRENT_DATE - INTERVAL '30 days'
+             AND ped.data >= CURRENT_DATE - INTERVAL '15 days'
          WHERE p.tenant_id = ? AND p.filial_id = ? AND p.ativo = true
            $whereExibirCardapio
          GROUP BY p.id, c.nome
-         HAVING COUNT(DISTINCT pi.pedido_id) > 0
-         ORDER BY total_pedidos DESC, total_quantidade DESC
+         HAVING COALESCE(SUM(pi.quantidade), 0) > 0
+         ORDER BY total_quantidade DESC, total_pedidos DESC
          LIMIT 10",
         [$tenantId, $filialId, $tenantId, $filialId]
     );
+    
+    error_log("Cardapio Online - Produtos mais vendidos encontrados: " . count($produtosMaisVendidos));
 } catch (\Exception $e) {
     error_log("Erro ao buscar produtos mais vendidos: " . $e->getMessage());
     $produtosMaisVendidos = [];
 }
 
-// Se não houver produtos com vendas, usar fallback: produtos mais recentes ou aleatórios
+// Se não houver produtos com vendas nos últimos 15 dias, usar fallback: produtos mais recentes
 if (empty($produtosMaisVendidos)) {
     try {
         $whereExibirCardapio = '';
@@ -135,7 +138,7 @@ if (empty($produtosMaisVendidos)) {
             $whereExibirCardapio = 'AND (p.exibir_cardapio_online IS NULL OR p.exibir_cardapio_online = true)';
         }
         
-        // Fallback: produtos mais recentes primeiro, depois aleatórios
+        // Fallback: produtos mais recentes primeiro
         $produtosMaisVendidos = $db->fetchAll(
             "SELECT p.*, c.nome as categoria_nome 
              FROM produtos p 
@@ -146,6 +149,7 @@ if (empty($produtosMaisVendidos)) {
              LIMIT 10",
             [$tenantId, $filialId]
         );
+        error_log("Cardapio Online - Usando fallback (produtos recentes): " . count($produtosMaisVendidos));
     } catch (\Exception $e) {
         error_log("Erro ao buscar produtos fallback mais vendidos: " . $e->getMessage());
         $produtosMaisVendidos = [];
