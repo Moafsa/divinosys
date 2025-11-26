@@ -218,6 +218,19 @@ if (count($enderecoParts) > 2) {
     <title><?php echo htmlspecialchars($filial['nome']); ?> - Cardápio Online</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <?php
+    // Get pixel code from filial_settings
+    $pixelSetting = $db->fetch(
+        "SELECT setting_value FROM filial_settings WHERE tenant_id = ? AND filial_id = ? AND setting_key = 'pixel_rastreamento'",
+        [$tenantId, $filialId]
+    );
+    
+    if ($pixelSetting && !empty($pixelSetting['setting_value'])) {
+        // Output pixel code directly (it should already be valid HTML/JavaScript)
+        echo $pixelSetting['setting_value'];
+    }
+    ?>
     <style>
         :root {
             --primary-color: <?php echo $primaryColor; ?>;
@@ -1741,9 +1754,13 @@ if (count($enderecoParts) > 2) {
                         
                         <div id="checkoutStep2" class="checkout-step" style="display: none;">
                             <h5 class="mb-3">Dados do Cliente</h5>
+                            <div id="checkoutError" class="alert alert-danger" style="display: none; margin-bottom: 15px;"></div>
                             <input type="text" class="form-control mb-2" id="customerName" placeholder="Nome completo" required>
                             <input type="email" class="form-control mb-2" id="customerEmail" placeholder="E-mail (opcional)">
-                            <input type="text" class="form-control mb-2" id="customerCpf" placeholder="CPF (opcional)">
+                            <input type="text" class="form-control mb-2" id="customerCpf" placeholder="CPF (obrigatório para pagamento online)" required>
+                            <small class="text-muted d-block mb-2" id="cpfRequiredMsg" style="display: none; color: #dc3545 !important;">
+                                <i class="fas fa-exclamation-circle"></i> CPF é obrigatório para pagamento online
+                            </small>
                             <button class="btn btn-primary w-100 mt-2" onclick="proximoPasso(2)">Continuar</button>
                         </div>
                         
@@ -1787,7 +1804,7 @@ if (count($enderecoParts) > 2) {
                                     <input type="radio" name="paymentMethod" value="online" id="paymentOnline">
                                     <label for="paymentOnline">
                                         <strong>Pagar Online</strong>
-                                        <br><small class="text-muted">PIX, Cartão via Asaas</small>
+                                        <br><small class="text-muted">PIX ou Cartão via Asaas</small>
                                     </label>
                                 </div>
                             <?php endif; ?>
@@ -1801,6 +1818,28 @@ if (count($enderecoParts) > 2) {
                                 </div>
                             <?php endif; ?>
                             <button class="btn btn-primary w-100 mt-3" onclick="proximoPasso(4)">Continuar</button>
+                        </div>
+                        
+                        <div id="checkoutStep4b" class="checkout-step" style="display: none;">
+                            <h5 class="mb-3">Escolha o Método de Pagamento Online</h5>
+                            <div class="payment-option" onclick="selectOnlinePaymentMethod('PIX')">
+                                <input type="radio" name="onlinePaymentMethod" value="PIX" id="onlinePaymentPIX" checked>
+                                <label for="onlinePaymentPIX">
+                                    <strong>PIX</strong>
+                                    <br><small class="text-muted">Pagamento instantâneo via QR Code</small>
+                                </label>
+                            </div>
+                            <div class="payment-option" onclick="selectOnlinePaymentMethod('CREDIT_CARD')">
+                                <input type="radio" name="onlinePaymentMethod" value="CREDIT_CARD" id="onlinePaymentCard">
+                                <label for="onlinePaymentCard">
+                                    <strong>Cartão de Crédito</strong>
+                                    <br><small class="text-muted">Visa, Mastercard, Elo, etc.</small>
+                                </label>
+                            </div>
+                            <div class="d-flex gap-2 mt-3">
+                                <button class="btn btn-secondary flex-fill" onclick="voltarPasso()">Voltar</button>
+                                <button class="btn btn-primary flex-fill" onclick="proximoPasso('4b')">Continuar</button>
+                            </div>
                         </div>
                         
                         <div id="checkoutStep5" class="checkout-step" style="display: none;">
@@ -1850,6 +1889,17 @@ if (count($enderecoParts) > 2) {
             // Add modal to body
             document.body.insertAdjacentHTML('beforeend', modalHtml);
             
+            // Setup CPF listener when modal is created
+            setTimeout(() => {
+                setupCpfFieldListener();
+                // Verificar imediatamente se CPF já está preenchido
+                verificarEesconderMensagemCpf();
+                // Verificar novamente após um pequeno delay para garantir
+                setTimeout(() => {
+                    verificarEesconderMensagemCpf();
+                }, 200);
+            }, 100);
+            
             // Show first step
             currentCheckoutStep = 1;
             mostrarPasso(1);
@@ -1860,18 +1910,70 @@ if (count($enderecoParts) > 2) {
         let clienteEnderecos = [];
         let deliveryFee = 0;
         let paymentMethod = 'on_delivery';
+        let onlinePaymentMethod = 'PIX'; // PIX or CREDIT_CARD
         let formaPagamentoDetalhada = '';
         let trocoPara = null;
         
         function mostrarPasso(step) {
+            // Hide all steps
             for (let i = 1; i <= 6; i++) {
                 const stepEl = document.getElementById('checkoutStep' + i);
                 if (stepEl) stepEl.style.display = 'none';
             }
+            // Also hide step 4b
+            const step4b = document.getElementById('checkoutStep4b');
+            if (step4b) {
+                step4b.style.display = 'none';
+            }
+            
+            // Show current step
             const currentStepEl = document.getElementById('checkoutStep' + step);
             if (currentStepEl) {
                 currentStepEl.style.display = 'block';
                 currentCheckoutStep = step;
+                
+                // Verificar CPF quando o passo 2 é exibido
+                if (step === 2) {
+                    // Setup CPF listener
+                    setupCpfFieldListener();
+                    
+                    // Verificar se CPF já está preenchido e esconder mensagem
+                    // Usar múltiplos timeouts para garantir que funciona
+                    setTimeout(() => {
+                        verificarEesconderMensagemCpf();
+                    }, 50);
+                    setTimeout(() => {
+                        verificarEesconderMensagemCpf();
+                    }, 200);
+                    setTimeout(() => {
+                        verificarEesconderMensagemCpf();
+                    }, 500);
+                    
+                    // Criar um observer para monitorar mudanças no campo CPF
+                    const cpfField = document.getElementById('customerCpf');
+                    if (cpfField) {
+                        // Usar MutationObserver para detectar mudanças no valor
+                        const observer = new MutationObserver(() => {
+                            verificarEesconderMensagemCpf();
+                        });
+                        
+                        // Observar mudanças no atributo value
+                        observer.observe(cpfField, {
+                            attributes: true,
+                            attributeFilter: ['value']
+                        });
+                        
+                        // Também observar mudanças no texto (para inputs)
+                        const checkInterval = setInterval(() => {
+                            if (document.getElementById('checkoutStep2').style.display === 'none') {
+                                clearInterval(checkInterval);
+                                observer.disconnect();
+                            } else {
+                                verificarEesconderMensagemCpf();
+                            }
+                        }, 300);
+                    }
+                }
                 
                 // Show address section if step 3 and delivery type
                 if (step === 3) {
@@ -1915,6 +2017,12 @@ if (count($enderecoParts) > 2) {
                         if (enderecoSectionEl) enderecoSectionEl.style.display = 'none';
                     }
                 }
+            } else if (step === '4b') {
+                // Show step 4b (online payment method selection)
+                if (step4b) {
+                    step4b.style.display = 'block';
+                    currentCheckoutStep = '4b';
+                }
             }
         }
         
@@ -1927,9 +2035,37 @@ if (count($enderecoParts) > 2) {
                 }
             } else if (fromStep === 2) {
                 const name = document.getElementById('customerName').value.trim();
+                const cpf = document.getElementById('customerCpf').value.trim();
+                const errorDiv = document.getElementById('checkoutError');
+                const cpfRequiredMsg = document.getElementById('cpfRequiredMsg');
+                
+                if (errorDiv) errorDiv.style.display = 'none';
+                if (cpfRequiredMsg) cpfRequiredMsg.style.display = 'none';
+                
                 if (!name) {
-                    alert('Por favor, informe o nome');
+                    if (errorDiv) {
+                        errorDiv.textContent = 'Por favor, informe o nome';
+                        errorDiv.style.display = 'block';
+                    }
                     return;
+                }
+                
+                // Check if CPF is required (online payment)
+                // Primeiro verificar se CPF está preenchido e esconder mensagem se estiver
+                if (cpf && cpf.trim()) {
+                    if (cpfRequiredMsg) cpfRequiredMsg.style.display = 'none';
+                    document.getElementById('customerCpf').classList.remove('is-invalid');
+                } else if (paymentMethod === 'online' && !cpf) {
+                    if (errorDiv) {
+                        errorDiv.textContent = 'CPF é obrigatório para pagamento online';
+                        errorDiv.style.display = 'block';
+                    }
+                    if (cpfRequiredMsg) cpfRequiredMsg.style.display = 'block';
+                    document.getElementById('customerCpf').classList.add('is-invalid');
+                    document.getElementById('customerCpf').focus();
+                    return;
+                } else {
+                    document.getElementById('customerCpf').classList.remove('is-invalid');
                 }
                 // Check delivery type - if pickup, skip step 3 (address) and go to step 4 (payment)
                 const deliveryType = document.getElementById('deliveryTypeSelect').value;
@@ -1961,14 +2097,27 @@ if (count($enderecoParts) > 2) {
                 const deliveryType = document.getElementById('deliveryTypeSelect').value;
                 const selectedPayment = document.querySelector('input[name="paymentMethod"]:checked');
                 
+                // If online payment selected, show step 4b to choose PIX or Card
+                if (selectedPayment && selectedPayment.value === 'online') {
+                    mostrarPasso('4b');
+                    return;
+                }
+                
                 // Only show step 5 (payment details) if payment is on_delivery AND delivery type is delivery (not pickup)
                 if (selectedPayment && selectedPayment.value === 'on_delivery' && deliveryType === 'delivery') {
                     mostrarPasso(5);
                 } else {
-                    // For pickup or online payment, go directly to summary
+                    // For pickup, go directly to summary
                     mostrarPasso(6);
                     updateOrderSummary();
                 }
+                return;
+            }
+            
+            if (fromStep === '4b') {
+                // After choosing online payment method (PIX or Card), go to summary
+                mostrarPasso(6);
+                updateOrderSummary();
                 return;
             }
             
@@ -2103,7 +2252,14 @@ if (count($enderecoParts) > 2) {
                     // Preencher campos com dados do cliente (se existirem)
                     document.getElementById('customerName').value = data.cliente.nome && data.cliente.nome !== 'Cliente' ? data.cliente.nome : '';
                     document.getElementById('customerEmail').value = data.cliente.email || '';
-                    document.getElementById('customerCpf').value = data.cliente.cpf || '';
+                    const cpfField = document.getElementById('customerCpf');
+                    cpfField.value = data.cliente.cpf || '';
+                    
+                    // Esconder mensagem de CPF obrigatório se o CPF estiver preenchido
+                    // Usar setTimeout para garantir que o valor foi definido antes de verificar
+                    setTimeout(() => {
+                        verificarEesconderMensagemCpf();
+                    }, 100);
                     
                     if (data.cliente.nome && data.cliente.nome !== 'Cliente') {
                         resultDiv.className = 'alert alert-success';
@@ -2130,6 +2286,45 @@ if (count($enderecoParts) > 2) {
                 console.error('Erro ao buscar cliente:', error);
                 resultDiv.className = 'alert alert-danger';
                 resultDiv.textContent = 'Erro ao buscar cliente. Tente novamente.';
+            }
+        }
+        
+        // Função auxiliar para verificar e esconder mensagem de CPF se estiver preenchido
+        function verificarEesconderMensagemCpf() {
+            const cpfField = document.getElementById('customerCpf');
+            const cpfRequiredMsg = document.getElementById('cpfRequiredMsg');
+            if (cpfField && cpfRequiredMsg) {
+                const cpfValue = cpfField.value.trim();
+                if (cpfValue) {
+                    cpfRequiredMsg.style.display = 'none';
+                    cpfField.classList.remove('is-invalid');
+                    return true; // CPF está preenchido
+                }
+            }
+            return false; // CPF não está preenchido
+        }
+        
+        // Setup CPF field listener to hide message when CPF is filled
+        function setupCpfFieldListener() {
+            const cpfField = document.getElementById('customerCpf');
+            if (cpfField) {
+                // Remove existing listener if any
+                const existingHandler = cpfField._cpfHandler;
+                if (existingHandler) {
+                    cpfField.removeEventListener('input', existingHandler);
+                }
+                
+                // Create new handler
+                const cpfHandler = function() {
+                    verificarEesconderMensagemCpf();
+                };
+                
+                // Store handler reference and add listener
+                cpfField._cpfHandler = cpfHandler;
+                cpfField.addEventListener('input', cpfHandler);
+                
+                // Verificar imediatamente se já está preenchido
+                verificarEesconderMensagemCpf();
             }
         }
         
@@ -2162,6 +2357,9 @@ if (count($enderecoParts) > 2) {
                 cpfField.removeEventListener('input', debouncedUpdate);
                 cpfField.addEventListener('input', debouncedUpdate);
             }
+            
+            // Setup CPF listener separately
+            setupCpfFieldListener();
         }
         
         // Update customer data automatically
@@ -2228,6 +2426,14 @@ if (count($enderecoParts) > 2) {
         function selectPayment(method) {
             paymentMethod = method;
             document.getElementById('payment' + (method === 'online' ? 'Online' : 'OnDelivery')).checked = true;
+            
+            // Sempre verificar e esconder mensagem se CPF estiver preenchido
+            verificarEesconderMensagemCpf();
+        }
+        
+        function selectOnlinePaymentMethod(method) {
+            onlinePaymentMethod = method;
+            document.getElementById('onlinePayment' + (method === 'PIX' ? 'PIX' : 'Card')).checked = true;
         }
         
         async function salvarNovoEnderecoCliente(enderecoData) {
@@ -2718,25 +2924,117 @@ if (count($enderecoParts) > 2) {
             total.textContent = `R$ ${totalValue.toFixed(2).replace('.', ',')}`;
         }
         
+        // Prevent double submission
+        let isSubmittingOrder = false;
+        
         async function submitOrder() {
+            // Prevent double submission
+            if (isSubmittingOrder) {
+                console.log('Pedido já está sendo processado, aguarde...');
+                return;
+            }
+            
+            // Set submitting state
+            isSubmittingOrder = true;
+            
+            // Get submit button and disable it
+            const submitButton = document.querySelector('button[onclick="submitOrder()"]');
+            const originalButtonText = submitButton ? submitButton.innerHTML : '';
+            if (submitButton) {
+                submitButton.disabled = true;
+                submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+                submitButton.style.opacity = '0.6';
+                submitButton.style.cursor = 'not-allowed';
+            }
+            
             const customerName = document.getElementById('customerName').value.trim();
             const customerPhone = document.getElementById('customerPhone').value.trim();
             const customerEmail = document.getElementById('customerEmail').value.trim();
             const customerCpf = document.getElementById('customerCpf').value.trim();
             
+            // Hide any previous errors
+            const errorDiv = document.getElementById('checkoutError');
+            const cpfRequiredMsg = document.getElementById('cpfRequiredMsg');
+            if (errorDiv) errorDiv.style.display = 'none';
+            if (cpfRequiredMsg) cpfRequiredMsg.style.display = 'none';
+            
             if (!customerName || !customerPhone) {
-                alert('Por favor, preencha nome e telefone.');
+                // Re-enable button on validation error
+                isSubmittingOrder = false;
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalButtonText;
+                    submitButton.style.opacity = '1';
+                    submitButton.style.cursor = 'pointer';
+                }
+                
+                if (errorDiv) {
+                    errorDiv.textContent = 'Por favor, preencha nome e telefone.';
+                    errorDiv.style.display = 'block';
+                }
+                // Go back to step 2 if not already there
+                if (document.getElementById('checkoutStep2').style.display === 'none') {
+                    proximoPasso(1);
+                }
                 return;
+            }
+            
+            // Verificar e esconder mensagem se CPF estiver preenchido
+            if (customerCpf && customerCpf.trim()) {
+                if (cpfRequiredMsg) cpfRequiredMsg.style.display = 'none';
+                document.getElementById('customerCpf').classList.remove('is-invalid');
+            } else if (paymentMethod === 'online' && !customerCpf) {
+                // Re-enable button on validation error
+                isSubmittingOrder = false;
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalButtonText;
+                    submitButton.style.opacity = '1';
+                    submitButton.style.cursor = 'pointer';
+                }
+                
+                // CPF is required for online payment
+                if (errorDiv) {
+                    errorDiv.textContent = 'CPF é obrigatório para pagamento online. Por favor, preencha o CPF.';
+                    errorDiv.style.display = 'block';
+                }
+                if (cpfRequiredMsg) cpfRequiredMsg.style.display = 'block';
+                // Go back to step 2 if not already there
+                if (document.getElementById('checkoutStep2').style.display === 'none') {
+                    proximoPasso(1);
+                }
+                document.getElementById('customerCpf').focus();
+                document.getElementById('customerCpf').classList.add('is-invalid');
+                return;
+            } else {
+                // Remove invalid class if CPF is filled
+                document.getElementById('customerCpf').classList.remove('is-invalid');
             }
             
             // Get delivery type from cart (inside cartItems) or fallback to sidebar
             const deliveryTypeSelect = document.getElementById('deliveryTypeSelect');
             if (!deliveryTypeSelect) {
+                // Re-enable button on validation error
+                isSubmittingOrder = false;
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalButtonText;
+                    submitButton.style.opacity = '1';
+                    submitButton.style.cursor = 'pointer';
+                }
                 alert('Por favor, selecione uma opção de entrega no carrinho.');
                 return;
             }
             const deliveryType = deliveryTypeSelect.value;
             if (!deliveryType) {
+                // Re-enable button on validation error
+                isSubmittingOrder = false;
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalButtonText;
+                    submitButton.style.opacity = '1';
+                    submitButton.style.cursor = 'pointer';
+                }
                 alert('Por favor, selecione uma opção de entrega.');
                 return;
             }
@@ -2762,6 +3060,14 @@ if (count($enderecoParts) > 2) {
                         const address = document.getElementById('deliveryAddress').value.trim();
                         const city = document.getElementById('deliveryCity').value.trim();
                         if (!address || !city) {
+                            // Re-enable button on validation error
+                            isSubmittingOrder = false;
+                            if (submitButton) {
+                                submitButton.disabled = false;
+                                submitButton.innerHTML = originalButtonText;
+                                submitButton.style.opacity = '1';
+                                submitButton.style.cursor = 'pointer';
+                            }
                             alert('Por favor, preencha o endereço de entrega.');
                             return;
                         }
@@ -2811,6 +3117,8 @@ if (count($enderecoParts) > 2) {
                 cliente_id: clienteData ? clienteData.id : null,
                 endereco_entrega: enderecoEntrega,
                 forma_pagamento: paymentMethod,
+                // Online payment method (PIX or CREDIT_CARD) - only if payment is online
+                online_payment_method: (paymentMethod === 'online') ? onlinePaymentMethod : null,
                 // Only send detailed payment info if payment is on_delivery AND delivery type is delivery (not pickup)
                 forma_pagamento_detalhada: (paymentMethod === 'on_delivery' && deliveryType === 'delivery') ? formaPagamentoDetalhada : null,
                 troco_para: (paymentMethod === 'on_delivery' && deliveryType === 'delivery' && formaPagamentoDetalhada === 'Dinheiro') ? trocoPara : null
@@ -2828,22 +3136,113 @@ if (count($enderecoParts) > 2) {
                 const result = await response.json();
                 
                 if (result.success) {
-                    if (paymentMethod === 'online' && result.payment_url) {
-                        window.location.href = result.payment_url;
+                    if (paymentMethod === 'online') {
+                        if (result.payment_url) {
+                            // Payment created successfully - clear cart before redirecting
+                            cart = [];
+                            updateCart();
+                            closeCheckoutModal();
+                            toggleSidebar();
+                            // Save order ID to localStorage so we can show success message when user returns
+                            if (result.pedido_id) {
+                                localStorage.setItem('last_order_id', result.pedido_id);
+                            }
+                            // Redirect to payment page
+                            window.location.href = result.payment_url;
+                        } else if (result.payment_error) {
+                            // Payment failed but order was created - show error in modal
+                            // Note: Button stays disabled because order was created, we're just showing payment error
+                            const errorDiv = document.getElementById('checkoutError');
+                            if (errorDiv) {
+                                errorDiv.innerHTML = '<i class="fas fa-exclamation-triangle"></i> ' + result.payment_error;
+                                errorDiv.style.display = 'block';
+                                errorDiv.className = 'alert alert-warning';
+                            }
+                            // Go back to step 2 to show CPF field if needed
+                            if (result.payment_error.includes('CPF') || result.payment_error.includes('cpf')) {
+                                // Re-enable button to allow retry
+                                isSubmittingOrder = false;
+                                if (submitButton) {
+                                    submitButton.disabled = false;
+                                    submitButton.innerHTML = originalButtonText;
+                                    submitButton.style.opacity = '1';
+                                    submitButton.style.cursor = 'pointer';
+                                }
+                                proximoPasso(1);
+                            }
+                        } else {
+                            // Payment method is online but no URL and no error
+                            const errorDiv = document.getElementById('checkoutError');
+                            if (errorDiv) {
+                                errorDiv.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Pedido criado, mas não foi possível gerar o link de pagamento. Entre em contato conosco.';
+                                errorDiv.style.display = 'block';
+                                errorDiv.className = 'alert alert-warning';
+                            }
+                        }
                     } else {
-                        alert('Pedido criado com sucesso! Número do pedido: ' + result.pedido_id);
-                        cart = [];
-                        updateCart();
+                        // Payment is not online (on_delivery) - success
                         closeCheckoutModal();
                         toggleSidebar();
+                        cart = [];
+                        updateCart();
+                        alert('Pedido criado com sucesso! Número do pedido: ' + result.pedido_id);
                         window.location.reload();
                     }
                 } else {
-                    alert('Erro ao criar pedido: ' + result.message);
+                    // Re-enable button on error
+                    isSubmittingOrder = false;
+                    if (submitButton) {
+                        submitButton.disabled = false;
+                        submitButton.innerHTML = originalButtonText;
+                        submitButton.style.opacity = '1';
+                        submitButton.style.cursor = 'pointer';
+                    }
+                    
+                    // Error creating order - show in modal
+                    const errorDiv = document.getElementById('checkoutError');
+                    if (errorDiv) {
+                        let errorMsg = result.message || 'Erro ao criar pedido. Tente novamente.';
+                        if (result.payment_error) {
+                            errorMsg = 'Erro no pagamento: ' + result.payment_error;
+                        }
+                        errorDiv.innerHTML = '<i class="fas fa-exclamation-circle"></i> ' + errorMsg;
+                        errorDiv.style.display = 'block';
+                        errorDiv.className = 'alert alert-danger';
+                    }
+                    
+                    // If payment error and can retry, allow customer to go back and choose another method
+                    if (result.payment_error && result.can_retry) {
+                        // Go back to payment selection step
+                        if (paymentMethod === 'online') {
+                            // Go back to step 4b (online payment method selection) or step 4 (payment type)
+                            proximoPasso(3); // Will go to step 4, then 4b if online selected
+                        } else {
+                            proximoPasso(3);
+                        }
+                    }
+                    
+                    // If CPF error, go back to step 2
+                    if (result.message && (result.message.includes('CPF') || result.message.includes('cpf'))) {
+                        proximoPasso(1);
+                    }
                 }
             } catch (error) {
+                // Re-enable button on exception
+                isSubmittingOrder = false;
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalButtonText;
+                    submitButton.style.opacity = '1';
+                    submitButton.style.cursor = 'pointer';
+                }
+                
                 console.error('Erro:', error);
-                alert('Erro ao processar pedido. Tente novamente.');
+                const errorDiv = document.getElementById('checkoutError');
+                if (errorDiv) {
+                    errorDiv.innerHTML = '<i class="fas fa-exclamation-circle"></i> Erro ao processar pedido. Tente novamente.';
+                    errorDiv.style.display = 'block';
+                    errorDiv.className = 'alert alert-danger';
+                }
             }
         }
         

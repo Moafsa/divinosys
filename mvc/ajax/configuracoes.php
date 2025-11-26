@@ -745,6 +745,25 @@ try {
                 throw new \Exception('Nenhuma linha foi atualizada. Verifique se a filial existe e você tem permissão.');
             }
             
+            // Save pixel code to filial_settings
+            $pixelCode = trim($_POST['pixel_rastreamento'] ?? '');
+            if ($pixelCode !== '') {
+                $db->query("
+                    INSERT INTO filial_settings (tenant_id, filial_id, setting_key, setting_value, updated_at)
+                    VALUES (?, ?, 'pixel_rastreamento', ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT (tenant_id, filial_id, setting_key) 
+                    DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = CURRENT_TIMESTAMP
+                ", [$tenantId, $filialId, $pixelCode]);
+                error_log("Pixel de rastreamento salvo");
+            } else {
+                // Remove pixel if empty
+                $db->query("
+                    DELETE FROM filial_settings 
+                    WHERE tenant_id = ? AND filial_id = ? AND setting_key = 'pixel_rastreamento'
+                ", [$tenantId, $filialId]);
+                error_log("Pixel de rastreamento removido (campo vazio)");
+            }
+            
             // Reload filial from database to update session cache
             $filialAtualizada = $db->fetch(
                 "SELECT * FROM filiais WHERE id = ? AND tenant_id = ?",

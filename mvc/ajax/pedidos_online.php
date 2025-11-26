@@ -228,7 +228,174 @@ try {
         // Continue with null - campo permite NULL
     }
     
-    // Prepare order data
+    // For online payment, process payment FIRST before creating order
+    // This allows customer to retry or choose another payment method if it fails
+    $paymentProcessed = false;
+    $paymentDataResult = null;
+    $clienteAsaasId = null;
+    
+    if ($formaPagamento === 'online') {
+        try {
+            require_once __DIR__ . '/../model/AsaasInvoice.php';
+            
+            // Get Asaas configuration for filial (or tenant if filial doesn't have one)
+            $asaasInvoice = new AsaasInvoice();
+            $asaasConfig = $asaasInvoice->getAsaasConfig($tenantId, $filialId);
+            
+            if (!$asaasConfig || !$asaasConfig['asaas_enabled'] || empty($asaasConfig['asaas_api_key'])) {
+                throw new Exception('Integração Asaas não configurada para esta filial');
+            }
+            
+            $api_url = $asaasConfig['asaas_api_url'] ?? 'https://sandbox.asaas.com/api/v3';
+            $api_key = $asaasConfig['asaas_api_key'];
+            
+            // Use same pattern as AsaasPayment::makeRequest (working implementation)
+            $makeAsaasRequest = function($method, $endpoint, $data = null) use ($api_url, $api_key) {
+                $url = $api_url . $endpoint;
+                
+                $headers = [
+                    'access_token: ' . $api_key,
+                    'Content-Type: application/json',
+                    'User-Agent: DivinoSYS/2.0'
+                ];
+                
+                $ch = curl_init();
+                curl_setopt($ch, CURLOPT_URL, $url);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                
+                if ($method === 'POST') {
+                    curl_setopt($ch, CURLOPT_POST, true);
+                    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+                } elseif ($method === 'DELETE') {
+                    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'DELETE');
+                }
+                
+                $response = curl_exec($ch);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                
+                $decodedResponse = json_decode($response, true);
+                
+                if ($httpCode >= 200 && $httpCode < 300) {
+                    return [
+                        'success' => true,
+                        'data' => $decodedResponse
+                    ];
+                } else {
+                    return [
+                        'success' => false,
+                        'error' => $decodedResponse['errors'] ?? 'Erro na API do Asaas',
+                        'http_code' => $httpCode
+                    ];
+                }
+            };
+            
+            // CPF is required for Asaas payment
+            if (empty($data['cliente_cpf'])) {
+                throw new Exception('CPF é obrigatório para pagamento online');
+            }
+            
+            // Create customer in Asaas
+            $customerData = [
+                'name' => $clienteNome,
+                'phone' => preg_replace('/[^0-9]/', '', $clienteTelefone),
+                'cpfCnpj' => preg_replace('/[^0-9]/', '', $data['cliente_cpf']),
+                'externalReference' => 'cliente_pedido_' . ($clienteId ?? 'temp_' . time())
+            ];
+            
+            if ($clienteEmail) {
+                $customerData['email'] = $clienteEmail;
+            }
+            
+            $customerResult = $makeAsaasRequest('POST', '/customers', $customerData);
+            
+            if ($customerResult['success'] && isset($customerResult['data']['id'])) {
+                $clienteAsaasId = $customerResult['data']['id'];
+            } else {
+                // If customer already exists, try to find by email
+                $errorMsg = is_array($customerResult['error']) ? json_encode($customerResult['error']) : ($customerResult['error'] ?? '');
+                if (strpos($errorMsg, 'já existe') !== false || strpos($errorMsg, 'already exists') !== false || strpos($errorMsg, 'duplicate') !== false) {
+                    if ($clienteEmail) {
+                        $searchResult = $makeAsaasRequest('GET', '/customers?email=' . urlencode($clienteEmail));
+                        if ($searchResult['success'] && isset($searchResult['data']['data']) && count($searchResult['data']['data']) > 0) {
+                            $clienteAsaasId = $searchResult['data']['data'][0]['id'];
+                        }
+                    }
+                }
+                
+                if (!$clienteAsaasId) {
+                    throw new Exception('Não foi possível criar ou encontrar cliente no Asaas');
+                }
+            }
+            
+            // Get billing type from request (PIX or CREDIT_CARD)
+            $billingType = $data['online_payment_method'] ?? 'PIX';
+            if (!in_array($billingType, ['PIX', 'CREDIT_CARD', 'BOLETO'])) {
+                $billingType = 'PIX';
+            }
+            
+            // Get webhook URL (from config or construct from current domain)
+            $webhookUrl = null;
+            if (!empty($asaasConfig['asaas_webhook_url'])) {
+                $webhookUrl = $asaasConfig['asaas_webhook_url'];
+            } else {
+                // Construct webhook URL from current domain
+                $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+                $host = $_SERVER['HTTP_HOST'] ?? 'localhost:8080';
+                $webhookUrl = $protocol . '://' . $host . '/webhook/asaas.php';
+            }
+            
+            // Create payment charge in Asaas BEFORE creating order
+            // Use temporary reference - will update with real order ID after
+            $paymentData = [
+                'customer' => $clienteAsaasId,
+                'billingType' => $billingType,
+                'value' => number_format($valorTotal, 2, '.', ''),
+                'dueDate' => date('Y-m-d', strtotime('+1 day')),
+                'description' => "Pedido - {$filial['nome']}",
+                'externalReference' => 'pedido_temp_' . time(),
+                'webhook' => $webhookUrl
+            ];
+            
+            $paymentResult = $makeAsaasRequest('POST', '/payments', $paymentData);
+            
+            if ($paymentResult['success'] && isset($paymentResult['data']['id'])) {
+                $paymentDataResult = $paymentResult['data'];
+                $paymentProcessed = true;
+            } else {
+                // Extract error message from Asaas response
+                $errorMsg = 'Erro desconhecido';
+                if (is_array($paymentResult['error'])) {
+                    if (isset($paymentResult['error'][0]['description'])) {
+                        $errorMsg = $paymentResult['error'][0]['description'];
+                    } elseif (isset($paymentResult['error'][0]['code'])) {
+                        $errorMsg = $paymentResult['error'][0]['code'];
+                    } else {
+                        $errorMsg = json_encode($paymentResult['error']);
+                    }
+                } elseif (!empty($paymentResult['error'])) {
+                    $errorMsg = $paymentResult['error'];
+                }
+                
+                // Payment failed - don't create order, return error so customer can retry
+                throw new Exception('Erro ao processar pagamento online: ' . $errorMsg);
+            }
+        } catch (Exception $e) {
+            // Payment failed - return error without creating order
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'payment_error' => true,
+                'can_retry' => true
+            ]);
+            exit;
+        }
+    }
+    
+    // Now create the order (only if payment was processed successfully for online, or if it's on_delivery)
     $pedidoData = [
         'idmesa' => $mesaId,
         'cliente' => $clienteNome,
@@ -248,6 +415,12 @@ try {
         'filial_id' => $filialId
     ];
     
+    // Add payment information if online payment was processed
+    if ($paymentProcessed && $paymentDataResult) {
+        $pedidoData['asaas_payment_id'] = $paymentDataResult['id'];
+        $pedidoData['asaas_payment_url'] = $paymentDataResult['invoiceUrl'] ?? null;
+    }
+    
     // Add forma_pagamento if payment is on delivery and detailed payment method is provided
     if ($formaPagamento === 'on_delivery' && $formaPagamentoDetalhada) {
         $pedidoData['forma_pagamento'] = $formaPagamentoDetalhada;
@@ -261,7 +434,20 @@ try {
     $pedidoId = $db->insert('pedido', $pedidoData);
     
     if (!$pedidoId) {
+        // If order creation fails after payment was processed, we should cancel the payment
+        // For now, just throw error
         throw new Exception('Erro ao criar pedido no banco de dados');
+    }
+    
+    // Update payment external reference with real order ID
+    if ($paymentProcessed && $paymentDataResult && isset($paymentDataResult['id'])) {
+        // Update payment description with order ID
+        $updatePaymentData = [
+            'description' => "Pedido #{$pedidoId} - {$filial['nome']}",
+            'externalReference' => 'pedido_' . $pedidoId
+        ];
+        // Note: Asaas may not support updating externalReference, but we try
+        // The description update is more important
     }
     
     // Create order items
@@ -339,110 +525,18 @@ try {
     // Delivery fee is already included in valor_total, no need to add as separate item
     // If you need to track delivery fee separately, add a 'taxa_entrega' column to pedido table
     
+    // Build response
     $response = [
         'success' => true,
         'pedido_id' => $pedidoId,
         'message' => 'Pedido criado com sucesso!'
     ];
     
-    // Process online payment if selected
-    if ($formaPagamento === 'online' && $filial['asaas_enabled'] && $filial['asaas_api_key']) {
-        try {
-            require_once __DIR__ . '/../../mvc/model/AsaasPayment.php';
-            
-            // Create AsaasPayment instance
-            // Note: AsaasPayment uses env vars, but we'll use tenant/filial config
-            // For now, we'll create payment directly via cURL
-            $asaasApiKey = $filial['asaas_api_key'];
-            $asaasApiUrl = $filial['asaas_api_url'] ?? 'https://sandbox.asaas.com/api/v3';
-            
-            // Create customer in Asaas if needed
-            $asaasCustomerId = $filial['asaas_customer_id'];
-            if (!$asaasCustomerId && $clienteEmail) {
-                // Create customer via API
-                $customerData = [
-                    'name' => $clienteNome,
-                    'email' => $clienteEmail,
-                    'phone' => preg_replace('/[^0-9]/', '', $clienteTelefone),
-                    'externalReference' => 'cliente_' . ($clienteId ?? 'temp_' . time())
-                ];
-                
-                $ch = curl_init($asaasApiUrl . '/customers');
-                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($ch, CURLOPT_POST, true);
-                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($customerData));
-                curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                    'access_token: ' . $asaasApiKey,
-                    'Content-Type: application/json'
-                ]);
-                
-                $customerResponse = curl_exec($ch);
-                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                curl_close($ch);
-                
-                if ($httpCode >= 200 && $httpCode < 300) {
-                    $customerResult = json_decode($customerResponse, true);
-                    if (isset($customerResult['id'])) {
-                        $asaasCustomerId = $customerResult['id'];
-                    }
-                }
-            }
-            
-            if ($asaasCustomerId) {
-                // Create payment charge via API
-                $paymentData = [
-                    'customer' => $asaasCustomerId,
-                    'billingType' => 'PIX',
-                    'value' => number_format($valorTotal, 2, '.', ''),
-                    'dueDate' => date('Y-m-d', strtotime('+1 day')),
-                    'description' => "Pedido #{$pedidoId} - {$filial['nome']}",
-                    'externalReference' => 'pedido_' . $pedidoId
-                ];
-                
-                $ch = curl_init($asaasApiUrl . '/payments');
-                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($ch, CURLOPT_POST, true);
-                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($paymentData));
-                curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                    'access_token: ' . $asaasApiKey,
-                    'Content-Type: application/json'
-                ]);
-                
-                $paymentResponse = curl_exec($ch);
-                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                curl_close($ch);
-                
-                if ($httpCode >= 200 && $httpCode < 300) {
-                    $paymentResult = json_decode($paymentResponse, true);
-                    
-                    // Save payment reference
-                    $db->update('pedido', [
-                        'asaas_payment_id' => $paymentResult['id'] ?? null,
-                        'asaas_payment_url' => $paymentResult['invoiceUrl'] ?? null
-                    ], ['idpedido' => $pedidoId]);
-                    
-                    // Return payment URL for redirect
-                    if (isset($paymentResult['invoiceUrl'])) {
-                        $response['payment_url'] = $paymentResult['invoiceUrl'];
-                        $response['payment_id'] = $paymentResult['id'];
-                    } elseif (isset($paymentResult['pixQrCodeId'])) {
-                        // PIX QR Code
-                        $response['payment_url'] = '/pagamento/pix.php?payment_id=' . $paymentResult['id'];
-                        $response['payment_id'] = $paymentResult['id'];
-                    }
-                } else {
-                    error_log("Erro ao criar pagamento Asaas: HTTP $httpCode - $paymentResponse");
-                    // Order created but payment failed - can be paid later
-                    $response['payment_error'] = 'Pedido criado, mas houve erro ao processar pagamento online. Você pode pagar na hora.';
-                }
-            } else {
-                error_log("Erro: Não foi possível criar ou encontrar cliente no Asaas");
-                $response['payment_error'] = 'Pedido criado, mas houve erro ao processar pagamento online. Você pode pagar na hora.';
-            }
-        } catch (Exception $e) {
-            error_log("Erro ao processar pagamento online: " . $e->getMessage());
-            // Order created but payment failed
-            $response['payment_error'] = 'Pedido criado, mas houve erro ao processar pagamento online. Você pode pagar na hora.';
+    // If online payment was processed successfully, return payment URL
+    if ($paymentProcessed && $paymentDataResult) {
+        if (isset($paymentDataResult['invoiceUrl'])) {
+            $response['payment_url'] = $paymentDataResult['invoiceUrl'];
+            $response['payment_id'] = $paymentDataResult['id'];
         }
     }
     

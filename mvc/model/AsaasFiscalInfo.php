@@ -4,13 +4,21 @@
  * Handles fiscal information for each establishment/filial
  */
 
-use System\Database;
-
 class AsaasFiscalInfo {
     private $conn;
     
     public function __construct() {
-        $this->conn = Database::getInstance()->getConnection();
+        try {
+            // Usar namespace completo diretamente, sem use statement
+            if (!class_exists('System\\Database')) {
+                throw new \Exception('System\\Database class not found. Make sure Database.php is loaded.');
+            }
+            $this->conn = \System\Database::getInstance()->getConnection();
+        } catch (\Exception $e) {
+            error_log('AsaasFiscalInfo constructor error: ' . $e->getMessage());
+            error_log('AsaasFiscalInfo constructor stack trace: ' . $e->getTraceAsString());
+            throw new \Exception('Failed to initialize database connection: ' . $e->getMessage());
+        }
     }
     
     /**
@@ -30,20 +38,21 @@ class AsaasFiscalInfo {
                         t.asaas_environment
                       FROM filiais f
                       JOIN tenants t ON f.tenant_id = t.id
-                      WHERE f.id = $1 AND f.tenant_id = $2";
+                      WHERE f.id = ? AND f.tenant_id = ?";
             
-            $result = pg_query_params($this->conn, $query, [$filial_id, $tenant_id]);
+            $stmt = $this->conn->prepare($query);
+            $stmt->execute([$filial_id, $tenant_id]);
+            $config = $stmt->fetch(\PDO::FETCH_ASSOC);
             
-            if ($result && pg_num_rows($result) > 0) {
-                $config = pg_fetch_assoc($result);
-                
+            if ($config) {
                 // If filial doesn't have its own API key, inherit from tenant
                 if (empty($config['asaas_api_key'])) {
-                    $tenant_query = "SELECT asaas_api_key, asaas_customer_id FROM tenants WHERE id = $1";
-                    $tenant_result = pg_query_params($this->conn, $tenant_query, [$tenant_id]);
+                    $tenant_query = "SELECT asaas_api_key, asaas_customer_id FROM tenants WHERE id = ?";
+                    $tenant_stmt = $this->conn->prepare($tenant_query);
+                    $tenant_stmt->execute([$tenant_id]);
+                    $tenant_config = $tenant_stmt->fetch(\PDO::FETCH_ASSOC);
                     
-                    if ($tenant_result && pg_num_rows($tenant_result) > 0) {
-                        $tenant_config = pg_fetch_assoc($tenant_result);
+                    if ($tenant_config) {
                         $config['asaas_api_key'] = $tenant_config['asaas_api_key'];
                         $config['asaas_customer_id'] = $tenant_config['asaas_customer_id'];
                     }
@@ -63,16 +72,28 @@ class AsaasFiscalInfo {
                         asaas_api_url,
                         asaas_environment
                       FROM tenants 
-                      WHERE id = $1";
+                      WHERE id = ?";
             
-            $result = pg_query_params($this->conn, $query, [$tenant_id]);
+            $stmt = $this->conn->prepare($query);
+            $stmt->execute([$tenant_id]);
+            $config = $stmt->fetch(\PDO::FETCH_ASSOC);
             
-            if ($result && pg_num_rows($result) > 0) {
-                return pg_fetch_assoc($result);
+            if ($config) {
+                return $config;
             }
         }
         
-        return null;
+        // Return empty config with defaults instead of null
+        return [
+            'asaas_api_key' => null,
+            'asaas_customer_id' => null,
+            'asaas_enabled' => false,
+            'asaas_fiscal_info' => null,
+            'asaas_municipal_service_id' => null,
+            'asaas_municipal_service_code' => null,
+            'asaas_api_url' => 'https://sandbox.asaas.com/api/v3',
+            'asaas_environment' => 'sandbox'
+        ];
     }
     
     /**
@@ -226,7 +247,7 @@ class AsaasFiscalInfo {
                    regime_tributario, optante_simples_nacional, municipal_service_id,
                    municipal_service_code, municipal_service_name, nbs_codes,
                    asaas_sync_status, asaas_response, created_at) 
-                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'synced', $16, CURRENT_TIMESTAMP)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', ?, CURRENT_TIMESTAMP)
                   ON CONFLICT (tenant_id, filial_id, cnpj) DO UPDATE SET
                   razao_social = EXCLUDED.razao_social,
                   nome_fantasia = EXCLUDED.nome_fantasia,
@@ -244,7 +265,8 @@ class AsaasFiscalInfo {
                   asaas_response = EXCLUDED.asaas_response,
                   updated_at = CURRENT_TIMESTAMP";
         
-        $result = pg_query_params($this->conn, $query, [
+        $stmt = $this->conn->prepare($query);
+        $result = $stmt->execute([
             $tenant_id,
             $filial_id,
             $fiscal_data['cnpj'],
@@ -270,12 +292,12 @@ class AsaasFiscalInfo {
      * Get fiscal information from database
      */
     public function getFiscalInfoFromDb($tenant_id, $filial_id = null) {
-        $query = "SELECT * FROM informacoes_fiscais WHERE tenant_id = $1";
+        $query = "SELECT * FROM informacoes_fiscais WHERE tenant_id = ?";
         
         $params = [$tenant_id];
         
         if ($filial_id) {
-            $query .= " AND filial_id = $" . (count($params) + 1);
+            $query .= " AND filial_id = ?";
             $params[] = $filial_id;
         } else {
             $query .= " AND filial_id IS NULL";
@@ -283,13 +305,11 @@ class AsaasFiscalInfo {
         
         $query .= " AND active = true ORDER BY created_at DESC LIMIT 1";
         
-        $result = pg_query_params($this->conn, $query, $params);
+        $stmt = $this->conn->prepare($query);
+        $stmt->execute($params);
+        $result = $stmt->fetch(\PDO::FETCH_ASSOC);
         
-        if ($result && pg_num_rows($result) > 0) {
-            return pg_fetch_assoc($result);
-        }
-        
-        return null;
+        return $result ?: null;
     }
     
     /**

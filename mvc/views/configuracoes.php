@@ -716,6 +716,34 @@ if ($tenant && $filial) {
                             </div>
                         </div>
                         
+                        <hr class="my-4">
+                        <h6 class="mb-3">
+                            <i class="fas fa-chart-line me-2"></i>
+                            Pixel de Rastreamento
+                        </h6>
+                        <p class="text-muted mb-3">Configure pixels de rastreamento (Facebook Pixel, Google Analytics, etc.) para medir tráfego e conversões no seu cardápio online</p>
+                        
+                        <?php
+                        // Get pixel code from filial_settings
+                        $pixelSetting = $db->fetch(
+                            "SELECT setting_value FROM filial_settings WHERE tenant_id = ? AND filial_id = ? AND setting_key = 'pixel_rastreamento'",
+                            [$tenant['id'], $filial['id']]
+                        );
+                        $pixelCode = $pixelSetting['setting_value'] ?? '';
+                        ?>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-12">
+                                <label class="form-label">Código do Pixel de Rastreamento</label>
+                                <textarea class="form-control" id="pixelRastreamento" rows="8" 
+                                          placeholder="Cole aqui o código do pixel (Facebook Pixel, Google Analytics, etc.)&#10;&#10;Exemplo Facebook Pixel:&#10;&lt;script&gt;&#10;!function(f,b,e,v,n,t,s)&#10;{if(f.fbq)return;n=f.fbq=function(){n.callMethod?&#10;n.callMethod.apply(n,arguments):n.queue.push(arguments)};&#10;if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';&#10;n.queue=[];t=b.createElement(e);t.async=!0;&#10;t.src=v;s=b.getElementsByTagName(e)[0];&#10;s.parentNode.insertBefore(t,s)}(window, document,'script',&#10;'https://connect.facebook.net/en_US/fbevents.js');&#10;fbq('init', 'SEU_PIXEL_ID');&#10;fbq('track', 'PageView');&#10;&lt;/script&gt;&#10;&lt;noscript&gt;&lt;img height=&quot;1&quot; width=&quot;1&quot; style=&quot;display:none&quot;&#10;src=&quot;https://www.facebook.com/tr?id=SEU_PIXEL_ID&amp;ev=PageView&amp;noscript=1&quot;&#10;/&gt;&lt;/noscript&gt;"><?php echo htmlspecialchars($pixelCode); ?></textarea>
+                                <small class="text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    O código será inserido automaticamente no &lt;head&gt; do cardápio online. Suporta Facebook Pixel, Google Analytics, Google Tag Manager e outros pixels de rastreamento.
+                                </small>
+                            </div>
+                        </div>
+                        
                         <div class="d-flex justify-content-end gap-2">
                             <button type="button" class="btn btn-outline-secondary" onclick="previewCardapio()">
                                 <i class="fas fa-eye me-2"></i>
@@ -774,15 +802,29 @@ if ($tenant && $filial) {
                                         <i class="fas fa-eye"></i>
                                     </button>
                                 </div>
-                                <small class="form-text text-muted">
+                                <small id="asaas-api-key-help" class="form-text text-muted">
                                     Obtenha sua chave API em <a href="https://www.asaas.com/" target="_blank">www.asaas.com</a>
                                 </small>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label class="form-label">ID do Cliente</label>
-                                <input type="text" class="form-control" id="asaas-customer-id" placeholder="ID do cliente no Asaas">
+                                <label class="form-label">Cliente no Asaas</label>
+                                <div class="d-flex align-items-center">
+                                    <button class="btn btn-outline-primary" type="button" onclick="criarOuBuscarClienteAsaas()" title="Criar ou buscar cliente automaticamente no Asaas">
+                                        <i class="fas fa-user-plus me-1"></i>
+                                        Criar/Buscar Cliente
+                                    </button>
+                                    <span class="badge bg-info ms-2" id="asaas-customer-status" style="display: none;">
+                                        <i class="fas fa-check-circle me-1"></i>
+                                        Cliente configurado
+                                    </span>
+                                </div>
+                                <small class="form-text text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    O cliente será criado automaticamente quando necessário. 
+                                    Você pode clicar no botão acima para criar/buscar agora.
+                                </small>
                             </div>
                         </div>
                     </div>
@@ -2462,6 +2504,10 @@ if ($tenant && $filial) {
                     });
                     formData.append('horario_funcionamento', JSON.stringify(horarios));
                     
+                    // Add pixel code
+                    const pixelCode = document.getElementById('pixelRastreamento')?.value || '';
+                    formData.append('pixel_rastreamento', pixelCode);
+                    
                     // Add logo file if selected
                     const logoFile = document.getElementById('logoUpload').files[0];
                     if (logoFile) {
@@ -2540,10 +2586,38 @@ if ($tenant && $filial) {
             .then(data => {
                 if (data.success && data.data) {
                     const config = data.data;
-                    // Never show API key for security
-                    document.getElementById('asaas-customer-id').value = config.asaas_customer_id || '';
+                    // Show masked API key if it exists
+                    const apiKeyInput = document.getElementById('asaas-api-key');
+                    if (config.has_api_key && config.asaas_api_key_masked) {
+                        // Key exists - show masked version in the field
+                        apiKeyInput.value = config.asaas_api_key_masked;
+                        apiKeyInput.placeholder = 'Digite uma nova chave para alterar';
+                        // Add a small indicator that key is saved
+                        const keyHelp = document.getElementById('asaas-api-key-help');
+                        if (keyHelp) {
+                            keyHelp.textContent = '✓ Chave API salva (digite uma nova para alterar)';
+                            keyHelp.className = 'form-text text-success';
+                        }
+                    } else {
+                        apiKeyInput.placeholder = 'Digite sua chave API do Asaas';
+                        apiKeyInput.value = '';
+                        const keyHelp = document.getElementById('asaas-api-key-help');
+                        if (keyHelp) {
+                            keyHelp.textContent = 'Obtenha sua chave API em www.asaas.com';
+                            keyHelp.className = 'form-text text-muted';
+                        }
+                    }
+                    
                     document.getElementById('asaas-environment').value = config.asaas_environment || 'sandbox';
                     document.getElementById('asaas-enabled').checked = config.asaas_enabled || false;
+                    
+                    // Update customer status badge
+                    const customerStatusBadge = document.getElementById('asaas-customer-status');
+                    if (config.asaas_customer_id) {
+                        customerStatusBadge.style.display = 'inline-block';
+                    } else {
+                        customerStatusBadge.style.display = 'none';
+                    }
                     
                     // Update status badge
                     const statusBadge = document.getElementById('asaas-status-badge');
@@ -2567,7 +2641,7 @@ if ($tenant && $filial) {
                 tenant_id: <?php echo $tenant['id']; ?>,
                 filial_id: <?php echo $filial['id'] ?? 'null'; ?>,
                 asaas_api_key: document.getElementById('asaas-api-key').value,
-                asaas_customer_id: document.getElementById('asaas-customer-id').value,
+                asaas_customer_id: null, // Será criado automaticamente quando necessário
                 asaas_environment: document.getElementById('asaas-environment').value,
                 asaas_enabled: document.getElementById('asaas-enabled').checked
             };
@@ -2597,6 +2671,9 @@ if ($tenant && $filial) {
 
         // Testar conexão com Asaas
         function testarConexaoAsaas() {
+            const tenantId = <?php echo $tenant['id']; ?>;
+            const filialId = <?php echo $filial['id'] ?? 'null'; ?>;
+            
             Swal.fire({
                 title: 'Testando Conexão...',
                 text: 'Aguarde enquanto testamos a conexão com o Asaas',
@@ -2606,7 +2683,7 @@ if ($tenant && $filial) {
                 }
             });
 
-            fetch('mvc/ajax/asaas_config.php?action=testConnection', {
+            fetch(`mvc/ajax/asaas_config.php?action=testConnection&tenant_id=${tenantId}&filial_id=${filialId}`, {
                 method: 'GET',
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest',
@@ -2651,6 +2728,64 @@ if ($tenant && $filial) {
                 statusBadge.className = 'badge bg-warning me-2';
                 statusBadge.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>Não Configurado';
             }
+        }
+
+        // Criar ou buscar cliente no Asaas automaticamente
+        function criarOuBuscarClienteAsaas() {
+            const tenantId = <?php echo $tenant['id']; ?>;
+            const filialId = <?php echo $filial['id'] ?? 'null'; ?>;
+            
+            Swal.fire({
+                title: 'Criando/Buscando Cliente...',
+                text: 'Aguarde enquanto criamos ou buscamos o cliente no Asaas',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            fetch(`mvc/ajax/asaas_config.php?action=createOrFindCustomer&tenant_id=${tenantId}&filial_id=${filialId}`, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Atualizar badge de status do cliente
+                    const customerStatusBadge = document.getElementById('asaas-customer-status');
+                    if (data.customer_id) {
+                        customerStatusBadge.style.display = 'inline-block';
+                    }
+                    
+                    Swal.fire({
+                        title: 'Sucesso!',
+                        text: data.message || 'Cliente criado/buscado com sucesso!',
+                        icon: 'success',
+                        confirmButtonText: 'Ótimo!'
+                    });
+                    
+                    // Recarregar configuração para garantir sincronização
+                    carregarConfiguracaoAsaas();
+                } else {
+                    Swal.fire({
+                        title: 'Erro',
+                        text: data.error || 'Erro ao criar/buscar cliente no Asaas',
+                        icon: 'error',
+                        confirmButtonText: 'Entendi'
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire({
+                    title: 'Erro',
+                    text: 'Erro ao criar/buscar cliente no Asaas',
+                    icon: 'error',
+                    confirmButtonText: 'Entendi'
+                });
+            });
         }
 
         // Load fiscal information

@@ -49,7 +49,53 @@ try {
     
     error_log("ASAAS WEBHOOK - Payment ID: $paymentId, Subscription: $subscriptionId, Status: $status");
     
-    // Buscar assinatura no banco
+    // FIRST: Check if this is a payment for an order (pedido)
+    // Look for pedido by asaas_payment_id
+    $pedido = $db->fetch(
+        "SELECT idpedido, tenant_id, filial_id, valor_total, status_pagamento FROM pedido WHERE asaas_payment_id = ?",
+        [$paymentId]
+    );
+    
+    if ($pedido) {
+        error_log("ASAAS WEBHOOK - Pedido encontrado: ID={$pedido['idpedido']}, Tenant={$pedido['tenant_id']}, Status atual={$pedido['status_pagamento']}");
+        
+        // Map Asaas status to internal payment status
+        $newStatusPagamento = mapAsaasStatusToPedido($status);
+        $valorPago = 0;
+        $saldoDevedor = $pedido['valor_total'];
+        
+        // If payment confirmed/received, mark as paid
+        if ($status === 'CONFIRMED' || $status === 'RECEIVED' || $status === 'RECEIVED_IN_CASH') {
+            $valorPago = $value;
+            $saldoDevedor = max(0, $pedido['valor_total'] - $valorPago);
+            $newStatusPagamento = 'quitado';
+        } elseif ($status === 'OVERDUE') {
+            $newStatusPagamento = 'pendente';
+        } elseif ($status === 'REFUNDED' || $status === 'REFUND_REQUESTED') {
+            $newStatusPagamento = 'cancelado';
+        }
+        
+        // Update pedido with payment status
+        $updateData = [
+            'status_pagamento' => $newStatusPagamento,
+            'valor_pago' => $valorPago,
+            'saldo_devedor' => $saldoDevedor,
+            'updated_at' => date('Y-m-d H:i:s')
+        ];
+        
+        // If payment was confirmed, update order status to Finalizado
+        if ($newStatusPagamento === 'quitado') {
+            $updateData['status'] = 'Finalizado';
+        }
+        
+        $db->update('pedido', $updateData, 'idpedido = ?', [$pedido['idpedido']]);
+        
+        error_log("ASAAS WEBHOOK - Pedido atualizado: Status={$newStatusPagamento}, Valor Pago={$valorPago}, Saldo Devedor={$saldoDevedor}");
+        
+        // Continue processing (don't return yet, in case it's also a subscription payment)
+    }
+    
+    // THEN: Check if this is a subscription payment
     if ($subscriptionId) {
         $assinatura = $db->fetch(
             "SELECT * FROM assinaturas WHERE asaas_subscription_id = ?",
@@ -153,7 +199,7 @@ try {
 }
 
 /**
- * Mapear status do Asaas para status interno
+ * Mapear status do Asaas para status interno (assinaturas)
  */
 function mapAsaasStatus($asaasStatus) {
     $statusMap = [
@@ -169,6 +215,29 @@ function mapAsaasStatus($asaasStatus) {
         'AWAITING_CHARGEBACK_REVERSAL' => 'cancelado',
         'DUNNING_REQUESTED' => 'pendente',
         'DUNNING_RECEIVED' => 'pago',
+        'AWAITING_RISK_ANALYSIS' => 'pendente'
+    ];
+    
+    return $statusMap[$asaasStatus] ?? 'pendente';
+}
+
+/**
+ * Mapear status do Asaas para status de pagamento do pedido
+ */
+function mapAsaasStatusToPedido($asaasStatus) {
+    $statusMap = [
+        'PENDING' => 'pendente',
+        'CONFIRMED' => 'quitado',
+        'RECEIVED' => 'quitado',
+        'OVERDUE' => 'pendente',
+        'REFUNDED' => 'cancelado',
+        'RECEIVED_IN_CASH' => 'quitado',
+        'REFUND_REQUESTED' => 'cancelado',
+        'CHARGEBACK_REQUESTED' => 'cancelado',
+        'CHARGEBACK_DISPUTE' => 'cancelado',
+        'AWAITING_CHARGEBACK_REVERSAL' => 'cancelado',
+        'DUNNING_REQUESTED' => 'pendente',
+        'DUNNING_RECEIVED' => 'quitado',
         'AWAITING_RISK_ANALYSIS' => 'pendente'
     ];
     

@@ -4,13 +4,21 @@
  * Handles invoice operations for each establishment/filial
  */
 
-use System\Database;
-
 class AsaasInvoice {
     private $conn;
     
     public function __construct() {
-        $this->conn = Database::getInstance()->getConnection();
+        try {
+            // Usar namespace completo diretamente, sem use statement
+            if (!class_exists('System\\Database')) {
+                throw new \Exception('System\\Database class not found. Make sure Database.php is loaded.');
+            }
+            $this->conn = \System\Database::getInstance()->getConnection();
+        } catch (\Exception $e) {
+            error_log('AsaasInvoice constructor error: ' . $e->getMessage());
+            error_log('AsaasInvoice constructor stack trace: ' . $e->getTraceAsString());
+            throw new \Exception('Failed to initialize database connection: ' . $e->getMessage());
+        }
     }
     
     /**
@@ -30,20 +38,21 @@ class AsaasInvoice {
                         t.asaas_environment
                       FROM filiais f
                       JOIN tenants t ON f.tenant_id = t.id
-                      WHERE f.id = $1 AND f.tenant_id = $2";
+                      WHERE f.id = ? AND f.tenant_id = ?";
             
-            $result = pg_query_params($this->conn, $query, [$filial_id, $tenant_id]);
+            $stmt = $this->conn->prepare($query);
+            $stmt->execute([$filial_id, $tenant_id]);
+            $config = $stmt->fetch(\PDO::FETCH_ASSOC);
             
-            if ($result && pg_num_rows($result) > 0) {
-                $config = pg_fetch_assoc($result);
-                
+            if ($config) {
                 // If filial doesn't have its own API key, inherit from tenant
                 if (empty($config['asaas_api_key'])) {
-                    $tenant_query = "SELECT asaas_api_key, asaas_customer_id FROM tenants WHERE id = $1";
-                    $tenant_result = pg_query_params($this->conn, $tenant_query, [$tenant_id]);
+                    $tenant_query = "SELECT asaas_api_key, asaas_customer_id FROM tenants WHERE id = ?";
+                    $tenant_stmt = $this->conn->prepare($tenant_query);
+                    $tenant_stmt->execute([$tenant_id]);
+                    $tenant_config = $tenant_stmt->fetch(\PDO::FETCH_ASSOC);
                     
-                    if ($tenant_result && pg_num_rows($tenant_result) > 0) {
-                        $tenant_config = pg_fetch_assoc($tenant_result);
+                    if ($tenant_config) {
                         $config['asaas_api_key'] = $tenant_config['asaas_api_key'];
                         $config['asaas_customer_id'] = $tenant_config['asaas_customer_id'];
                     }
@@ -63,16 +72,130 @@ class AsaasInvoice {
                         asaas_api_url,
                         asaas_environment
                       FROM tenants 
-                      WHERE id = $1";
+                      WHERE id = ?";
             
-            $result = pg_query_params($this->conn, $query, [$tenant_id]);
+            $stmt = $this->conn->prepare($query);
+            $stmt->execute([$tenant_id]);
+            $config = $stmt->fetch(\PDO::FETCH_ASSOC);
             
-            if ($result && pg_num_rows($result) > 0) {
-                return pg_fetch_assoc($result);
+            if ($config) {
+                return $config;
             }
         }
         
-        return null;
+        // Return empty config with defaults instead of null
+        return [
+            'asaas_api_key' => null,
+            'asaas_customer_id' => null,
+            'asaas_enabled' => false,
+            'asaas_fiscal_info' => null,
+            'asaas_municipal_service_id' => null,
+            'asaas_municipal_service_code' => null,
+            'asaas_api_url' => 'https://sandbox.asaas.com/api/v3',
+            'asaas_environment' => 'sandbox'
+        ];
+    }
+    
+    /**
+     * Create or find customer in Asaas automatically
+     * Similar to what's done in plan onboarding
+     */
+    private function createOrFindCustomer($tenant_id, $filial_id, $config) {
+        // If customer_id already exists, return it
+        if (!empty($config['asaas_customer_id'])) {
+            return $config['asaas_customer_id'];
+        }
+        
+        $api_url = $config['asaas_api_url'] ?? 'https://sandbox.asaas.com/api/v3';
+        $api_key = $config['asaas_api_key'];
+        
+        // Get tenant/filial data
+        if ($filial_id) {
+            $query = "SELECT f.*, t.nome as tenant_nome, t.email as tenant_email, t.cnpj as tenant_cnpj, t.telefone as tenant_telefone
+                      FROM filiais f
+                      JOIN tenants t ON f.tenant_id = t.id
+                      WHERE f.id = ? AND f.tenant_id = ?";
+            $stmt = $this->conn->prepare($query);
+            $stmt->execute([$filial_id, $tenant_id]);
+            $entity = $stmt->fetch(\PDO::FETCH_ASSOC);
+            $entityName = $entity['nome'] ?? $entity['tenant_nome'];
+            $entityEmail = $entity['email'] ?? $entity['tenant_email'];
+            $entityCnpj = $entity['cnpj'] ?? $entity['tenant_cnpj'];
+            $entityPhone = $entity['telefone'] ?? $entity['tenant_telefone'];
+        } else {
+            $query = "SELECT * FROM tenants WHERE id = ?";
+            $stmt = $this->conn->prepare($query);
+            $stmt->execute([$tenant_id]);
+            $entity = $stmt->fetch(\PDO::FETCH_ASSOC);
+            $entityName = $entity['nome'] ?? '';
+            $entityEmail = $entity['email'] ?? '';
+            $entityCnpj = $entity['cnpj'] ?? '';
+            $entityPhone = $entity['telefone'] ?? '';
+        }
+        
+        if (!$entity) {
+            return null;
+        }
+        
+        // Try to find existing customer by CNPJ
+        $customerId = null;
+        if (!empty($entityCnpj)) {
+            $cnpjClean = preg_replace('/[^0-9]/', '', $entityCnpj);
+            $searchUrl = $api_url . '/customers?cpfCnpj=' . urlencode($cnpjClean);
+            
+            $searchResult = $this->makeAsaasRequest('GET', $searchUrl, [], $api_key);
+            if ($searchResult['success'] && isset($searchResult['data']['data']) && count($searchResult['data']['data']) > 0) {
+                $customerId = $searchResult['data']['data'][0]['id'];
+            }
+        }
+        
+        // If not found, create new customer
+        if (!$customerId) {
+            $customerData = [
+                'name' => $entityName,
+                'email' => $entityEmail,
+                'phone' => preg_replace('/[^0-9]/', '', $entityPhone),
+                'externalReference' => ($filial_id ? 'filial_' : 'tenant_') . ($filial_id ?? $tenant_id)
+            ];
+            
+            if (!empty($entityCnpj)) {
+                $customerData['cpfCnpj'] = preg_replace('/[^0-9]/', '', $entityCnpj);
+            }
+            
+            $createResult = $this->makeAsaasRequest('POST', $api_url . '/customers', $customerData, $api_key);
+            
+            if ($createResult['success'] && isset($createResult['data']['id'])) {
+                $customerId = $createResult['data']['id'];
+            } else {
+                // If error is "already exists", try to find again
+                $errorMsg = $createResult['error'] ?? '';
+                if (strpos($errorMsg, 'já existe') !== false || strpos($errorMsg, 'already exists') !== false) {
+                    if (!empty($entityCnpj)) {
+                        $cnpjClean = preg_replace('/[^0-9]/', '', $entityCnpj);
+                        $searchUrl = $api_url . '/customers?cpfCnpj=' . urlencode($cnpjClean);
+                        $searchResult = $this->makeAsaasRequest('GET', $searchUrl, [], $api_key);
+                        if ($searchResult['success'] && isset($searchResult['data']['data']) && count($searchResult['data']['data']) > 0) {
+                            $customerId = $searchResult['data']['data'][0]['id'];
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Save customer_id to database
+        if ($customerId) {
+            if ($filial_id) {
+                $updateQuery = "UPDATE filiais SET asaas_customer_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?";
+                $stmt = $this->conn->prepare($updateQuery);
+                $stmt->execute([$customerId, $filial_id, $tenant_id]);
+            } else {
+                $updateQuery = "UPDATE tenants SET asaas_customer_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+                $stmt = $this->conn->prepare($updateQuery);
+                $stmt->execute([$customerId, $tenant_id]);
+            }
+        }
+        
+        return $customerId;
     }
     
     /**
@@ -91,8 +214,18 @@ class AsaasInvoice {
         $api_url = $config['asaas_api_url'] ?? 'https://sandbox.asaas.com/api/v3';
         $api_key = $config['asaas_api_key'];
         
+        // Create or find customer automatically if not set
+        $customerId = $this->createOrFindCustomer($tenant_id, $filial_id, $config);
+        
+        if (!$customerId) {
+            return [
+                'success' => false,
+                'error' => 'Não foi possível criar ou encontrar o cliente no Asaas. Verifique os dados do estabelecimento (nome, email, CNPJ).'
+            ];
+        }
+        
         $data = [
-            'customer' => $config['asaas_customer_id'],
+            'customer' => $customerId,
             'payment' => $invoice_data['payment_id'] ?? null,
             'installment' => $invoice_data['installment_id'] ?? null,
             'municipalServiceId' => $config['asaas_municipal_service_id'],
@@ -341,12 +474,13 @@ class AsaasInvoice {
         $query = "INSERT INTO notas_fiscais 
                   (tenant_id, filial_id, asaas_invoice_id, asaas_payment_id, valor_total, 
                    asaas_response, observacoes, created_at) 
-                  VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP) 
+                  VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) 
                   ON CONFLICT (asaas_invoice_id) DO UPDATE SET
                   asaas_response = EXCLUDED.asaas_response,
                   updated_at = CURRENT_TIMESTAMP";
         
-        $result = pg_query_params($this->conn, $query, [
+        $stmt = $this->conn->prepare($query);
+        $result = $stmt->execute([
             $tenant_id,
             $filial_id,
             $asaas_data['id'],
@@ -364,7 +498,7 @@ class AsaasInvoice {
      */
     private function updateInvoiceStatus($asaas_invoice_id, $status, $asaas_data = null) {
         $query = "UPDATE notas_fiscais 
-                  SET status = $2, asaas_response = $3, updated_at = CURRENT_TIMESTAMP";
+                  SET status = ?, asaas_response = ?, updated_at = CURRENT_TIMESTAMP";
         
         if ($status === 'issued') {
             $query .= ", data_emissao = CURRENT_TIMESTAMP";
@@ -372,12 +506,13 @@ class AsaasInvoice {
             $query .= ", data_cancelamento = CURRENT_TIMESTAMP";
         }
         
-        $query .= " WHERE asaas_invoice_id = $1";
+        $query .= " WHERE asaas_invoice_id = ?";
         
-        $result = pg_query_params($this->conn, $query, [
-            $asaas_invoice_id,
+        $stmt = $this->conn->prepare($query);
+        $result = $stmt->execute([
             $status,
-            $asaas_data ? json_encode($asaas_data) : null
+            $asaas_data ? json_encode($asaas_data) : null,
+            $asaas_invoice_id
         ]);
         
         return $result !== false;
@@ -391,32 +526,30 @@ class AsaasInvoice {
                   FROM notas_fiscais nf
                   JOIN tenants t ON nf.tenant_id = t.id
                   LEFT JOIN filiais f ON nf.filial_id = f.id
-                  WHERE nf.tenant_id = $1";
+                  WHERE nf.tenant_id = ?";
         
         $params = [$tenant_id];
         
         if ($filial_id) {
-            $query .= " AND nf.filial_id = $" . (count($params) + 1);
+            $query .= " AND nf.filial_id = ?";
             $params[] = $filial_id;
         }
         
-        $query .= " ORDER BY nf.created_at DESC LIMIT $" . (count($params) + 1) . " OFFSET $" . (count($params) + 2);
+        $query .= " ORDER BY nf.created_at DESC LIMIT ? OFFSET ?";
         $params[] = $limit;
         $params[] = $offset;
         
-        $result = pg_query_params($this->conn, $query, $params);
+        $stmt = $this->conn->prepare($query);
+        $stmt->execute($params);
+        $result = $stmt->fetchAll(\PDO::FETCH_ASSOC);
         
-        if ($result) {
-            return pg_fetch_all($result) ?: [];
-        }
-        
-        return [];
+        return $result ?: [];
     }
     
     /**
      * Make request to Asaas API
      */
-    private function makeAsaasRequest($method, $url, $data = [], $api_key) {
+    public function makeAsaasRequest($method, $url, $data = [], $api_key) {
         $headers = [
             'Content-Type: application/json',
             'access_token: ' . $api_key
@@ -442,13 +575,29 @@ class AsaasInvoice {
         curl_close($ch);
         
         if ($error) {
+            error_log("Asaas CURL Error: $error");
             return [
                 'success' => false,
                 'error' => 'CURL Error: ' . $error
             ];
         }
         
+        // Log raw response for debugging
+        error_log("Asaas API Response (HTTP $http_code): " . substr($response, 0, 500));
+        
         $decoded_response = json_decode($response, true);
+        
+        // If JSON decode failed, log the raw response
+        if ($decoded_response === null && json_last_error() !== JSON_ERROR_NONE) {
+            error_log("Asaas JSON decode error: " . json_last_error_msg());
+            error_log("Raw response: " . $response);
+            return [
+                'success' => false,
+                'error' => 'Invalid JSON response from Asaas: ' . json_last_error_msg(),
+                'http_code' => $http_code,
+                'raw_response' => $response
+            ];
+        }
         
         if ($http_code >= 200 && $http_code < 300) {
             return [
@@ -457,9 +606,25 @@ class AsaasInvoice {
                 'http_code' => $http_code
             ];
         } else {
+            // Try to extract error message from different possible formats
+            $errorMsg = 'Unknown error';
+            
+            if (isset($decoded_response['errors']) && is_array($decoded_response['errors']) && count($decoded_response['errors']) > 0) {
+                $errorMsg = $decoded_response['errors'][0]['description'] ?? $decoded_response['errors'][0]['code'] ?? 'Unknown error';
+            } elseif (isset($decoded_response['error'])) {
+                $errorMsg = $decoded_response['error'];
+            } elseif (isset($decoded_response['message'])) {
+                $errorMsg = $decoded_response['message'];
+            } elseif (is_string($decoded_response)) {
+                $errorMsg = $decoded_response;
+            }
+            
+            error_log("Asaas API Error (HTTP $http_code): $errorMsg");
+            error_log("Full error response: " . json_encode($decoded_response));
+            
             return [
                 'success' => false,
-                'error' => $decoded_response['errors'][0]['description'] ?? 'Unknown error',
+                'error' => $errorMsg,
                 'http_code' => $http_code,
                 'response' => $decoded_response
             ];

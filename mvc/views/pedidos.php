@@ -584,6 +584,39 @@ $stats = [
                                     </div>
                                 </div>
                                 
+                                <!-- Informações de Pagamento (se pagamento online) -->
+                                ${pedido.asaas_payment_id ? `
+                                <div class="mb-3">
+                                    <div class="info-card border border-info">
+                                        <h6><i class="fas fa-credit-card me-2"></i>Pagamento Online (Asaas)</h6>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <p class="mb-1"><strong>Status do Pagamento:</strong> 
+                                                    <span class="badge bg-${pedido.status_pagamento === 'quitado' ? 'success' : pedido.status_pagamento === 'pendente' ? 'warning' : 'danger'}">
+                                                        ${pedido.status_pagamento === 'quitado' ? 'Pago' : pedido.status_pagamento === 'pendente' ? 'Pendente' : pedido.status_pagamento || 'Pendente'}
+                                                    </span>
+                                                </p>
+                                                <p class="mb-1"><strong>ID do Pagamento:</strong> <small>${pedido.asaas_payment_id}</small></p>
+                                                ${pedido.asaas_payment_url ? `
+                                                    <p class="mb-0">
+                                                        <a href="${pedido.asaas_payment_url}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                                            <i class="fas fa-external-link-alt"></i> Ver Fatura no Asaas
+                                                        </a>
+                                                    </p>
+                                                ` : ''}
+                                            </div>
+                                            <div class="col-md-6">
+                                                <p class="mb-1"><strong>Valor Pago:</strong> R$ ${parseFloat(pedido.valor_pago || 0).toFixed(2).replace('.', ',')}</p>
+                                                <p class="mb-1"><strong>Saldo Devedor:</strong> R$ ${parseFloat(pedido.saldo_devedor || pedido.valor_total).toFixed(2).replace('.', ',')}</p>
+                                                <button type="button" class="btn btn-sm btn-outline-info mt-1" onclick="consultarStatusPagamento(${pedido.idpedido})" title="Consultar status atualizado no Asaas">
+                                                    <i class="fas fa-sync"></i> Atualizar Status
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                ` : ''}
+                                
                                 <!-- Observações -->
                                 <div class="mb-3">
                                     <label class="form-label">Observações</label>
@@ -847,6 +880,52 @@ $stats = [
 
         function atualizarPedidos() {
             location.reload();
+        }
+        
+        function consultarStatusPagamento(pedidoId) {
+            // Show loading
+            Swal.fire({
+                title: 'Consultando...',
+                text: 'Buscando status atualizado do pagamento no Asaas',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+            
+            fetch(`mvc/ajax/pedidos.php?action=consultar_pagamento_asaas&pedido_id=${pedidoId}`, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Status Atualizado',
+                        text: `Status do pagamento: ${data.status_pagamento}`,
+                        confirmButtonText: 'OK'
+                    }).then(() => {
+                        // Reload pedido details
+                        verPedido(pedidoId);
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Erro',
+                        text: data.message || 'Erro ao consultar status do pagamento'
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Erro',
+                    text: 'Erro ao consultar status do pagamento'
+                });
+            });
         }
         
         function salvarObservacao(pedidoId) {

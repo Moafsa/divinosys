@@ -1204,6 +1204,130 @@ try {
         ]);
         break;
 
+        case 'consultar_pagamento_asaas':
+            $pedidoId = $_GET['pedido_id'] ?? $_POST['pedido_id'] ?? '';
+            
+            if (empty($pedidoId)) {
+                throw new \Exception('ID do pedido é obrigatório');
+            }
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId();
+            
+            if (!$tenantId) {
+                throw new \Exception("Tenant ID não encontrado na sessão. Faça login novamente.");
+            }
+            
+            $filialId = $session->getFilialId();
+            if ($filialId === null) {
+                $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+                $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+            }
+            
+            // Buscar pedido
+            $pedido = $db->fetch(
+                "SELECT asaas_payment_id, tenant_id, filial_id, valor_total FROM pedido WHERE idpedido = ? AND tenant_id = ? AND filial_id = ?",
+                [$pedidoId, $tenantId, $filialId]
+            );
+            
+            if (!$pedido || !$pedido['asaas_payment_id']) {
+                throw new \Exception('Pedido não encontrado ou não possui pagamento Asaas');
+            }
+            
+            // Get Asaas configuration
+            require_once __DIR__ . '/../model/AsaasInvoice.php';
+            $asaasInvoice = new AsaasInvoice();
+            $asaasConfig = $asaasInvoice->getAsaasConfig($tenantId, $filialId);
+            
+            if (!$asaasConfig || !$asaasConfig['asaas_enabled'] || empty($asaasConfig['asaas_api_key'])) {
+                throw new \Exception('Integração Asaas não configurada');
+            }
+            
+            $api_url = $asaasConfig['asaas_api_url'] ?? 'https://sandbox.asaas.com/api/v3';
+            $api_key = $asaasConfig['asaas_api_key'];
+            
+            // Consult payment status in Asaas
+            $url = $api_url . '/payments/' . $pedido['asaas_payment_id'];
+            $headers = [
+                'access_token: ' . $api_key,
+                'Content-Type: application/json',
+                'User-Agent: DivinoSYS/2.0'
+            ];
+            
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            
+            if ($httpCode !== 200) {
+                throw new \Exception('Erro ao consultar pagamento no Asaas (HTTP ' . $httpCode . ')');
+            }
+            
+            $paymentData = json_decode($response, true);
+            
+            if (!$paymentData || !isset($paymentData['status'])) {
+                throw new \Exception('Resposta inválida do Asaas');
+            }
+            
+            // Map Asaas status to internal status
+            $statusMap = [
+                'PENDING' => 'pendente',
+                'CONFIRMED' => 'quitado',
+                'RECEIVED' => 'quitado',
+                'OVERDUE' => 'pendente',
+                'REFUNDED' => 'cancelado',
+                'RECEIVED_IN_CASH' => 'quitado',
+                'REFUND_REQUESTED' => 'cancelado',
+                'CHARGEBACK_REQUESTED' => 'cancelado',
+                'CHARGEBACK_DISPUTE' => 'cancelado',
+                'AWAITING_CHARGEBACK_REVERSAL' => 'cancelado',
+                'DUNNING_REQUESTED' => 'pendente',
+                'DUNNING_RECEIVED' => 'quitado',
+                'AWAITING_RISK_ANALYSIS' => 'pendente'
+            ];
+            
+            $asaasStatus = $paymentData['status'];
+            $newStatusPagamento = $statusMap[$asaasStatus] ?? 'pendente';
+            $valorPago = 0;
+            $saldoDevedor = $pedido['valor_total'];
+            
+            // If payment confirmed/received, mark as paid
+            if ($asaasStatus === 'CONFIRMED' || $asaasStatus === 'RECEIVED' || $asaasStatus === 'RECEIVED_IN_CASH') {
+                $valorPago = floatval($paymentData['value'] ?? $pedido['valor_total']);
+                $saldoDevedor = max(0, $pedido['valor_total'] - $valorPago);
+            }
+            
+            // Update pedido with payment status
+            $updateData = [
+                'status_pagamento' => $newStatusPagamento,
+                'valor_pago' => $valorPago,
+                'saldo_devedor' => $saldoDevedor,
+                'updated_at' => date('Y-m-d H:i:s')
+            ];
+            
+            // If payment was confirmed, update order status to Finalizado
+            if ($newStatusPagamento === 'quitado') {
+                $updateData['status'] = 'Finalizado';
+            }
+            
+            $db->update('pedido', $updateData, 'idpedido = ?', [$pedidoId]);
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Status do pagamento atualizado',
+                'status_pagamento' => $newStatusPagamento,
+                'status_asaas' => $asaasStatus,
+                'valor_pago' => $valorPago,
+                'saldo_devedor' => $saldoDevedor
+            ]);
+            break;
+
         default:
             throw new \Exception('Ação não encontrada: ' . $action);
     }

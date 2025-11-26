@@ -2,17 +2,39 @@
 /**
  * Controller for Fiscal Information Management
  * Handles fiscal information for establishments and filiais
+ * 
+ * IMPORTANTE: Este controller assume que Database.php e AsaasFiscalInfo.php
+ * já foram carregados pelo arquivo AJAX que o chama.
  */
-
-require_once __DIR__ . '/../model/AsaasFiscalInfo.php';
 
 class FiscalInfoController {
     private $asaasFiscalInfo;
     private $conn;
     
     public function __construct() {
-        $this->asaasFiscalInfo = new AsaasFiscalInfo();
-        $this->conn = Database::getInstance()->getConnection();
+        try {
+            // Verificar se Database está disponível ANTES de instanciar AsaasFiscalInfo
+            if (!class_exists('System\\Database')) {
+                throw new \Exception('System\\Database class not found. Database.php must be loaded before FiscalInfoController.');
+            }
+            
+            // Verificar se AsaasFiscalInfo está disponível
+            if (!class_exists('AsaasFiscalInfo')) {
+                throw new \Exception('AsaasFiscalInfo class not found. AsaasFiscalInfo.php must be loaded before FiscalInfoController.');
+            }
+            
+            // Agora instanciar (o construtor do AsaasFiscalInfo precisa do Database)
+            $this->asaasFiscalInfo = new AsaasFiscalInfo();
+            $this->conn = \System\Database::getInstance()->getConnection();
+        } catch (\Exception $e) {
+            error_log('FiscalInfoController constructor error: ' . $e->getMessage());
+            error_log('Stack trace: ' . $e->getTraceAsString());
+            throw $e;
+        } catch (\Error $e) {
+            error_log('FiscalInfoController constructor fatal error: ' . $e->getMessage());
+            error_log('Stack trace: ' . $e->getTraceAsString());
+            throw $e;
+        }
     }
     
     /**
@@ -237,12 +259,13 @@ class FiscalInfoController {
                     COUNT(CASE WHEN asaas_sync_status = 'error' THEN 1 END) as error,
                     COUNT(CASE WHEN active = true THEN 1 END) as active
                   FROM informacoes_fiscais 
-                  WHERE tenant_id = $1";
+                  WHERE tenant_id = ?";
         
-        $result = pg_query_params($this->conn, $query, [$tenant_id]);
+        $stmt = $this->conn->prepare($query);
+        $stmt->execute([$tenant_id]);
+        $stats = $stmt->fetch(\PDO::FETCH_ASSOC);
         
-        if ($result && pg_num_rows($result) > 0) {
-            $stats = pg_fetch_assoc($result);
+        if ($stats) {
             echo json_encode([
                 'success' => true,
                 'data' => $stats
@@ -278,9 +301,10 @@ class FiscalInfoController {
         
         $query = "UPDATE informacoes_fiscais 
                   SET active = false, updated_at = CURRENT_TIMESTAMP 
-                  WHERE id = $1 AND tenant_id = $2";
+                  WHERE id = ? AND tenant_id = ?";
         
-        $result = pg_query_params($this->conn, $query, [$fiscal_info_id, $tenant_id]);
+        $stmt = $this->conn->prepare($query);
+        $result = $stmt->execute([$fiscal_info_id, $tenant_id]);
         
         if ($result) {
             echo json_encode([
