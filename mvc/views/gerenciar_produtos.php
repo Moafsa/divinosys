@@ -568,6 +568,22 @@ if ($tenant && $filial) {
                                     </div>
                                     <div class="form-text">Quando desmarcado, o produto não aparecerá na página do cardápio online</div>
                                 </div>
+                                
+                                <div class="mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="produtoEmPromocao" onchange="togglePrecoPromocional()">
+                                        <label class="form-check-label" for="produtoEmPromocao">
+                                            <strong>Em Promoção</strong>
+                                        </label>
+                                    </div>
+                                    <div class="form-text">Marque para ativar a promoção deste produto</div>
+                                </div>
+                                
+                                <div class="mb-3" id="precoPromocionalContainer" style="display: none;">
+                                    <label class="form-label">Preço Promocional</label>
+                                    <input type="number" class="form-control" id="produtoPrecoPromocional" step="0.01" placeholder="0,00">
+                                    <div class="form-text">Preço que será exibido quando o produto estiver em promoção</div>
+                                </div>
                             </div>
                         </div>
                         
@@ -725,7 +741,25 @@ if ($tenant && $filial) {
             document.getElementById('formProduto').reset();
             document.getElementById('produtoId').value = '';
             document.getElementById('produtoPrecoMini').value = '0';
+            document.getElementById('produtoEmPromocao').checked = false;
+            document.getElementById('produtoPrecoPromocional').value = '';
+            togglePrecoPromocional(); // Ocultar campo de preço promocional
             new bootstrap.Modal(document.getElementById('modalProduto')).show();
+        }
+        
+        function togglePrecoPromocional() {
+            const emPromocao = document.getElementById('produtoEmPromocao').checked;
+            const precoPromocionalContainer = document.getElementById('precoPromocionalContainer');
+            const precoPromocionalInput = document.getElementById('produtoPrecoPromocional');
+            
+            if (emPromocao) {
+                precoPromocionalContainer.style.display = 'block';
+                precoPromocionalInput.setAttribute('required', 'required');
+            } else {
+                precoPromocionalContainer.style.display = 'none';
+                precoPromocionalInput.removeAttribute('required');
+                precoPromocionalInput.value = ''; // Limpar valor quando desmarcar
+            }
         }
 
         function editarProduto(produtoId) {
@@ -756,6 +790,12 @@ if ($tenant && $filial) {
                     document.getElementById('produtoEstoque').value = data.produto.estoque_atual || '0';
                     document.getElementById('produtoEstoqueMinimo').value = data.produto.estoque_minimo || '0';
                     document.getElementById('produtoPrecoCusto').value = data.produto.preco_custo || '0';
+                    
+                    // Promoção
+                    const emPromocao = data.produto.em_promocao === true || data.produto.em_promocao === 1;
+                    document.getElementById('produtoEmPromocao').checked = emPromocao;
+                    document.getElementById('produtoPrecoPromocional').value = data.produto.preco_promocional || '';
+                    togglePrecoPromocional(); // Atualizar visibilidade do campo
                     
                     // Limpar ingredientes existentes
                     document.getElementById('ingredientes_lista').innerHTML = '';
@@ -835,6 +875,20 @@ if ($tenant && $filial) {
             const estoqueAtual = document.getElementById('produtoEstoque').value || '0';
             const estoqueMinimo = document.getElementById('produtoEstoqueMinimo').value || '0';
             const precoCusto = document.getElementById('produtoPrecoCusto').value || '0';
+            const emPromocao = document.getElementById('produtoEmPromocao').checked ? 1 : 0;
+            let precoPromocional = document.getElementById('produtoPrecoPromocional').value || '';
+            
+            // Converter formato brasileiro (vírgula) para formato numérico (ponto)
+            if (precoPromocional) {
+                precoPromocional = precoPromocional.replace(',', '.');
+                // Validar se é um número válido
+                if (isNaN(parseFloat(precoPromocional)) || parseFloat(precoPromocional) <= 0) {
+                    precoPromocional = '';
+                }
+            }
+            
+            console.log('PROMOCAO JS - emPromocao:', emPromocao);
+            console.log('PROMOCAO JS - precoPromocional:', precoPromocional);
             
             // Coletar ingredientes selecionados
             const ingredientesSelecionados = [];
@@ -843,7 +897,9 @@ if ($tenant && $filial) {
             });
             
             console.log('Dados coletados:', {
-                produtoId, nome, descricao, precoNormal, precoMini, categoriaId, ativo, estoqueAtual, estoqueMinimo, precoCusto, ingredientesSelecionados
+                produtoId, nome, descricao, precoNormal, precoMini, categoriaId, ativo, 
+                exibirCardapio, estoqueAtual, estoqueMinimo, precoCusto, 
+                emPromocao, precoPromocional, ingredientesSelecionados
             });
             
             // Validar dados obrigatórios
@@ -884,6 +940,8 @@ if ($tenant && $filial) {
             formData.append('estoque_minimo', estoqueMinimo);
             formData.append('preco_custo', precoCusto);
             formData.append('exibir_cardapio_online', exibirCardapio);
+            formData.append('em_promocao', emPromocao);
+            formData.append('preco_promocional', precoPromocional);
             formData.append('ingredientes', JSON.stringify(ingredientesSelecionados));
             
             // Adicionar imagem se selecionada
@@ -892,11 +950,20 @@ if ($tenant && $filial) {
                 formData.append('imagem', imagemInput.files[0]);
             }
             
+            console.log('Enviando dados para o servidor...');
+            console.log('FormData entries:');
+            for (let pair of formData.entries()) {
+                console.log(pair[0] + ': ' + pair[1]);
+            }
+            
             fetch('mvc/ajax/produtos_fix.php', {
                 method: 'POST',
                 body: formData
             })
-            .then(response => response.json())
+            .then(response => {
+                console.log('Response status:', response.status);
+                return response.json();
+            })
             .then(data => {
                 console.log('Resposta do servidor:', data);
                 if (data.success) {

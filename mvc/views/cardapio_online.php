@@ -94,18 +94,130 @@ if ($hasExibirCardapioColumn) {
     );
 }
 
+// Get most sold products - SIMPLIFICADO: sempre buscar produtos ativos
+$produtosMaisVendidos = [];
+try {
+    // Query simples: produtos ativos, com exibir_cardapio_online se a coluna existir
+    if ($hasExibirCardapioColumn) {
+        $produtosMaisVendidos = $db->fetchAll(
+            "SELECT p.*, c.nome as categoria_nome 
+             FROM produtos p 
+             LEFT JOIN categorias c ON p.categoria_id = c.id 
+             WHERE p.tenant_id = ? AND p.filial_id = ? AND p.ativo = true 
+               AND (p.exibir_cardapio_online IS NULL OR p.exibir_cardapio_online = true)
+             ORDER BY RANDOM()
+             LIMIT 10",
+            [$tenantId, $filialId]
+        );
+    } else {
+        $produtosMaisVendidos = $db->fetchAll(
+            "SELECT p.*, c.nome as categoria_nome 
+             FROM produtos p 
+             LEFT JOIN categorias c ON p.categoria_id = c.id 
+             WHERE p.tenant_id = ? AND p.filial_id = ? AND p.ativo = true
+             ORDER BY RANDOM()
+             LIMIT 10",
+            [$tenantId, $filialId]
+        );
+    }
+} catch (\Exception $e) {
+    error_log("Erro ao buscar produtos mais vendidos: " . $e->getMessage());
+    $produtosMaisVendidos = [];
+}
+
+// Get promotional products (products with em_promocao = true and preco_promocional set)
+$hasEmPromocao = false;
+$hasPrecoPromocional = false;
+try {
+    $columnCheck = $db->fetch("
+        SELECT 1 
+        FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+          AND table_name = 'produtos' 
+          AND column_name = 'em_promocao'
+        LIMIT 1
+    ");
+    $hasEmPromocao = !empty($columnCheck);
+    
+    $columnCheck = $db->fetch("
+        SELECT 1 
+        FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+          AND table_name = 'produtos' 
+          AND column_name = 'preco_promocional'
+        LIMIT 1
+    ");
+    $hasPrecoPromocional = !empty($columnCheck);
+} catch (\Exception $e) {
+    $hasEmPromocao = false;
+    $hasPrecoPromocional = false;
+}
+
+// Get promotional products - SIMPLIFICADO: query direta
+$produtosPromocao = [];
+try {
+    // Query simples e direta
+    if ($hasExibirCardapioColumn) {
+        $produtosPromocao = $db->fetchAll(
+            "SELECT p.*, c.nome as categoria_nome 
+             FROM produtos p 
+             LEFT JOIN categorias c ON p.categoria_id = c.id 
+             WHERE p.tenant_id = ? AND p.filial_id = ? 
+               AND p.ativo = true 
+               AND (p.exibir_cardapio_online IS NULL OR p.exibir_cardapio_online = true)
+               AND p.em_promocao = true
+               AND p.preco_promocional IS NOT NULL 
+               AND p.preco_promocional > 0
+             ORDER BY RANDOM()
+             LIMIT 10",
+            [$tenantId, $filialId]
+        );
+    } else {
+        $produtosPromocao = $db->fetchAll(
+            "SELECT p.*, c.nome as categoria_nome 
+             FROM produtos p 
+             LEFT JOIN categorias c ON p.categoria_id = c.id 
+             WHERE p.tenant_id = ? AND p.filial_id = ? 
+               AND p.ativo = true
+               AND p.em_promocao = true
+               AND p.preco_promocional IS NOT NULL 
+               AND p.preco_promocional > 0
+             ORDER BY RANDOM()
+             LIMIT 10",
+            [$tenantId, $filialId]
+        );
+    }
+} catch (\Exception $e) {
+    error_log("Erro ao buscar produtos em promoção: " . $e->getMessage());
+    $produtosPromocao = [];
+}
+
+// Não usar fallback - só mostrar produtos realmente em promoção
+
+// Debug simples
+error_log("Cardapio Online - Mais Vendidos: " . count($produtosMaisVendidos) . ", Promoção: " . count($produtosPromocao));
+
 // Group products by category
 $produtosPorCategoria = [];
+$categoriasInfo = [];
 foreach ($produtos as $produto) {
     $categoria = $produto['categoria_nome'] ?? 'Outros';
+    $categoriaId = $produto['categoria_id'] ?? 0;
+    
     if (!isset($produtosPorCategoria[$categoria])) {
         $produtosPorCategoria[$categoria] = [];
+        $categoriasInfo[$categoria] = [
+            'id' => $categoriaId,
+            'nome' => $categoria,
+            'imagem' => null // Can be extended later
+        ];
     }
     $produtosPorCategoria[$categoria][] = $produto;
 }
 
 // Sort categories in descending order (Z to A)
 krsort($produtosPorCategoria);
+krsort($categoriasInfo);
 
 // Parse opening hours - support multiple periods per day
 $horarios = json_decode($filial['horario_funcionamento'] ?? '{}', true);
@@ -137,23 +249,13 @@ if (empty($horarios)) {
     }
 }
 
-// Check if currently open
+// Check if currently open - using establishment timezone
 $isOpen = false;
-$diaAtual = strtolower(date('l'));
-$diaAtualPt = [
-    'monday' => 'segunda',
-    'tuesday' => 'terca',
-    'wednesday' => 'quarta',
-    'thursday' => 'quinta',
-    'friday' => 'sexta',
-    'saturday' => 'sabado',
-    'sunday' => 'domingo'
-];
-$diaAtualKey = $diaAtualPt[$diaAtual] ?? 'segunda';
+$diaAtualKey = \System\TimeHelper::currentDayName($filialId);
 $horarioHoje = $horarios[$diaAtualKey] ?? null;
 
 if ($horarioHoje && $horarioHoje['aberto'] && isset($horarioHoje['periodos'])) {
-    $horaAtual = date('H:i');
+    $horaAtual = \System\TimeHelper::currentHour($filialId);
     foreach ($horarioHoje['periodos'] as $periodo) {
         if ($horaAtual >= $periodo['inicio'] && $horaAtual <= $periodo['fim']) {
             $isOpen = true;
@@ -470,6 +572,256 @@ if (count($enderecoParts) > 2) {
             font-size: 1.2rem;
             font-weight: bold;
             color: var(--primary-color);
+        }
+        
+        .product-price-promo {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+        
+        .price-old {
+            font-size: 0.9rem;
+            color: #999;
+            text-decoration: line-through;
+        }
+        
+        .price-new {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #dc3545;
+        }
+        
+        /* Carousel Styles */
+        .carousel-section {
+            margin: 3rem 0;
+        }
+        
+        .carousel-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .carousel-title i {
+            color: var(--primary-color);
+        }
+        
+        .carousel-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .carousel-wrapper {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .carousel-track {
+            display: flex !important;
+            gap: 1.5rem;
+            transition: transform 0.3s ease;
+            overflow-x: auto;
+            scroll-behavior: smooth;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            width: 100%;
+            min-height: 250px;
+            justify-content: center;
+            padding: 0 2rem;
+        }
+        
+        .carousel-track::-webkit-scrollbar {
+            display: none;
+        }
+        
+        .carousel-item {
+            flex: 0 0 200px !important;
+            min-width: 200px !important;
+            display: block !important;
+            visibility: visible !important;
+            scroll-snap-align: center;
+        }
+        
+        .product-card-carousel {
+            background: white;
+            border-radius: 10px;
+            overflow: visible;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: transform 0.3s;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 1rem;
+        }
+        
+        .product-card-carousel:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .product-card-carousel .product-image {
+            height: 150px;
+            width: 150px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 4px solid var(--primary-color);
+            margin: 0 auto 1rem auto;
+            display: block;
+        }
+        
+        .product-card-carousel .product-info {
+            padding: 0;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            text-align: center;
+        }
+        
+        .product-card-carousel .product-name {
+            font-size: 0.95rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .product-card-carousel .product-price {
+            font-size: 1.1rem;
+            margin-top: auto;
+        }
+        
+        /* Fallback image container também redondo */
+        .product-card-carousel .product-image[style*="display: flex"],
+        .product-card-carousel div.product-image {
+            height: 150px !important;
+            width: 150px !important;
+            border-radius: 50% !important;
+            border: 4px solid var(--primary-color) !important;
+            margin: 0 auto 1rem auto !important;
+            flex-shrink: 0;
+        }
+        
+        .carousel-btn {
+            background: var(--primary-color);
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            color: #000;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+        
+        .carousel-btn:hover {
+            background: #ffd700;
+            transform: scale(1.1);
+        }
+        
+        .carousel-btn:active {
+            transform: scale(0.95);
+        }
+        
+        /* Categories Grid */
+        .categories-section {
+            margin: 4rem 0;
+        }
+        
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 2rem;
+            color: #333;
+        }
+        
+        .categories-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 2rem;
+        }
+        
+        .category-card {
+            background: white;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .category-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+        }
+        
+        .category-image {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            background: linear-gradient(135deg, var(--primary-color), #ffd700);
+        }
+        
+        .category-info {
+            padding: 1.5rem;
+            text-align: center;
+        }
+        
+        .category-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+        
+        .category-count {
+            font-size: 0.9rem;
+            color: #666;
+        }
+        
+        /* Category Products Section */
+        .category-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .btn-back-category {
+            background: #f5f5f5;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s;
+        }
+        
+        .btn-back-category:hover {
+            background: #e0e0e0;
+        }
+        
+        .category-products-title {
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: #333;
+            margin: 0;
         }
         
         /* Cart Button */
@@ -961,6 +1313,65 @@ if (count($enderecoParts) > 2) {
             .payment-methods {
                 grid-template-columns: 1fr;
             }
+            
+            /* Carousel responsive */
+            .carousel-section {
+                margin: 2rem 0;
+            }
+            
+            .carousel-title {
+                font-size: 1.2rem;
+                margin-bottom: 1rem;
+            }
+            
+            .carousel-item {
+                flex: 0 0 160px;
+                min-width: 160px;
+            }
+            
+            .product-card-carousel .product-image {
+                height: 120px;
+            }
+            
+            .product-card-carousel .product-info {
+                padding: 0.75rem;
+            }
+            
+            .product-card-carousel .product-name {
+                font-size: 0.85rem;
+            }
+            
+            .product-card-carousel .product-price {
+                font-size: 1rem;
+            }
+            
+            .carousel-btn {
+                width: 35px;
+                height: 35px;
+                font-size: 1rem;
+            }
+            
+            /* Categories responsive */
+            .categories-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 1rem;
+            }
+            
+            .category-image {
+                height: 150px;
+            }
+            
+            .category-info {
+                padding: 1rem;
+            }
+            
+            .category-name {
+                font-size: 1rem;
+            }
+            
+            .category-count {
+                font-size: 0.8rem;
+            }
         }
         
         @media (max-width: 480px) {
@@ -1032,6 +1443,28 @@ if (count($enderecoParts) > 2) {
                 font-size: 1rem;
             }
             
+            /* Carousel mobile */
+            .carousel-item {
+                flex: 0 0 140px;
+                min-width: 140px;
+            }
+            
+            .carousel-btn {
+                width: 30px;
+                height: 30px;
+                font-size: 0.9rem;
+            }
+            
+            /* Categories mobile */
+            .categories-grid {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+            
+            .category-image {
+                height: 180px;
+            }
+            
             .close-checkout {
                 top: 0.5rem;
                 right: 0.5rem;
@@ -1092,8 +1525,159 @@ if (count($enderecoParts) > 2) {
                     <input type="text" id="searchInput" class="search-box" placeholder="Buscar produtos..." autocomplete="off">
                 </div>
                 
-                <!-- Products by Category -->
-                <div id="productsContainer">
+                <!-- Most Sold Products Carousel -->
+                <div class="carousel-section">
+                    <h3 class="carousel-title">
+                        <i class="fas fa-fire"></i> Mais Vendidos 
+                        <span style="font-size: 0.8em; color: #666;">(<?php echo count($produtosMaisVendidos); ?> produtos)</span>
+                    </h3>
+                    <?php if (!empty($produtosMaisVendidos)): ?>
+                    <div class="carousel-container">
+                        <button class="carousel-btn carousel-btn-prev" onclick="scrollCarousel('maisVendidos', -1)">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <div class="carousel-wrapper" id="carouselMaisVendidos">
+                            <div class="carousel-track" style="scroll-snap-type: x mandatory;">
+                                <?php foreach ($produtosMaisVendidos as $produto): ?>
+                                    <div class="carousel-item">
+                                        <div class="product-card-carousel" 
+                                             data-product-id="<?php echo $produto['id']; ?>"
+                                             data-product-data="<?php echo htmlspecialchars(json_encode($produto)); ?>"
+                                             style="cursor: pointer;">
+                                            <?php if ($produto['imagem']): ?>
+                                                <img src="<?php echo htmlspecialchars($produto['imagem']); ?>" alt="<?php echo htmlspecialchars($produto['nome']); ?>" class="product-image" onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                                <div class="product-image" style="display: none; align-items: center; justify-content: center; background: #f5f5f5;">
+                                                    <i class="fas fa-image" style="font-size: 2rem; color: #ccc;"></i>
+                                                </div>
+                                            <?php else: ?>
+                                                <div class="product-image" style="display: flex; align-items: center; justify-content: center; background: #f5f5f5;">
+                                                    <i class="fas fa-image" style="font-size: 2rem; color: #ccc;"></i>
+                                                </div>
+                                            <?php endif; ?>
+                                            <div class="product-info">
+                                                <div class="product-name"><?php echo htmlspecialchars($produto['nome']); ?></div>
+                                                <div class="product-price">R$ <?php echo number_format($produto['preco_normal'], 2, ',', '.'); ?></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                        <button class="carousel-btn carousel-btn-next" onclick="scrollCarousel('maisVendidos', 1)">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                    <?php else: ?>
+                    <div class="carousel-empty">
+                        <p class="text-muted text-center py-4">Nenhum produto encontrado no momento.</p>
+                    </div>
+                    <?php endif; ?>
+                </div>
+                
+                <!-- Promotional Products Carousel -->
+                <div class="carousel-section">
+                    <h3 class="carousel-title">
+                        <i class="fas fa-tag"></i> Promoções do Dia
+                        <span style="font-size: 0.8em; color: #666;">(<?php echo count($produtosPromocao); ?> produtos)</span>
+                    </h3>
+                    <?php if (!empty($produtosPromocao)): ?>
+                    <div class="carousel-container">
+                        <button class="carousel-btn carousel-btn-prev" onclick="scrollCarousel('promocoes', -1)">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <div class="carousel-wrapper" id="carouselPromocoes">
+                            <div class="carousel-track" style="scroll-snap-type: x mandatory;">
+                                <?php foreach ($produtosPromocao as $produto): 
+                                    $precoPromo = isset($produto['preco_promocional']) && $produto['preco_promocional'] > 0 ? $produto['preco_promocional'] : $produto['preco_normal'];
+                                ?>
+                                    <div class="carousel-item">
+                                        <div class="product-card-carousel" 
+                                             data-product-id="<?php echo $produto['id']; ?>"
+                                             data-product-data="<?php echo htmlspecialchars(json_encode($produto)); ?>"
+                                             style="cursor: pointer;">
+                                            <?php if ($produto['imagem']): ?>
+                                                <img src="<?php echo htmlspecialchars($produto['imagem']); ?>" alt="<?php echo htmlspecialchars($produto['nome']); ?>" class="product-image" onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                                <div class="product-image" style="display: none; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--primary-color), #ffd700);">
+                                                    <i class="fas fa-image" style="font-size: 2rem; color: white;"></i>
+                                                </div>
+                                            <?php else: ?>
+                                                <div class="product-image" style="display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--primary-color), #ffd700);">
+                                                    <i class="fas fa-image" style="font-size: 2rem; color: white;"></i>
+                                                </div>
+                                            <?php endif; ?>
+                                            <div class="product-info">
+                                                <div class="product-name"><?php echo htmlspecialchars($produto['nome']); ?></div>
+                                                <?php if (isset($produto['preco_promocional']) && $produto['preco_promocional'] > 0 && $produto['preco_promocional'] < $produto['preco_normal']): ?>
+                                                    <div class="product-price-promo">
+                                                        <span class="price-old">R$ <?php echo number_format($produto['preco_normal'], 2, ',', '.'); ?></span>
+                                                        <span class="price-new">R$ <?php echo number_format($produto['preco_promocional'], 2, ',', '.'); ?></span>
+                                                    </div>
+                                                <?php else: ?>
+                                                    <div class="product-price">R$ <?php echo number_format($produto['preco_normal'], 2, ',', '.'); ?></div>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                        <button class="carousel-btn carousel-btn-next" onclick="scrollCarousel('promocoes', 1)">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                    <?php else: ?>
+                    <div class="carousel-empty">
+                        <p class="text-muted text-center py-4">Nenhuma promoção disponível no momento.</p>
+                    </div>
+                    <?php endif; ?>
+                </div>
+                
+                <!-- Categories Grid -->
+                <div class="categories-section">
+                    <h3 class="section-title">Categorias</h3>
+                    <div class="categories-grid" id="categoriesGrid">
+                        <?php foreach ($categoriasInfo as $categoriaNome => $categoriaInfo): 
+                            $primeiroProduto = $produtosPorCategoria[$categoriaNome][0] ?? null;
+                            $categoriaImagem = $primeiroProduto['imagem'] ?? null;
+                        ?>
+                            <div class="category-card" 
+                                 data-category="<?php echo htmlspecialchars(strtolower($categoriaNome)); ?>"
+                                 data-category-name="<?php echo htmlspecialchars($categoriaNome, ENT_QUOTES, 'UTF-8'); ?>"
+                                 onclick="openCategory(this.getAttribute('data-category-name'))">
+                                <?php if ($categoriaImagem): ?>
+                                    <img src="<?php echo htmlspecialchars($categoriaImagem); ?>" alt="<?php echo htmlspecialchars($categoriaNome); ?>" class="category-image" onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                    <div class="category-image" style="display: none; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--primary-color), #ffd700);">
+                                        <i class="fas fa-utensils" style="font-size: 3rem; color: white;"></i>
+                                    </div>
+                                <?php else: ?>
+                                    <div class="category-image" style="display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--primary-color), #ffd700);">
+                                        <i class="fas fa-utensils" style="font-size: 3rem; color: white;"></i>
+                                    </div>
+                                <?php endif; ?>
+                                <div class="category-info">
+                                    <div class="category-name"><?php echo htmlspecialchars($categoriaNome); ?></div>
+                                    <div class="category-count"><?php echo count($produtosPorCategoria[$categoriaNome]); ?> itens</div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                
+                <!-- Products by Category (Hidden by default, shown when category is clicked) -->
+                <div id="categoryProductsSection" style="display: none;">
+                    <div class="category-header">
+                        <button class="btn-back-category" onclick="closeCategory()">
+                            <i class="fas fa-arrow-left"></i> Voltar
+                        </button>
+                        <h3 id="categoryProductsTitle" class="category-products-title"></h3>
+                    </div>
+                    <div id="categoryProductsContainer" class="products-grid">
+                        <!-- Products will be loaded here via JavaScript -->
+                    </div>
+                </div>
+                
+                <!-- Products by Category (Original - Hidden) -->
+                <div id="productsContainer" style="display: none;">
                     <?php foreach ($produtosPorCategoria as $categoria => $produtosCategoria): ?>
                         <div class="category-section" data-category="<?php echo htmlspecialchars(strtolower($categoria)); ?>">
                             <h3 class="mt-4 mb-3"><?php echo htmlspecialchars($categoria); ?></h3>
@@ -1277,7 +1861,226 @@ if (count($enderecoParts) > 2) {
     </div>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
+        // ============================================
+        // FUNÇÃO HELPER PARA EVENTOS DE CONVERSÃO DO PIXEL
+        // ============================================
+        // Detecta automaticamente o tipo de pixel e dispara eventos de conversão
+        function trackPixelEvent(eventName, eventData = {}) {
+            try {
+                // Facebook Pixel (fbq)
+                if (typeof fbq !== 'undefined' && typeof fbq === 'function') {
+                    if (eventName === 'ViewContent') {
+                        fbq('track', 'ViewContent', {
+                            content_name: eventData.content_name || '',
+                            content_category: eventData.content_category || '',
+                            content_ids: eventData.content_ids || [],
+                            value: eventData.value || 0,
+                            currency: 'BRL'
+                        });
+                    } else if (eventName === 'AddToCart') {
+                        fbq('track', 'AddToCart', {
+                            content_name: eventData.content_name || '',
+                            content_category: eventData.content_category || '',
+                            content_ids: eventData.content_ids || [],
+                            value: eventData.value || 0,
+                            currency: 'BRL',
+                            num_items: eventData.num_items || 1
+                        });
+                    } else if (eventName === 'InitiateCheckout') {
+                        fbq('track', 'InitiateCheckout', {
+                            value: eventData.value || 0,
+                            currency: 'BRL',
+                            num_items: eventData.num_items || 0
+                        });
+                    } else if (eventName === 'Purchase') {
+                        fbq('track', 'Purchase', {
+                            value: eventData.value || 0,
+                            currency: 'BRL',
+                            contents: eventData.contents || [],
+                            num_items: eventData.num_items || 0
+                        });
+                    } else if (eventName === 'CheckoutProgress') {
+                        // Evento customizado para progresso do checkout
+                        fbq('trackCustom', 'CheckoutProgress', {
+                            checkout_step: eventData.checkout_step || '',
+                            step_name: eventData.step_name || '',
+                            step_number: eventData.step_number || 0,
+                            value: eventData.value || 0,
+                            currency: 'BRL'
+                        });
+                    } else if (eventName === 'CheckoutAbandoned') {
+                        // Evento customizado para checkout abandonado
+                        fbq('trackCustom', 'CheckoutAbandoned', {
+                            abandoned_step: eventData.abandoned_step || '',
+                            step_name: eventData.step_name || '',
+                            step_number: eventData.step_number || 0,
+                            value: eventData.value || 0,
+                            currency: 'BRL',
+                            num_items: eventData.num_items || 0
+                        });
+                    }
+                }
+                
+                // Google Analytics 4 (gtag)
+                if (typeof gtag !== 'undefined' && typeof gtag === 'function') {
+                    if (eventName === 'ViewContent') {
+                        gtag('event', 'view_item', {
+                            currency: 'BRL',
+                            value: eventData.value || 0,
+                            items: [{
+                                item_id: eventData.content_ids?.[0] || '',
+                                item_name: eventData.content_name || '',
+                                item_category: eventData.content_category || '',
+                                price: eventData.value || 0,
+                                quantity: 1
+                            }]
+                        });
+                    } else if (eventName === 'AddToCart') {
+                        gtag('event', 'add_to_cart', {
+                            currency: 'BRL',
+                            value: eventData.value || 0,
+                            items: [{
+                                item_id: eventData.content_ids?.[0] || '',
+                                item_name: eventData.content_name || '',
+                                item_category: eventData.content_category || '',
+                                price: eventData.value || 0,
+                                quantity: eventData.num_items || 1
+                            }]
+                        });
+                    } else if (eventName === 'InitiateCheckout') {
+                        gtag('event', 'begin_checkout', {
+                            currency: 'BRL',
+                            value: eventData.value || 0,
+                            items: eventData.items || []
+                        });
+                    } else if (eventName === 'Purchase') {
+                        // Converter contents para formato GA4 se necessário
+                        const ga4Items = (eventData.contents || []).map(item => ({
+                            item_id: item.item_id || item.id || '',
+                            item_name: item.item_name || item.nome || '',
+                            item_category: item.item_category || '',
+                            price: item.price || item.preco || 0,
+                            quantity: item.quantity || 1
+                        }));
+                        
+                        gtag('event', 'purchase', {
+                            transaction_id: eventData.transaction_id || '',
+                            value: eventData.value || 0,
+                            currency: 'BRL',
+                            items: ga4Items
+                        });
+                    } else if (eventName === 'CheckoutProgress') {
+                        // Evento customizado para progresso do checkout
+                        gtag('event', 'checkout_progress', {
+                            checkout_step: eventData.checkout_step || '',
+                            step_name: eventData.step_name || '',
+                            step_number: eventData.step_number || 0,
+                            value: eventData.value || 0,
+                            currency: 'BRL'
+                        });
+                    } else if (eventName === 'CheckoutAbandoned') {
+                        // Evento customizado para checkout abandonado
+                        gtag('event', 'checkout_abandoned', {
+                            abandoned_step: eventData.abandoned_step || '',
+                            step_name: eventData.step_name || '',
+                            step_number: eventData.step_number || 0,
+                            value: eventData.value || 0,
+                            currency: 'BRL',
+                            items: eventData.items || []
+                        });
+                    }
+                }
+                
+                // Google Tag Manager (dataLayer)
+                if (typeof dataLayer !== 'undefined' && Array.isArray(dataLayer)) {
+                    if (eventName === 'ViewContent') {
+                        dataLayer.push({
+                            event: 'view_item',
+                            ecommerce: {
+                                currency: 'BRL',
+                                value: eventData.value || 0,
+                                items: [{
+                                    item_id: eventData.content_ids?.[0] || '',
+                                    item_name: eventData.content_name || '',
+                                    item_category: eventData.content_category || '',
+                                    price: eventData.value || 0,
+                                    quantity: 1
+                                }]
+                            }
+                        });
+                    } else if (eventName === 'AddToCart') {
+                        dataLayer.push({
+                            event: 'add_to_cart',
+                            ecommerce: {
+                                currency: 'BRL',
+                                value: eventData.value || 0,
+                                items: [{
+                                    item_id: eventData.content_ids?.[0] || '',
+                                    item_name: eventData.content_name || '',
+                                    item_category: eventData.content_category || '',
+                                    price: eventData.value || 0,
+                                    quantity: eventData.num_items || 1
+                                }]
+                            }
+                        });
+                    } else if (eventName === 'InitiateCheckout') {
+                        dataLayer.push({
+                            event: 'begin_checkout',
+                            ecommerce: {
+                                currency: 'BRL',
+                                value: eventData.value || 0,
+                                items: eventData.items || []
+                            }
+                        });
+                    } else if (eventName === 'Purchase') {
+                        // Converter contents para formato GTM se necessário
+                        const gtmItems = (eventData.contents || []).map(item => ({
+                            item_id: item.item_id || item.id || '',
+                            item_name: item.item_name || item.nome || '',
+                            item_category: item.item_category || '',
+                            price: item.price || item.preco || 0,
+                            quantity: item.quantity || 1
+                        }));
+                        
+                        dataLayer.push({
+                            event: 'purchase',
+                            ecommerce: {
+                                transaction_id: eventData.transaction_id || '',
+                                value: eventData.value || 0,
+                                currency: 'BRL',
+                                items: gtmItems
+                            }
+                        });
+                    } else if (eventName === 'CheckoutProgress') {
+                        // Evento customizado para progresso do checkout
+                        dataLayer.push({
+                            event: 'checkout_progress',
+                            checkout_step: eventData.checkout_step || '',
+                            step_name: eventData.step_name || '',
+                            step_number: eventData.step_number || 0,
+                            value: eventData.value || 0,
+                            currency: 'BRL'
+                        });
+                    } else if (eventName === 'CheckoutAbandoned') {
+                        // Evento customizado para checkout abandonado
+                        dataLayer.push({
+                            event: 'checkout_abandoned',
+                            abandoned_step: eventData.abandoned_step || '',
+                            step_name: eventData.step_name || '',
+                            step_number: eventData.step_number || 0,
+                            value: eventData.value || 0,
+                            currency: 'BRL',
+                            items: eventData.items || []
+                        });
+                    }
+                }
+            } catch (error) {
+                console.warn('Erro ao disparar evento de pixel:', error);
+            }
+        }
+        
         // Tab switching
         document.querySelectorAll('.nav-link').forEach(link => {
             link.addEventListener('click', function(e) {
@@ -1415,12 +2218,30 @@ if (count($enderecoParts) > 2) {
                                 <div style="flex: 1;">
                                     <div><strong>${item.nome}</strong></div>
                                     ${ingredientesInfo}
-                                    <small>R$ ${parseFloat(item.preco_normal || 0).toFixed(2).replace('.', ',')} x ${item.quantity || 1}</small>
+                                    <small>R$ ${parseFloat(item.preco_normal || 0).toFixed(2).replace('.', ',')} unidade</small>
                                 </div>
                                 <div style="margin-left: 0.5rem;">
                                     <button onclick="removeFromCart(${index})" style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0.25rem;">
                                         <i class="fas fa-trash"></i>
                                     </button>
+                                </div>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem;">
+                                <label style="font-size: 0.9rem; margin: 0;">Quantidade:</label>
+                                <div style="display: flex; align-items: center; gap: 0.5rem; border: 1px solid #ddd; border-radius: 5px; padding: 0.25rem;">
+                                    <button onclick="updateItemQuantity(${index}, ${(item.quantity || 1) - 1})" 
+                                            style="background: var(--primary-color); border: none; color: #000; width: 30px; height: 30px; border-radius: 5px; cursor: ${(item.quantity || 1) <= 1 ? 'not-allowed' : 'pointer'}; font-weight: bold; display: flex; align-items: center; justify-content: center; opacity: ${(item.quantity || 1) <= 1 ? '0.5' : '1'};"
+                                            ${(item.quantity || 1) <= 1 ? 'disabled' : ''}>
+                                        <i class="fas fa-minus" style="font-size: 0.8rem;"></i>
+                                    </button>
+                                    <span style="min-width: 30px; text-align: center; font-weight: bold;">${item.quantity || 1}</span>
+                                    <button onclick="updateItemQuantity(${index}, ${(item.quantity || 1) + 1})" 
+                                            style="background: var(--primary-color); border: none; color: #000; width: 30px; height: 30px; border-radius: 5px; cursor: pointer; font-weight: bold; display: flex; align-items: center; justify-content: center;">
+                                        <i class="fas fa-plus" style="font-size: 0.8rem;"></i>
+                                    </button>
+                                </div>
+                                <div style="margin-left: auto; font-weight: bold;">
+                                    R$ ${(parseFloat(item.preco_normal || 0) * (item.quantity || 1)).toFixed(2).replace('.', ',')}
                                 </div>
                             </div>
                             <div style="margin-top: 0.5rem;">
@@ -1681,19 +2502,31 @@ if (count($enderecoParts) > 2) {
                 (!item.observacao || item.observacao.trim() === '')
             );
             
+            const productPrice = parseFloat(product.preco_normal) || 0;
+            const productCategory = product.categoria_nome || 'Geral';
+            
             if (existingItem) {
                 existingItem.quantity++;
             } else {
                 cart.push({
                     id: product.id,
                     nome: product.nome,
-                    preco_normal: parseFloat(product.preco_normal) || 0,
+                    preco_normal: productPrice,
                     quantity: 1,
                     ingredientes_adicionados: product.ingredientes_adicionados || [],
                     ingredientes_removidos: product.ingredientes_removidos || [],
                     observacao: product.observacao || ''
                 });
             }
+            
+            // Disparar evento AddToCart do pixel
+            trackPixelEvent('AddToCart', {
+                content_name: product.nome,
+                content_category: productCategory,
+                content_ids: [product.id.toString()],
+                value: productPrice,
+                num_items: existingItem ? existingItem.quantity : 1
+            });
             
             updateCart();
         }
@@ -1702,6 +2535,16 @@ if (count($enderecoParts) > 2) {
             if (cart[index]) {
                 cart[index].observacao = observacao;
                 updateCart();
+            }
+        }
+        
+        function updateItemQuantity(index, newQuantity) {
+            if (cart[index] && newQuantity > 0) {
+                cart[index].quantity = newQuantity;
+                updateCart();
+            } else if (cart[index] && newQuantity <= 0) {
+                // Remove item if quantity is 0 or less
+                removeFromCart(index);
             }
         }
         
@@ -1732,6 +2575,31 @@ if (count($enderecoParts) > 2) {
         }
         
         function showCheckoutModal() {
+            // Resetar flag de checkout completado quando inicia novo checkout
+            checkoutCompleted = false;
+            
+            // Calcular valor total do carrinho para o evento de conversão
+            const totalValue = cart.reduce((sum, item) => {
+                return sum + (parseFloat(item.preco_normal || 0) * (item.quantity || 1));
+            }, 0);
+            
+            const totalItems = cart.reduce((sum, item) => sum + (item.quantity || 1), 0);
+            
+            // Preparar itens para Google Analytics/GTM
+            const items = cart.map(item => ({
+                item_id: item.id.toString(),
+                item_name: item.nome,
+                price: parseFloat(item.preco_normal || 0),
+                quantity: item.quantity || 1
+            }));
+            
+            // Disparar evento InitiateCheckout do pixel
+            trackPixelEvent('InitiateCheckout', {
+                value: totalValue,
+                num_items: totalItems,
+                items: items
+            });
+            
             // Create modal HTML
             const modalHtml = `
                 <div class="checkout-modal" id="checkoutModal">
@@ -1750,18 +2618,23 @@ if (count($enderecoParts) > 2) {
                                 </button>
                             </div>
                             <div id="clienteSearchResult" class="alert" style="display: none;"></div>
+                            
+                            <!-- Campos de dados do cliente - aparecem após buscar telefone -->
+                            <div id="customerDataFields" style="display: none; margin-top: 20px;">
+                                <h5 class="mb-3">Dados do Cliente</h5>
+                                <div id="checkoutError" class="alert alert-danger" style="display: none; margin-bottom: 15px;"></div>
+                                <input type="text" class="form-control mb-2" id="customerName" placeholder="Nome completo" required>
+                                <input type="email" class="form-control mb-2" id="customerEmail" placeholder="E-mail (opcional)">
+                                <input type="text" class="form-control mb-2" id="customerCpf" placeholder="CPF (opcional)">
+                                <small class="text-muted d-block mb-2">
+                                    <i class="fas fa-info-circle"></i> CPF é opcional, mas recomendado para pagamentos online
+                                </small>
+                                <button class="btn btn-primary w-100 mt-2" onclick="proximoPasso(1)">Continuar</button>
+                            </div>
                         </div>
                         
                         <div id="checkoutStep2" class="checkout-step" style="display: none;">
-                            <h5 class="mb-3">Dados do Cliente</h5>
-                            <div id="checkoutError" class="alert alert-danger" style="display: none; margin-bottom: 15px;"></div>
-                            <input type="text" class="form-control mb-2" id="customerName" placeholder="Nome completo" required>
-                            <input type="email" class="form-control mb-2" id="customerEmail" placeholder="E-mail (opcional)">
-                            <input type="text" class="form-control mb-2" id="customerCpf" placeholder="CPF (obrigatório para pagamento online)" required>
-                            <small class="text-muted d-block mb-2" id="cpfRequiredMsg" style="display: none; color: #dc3545 !important;">
-                                <i class="fas fa-exclamation-circle"></i> CPF é obrigatório para pagamento online
-                            </small>
-                            <button class="btn btn-primary w-100 mt-2" onclick="proximoPasso(2)">Continuar</button>
+                            <!-- Este passo não é mais usado, mantido para compatibilidade -->
                         </div>
                         
                         <div id="checkoutStep3" class="checkout-step" style="display: none;">
@@ -1807,6 +2680,19 @@ if (count($enderecoParts) > 2) {
                                         <br><small class="text-muted">PIX ou Cartão via Asaas</small>
                                     </label>
                                 </div>
+                                
+                                <!-- Botões de PIX e Cartão - aparecem quando Pagar Online é selecionado -->
+                                <div id="onlinePaymentButtons" style="display: none; margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                                    <h6 class="mb-3">Escolha o método de pagamento:</h6>
+                                    <div class="d-grid gap-2">
+                                        <button class="btn btn-success btn-lg" onclick="finalizarPedidoOnline('PIX')" style="margin-bottom: 10px;">
+                                            <i class="fas fa-qrcode"></i> Pagar com PIX
+                                        </button>
+                                        <button class="btn btn-primary btn-lg" onclick="finalizarPedidoOnline('CREDIT_CARD')">
+                                            <i class="fas fa-credit-card"></i> Pagar com Cartão
+                                        </button>
+                                    </div>
+                                </div>
                             <?php endif; ?>
                             <?php if ($filial['aceita_pagamento_na_hora']): ?>
                                 <div class="payment-option" onclick="selectPayment('on_delivery')">
@@ -1817,29 +2703,11 @@ if (count($enderecoParts) > 2) {
                                     </label>
                                 </div>
                             <?php endif; ?>
-                            <button class="btn btn-primary w-100 mt-3" onclick="proximoPasso(4)">Continuar</button>
+                            <button class="btn btn-primary w-100 mt-3" id="btnContinuarStep4" onclick="proximoPasso(4)">Continuar</button>
                         </div>
                         
                         <div id="checkoutStep4b" class="checkout-step" style="display: none;">
-                            <h5 class="mb-3">Escolha o Método de Pagamento Online</h5>
-                            <div class="payment-option" onclick="selectOnlinePaymentMethod('PIX')">
-                                <input type="radio" name="onlinePaymentMethod" value="PIX" id="onlinePaymentPIX" checked>
-                                <label for="onlinePaymentPIX">
-                                    <strong>PIX</strong>
-                                    <br><small class="text-muted">Pagamento instantâneo via QR Code</small>
-                                </label>
-                            </div>
-                            <div class="payment-option" onclick="selectOnlinePaymentMethod('CREDIT_CARD')">
-                                <input type="radio" name="onlinePaymentMethod" value="CREDIT_CARD" id="onlinePaymentCard">
-                                <label for="onlinePaymentCard">
-                                    <strong>Cartão de Crédito</strong>
-                                    <br><small class="text-muted">Visa, Mastercard, Elo, etc.</small>
-                                </label>
-                            </div>
-                            <div class="d-flex gap-2 mt-3">
-                                <button class="btn btn-secondary flex-fill" onclick="voltarPasso()">Voltar</button>
-                                <button class="btn btn-primary flex-fill" onclick="proximoPasso('4b')">Continuar</button>
-                            </div>
+                            <!-- Este passo não é mais usado, mantido para compatibilidade -->
                         </div>
                         
                         <div id="checkoutStep5" class="checkout-step" style="display: none;">
@@ -1878,6 +2746,45 @@ if (count($enderecoParts) > 2) {
                                 <button class="btn btn-primary flex-fill" onclick="submitOrder()">Confirmar Pedido</button>
                             </div>
                         </div>
+                        
+                        <div id="checkoutStep7" class="checkout-step" style="display: none;">
+                            <!-- PIX Payment -->
+                            <div id="pixPaymentContainer" style="display: none;">
+                                <h5 class="mb-3">Pagamento via PIX</h5>
+                                <div class="text-center mb-3">
+                                    <p class="mb-2">Escaneie o QR Code ou copie o código PIX</p>
+                                    <div id="pixQrCodeContainer" class="mb-3">
+                                        <img id="pixQrCodeImage" src="" alt="QR Code PIX" style="max-width: 300px; border: 1px solid #ddd; border-radius: 8px; padding: 10px; background: white;">
+                                    </div>
+                                    <div class="input-group mb-3">
+                                        <input type="text" class="form-control" id="pixCopyPaste" readonly>
+                                        <button class="btn btn-primary" onclick="copiarPix()">
+                                            <i class="fas fa-copy"></i> Copiar
+                                        </button>
+                                    </div>
+                                    <div class="alert alert-info">
+                                        <i class="fas fa-info-circle"></i> Aguardando confirmação do pagamento...
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Credit Card Payment -->
+                            <div id="creditCardPaymentContainer" style="display: none;">
+                                <h5 class="mb-3">Pagamento via Cartão de Crédito</h5>
+                                <div class="alert alert-warning">
+                                    <i class="fas fa-exclamation-triangle"></i> Para pagamento com cartão, você será redirecionado para a página segura do Asaas.
+                                </div>
+                                <div class="text-center mt-3">
+                                    <button class="btn btn-primary" onclick="abrirPagamentoCartao()">
+                                        <i class="fas fa-credit-card"></i> Ir para Pagamento
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="text-center mt-3">
+                                <button class="btn btn-secondary" onclick="voltarParaResumo()">Voltar</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
@@ -1913,10 +2820,11 @@ if (count($enderecoParts) > 2) {
         let onlinePaymentMethod = 'PIX'; // PIX or CREDIT_CARD
         let formaPagamentoDetalhada = '';
         let trocoPara = null;
+        let checkoutCompleted = false; // Flag para indicar se o checkout foi completado
         
         function mostrarPasso(step) {
             // Hide all steps
-            for (let i = 1; i <= 6; i++) {
+            for (let i = 1; i <= 7; i++) {
                 const stepEl = document.getElementById('checkoutStep' + i);
                 if (stepEl) stepEl.style.display = 'none';
             }
@@ -1932,46 +2840,51 @@ if (count($enderecoParts) > 2) {
                 currentStepEl.style.display = 'block';
                 currentCheckoutStep = step;
                 
-                // Verificar CPF quando o passo 2 é exibido
-                if (step === 2) {
-                    // Setup CPF listener
-                    setupCpfFieldListener();
-                    
-                    // Verificar se CPF já está preenchido e esconder mensagem
-                    // Usar múltiplos timeouts para garantir que funciona
-                    setTimeout(() => {
-                        verificarEesconderMensagemCpf();
-                    }, 50);
-                    setTimeout(() => {
-                        verificarEesconderMensagemCpf();
-                    }, 200);
-                    setTimeout(() => {
-                        verificarEesconderMensagemCpf();
-                    }, 500);
-                    
-                    // Criar um observer para monitorar mudanças no campo CPF
-                    const cpfField = document.getElementById('customerCpf');
-                    if (cpfField) {
-                        // Usar MutationObserver para detectar mudanças no valor
-                        const observer = new MutationObserver(() => {
+                // Mapear nomes das etapas
+                const stepNames = {
+                    1: 'Telefone',
+                    2: 'Dados do Cliente',
+                    3: 'Endereço de Entrega',
+                    4: 'Forma de Pagamento',
+                    '4b': 'Método de Pagamento Online',
+                    5: 'Forma de Pagamento na Entrega',
+                    6: 'Resumo do Pedido',
+                    7: 'Finalizar Pagamento'
+                };
+                
+                const stepName = stepNames[step] || `Etapa ${step}`;
+                const stepNumber = (step === '4b') ? 4.5 : parseFloat(step);
+                
+                // Calcular valor total do carrinho
+                const totalValue = cart.reduce((sum, item) => {
+                    return sum + (parseFloat(item.preco_normal || 0) * (item.quantity || 1));
+                }, 0);
+                
+                // Disparar evento de progresso do checkout
+                trackPixelEvent('CheckoutProgress', {
+                    checkout_step: step.toString(),
+                    step_name: stepName,
+                    step_number: stepNumber,
+                    value: totalValue
+                });
+                
+                // Verificar CPF quando os campos de dados do cliente são exibidos (no step 1)
+                if (step === 1) {
+                    // Setup CPF listener quando os campos aparecem
+                    const customerDataFields = document.getElementById('customerDataFields');
+                    if (customerDataFields && customerDataFields.style.display !== 'none') {
+                        setupCpfFieldListener();
+                        
+                        // Verificar se CPF já está preenchido e esconder mensagem
+                        setTimeout(() => {
                             verificarEesconderMensagemCpf();
-                        });
-                        
-                        // Observar mudanças no atributo value
-                        observer.observe(cpfField, {
-                            attributes: true,
-                            attributeFilter: ['value']
-                        });
-                        
-                        // Também observar mudanças no texto (para inputs)
-                        const checkInterval = setInterval(() => {
-                            if (document.getElementById('checkoutStep2').style.display === 'none') {
-                                clearInterval(checkInterval);
-                                observer.disconnect();
-                            } else {
-                                verificarEesconderMensagemCpf();
-                            }
-                        }, 300);
+                        }, 50);
+                        setTimeout(() => {
+                            verificarEesconderMensagemCpf();
+                        }, 200);
+                        setTimeout(() => {
+                            verificarEesconderMensagemCpf();
+                        }, 500);
                     }
                 }
                 
@@ -2028,12 +2941,14 @@ if (count($enderecoParts) > 2) {
         
         async function proximoPasso(fromStep) {
             if (fromStep === 1) {
-                const phone = document.getElementById('customerPhone').value.trim();
-                if (!phone) {
-                    alert('Por favor, informe o telefone');
+                // Validar se telefone foi buscado
+                const customerDataFields = document.getElementById('customerDataFields');
+                if (!customerDataFields || customerDataFields.style.display === 'none') {
+                    alert('Por favor, busque o cliente pelo telefone primeiro');
                     return;
                 }
-            } else if (fromStep === 2) {
+                
+                // Validar dados do cliente
                 const name = document.getElementById('customerName').value.trim();
                 const cpf = document.getElementById('customerCpf').value.trim();
                 const errorDiv = document.getElementById('checkoutError');
@@ -2050,27 +2965,33 @@ if (count($enderecoParts) > 2) {
                     return;
                 }
                 
-                // Check if CPF is required (online payment)
-                // Primeiro verificar se CPF está preenchido e esconder mensagem se estiver
+                // CPF is now optional - remove validation requirement
+                // Just hide/show message based on field state
                 if (cpf && cpf.trim()) {
                     if (cpfRequiredMsg) cpfRequiredMsg.style.display = 'none';
                     document.getElementById('customerCpf').classList.remove('is-invalid');
-                } else if (paymentMethod === 'online' && !cpf) {
-                    if (errorDiv) {
-                        errorDiv.textContent = 'CPF é obrigatório para pagamento online';
-                        errorDiv.style.display = 'block';
-                    }
-                    if (cpfRequiredMsg) cpfRequiredMsg.style.display = 'block';
-                    document.getElementById('customerCpf').classList.add('is-invalid');
-                    document.getElementById('customerCpf').focus();
-                    return;
                 } else {
                     document.getElementById('customerCpf').classList.remove('is-invalid');
                 }
+                
                 // Check delivery type - if pickup, skip step 3 (address) and go to step 4 (payment)
                 const deliveryType = document.getElementById('deliveryTypeSelect').value;
                 if (deliveryType === 'pickup') {
                     mostrarPasso(4);
+                    return;
+                } else {
+                    // Go to address step
+                    mostrarPasso(3);
+                    return;
+                }
+            } else if (fromStep === 2) {
+                // Este passo não é mais usado, mas mantido para compatibilidade
+                const deliveryType = document.getElementById('deliveryTypeSelect').value;
+                if (deliveryType === 'pickup') {
+                    mostrarPasso(4);
+                    return;
+                } else {
+                    mostrarPasso(3);
                     return;
                 }
             } else if (fromStep === 3) {
@@ -2115,9 +3036,10 @@ if (count($enderecoParts) > 2) {
             }
             
             if (fromStep === '4b') {
-                // After choosing online payment method (PIX or Card), go to summary
-                mostrarPasso(6);
-                updateOrderSummary();
+                // After choosing online payment method (PIX or Card), generate invoice directly
+                // Skip summary step and go directly to submit order
+                // CPF is now optional - will try to create payment without it
+                await submitOrder();
                 return;
             }
             
@@ -2164,6 +3086,13 @@ if (count($enderecoParts) > 2) {
         
         function voltarPasso() {
             if (currentCheckoutStep > 1) {
+                // If going back from step 7 (payment), go to step 6 (summary)
+                if (currentCheckoutStep === 7) {
+                    mostrarPasso(6);
+                    updateOrderSummary();
+                    return;
+                }
+                
                 // If going back from step 6 to step 5, or from step 5 to step 4, handle navigation
                 if (currentCheckoutStep === 6) {
                     // Going back from summary - determine which step to go to
@@ -2201,15 +3130,18 @@ if (count($enderecoParts) > 2) {
                     if (trocoField) trocoField.style.display = 'none';
                     mostrarPasso(4);
                 } else if (currentCheckoutStep === 4) {
-                    // Going back from step 4 - check if should go to step 3 (address) or step 2 (customer data)
+                    // Going back from step 4 - check if should go to step 3 (address) or step 1 (customer data)
                     const deliveryType = document.getElementById('deliveryTypeSelect').value;
                     if (deliveryType === 'delivery') {
                         // Go back to step 3 (address)
                         mostrarPasso(3);
                     } else {
-                        // Go back to step 2 (customer data) since pickup skips address
-                        mostrarPasso(2);
+                        // Go back to step 1 (customer data) since pickup skips address
+                        mostrarPasso(1);
                     }
+                } else if (currentCheckoutStep === 3) {
+                    // Going back from step 3 (address) - go to step 1 (customer data)
+                    mostrarPasso(1);
                 } else {
                     // Normal back navigation
                     mostrarPasso(currentCheckoutStep - 1);
@@ -2218,10 +3150,61 @@ if (count($enderecoParts) > 2) {
         }
         
         function closeCheckoutModal() {
+            // Verificar se o checkout foi realmente abandonado (não foi completado)
+            // Se chegou até aqui sem completar, é um abandono
+            if (!checkoutCompleted && currentCheckoutStep > 0 && currentCheckoutStep < 7) {
+                // Mapear nomes das etapas
+                const stepNames = {
+                    1: 'Telefone',
+                    2: 'Dados do Cliente',
+                    3: 'Endereço de Entrega',
+                    4: 'Forma de Pagamento',
+                    '4b': 'Método de Pagamento Online',
+                    5: 'Forma de Pagamento na Entrega',
+                    6: 'Resumo do Pedido',
+                    7: 'Finalizar Pagamento'
+                };
+                
+                const stepName = stepNames[currentCheckoutStep] || `Etapa ${currentCheckoutStep}`;
+                const stepNumber = (currentCheckoutStep === '4b') ? 4.5 : parseFloat(currentCheckoutStep);
+                
+                // Calcular valor total do carrinho
+                const totalValue = cart.reduce((sum, item) => {
+                    return sum + (parseFloat(item.preco_normal || 0) * (item.quantity || 1));
+                }, 0);
+                
+                const totalItems = cart.reduce((sum, item) => sum + (item.quantity || 1), 0);
+                
+                // Preparar itens para o evento
+                const items = cart.map(item => ({
+                    item_id: item.id.toString(),
+                    item_name: item.nome,
+                    price: parseFloat(item.preco_normal || 0),
+                    quantity: item.quantity || 1
+                }));
+                
+                // Disparar evento de checkout abandonado
+                trackPixelEvent('CheckoutAbandoned', {
+                    abandoned_step: currentCheckoutStep.toString(),
+                    step_name: stepName,
+                    step_number: stepNumber,
+                    value: totalValue,
+                    num_items: totalItems,
+                    items: items
+                });
+            }
+            
             const modal = document.getElementById('checkoutModal');
             if (modal) modal.remove();
             currentCheckoutStep = 1;
             clienteData = null;
+            checkoutCompleted = false; // Resetar flag para próximo checkout
+            
+            // Reset customer data fields visibility for next checkout
+            const customerDataFields = document.getElementById('customerDataFields');
+            if (customerDataFields) {
+                customerDataFields.style.display = 'none';
+            }
         }
         
         async function buscarCliente() {
@@ -2249,6 +3232,12 @@ if (count($enderecoParts) > 2) {
                     clienteData = data.cliente;
                     clienteEnderecos = data.enderecos || [];
                     
+                    // Mostrar campos de dados do cliente
+                    const customerDataFields = document.getElementById('customerDataFields');
+                    if (customerDataFields) {
+                        customerDataFields.style.display = 'block';
+                    }
+                    
                     // Preencher campos com dados do cliente (se existirem)
                     document.getElementById('customerName').value = data.cliente.nome && data.cliente.nome !== 'Cliente' ? data.cliente.nome : '';
                     document.getElementById('customerEmail').value = data.cliente.email || '';
@@ -2271,10 +3260,6 @@ if (count($enderecoParts) > 2) {
                     
                     // Atualizar cliente quando nome/email/cpf forem preenchidos
                     setupCustomerDataUpdate();
-                    
-                    setTimeout(() => {
-                        proximoPasso(1);
-                    }, 1000);
                 } else {
                     // Erro ao buscar/criar cliente
                     clienteData = null;
@@ -2426,6 +3411,18 @@ if (count($enderecoParts) > 2) {
         function selectPayment(method) {
             paymentMethod = method;
             document.getElementById('payment' + (method === 'online' ? 'Online' : 'OnDelivery')).checked = true;
+            
+            // Mostrar/esconder botões de pagamento online
+            const onlineButtons = document.getElementById('onlinePaymentButtons');
+            if (onlineButtons) {
+                onlineButtons.style.display = (method === 'online') ? 'block' : 'none';
+            }
+            
+            // Esconder/mostrar botão Continuar
+            const btnContinuar = document.getElementById('btnContinuarStep4');
+            if (btnContinuar) {
+                btnContinuar.style.display = (method === 'online') ? 'none' : 'block';
+            }
             
             // Sempre verificar e esconder mensagem se CPF estiver preenchido
             verificarEesconderMensagemCpf();
@@ -2927,6 +3924,163 @@ if (count($enderecoParts) > 2) {
         // Prevent double submission
         let isSubmittingOrder = false;
         
+        // Função simplificada para finalizar pedido online (PIX ou Cartão)
+        async function finalizarPedidoOnline(paymentType) {
+            // Prevent double submission
+            if (isSubmittingOrder) {
+                console.log('Pedido já está sendo processado, aguarde...');
+                return;
+            }
+            
+            isSubmittingOrder = true;
+            
+            // Obter dados do formulário
+            const customerNameValue = document.getElementById('customerName').value.trim();
+            const customerPhoneValue = document.getElementById('customerPhone').value.trim();
+            const customerEmailValue = document.getElementById('customerEmail').value.trim();
+            const customerCpfValue = document.getElementById('customerCpf').value.trim();
+            
+            // Validar dados básicos
+            if (!customerNameValue || !customerPhoneValue) {
+                alert('Por favor, preencha seus dados primeiro.');
+                isSubmittingOrder = false;
+                return;
+            }
+            
+            // Validar endereço se for delivery
+            const deliveryType = document.getElementById('deliveryTypeSelect').value;
+            let enderecoEntrega = null;
+            
+            if (deliveryType === 'delivery') {
+                const enderecoSelecionado = document.getElementById('enderecoSelecionado').value;
+                
+                if (enderecoSelecionado !== '' && clienteEnderecos[enderecoSelecionado]) {
+                    const endereco = clienteEnderecos[enderecoSelecionado];
+                    const logradouro = endereco.logradouro || '';
+                    const numero = endereco.numero || '';
+                    enderecoEntrega = {
+                        endereco: `${logradouro}${numero ? ', ' + numero : ''}`.trim(),
+                        bairro: endereco.bairro || '',
+                        cidade: endereco.cidade || '',
+                        cep: endereco.cep || '',
+                        estado: endereco.estado || ''
+                    };
+                } else {
+                    const address = document.getElementById('deliveryAddress').value.trim();
+                    const city = document.getElementById('deliveryCity').value.trim();
+                    if (!address || !city) {
+                        alert('Por favor, preencha o endereço de entrega.');
+                        isSubmittingOrder = false;
+                        return;
+                    }
+                    
+                    enderecoEntrega = {
+                        endereco: address,
+                        bairro: document.getElementById('deliveryNeighborhood').value.trim(),
+                        cidade: city,
+                        cep: document.getElementById('deliveryCEP').value.trim(),
+                        estado: document.getElementById('deliveryEstado').value.trim()
+                    };
+                }
+            }
+            
+            const itensDetalhados = cart.map(item => ({
+                id: item.id,
+                quantity: item.quantity,
+                preco: item.preco_normal,
+                observacao: item.observacao || '',
+                ingredientes_adicionados: item.ingredientes_adicionados || [],
+                ingredientes_removidos: item.ingredientes_removidos || []
+            }));
+            
+            const orderData = {
+                filial_id: <?php echo $filialId; ?>,
+                tenant_id: <?php echo $tenantId; ?>,
+                itens: itensDetalhados,
+                tipo_entrega: deliveryType,
+                taxa_entrega: deliveryFee,
+                cliente_nome: customerNameValue,
+                cliente_telefone: customerPhoneValue,
+                cliente_email: customerEmailValue,
+                cliente_cpf: customerCpfValue,
+                cliente_id: clienteData ? clienteData.id : null,
+                endereco_entrega: enderecoEntrega,
+                forma_pagamento: 'online',
+                online_payment_method: paymentType
+            };
+            
+            try {
+                const response = await fetch('mvc/ajax/pedidos_online.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(orderData)
+                });
+                
+                const result = await response.json();
+                
+                console.log('Resultado do pedido:', result);
+                
+                if (result.success) {
+                    // Se tiver payment_url, abrir em nova janela
+                    if (result.payment_url) {
+                        // Abrir URL do Asaas em nova janela
+                        window.open(result.payment_url, '_blank', 'width=800,height=600');
+                        
+                        // Fechar modal e limpar carrinho
+                        checkoutCompleted = true;
+                        cart = [];
+                        updateCart();
+                        closeCheckoutModal();
+                        
+                        // Mostrar mensagem de sucesso
+                        if (typeof Swal !== 'undefined') {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Pedido Criado!',
+                                text: 'Você será redirecionado para a página de pagamento. Após o pagamento, seu pedido será confirmado.',
+                                confirmButtonText: 'OK'
+                            });
+                        } else {
+                            alert('Pedido criado com sucesso! Você será redirecionado para a página de pagamento.');
+                        }
+                        
+                        // Iniciar verificação de status do pagamento
+                        if (result.pedido_id) {
+                            setupPaymentStatusCheck(result.pedido_id);
+                        }
+                    } else {
+                        // Pedido criado mas sem URL de pagamento (pode ser que o pagamento foi processado diretamente)
+                        checkoutCompleted = true;
+                        cart = [];
+                        updateCart();
+                        closeCheckoutModal();
+                        
+                        if (typeof Swal !== 'undefined') {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Pedido Criado!',
+                                text: 'Seu pedido foi criado com sucesso!',
+                                confirmButtonText: 'OK'
+                            });
+                        } else {
+                            alert('Pedido criado com sucesso!');
+                        }
+                    }
+                } else {
+                    console.error('Erro ao criar pedido:', result);
+                    alert('Erro ao criar pedido: ' + (result.message || 'Erro desconhecido'));
+                    isSubmittingOrder = false;
+                }
+            } catch (error) {
+                console.error('Erro ao finalizar pedido:', error);
+                console.error('Stack trace:', error.stack);
+                alert('Erro ao processar pedido. Por favor, tente novamente.');
+                isSubmittingOrder = false;
+            }
+        }
+        
         async function submitOrder() {
             // Prevent double submission
             if (isSubmittingOrder) {
@@ -2972,42 +4126,20 @@ if (count($enderecoParts) > 2) {
                     errorDiv.textContent = 'Por favor, preencha nome e telefone.';
                     errorDiv.style.display = 'block';
                 }
-                // Go back to step 2 if not already there
-                if (document.getElementById('checkoutStep2').style.display === 'none') {
-                    proximoPasso(1);
+                // Go back to step 1 if not already there
+                const customerDataFields = document.getElementById('customerDataFields');
+                if (!customerDataFields || customerDataFields.style.display === 'none') {
+                    mostrarPasso(1);
                 }
                 return;
             }
             
-            // Verificar e esconder mensagem se CPF estiver preenchido
+            // CPF is now optional - no validation required
+            // Just ensure field is not marked as invalid
             if (customerCpf && customerCpf.trim()) {
                 if (cpfRequiredMsg) cpfRequiredMsg.style.display = 'none';
                 document.getElementById('customerCpf').classList.remove('is-invalid');
-            } else if (paymentMethod === 'online' && !customerCpf) {
-                // Re-enable button on validation error
-                isSubmittingOrder = false;
-                if (submitButton) {
-                    submitButton.disabled = false;
-                    submitButton.innerHTML = originalButtonText;
-                    submitButton.style.opacity = '1';
-                    submitButton.style.cursor = 'pointer';
-                }
-                
-                // CPF is required for online payment
-                if (errorDiv) {
-                    errorDiv.textContent = 'CPF é obrigatório para pagamento online. Por favor, preencha o CPF.';
-                    errorDiv.style.display = 'block';
-                }
-                if (cpfRequiredMsg) cpfRequiredMsg.style.display = 'block';
-                // Go back to step 2 if not already there
-                if (document.getElementById('checkoutStep2').style.display === 'none') {
-                    proximoPasso(1);
-                }
-                document.getElementById('customerCpf').focus();
-                document.getElementById('customerCpf').classList.add('is-invalid');
-                return;
             } else {
-                // Remove invalid class if CPF is filled
                 document.getElementById('customerCpf').classList.remove('is-invalid');
             }
             
@@ -3136,19 +4268,104 @@ if (count($enderecoParts) > 2) {
                 const result = await response.json();
                 
                 if (result.success) {
+                    // Marcar checkout como completado para evitar disparar evento de abandono
+                    checkoutCompleted = true;
+                    
+                    // Calcular valor total do pedido para evento de conversão
+                    const totalValue = cart.reduce((sum, item) => {
+                        return sum + (parseFloat(item.preco_normal || 0) * (item.quantity || 1));
+                    }, 0) + (parseFloat(deliveryFee) || 0);
+                    
+                    const totalItems = cart.reduce((sum, item) => sum + (item.quantity || 1), 0);
+                    
+                    // Preparar itens para evento de conversão
+                    const purchaseItems = cart.map(item => ({
+                        item_id: item.id.toString(),
+                        item_name: item.nome,
+                        price: parseFloat(item.preco_normal || 0),
+                        quantity: item.quantity || 1
+                    }));
+                    
+                    // Disparar evento Purchase do pixel
+                    trackPixelEvent('Purchase', {
+                        transaction_id: result.pedido_id ? result.pedido_id.toString() : '',
+                        value: totalValue,
+                        num_items: totalItems,
+                        contents: purchaseItems
+                    });
+                    
                     if (paymentMethod === 'online') {
-                        if (result.payment_url) {
-                            // Payment created successfully - clear cart before redirecting
-                            cart = [];
-                            updateCart();
-                            closeCheckoutModal();
-                            toggleSidebar();
-                            // Save order ID to localStorage so we can show success message when user returns
+                        console.log('Payment response:', result);
+                        
+                        if (result.payment_id) {
+                            // Payment created successfully - show transparent checkout
+                            // Save order ID to localStorage
                             if (result.pedido_id) {
                                 localStorage.setItem('last_order_id', result.pedido_id);
                             }
-                            // Redirect to payment page
-                            window.location.href = result.payment_url;
+                            
+                            // Show payment step
+                            mostrarPasso(7);
+                            
+                            // Show appropriate payment method
+                            if (result.billing_type === 'PIX') {
+                                console.log('Processing PIX payment, payment_id:', result.payment_id);
+                                
+                                // Show PIX payment
+                                const pixContainer = document.getElementById('pixPaymentContainer');
+                                const cardContainer = document.getElementById('creditCardPaymentContainer');
+                                
+                                if (pixContainer) pixContainer.style.display = 'block';
+                                if (cardContainer) cardContainer.style.display = 'none';
+                                
+                                // Load PIX QR code from response if available
+                                let hasQrCode = false;
+                                if (result.pix_qr_code) {
+                                    console.log('QR code from response:', result.pix_qr_code.substring(0, 50) + '...');
+                                    const qrImg = document.getElementById('pixQrCodeImage');
+                                    if (qrImg) {
+                                        qrImg.src = result.pix_qr_code;
+                                        qrImg.style.display = 'block';
+                                        hasQrCode = true;
+                                    }
+                                }
+                                
+                                // Set copy-paste code from response if available
+                                if (result.pix_copy_paste) {
+                                    console.log('PIX copy-paste from response');
+                                    const pixInput = document.getElementById('pixCopyPaste');
+                                    if (pixInput) {
+                                        pixInput.value = result.pix_copy_paste;
+                                        hasQrCode = true;
+                                    }
+                                }
+                                
+            // Always try to fetch from API (in case it wasn't in response or to get latest)
+            if (result.payment_id) {
+                console.log('Fetching QR code from API...');
+                // Wait longer for Asaas to generate QR code (can take 3-5 seconds)
+                setTimeout(() => {
+                    carregarQrCodePix(result.payment_id);
+                }, 3000); // Increased from 1s to 3s
+            }
+                                
+                                // Start polling for payment status
+                                if (result.pedido_id) {
+                                    setupPaymentStatusCheck(result.pedido_id);
+                                }
+                            } else if (result.billing_type === 'CREDIT_CARD') {
+                                // Show credit card payment option
+                                document.getElementById('pixPaymentContainer').style.display = 'none';
+                                document.getElementById('creditCardPaymentContainer').style.display = 'block';
+                                
+                                // Store payment URL for credit card
+                                window.asaasPaymentUrl = result.payment_url;
+                            } else if (result.payment_url) {
+                                // Fallback: if we have payment_url but no billing_type, show credit card option
+                                document.getElementById('pixPaymentContainer').style.display = 'none';
+                                document.getElementById('creditCardPaymentContainer').style.display = 'block';
+                                window.asaasPaymentUrl = result.payment_url;
+                            }
                         } else if (result.payment_error) {
                             // Payment failed but order was created - show error in modal
                             // Note: Button stays disabled because order was created, we're just showing payment error
@@ -3181,6 +4398,7 @@ if (count($enderecoParts) > 2) {
                         }
                     } else {
                         // Payment is not online (on_delivery) - success
+                        // O evento Purchase já foi disparado acima antes do if
                         closeCheckoutModal();
                         toggleSidebar();
                         cart = [];
@@ -3257,6 +4475,240 @@ if (count($enderecoParts) > 2) {
             }
         }
         
+        // Setup payment status check for inline checkout
+        function setupPaymentStatusCheck(pedidoId) {
+            if (!pedidoId) return;
+            
+            // Poll for payment status every 3 seconds
+            const statusInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`mvc/ajax/pedidos_online.php?action=check_payment_status&pedido_id=${pedidoId}`);
+                    const result = await response.json();
+                    
+                    if (result.success && result.status === 'paid') {
+                        // Payment completed
+                        clearInterval(statusInterval);
+                        
+                        // Clear cart
+                        cart = [];
+                        updateCart();
+                        
+                        // Close modal and show success
+                        closeCheckoutModal();
+                        toggleSidebar();
+                        
+                        // Show success message
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Pagamento Confirmado!',
+                            text: 'Seu pedido foi confirmado e está sendo preparado.',
+                            confirmButtonText: 'OK'
+                        });
+                    } else if (result.success && result.status === 'cancelled') {
+                        // Payment cancelled
+                        clearInterval(statusInterval);
+                        Swal.fire({
+                            icon: 'info',
+                            title: 'Pagamento Cancelado',
+                            text: 'O pagamento foi cancelado. Você pode tentar novamente.',
+                            confirmButtonText: 'OK'
+                        });
+                    }
+                } catch (error) {
+                    console.error('Erro ao verificar status do pagamento:', error);
+                }
+            }, 3000);
+            
+            // Stop checking after 10 minutes
+            setTimeout(() => {
+                clearInterval(statusInterval);
+            }, 600000);
+        }
+        
+        // Voltar para resumo do pedido
+        function voltarParaResumo() {
+            mostrarPasso(6);
+            updateOrderSummary();
+        }
+        
+        // Carregar QR Code do PIX
+        async function carregarQrCodePix(paymentId) {
+            if (!paymentId) {
+                console.error('Payment ID não fornecido para carregar QR code');
+                return;
+            }
+            
+            console.log('Carregando QR code do PIX para payment_id:', paymentId);
+            
+            const tenantId = <?php echo $tenantId; ?>;
+            const filialId = <?php echo $filialId; ?>;
+            
+            // Try multiple times as Asaas may take a moment to generate QR code
+            let attempts = 0;
+            const maxAttempts = 5;
+            
+            const tryLoad = async () => {
+                try {
+                    const url = `mvc/ajax/pedidos_online.php?action=get_pix_qrcode&payment_id=${paymentId}&tenant_id=${tenantId}&filial_id=${filialId}`;
+                    console.log('Fetching QR code from:', url);
+                    
+                    const response = await fetch(url);
+                    const result = await response.json();
+                    
+                    console.log('QR code response:', result);
+                    
+                    if (result.success) {
+                        // Check if QR code is available
+                        if (result.pix_qr_code || result.pix_copy_paste) {
+                            if (result.pix_qr_code) {
+                                const qrImg = document.getElementById('pixQrCodeImage');
+                                if (qrImg) {
+                                    qrImg.src = result.pix_qr_code;
+                                    qrImg.style.display = 'block';
+                                    console.log('QR code image atualizado');
+                                }
+                            }
+                            
+                            if (result.pix_copy_paste) {
+                                const pixInput = document.getElementById('pixCopyPaste');
+                                if (pixInput) {
+                                    pixInput.value = result.pix_copy_paste;
+                                    console.log('PIX copy-paste atualizado');
+                                }
+                            }
+                            
+                            // If we got at least one, we're done
+                            if (result.pix_qr_code || result.pix_copy_paste) {
+                                console.log('QR code carregado com sucesso!');
+                                return true;
+                            }
+                        } else {
+                            // QR code not ready yet
+                            if (result.not_ready_yet) {
+                                console.log('QR code ainda não disponível no Asaas, tentando novamente...');
+                            } else {
+                                console.log('QR code parcialmente carregado:', {
+                                    has_qr: !!result.pix_qr_code,
+                                    has_copy_paste: !!result.pix_copy_paste
+                                });
+                            }
+                        }
+                    } else {
+                        console.error('Erro ao buscar QR code:', result.message);
+                    }
+                    
+                    // If not successful and we have attempts left, try again
+                    if (attempts < maxAttempts) {
+                        attempts++;
+                        console.log(`Tentativa ${attempts} de ${maxAttempts} - QR code ainda não disponível, tentando novamente em 2 segundos...`);
+                        setTimeout(tryLoad, 2000);
+                    } else {
+                        console.error('Não foi possível carregar QR code após', maxAttempts, 'tentativas');
+                        // Show error message
+                        const alertDiv = document.querySelector('#pixPaymentContainer .alert-info');
+                        if (alertDiv) {
+                            alertDiv.className = 'alert alert-warning';
+                            alertDiv.innerHTML = '<i class="fas fa-exclamation-triangle"></i> QR Code não disponível. Por favor, entre em contato conosco.';
+                        }
+                    }
+                } catch (error) {
+                    console.error('Erro ao carregar QR Code:', error);
+                    if (attempts < maxAttempts) {
+                        attempts++;
+                        setTimeout(tryLoad, 2000);
+                    } else {
+                        const alertDiv = document.querySelector('#pixPaymentContainer .alert-info');
+                        if (alertDiv) {
+                            alertDiv.className = 'alert alert-danger';
+                            alertDiv.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Erro ao carregar QR Code. Por favor, entre em contato conosco.';
+                        }
+                    }
+                }
+            };
+            
+            // Start trying
+            tryLoad();
+        }
+        
+        // Copiar código PIX
+        function copiarPix() {
+            const pixInput = document.getElementById('pixCopyPaste');
+            if (!pixInput || !pixInput.value) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Erro',
+                    text: 'Código PIX não disponível'
+                });
+                return;
+            }
+            
+            pixInput.select();
+            pixInput.setSelectionRange(0, 99999); // For mobile devices
+            
+            try {
+                document.execCommand('copy');
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Código PIX copiado!',
+                    text: 'Cole no aplicativo do seu banco para pagar',
+                    timer: 2000,
+                    showConfirmButton: false
+                });
+            } catch (err) {
+                // Fallback for modern browsers
+                navigator.clipboard.writeText(pixInput.value).then(() => {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Código PIX copiado!',
+                        text: 'Cole no aplicativo do seu banco para pagar',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                }).catch(() => {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Erro',
+                        text: 'Não foi possível copiar o código PIX'
+                    });
+                });
+            }
+        }
+        
+        // Abrir pagamento de cartão
+        function abrirPagamentoCartao() {
+            if (window.asaasPaymentUrl) {
+                // Open in new window
+                const paymentWindow = window.open(window.asaasPaymentUrl, 'AsaasPayment', 'width=800,height=600');
+                
+                if (!paymentWindow) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Popup bloqueado',
+                        text: 'Por favor, permita popups para este site e tente novamente'
+                    });
+                    return;
+                }
+                
+                // Monitor window for payment completion
+                const checkWindow = setInterval(() => {
+                    if (paymentWindow.closed) {
+                        clearInterval(checkWindow);
+                        // Check payment status
+                        const pedidoId = localStorage.getItem('last_order_id');
+                        if (pedidoId) {
+                            setupPaymentStatusCheck(pedidoId);
+                        }
+                    }
+                }, 1000);
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Erro',
+                    text: 'URL de pagamento não disponível'
+                });
+            }
+        }
+        
         // Reservation form
         document.getElementById('reservationForm').addEventListener('submit', function(e) {
             e.preventDefault();
@@ -3275,10 +4727,19 @@ if (count($enderecoParts) > 2) {
         updateCartUI();
         
         // Add click event to product cards to add directly to cart
+        // Only for cards that don't have their own event listener (original products container)
         document.addEventListener('click', function(e) {
             const productCard = e.target.closest('.product-card');
             // Only trigger if clicking on the card itself, not on buttons or their children
-            if (productCard && !e.target.closest('button')) {
+            // Skip if the event was already handled (stopPropagation was called)
+            if (productCard && !e.target.closest('button') && !e.defaultPrevented) {
+                // Check if this card is in the original products container (not category products)
+                const isInCategoryProducts = productCard.closest('#categoryProductsContainer');
+                if (isInCategoryProducts) {
+                    // Skip - this card has its own listener
+                    return;
+                }
+                
                 // Get product data from data attributes
                 const productId = productCard.getAttribute('data-product-id');
                 const productDataStr = productCard.getAttribute('data-product-data');
@@ -3286,6 +4747,18 @@ if (count($enderecoParts) > 2) {
                 if (productId && productDataStr) {
                     try {
                         const produtoData = JSON.parse(productDataStr);
+                        
+                        // Disparar evento ViewContent do pixel antes de adicionar ao carrinho
+                        const productPrice = parseFloat(produtoData.preco_normal) || 0;
+                        const productCategory = produtoData.categoria_nome || 'Geral';
+                        
+                        trackPixelEvent('ViewContent', {
+                            content_name: produtoData.nome,
+                            content_category: productCategory,
+                            content_ids: [produtoData.id.toString()],
+                            value: productPrice
+                        });
+                        
                         // Add directly to cart when clicking on the card
                         addToCart(produtoData);
                     } catch (error) {
@@ -3293,6 +4766,190 @@ if (count($enderecoParts) > 2) {
                     }
                 }
             }
+        });
+        
+        // ============================================
+        // CAROUSEL FUNCTIONS
+        // ============================================
+        function scrollCarousel(carouselId, direction) {
+            const carousel = document.getElementById('carousel' + (carouselId === 'maisVendidos' ? 'MaisVendidos' : 'Promocoes'));
+            if (!carousel) return;
+            
+            const track = carousel.querySelector('.carousel-track');
+            if (!track) return;
+            
+            const scrollAmount = 220; // Width of item + gap
+            const currentScroll = track.scrollLeft;
+            const newScroll = currentScroll + (direction * scrollAmount);
+            
+            track.scrollTo({
+                left: newScroll,
+                behavior: 'smooth'
+            });
+        }
+        
+        // ============================================
+        // CATEGORY NAVIGATION FUNCTIONS
+        // ============================================
+        const produtosPorCategoriaData = <?php echo json_encode($produtosPorCategoria, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;
+        
+        function openCategory(categoriaNome) {
+            console.log('openCategory called with:', categoriaNome);
+            
+            // Hide categories grid
+            const categoriesGrid = document.getElementById('categoriesGrid');
+            const categoryProductsSection = document.getElementById('categoryProductsSection');
+            const categoryProductsTitle = document.getElementById('categoryProductsTitle');
+            const categoryProductsContainer = document.getElementById('categoryProductsContainer');
+            
+            if (!categoriesGrid || !categoryProductsSection || !categoryProductsTitle || !categoryProductsContainer) {
+                console.error('Required elements not found');
+                return;
+            }
+            
+            // Hide carousels and categories
+            document.querySelectorAll('.carousel-section').forEach(section => {
+                section.style.display = 'none';
+            });
+            categoriesGrid.style.display = 'none';
+            
+            // Show category products section
+            categoryProductsSection.style.display = 'block';
+            categoryProductsTitle.textContent = categoriaNome;
+            
+            // Clear container
+            categoryProductsContainer.innerHTML = '';
+            
+            // Get products for this category
+            console.log('produtosPorCategoriaData:', produtosPorCategoriaData);
+            const produtos = produtosPorCategoriaData[categoriaNome] || [];
+            console.log('Products for category:', produtos);
+            
+            // Render products
+            if (produtos.length === 0) {
+                categoryProductsContainer.innerHTML = '<p class="text-center text-muted mt-4">Nenhum produto encontrado nesta categoria.</p>';
+                return;
+            }
+            
+            produtos.forEach(produto => {
+                try {
+                    const produtoCard = document.createElement('div');
+                    produtoCard.className = 'product-card';
+                    produtoCard.setAttribute('data-product-id', produto.id);
+                    produtoCard.setAttribute('data-product-data', JSON.stringify(produto));
+                    produtoCard.style.cursor = 'pointer';
+                    
+                    const produtoNome = (produto.nome || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                    const produtoImagem = (produto.imagem || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                    const produtoPreco = parseFloat(produto.preco_normal || 0).toFixed(2).replace('.', ',');
+                    const produtoDataEscaped = JSON.stringify(produto).replace(/\\/g, '\\\\').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                    
+                    const imagemHtml = produtoImagem 
+                        ? `<img src="${produtoImagem}" alt="${produtoNome}" class="product-image" onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                           <div class="product-image" style="display: none; align-items: center; justify-content: center; background: #f5f5f5;">
+                               <i class="fas fa-image" style="font-size: 3rem; color: #ccc;"></i>
+                           </div>`
+                        : `<div class="product-image" style="display: flex; align-items: center; justify-content: center; background: #f5f5f5;">
+                               <i class="fas fa-image" style="font-size: 3rem; color: #ccc;"></i>
+                           </div>`;
+                    
+                    produtoCard.innerHTML = `
+                        ${imagemHtml}
+                        <div class="product-info">
+                            <div class="product-name">${produtoNome}</div>
+                            <div class="product-price">R$ ${produtoPreco}</div>
+                            <button class="btn btn-primary btn-sm w-100 mt-2" onclick="event.stopPropagation(); personalizarProduto(${produto.id}, ${produtoDataEscaped})">
+                                <i class="fas fa-edit"></i> Editar
+                            </button>
+                        </div>
+                    `;
+                    
+                    // Add click event to add to cart (stopPropagation to prevent duplicate)
+                    produtoCard.addEventListener('click', function(e) {
+                        e.stopPropagation(); // Prevent the global listener from firing
+                        if (!e.target.closest('button')) {
+                            addToCart(produto);
+                        }
+                    });
+                    
+                    categoryProductsContainer.appendChild(produtoCard);
+                } catch (error) {
+                    console.error('Error rendering product:', error, produto);
+                }
+            });
+            
+            // Scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        
+        function closeCategory() {
+            const categoriesGrid = document.getElementById('categoriesGrid');
+            const categoryProductsSection = document.getElementById('categoryProductsSection');
+            
+            if (!categoriesGrid || !categoryProductsSection) return;
+            
+            // Show carousels and categories
+            document.querySelectorAll('.carousel-section').forEach(section => {
+                section.style.display = 'block';
+            });
+            categoriesGrid.style.display = 'grid';
+            
+            // Hide category products section
+            categoryProductsSection.style.display = 'none';
+            
+            // Scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        
+        // Add click events to carousel product cards and category cards
+        document.addEventListener('DOMContentLoaded', function() {
+            // Mais vendidos carousel
+            const maisVendidosCards = document.querySelectorAll('#carouselMaisVendidos .product-card-carousel');
+            maisVendidosCards.forEach(card => {
+                card.addEventListener('click', function(e) {
+                    e.stopPropagation(); // Prevent duplicate events
+                    const productDataStr = card.getAttribute('data-product-data');
+                    if (productDataStr) {
+                        try {
+                            const produtoData = JSON.parse(productDataStr);
+                            addToCart(produtoData);
+                        } catch (error) {
+                            console.error('Error parsing product data:', error);
+                        }
+                    }
+                });
+            });
+            
+            // Promoções carousel
+            const promocoesCards = document.querySelectorAll('#carouselPromocoes .product-card-carousel');
+            promocoesCards.forEach(card => {
+                card.addEventListener('click', function(e) {
+                    e.stopPropagation(); // Prevent duplicate events
+                    const productDataStr = card.getAttribute('data-product-data');
+                    if (productDataStr) {
+                        try {
+                            const produtoData = JSON.parse(productDataStr);
+                            addToCart(produtoData);
+                        } catch (error) {
+                            console.error('Error parsing product data:', error);
+                        }
+                    }
+                });
+            });
+            
+            // Category cards - add event listener as backup
+            const categoryCards = document.querySelectorAll('.category-card');
+            categoryCards.forEach(card => {
+                card.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const categoriaNome = card.getAttribute('data-category-name');
+                    if (categoriaNome) {
+                        console.log('Category card clicked:', categoriaNome);
+                        openCategory(categoriaNome);
+                    }
+                });
+            });
         });
     </script>
 </body>

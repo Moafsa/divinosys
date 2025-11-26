@@ -458,7 +458,7 @@ try {
                 throw new \Exception('ID da mesa é obrigatório.');
             }
 
-            // Verificar se há pedidos na mesa
+            // Verificar se há pedidos na mesa (excluindo quitados)
             $pedidosMesa = $db->fetchAll(
                 "SELECT idpedido, valor_total, saldo_devedor, status, status_pagamento FROM pedido WHERE idmesa = ? AND tenant_id = ? AND filial_id = ?",
                 [$mesaId, $tenantId, $filialId]
@@ -469,11 +469,13 @@ try {
             error_log('PAGAMENTOS_PARCIAIS: Pedidos encontrados na mesa: ' . json_encode($pedidosMesa));
 
             // Calcular o saldo devedor total da mesa - FIADO conta como pagamento normal
+            // Excluir pedidos quitados e finalizados/cancelados
             $saldoDevedorMesa = 0;
             $valorTotalMesa = 0;
             
             foreach ($pedidosMesa as $pedido) {
-                if (!in_array($pedido['status'], ['Finalizado', 'Cancelado'])) {
+                // Excluir pedidos finalizados, cancelados ou quitados
+                if (!in_array($pedido['status'], ['Finalizado', 'Cancelado']) && $pedido['status_pagamento'] != 'quitado') {
                     $valorTotalMesa += (float)($pedido['valor_total'] ?? 0);
                     
                     // Usar o saldo_devedor do banco que já considera todos os pagamentos (incluindo FIADO)

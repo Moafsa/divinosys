@@ -19,7 +19,7 @@ CREATE TABLE tenants (
     status VARCHAR(20) DEFAULT 'ativo' CHECK (status IN ('ativo', 'inativo', 'suspenso')),
     plano_id INTEGER,
     -- Asaas Integration
-    asaas_api_key VARCHAR(255),
+    asaas_api_key VARCHAR(500),
     asaas_api_url VARCHAR(255) DEFAULT 'https://sandbox.asaas.com/api/v3',
     asaas_customer_id VARCHAR(100),
     asaas_webhook_token VARCHAR(255),
@@ -65,7 +65,7 @@ CREATE TABLE filiais (
     status VARCHAR(20) DEFAULT 'ativo' CHECK (status IN ('ativo', 'inativo', 'suspenso')),
     configuracao JSONB,
     -- Asaas Integration
-    asaas_api_key VARCHAR(255),
+    asaas_api_key VARCHAR(500),
     asaas_customer_id VARCHAR(100),
     asaas_enabled BOOLEAN DEFAULT false,
     asaas_fiscal_info JSONB,

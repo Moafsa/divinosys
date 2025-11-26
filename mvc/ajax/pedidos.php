@@ -198,13 +198,13 @@ try {
                 $usuarioData['telefone'] = $telefoneUsuario['telefone'] ?? '';
             }
             
-            // Criar pedido
+            // Criar pedido - usando timezone do estabelecimento
             $pedidoId = $db->insert('pedido', [
                 'idmesa' => $mesaId,
                 'cliente' => $clienteId ? 'Cliente Cadastrado' : 'Cliente Mesa',
                 'usuario_global_id' => $clienteId,
-                'data' => date('Y-m-d'),
-                'hora_pedido' => date('H:i:s'),
+                'data' => \System\TimeHelper::today($filialId),
+                'hora_pedido' => \System\TimeHelper::currentTime($filialId),
                 'valor_total' => $valorTotal,
                 'valor_pago' => 0.00,
                 'saldo_devedor' => $valorTotal,
@@ -775,9 +775,23 @@ try {
                 [$pedidoId, $tenantId]
             );
             
+            $novoValorTotal = (float) ($totalPedido['total'] ?? 0);
+            
+            // Buscar valor_pago atual do pedido para recalcular saldo_devedor
+            $pedidoAtual = $db->fetch(
+                "SELECT valor_pago FROM pedido WHERE idpedido = ? AND tenant_id = ?",
+                [$pedidoId, $tenantId]
+            );
+            
+            $valorPago = (float) ($pedidoAtual['valor_pago'] ?? 0);
+            $novoSaldoDevedor = max(0, $novoValorTotal - $valorPago);
+            
             $db->update(
                 'pedido',
-                ['valor_total' => $totalPedido['total']],
+                [
+                    'valor_total' => $novoValorTotal,
+                    'saldo_devedor' => $novoSaldoDevedor
+                ],
                 'idpedido = ? AND tenant_id = ?',
                 [$pedidoId, $tenantId]
             );
@@ -813,11 +827,23 @@ try {
                 [$pedidoId, $tenantId]
             );
             
-            $novoTotal = $totalPedido['total'] ?? 0;
+            $novoTotal = (float) ($totalPedido['total'] ?? 0);
+            
+            // Buscar valor_pago atual do pedido para recalcular saldo_devedor
+            $pedidoAtual = $db->fetch(
+                "SELECT valor_pago FROM pedido WHERE idpedido = ? AND tenant_id = ?",
+                [$pedidoId, $tenantId]
+            );
+            
+            $valorPago = (float) ($pedidoAtual['valor_pago'] ?? 0);
+            $novoSaldoDevedor = max(0, $novoTotal - $valorPago);
             
             $db->update(
                 'pedido',
-                ['valor_total' => $novoTotal],
+                [
+                    'valor_total' => $novoTotal,
+                    'saldo_devedor' => $novoSaldoDevedor
+                ],
                 'idpedido = ? AND tenant_id = ?',
                 [$pedidoId, $tenantId]
             );
@@ -868,11 +894,25 @@ try {
                 $filialId = $filial_padrao ? $filial_padrao['id'] : null;
             }
             
+            // Buscar pedido atual para obter valor_pago
+            $pedidoAtual = $db->fetch(
+                "SELECT valor_pago FROM pedido WHERE idpedido = ? AND tenant_id = ? AND filial_id = ?",
+                [$pedidoId, $tenantId, $filialId]
+            );
+            
+            if (!$pedidoAtual) {
+                throw new \Exception('Pedido não encontrado');
+            }
+            
             // Calcular novo valor total
             $valorTotal = 0;
             foreach ($itens as $item) {
                 $valorTotal += $item['preco'] * $item['quantidade'];
             }
+            
+            // Calcular novo saldo_devedor baseado no novo valor_total e valor_pago atual
+            $valorPago = (float) ($pedidoAtual['valor_pago'] ?? 0);
+            $novoSaldoDevedor = max(0, $valorTotal - $valorPago);
             
             // Buscar dados do usuário atual para atualizar no pedido
             $usuarioId = $session->getUserId() ?? 1;
@@ -894,12 +934,13 @@ try {
                 $usuarioData['telefone'] = $telefoneUsuario['telefone'] ?? '';
             }
             
-            // Atualizar dados do pedido
+            // Atualizar dados do pedido incluindo saldo_devedor
             $db->update(
                 'pedido',
                 [
                     'idmesa' => $mesaId,
                     'valor_total' => $valorTotal,
+                    'saldo_devedor' => $novoSaldoDevedor,
                     'observacao' => $observacao,
                     'usuario_id' => $usuarioId
                 ],

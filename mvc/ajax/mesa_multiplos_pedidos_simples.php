@@ -269,17 +269,21 @@ try {
                 throw new \Exception('Dados incompletos para fechar a mesa');
             }
             
-            // Buscar todos os pedidos ativos da mesa
+            // Buscar todos os pedidos ativos da mesa (excluindo finalizados, cancelados e quitados)
             $pedidos = $db->fetchAll(
-                'SELECT * FROM pedido WHERE idmesa = ? AND status NOT IN (?, ?) AND tenant_id = ? AND filial_id = ?',
-                [$mesaId, 'Finalizado', 'Cancelado', $tenantId, $filialId]
+                'SELECT * FROM pedido WHERE idmesa = ? AND status NOT IN (?, ?) AND status_pagamento != ? AND tenant_id = ? AND filial_id = ?',
+                [$mesaId, 'Finalizado', 'Cancelado', 'quitado', $tenantId, $filialId]
             );
             
             if (empty($pedidos)) {
                 throw new \Exception('Nenhum pedido ativo encontrado na mesa');
             }
             
-            $valorTotal = array_sum(array_column($pedidos, 'valor_total'));
+            // Usar saldo_devedor em vez de valor_total
+            $valorTotal = 0;
+            foreach ($pedidos as $pedido) {
+                $valorTotal += (float)($pedido['saldo_devedor'] ?? $pedido['valor_total']);
+            }
             
             // Fechar todos os pedidos da mesa
             foreach ($pedidos as $pedido) {

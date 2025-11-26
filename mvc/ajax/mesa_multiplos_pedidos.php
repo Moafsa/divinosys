@@ -334,10 +334,10 @@ try {
                 throw new \Exception('Mesa e forma de pagamento são obrigatórios');
             }
             
-            // Get all open pedidos for this mesa (excluindo entregues e quitados)
+            // Get all open pedidos for this mesa (excluindo finalizados, cancelados e quitados)
             $pedidos = $db->fetchAll(
-                'SELECT * FROM pedido WHERE idmesa = ? AND status NOT IN (?, ?) AND tenant_id = ? AND filial_id = ? AND NOT (status = ? AND status_pagamento = ?)',
-                [$mesaId, 'Finalizado', 'Cancelado', $tenantId, $filialId, 'Entregue', 'quitado']
+                'SELECT * FROM pedido WHERE idmesa = ? AND status NOT IN (?, ?) AND status_pagamento != ? AND tenant_id = ? AND filial_id = ?',
+                [$mesaId, 'Finalizado', 'Cancelado', 'quitado', $tenantId, $filialId]
             );
             
             if (empty($pedidos)) {
@@ -347,9 +347,9 @@ try {
             $valorTotal = 0;
             $valorPorPessoa = 0;
             
-            // Close all pedidos
+            // Close all pedidos - usar saldo_devedor em vez de valor_total
             foreach ($pedidos as $pedido) {
-                $valorTotal += $pedido['valor_total'];
+                $valorTotal += (float)($pedido['saldo_devedor'] ?? $pedido['valor_total']);
                 
                 $db->update(
                     'pedido',
@@ -440,17 +440,21 @@ try {
                 throw new \Exception('Dados incompletos para fechar a mesa');
             }
             
-            // Buscar todos os pedidos ativos da mesa (excluindo entregues e quitados)
+            // Buscar todos os pedidos ativos da mesa (excluindo finalizados, cancelados e quitados)
             $pedidos = $db->fetchAll(
-                'SELECT * FROM pedido WHERE idmesa = ? AND status NOT IN (?, ?) AND tenant_id = ? AND filial_id = ? AND NOT (status = ? AND status_pagamento = ?)',
-                [$mesaId, 'Finalizado', 'Cancelado', $tenantId, $filialId, 'Entregue', 'quitado']
+                'SELECT * FROM pedido WHERE idmesa = ? AND status NOT IN (?, ?) AND status_pagamento != ? AND tenant_id = ? AND filial_id = ?',
+                [$mesaId, 'Finalizado', 'Cancelado', 'quitado', $tenantId, $filialId]
             );
             
             if (empty($pedidos)) {
                 throw new \Exception('Nenhum pedido ativo encontrado na mesa');
             }
             
-            $valorTotal = array_sum(array_column($pedidos, 'valor_total'));
+            // Usar saldo_devedor em vez de valor_total
+            $valorTotal = 0;
+            foreach ($pedidos as $pedido) {
+                $valorTotal += (float)($pedido['saldo_devedor'] ?? $pedido['valor_total']);
+            }
             $observacao = $dadosFechamento['observacao'] ?? '';
             
             // Processar fechamento baseado no tipo

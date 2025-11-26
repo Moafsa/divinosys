@@ -108,9 +108,11 @@ foreach ($pedidos as $pedido) {
     }
 }
 
-// Get stats for today only
-$pedidos_hoje = array_filter($pedidos, function($pedido) {
-    return $pedido['data'] === date('Y-m-d');
+// Get stats for today only - usando timezone do estabelecimento
+$filialId = $session->getFilialId();
+$hoje = \System\TimeHelper::today($filialId);
+$pedidos_hoje = array_filter($pedidos, function($pedido) use ($hoje) {
+    return $pedido['data'] === $hoje;
 });
 
 $pedidos_por_status_hoje = [
