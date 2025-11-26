@@ -642,13 +642,18 @@ if (count($enderecoParts) > 2) {
             position: relative;
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 1rem;
+            width: 100%;
         }
         
         .carousel-wrapper {
             flex: 1;
             overflow: hidden;
             position: relative;
+            display: flex;
+            justify-content: center;
+            max-width: 100%;
         }
         
         .carousel-track {
@@ -662,7 +667,13 @@ if (count($enderecoParts) > 2) {
             width: 100%;
             min-height: 250px;
             justify-content: center;
+            align-items: center;
             padding: 0 2rem;
+        }
+        
+        /* Centralizar quando há poucos itens */
+        .carousel-track:not(:has(.carousel-item:nth-child(4))) {
+            justify-content: center;
         }
         
         .carousel-track::-webkit-scrollbar {
