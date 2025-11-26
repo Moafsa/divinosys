@@ -94,35 +94,62 @@ if ($hasExibirCardapioColumn) {
     );
 }
 
-// Get most sold products - SIMPLIFICADO: sempre buscar produtos ativos
+// Get most sold products - baseado em vendas reais dos últimos 30 dias
 $produtosMaisVendidos = [];
 try {
-    // Query simples: produtos ativos, com exibir_cardapio_online se a coluna existir
+    // Build WHERE clause for exibir_cardapio_online
+    $whereExibirCardapio = '';
     if ($hasExibirCardapioColumn) {
+        $whereExibirCardapio = 'AND (p.exibir_cardapio_online IS NULL OR p.exibir_cardapio_online = true)';
+    }
+    
+    // Query para buscar produtos mais vendidos baseado em pedidos quitados dos últimos 30 dias
+    $produtosMaisVendidos = $db->fetchAll(
+        "SELECT p.*, c.nome as categoria_nome, 
+                COUNT(DISTINCT pi.pedido_id) as total_pedidos,
+                COALESCE(SUM(pi.quantidade), 0) as total_quantidade
+         FROM produtos p
+         LEFT JOIN categorias c ON p.categoria_id = c.id
+         LEFT JOIN pedido_itens pi ON p.id = pi.produto_id AND pi.tenant_id = ? AND pi.filial_id = ?
+         LEFT JOIN pedido ped ON pi.pedido_id = ped.idpedido 
+             AND ped.status_pagamento = 'quitado'
+             AND ped.data >= CURRENT_DATE - INTERVAL '30 days'
+         WHERE p.tenant_id = ? AND p.filial_id = ? AND p.ativo = true
+           $whereExibirCardapio
+         GROUP BY p.id, c.nome
+         HAVING COUNT(DISTINCT pi.pedido_id) > 0
+         ORDER BY total_pedidos DESC, total_quantidade DESC
+         LIMIT 10",
+        [$tenantId, $filialId, $tenantId, $filialId]
+    );
+} catch (\Exception $e) {
+    error_log("Erro ao buscar produtos mais vendidos: " . $e->getMessage());
+    $produtosMaisVendidos = [];
+}
+
+// Se não houver produtos com vendas, usar fallback: produtos mais recentes ou aleatórios
+if (empty($produtosMaisVendidos)) {
+    try {
+        $whereExibirCardapio = '';
+        if ($hasExibirCardapioColumn) {
+            $whereExibirCardapio = 'AND (p.exibir_cardapio_online IS NULL OR p.exibir_cardapio_online = true)';
+        }
+        
+        // Fallback: produtos mais recentes primeiro, depois aleatórios
         $produtosMaisVendidos = $db->fetchAll(
             "SELECT p.*, c.nome as categoria_nome 
              FROM produtos p 
              LEFT JOIN categorias c ON p.categoria_id = c.id 
              WHERE p.tenant_id = ? AND p.filial_id = ? AND p.ativo = true 
-               AND (p.exibir_cardapio_online IS NULL OR p.exibir_cardapio_online = true)
-             ORDER BY RANDOM()
+               $whereExibirCardapio
+             ORDER BY p.id DESC
              LIMIT 10",
             [$tenantId, $filialId]
         );
-    } else {
-        $produtosMaisVendidos = $db->fetchAll(
-            "SELECT p.*, c.nome as categoria_nome 
-             FROM produtos p 
-             LEFT JOIN categorias c ON p.categoria_id = c.id 
-             WHERE p.tenant_id = ? AND p.filial_id = ? AND p.ativo = true
-             ORDER BY RANDOM()
-             LIMIT 10",
-            [$tenantId, $filialId]
-        );
+    } catch (\Exception $e) {
+        error_log("Erro ao buscar produtos fallback mais vendidos: " . $e->getMessage());
+        $produtosMaisVendidos = [];
     }
-} catch (\Exception $e) {
-    error_log("Erro ao buscar produtos mais vendidos: " . $e->getMessage());
-    $produtosMaisVendidos = [];
 }
 
 // Get promotional products (products with em_promocao = true and preco_promocional set)
