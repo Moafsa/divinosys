@@ -4,14 +4,45 @@
  * Handles order creation from public online menu
  */
 
-header('Content-Type: application/json');
+// Start output buffering FIRST to prevent any output before JSON
+ob_start();
+
+// Error handling - don't display errors, log them instead
+error_reporting(E_ALL);
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+
+// Shutdown function to catch fatal errors
+register_shutdown_function(function() {
+    $error = error_get_last();
+    if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        error_log("PEDIDOS_ONLINE FATAL ERROR: " . json_encode($error));
+        ob_end_clean();
+        if (!headers_sent()) {
+            header('Content-Type: application/json');
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Erro interno do servidor',
+                'error' => 'Fatal error: ' . $error['message'] . ' em ' . basename($error['file']) . ':' . $error['line']
+            ]);
+        }
+        exit;
+    }
+});
+
+header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    ob_end_clean();
     exit(0);
 }
+
+// Clean any output before requiring files
+ob_clean();
 
 require_once __DIR__ . '/../../system/Config.php';
 require_once __DIR__ . '/../../system/Database.php';
@@ -207,8 +238,9 @@ try {
     $usuarioId = null;
     try {
         // Try to find a default admin user for this tenant
+        // nivel: 999=SuperAdmin, 1=Admin Estabelecimento, 0=Admin Filial, -1=Operador
         $usuarioPadrao = $db->fetch(
-            "SELECT id FROM usuarios WHERE tenant_id = ? AND (tipo = 'admin' OR tipo = 'gerente') LIMIT 1",
+            "SELECT id FROM usuarios WHERE tenant_id = ? AND nivel >= 0 LIMIT 1",
             [$tenantId]
         );
         if ($usuarioPadrao) {
@@ -242,12 +274,22 @@ try {
             $asaasInvoice = new AsaasInvoice();
             $asaasConfig = $asaasInvoice->getAsaasConfig($tenantId, $filialId);
             
+            error_log("PEDIDOS_ONLINE - Asaas Config: " . json_encode([
+                'enabled' => $asaasConfig['asaas_enabled'] ?? false,
+                'has_api_key' => !empty($asaasConfig['asaas_api_key']),
+                'api_url' => $asaasConfig['asaas_api_url'] ?? 'not set',
+                'environment' => $asaasConfig['asaas_environment'] ?? 'not set'
+            ]));
+            
             if (!$asaasConfig || !$asaasConfig['asaas_enabled'] || empty($asaasConfig['asaas_api_key'])) {
+                error_log("PEDIDOS_ONLINE - Erro: Integração Asaas não configurada");
                 throw new Exception('Integração Asaas não configurada para esta filial');
             }
             
             $api_url = $asaasConfig['asaas_api_url'] ?? 'https://sandbox.asaas.com/api/v3';
             $api_key = $asaasConfig['asaas_api_key'];
+            
+            error_log("PEDIDOS_ONLINE - Usando API URL: " . $api_url . " | Environment: " . ($asaasConfig['asaas_environment'] ?? 'not set'));
             
             // Use same pattern as AsaasPayment::makeRequest (working implementation)
             $makeAsaasRequest = function($method, $endpoint, $data = null) use ($api_url, $api_key) {
@@ -347,6 +389,14 @@ try {
                 $webhookUrl = $protocol . '://' . $host . '/webhook/asaas.php';
             }
             
+            // Asaas has a minimum charge value of R$ 5,00 in production
+            // Check if order value meets minimum requirement
+            $valorMinimoAsaas = ($asaasConfig['asaas_environment'] === 'production') ? 5.00 : 0.01;
+            
+            if ($valorTotal < $valorMinimoAsaas) {
+                throw new Exception("O valor mínimo para pagamento online é R$ " . number_format($valorMinimoAsaas, 2, ',', '.') . ". Seu pedido é de R$ " . number_format($valorTotal, 2, ',', '.') . ". Por favor, adicione mais itens ao pedido ou escolha pagar na hora.");
+            }
+            
             // Create payment charge in Asaas BEFORE creating order
             // Use temporary reference - will update with real order ID after
             $paymentData = [
@@ -384,6 +434,8 @@ try {
             }
         } catch (Exception $e) {
             // Payment failed - return error without creating order
+            error_log("PEDIDOS_ONLINE - Payment Exception: " . $e->getMessage());
+            ob_end_clean(); // Clean any output before JSON
             http_response_code(400);
             echo json_encode([
                 'success' => false,
@@ -540,13 +592,20 @@ try {
         }
     }
     
+    ob_end_clean(); // Clean any output before JSON
     echo json_encode($response);
+    exit;
     
 } catch (Exception $e) {
+    error_log("PEDIDOS_ONLINE - Exception: " . $e->getMessage());
+    error_log("PEDIDOS_ONLINE - Stack trace: " . $e->getTraceAsString());
+    ob_end_clean(); // Clean any output before JSON
     http_response_code(400);
     echo json_encode([
         'success' => false,
-        'message' => $e->getMessage()
+        'message' => $e->getMessage(),
+        'error' => $e->getMessage()
     ]);
+    exit;
 }
 

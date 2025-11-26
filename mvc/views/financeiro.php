@@ -2299,8 +2299,6 @@ $contas = $db->fetchAll(
             const formData = new FormData();
             formData.append('action', 'pesquisar_produto_vendido');
             formData.append('nome_produto', nomeProduto);
-            formData.append('data_inicio', dataInicio);
-            formData.append('data_fim', dataFim);
             
             fetch('mvc/ajax/financeiro.php', {
                 method: 'POST',
@@ -2312,26 +2310,26 @@ $contas = $db->fetchAll(
                     const resultadoDiv = document.getElementById('resultadoProduto');
                     const detalhesDiv = document.getElementById('detalhesProduto');
                     
-                    if (data.produto) {
-                        const produto = data.produto;
-                        detalhesDiv.innerHTML = `
-                            <div class="row">
-                                <div class="col-md-4">
-                                    <strong>Produto:</strong> ${produto.nome}<br>
-                                    <strong>Quantidade Vendida:</strong> ${produto.quantidade_vendida || 0}<br>
-                                    <strong>Receita Total:</strong> <span class="text-success fw-bold">R$ ${parseFloat(produto.receita_total || 0).toFixed(2).replace('.', ',')}</span>
-                                </div>
-                                <div class="col-md-4">
-                                    <strong>Valor Unitário Médio:</strong> R$ ${parseFloat(produto.valor_unitario_medio || 0).toFixed(2).replace('.', ',')}<br>
-                                    <strong>Pedidos com este produto:</strong> ${produto.total_pedidos || 0}
-                                </div>
-                                <div class="col-md-4">
-                                    <strong>Período:</strong> ${dataInicio} até ${dataFim}
-                                </div>
-                            </div>
-                        `;
+                    if (data.produtos && data.produtos.length > 0) {
+                        // Mostrar lista de produtos encontrados
+                        let produtosHtml = '<h6 class="mb-3"><i class="fas fa-list me-2"></i>Produtos Encontrados (' + data.produtos.length + '):</h6>';
+                        produtosHtml += '<div class="list-group mb-3">';
+                        
+                        data.produtos.forEach(produto => {
+                            produtosHtml += `
+                                <a href="#" class="list-group-item list-group-item-action" 
+                                   onclick="buscarEstatisticasProduto(${produto.id}, '${produto.nome}', '${dataInicio}', '${dataFim}'); return false;">
+                                    <i class="fas fa-box me-2"></i>${produto.nome}
+                                </a>
+                            `;
+                        });
+                        
+                        produtosHtml += '</div>';
+                        produtosHtml += '<div id="estatisticasProduto" style="display: none;"></div>';
+                        
+                        detalhesDiv.innerHTML = produtosHtml;
                     } else {
-                        detalhesDiv.innerHTML = '<p class="text-muted">Nenhum produto encontrado com este nome no período selecionado.</p>';
+                        detalhesDiv.innerHTML = '<p class="text-muted">Nenhum produto encontrado com este nome.</p>';
                     }
                     
                     resultadoDiv.style.display = 'block';
@@ -2342,6 +2340,65 @@ $contas = $db->fetchAll(
             .catch(error => {
                 console.error('Erro:', error);
                 Swal.fire('Erro!', 'Erro ao processar pesquisa', 'error');
+            });
+        }
+        
+        // Buscar estatísticas de um produto específico
+        function buscarEstatisticasProduto(produtoId, produtoNome, dataInicio, dataFim) {
+            const formData = new FormData();
+            formData.append('action', 'buscar_estatisticas_produto');
+            formData.append('produto_id', produtoId);
+            formData.append('data_inicio', dataInicio);
+            formData.append('data_fim', dataFim);
+            
+            // Mostrar loading
+            const estatisticasDiv = document.getElementById('estatisticasProduto');
+            estatisticasDiv.style.display = 'block';
+            estatisticasDiv.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin me-2"></i>Carregando estatísticas...</div>';
+            
+            fetch('mvc/ajax/financeiro.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.produto) {
+                    const produto = data.produto;
+                    estatisticasDiv.innerHTML = `
+                        <div class="alert alert-success">
+                            <h6><i class="fas fa-chart-line me-2"></i>Estatísticas do Produto: <strong>${produto.nome}</strong></h6>
+                            <hr>
+                            <div class="row mt-3">
+                                <div class="col-md-4">
+                                    <strong>Quantidade Vendida:</strong><br>
+                                    <span class="h5 text-primary">${produto.quantidade_vendida || 0}</span>
+                                </div>
+                                <div class="col-md-4">
+                                    <strong>Receita Total:</strong><br>
+                                    <span class="h5 text-success fw-bold">R$ ${parseFloat(produto.receita_total || 0).toFixed(2).replace('.', ',')}</span>
+                                </div>
+                                <div class="col-md-4">
+                                    <strong>Valor Unitário Médio:</strong><br>
+                                    <span class="h5 text-info">R$ ${parseFloat(produto.valor_unitario_medio || 0).toFixed(2).replace('.', ',')}</span>
+                                </div>
+                            </div>
+                            <div class="row mt-3">
+                                <div class="col-md-6">
+                                    <strong>Total de Pedidos:</strong> ${produto.total_pedidos || 0}
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>Período:</strong> ${dataInicio} até ${dataFim}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    estatisticasDiv.innerHTML = '<div class="alert alert-warning">Nenhuma venda encontrada para este produto no período selecionado.</div>';
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                estatisticasDiv.innerHTML = '<div class="alert alert-danger">Erro ao carregar estatísticas do produto.</div>';
             });
         }
         

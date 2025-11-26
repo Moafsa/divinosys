@@ -728,8 +728,6 @@ try {
             
         case 'pesquisar_produto_vendido':
             $nomeProduto = trim($_POST['nome_produto'] ?? '');
-            $dataInicio = $_POST['data_inicio'] ?? date('Y-m-01');
-            $dataFim = $_POST['data_fim'] ?? date('Y-m-t');
             
             if (empty($nomeProduto)) {
                 http_response_code(400);
@@ -752,23 +750,57 @@ try {
             if (empty($produtos)) {
                 echo json_encode([
                     'success' => true,
-                    'produto' => null,
+                    'produtos' => [],
                     'message' => 'Nenhum produto encontrado'
                 ]);
                 exit;
             }
             
-            // Buscar vendas do primeiro produto encontrado (ou pode ser melhorado para mostrar todos)
-            $produtoId = $produtos[0]['id'];
-            $produtoNome = $produtos[0]['nome'];
+            // Retornar lista de produtos encontrados
+            echo json_encode([
+                'success' => true,
+                'produtos' => $produtos,
+                'message' => count($produtos) . ' produto(s) encontrado(s)'
+            ]);
+            break;
             
-            // Buscar estatísticas de vendas
+        case 'buscar_estatisticas_produto':
+            $produtoId = intval($_POST['produto_id'] ?? 0);
+            $dataInicio = $_POST['data_inicio'] ?? date('Y-m-01');
+            $dataFim = $_POST['data_fim'] ?? date('Y-m-t');
+            
+            if (empty($produtoId)) {
+                http_response_code(400);
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'ID do produto é obrigatório'
+                ]);
+                exit;
+            }
+            
+            // Buscar informações do produto
+            $produto = $db->fetch(
+                "SELECT id, nome FROM produtos 
+                 WHERE id = ? AND tenant_id = ? AND filial_id = ?",
+                [$produtoId, $tenantId, $filialId]
+            );
+            
+            if (!$produto) {
+                http_response_code(404);
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Produto não encontrado'
+                ]);
+                exit;
+            }
+            
+            // Buscar estatísticas de vendas com filtro de data aplicado corretamente
             $estatisticas = $db->fetch(
                 "SELECT 
                     COUNT(DISTINCT pi.pedido_id) as total_pedidos,
-                    SUM(pi.quantidade) as quantidade_vendida,
-                    SUM(pi.valor_total) as receita_total,
-                    AVG(pi.valor_unitario) as valor_unitario_medio
+                    COALESCE(SUM(pi.quantidade), 0) as quantidade_vendida,
+                    COALESCE(SUM(pi.valor_total), 0) as receita_total,
+                    COALESCE(AVG(pi.valor_unitario), 0) as valor_unitario_medio
                  FROM pedido_itens pi
                  INNER JOIN pedido p ON pi.pedido_id = p.idpedido
                  WHERE pi.produto_id = ?
@@ -782,8 +814,8 @@ try {
             echo json_encode([
                 'success' => true,
                 'produto' => [
-                    'id' => $produtoId,
-                    'nome' => $produtoNome,
+                    'id' => $produto['id'],
+                    'nome' => $produto['nome'],
                     'quantidade_vendida' => (int) ($estatisticas['quantidade_vendida'] ?? 0),
                     'receita_total' => (float) ($estatisticas['receita_total'] ?? 0),
                     'valor_unitario_medio' => (float) ($estatisticas['valor_unitario_medio'] ?? 0),

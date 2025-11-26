@@ -3201,9 +3201,9 @@ if (count($enderecoParts) > 2) {
                     // Error creating order - show in modal
                     const errorDiv = document.getElementById('checkoutError');
                     if (errorDiv) {
-                        let errorMsg = result.message || 'Erro ao criar pedido. Tente novamente.';
+                        let errorMsg = result.message || result.error || 'Erro ao criar pedido. Tente novamente.';
                         if (result.payment_error) {
-                            errorMsg = 'Erro no pagamento: ' + result.payment_error;
+                            errorMsg = result.payment_error;
                         }
                         errorDiv.innerHTML = '<i class="fas fa-exclamation-circle"></i> ' + errorMsg;
                         errorDiv.style.display = 'block';
@@ -3211,19 +3211,30 @@ if (count($enderecoParts) > 2) {
                     }
                     
                     // If payment error and can retry, allow customer to go back and choose another method
-                    if (result.payment_error && result.can_retry) {
-                        // Go back to payment selection step
-                        if (paymentMethod === 'online') {
-                            // Go back to step 4b (online payment method selection) or step 4 (payment type)
-                            proximoPasso(3); // Will go to step 4, then 4b if online selected
-                        } else {
+                    if ((result.payment_error || result.message) && result.can_retry) {
+                        // If error mentions minimum value, go back to cart or payment selection
+                        if (result.message && (result.message.includes('valor mínimo') || result.message.includes('mínimo'))) {
+                            // Go back to payment selection to allow choosing "Pagar na Hora"
                             proximoPasso(3);
+                        } else {
+                            // Go back to payment selection step
+                            if (paymentMethod === 'online') {
+                                // Go back to step 4b (online payment method selection) or step 4 (payment type)
+                                proximoPasso(3); // Will go to step 4, then 4b if online selected
+                            } else {
+                                proximoPasso(3);
+                            }
                         }
                     }
                     
                     // If CPF error, go back to step 2
                     if (result.message && (result.message.includes('CPF') || result.message.includes('cpf'))) {
                         proximoPasso(1);
+                    }
+                    
+                    // If minimum value error, also allow going back
+                    if (result.message && (result.message.includes('valor mínimo') || result.message.includes('mínimo'))) {
+                        proximoPasso(3); // Go back to payment selection
                     }
                 }
             } catch (error) {

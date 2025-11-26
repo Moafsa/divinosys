@@ -137,10 +137,17 @@ function saveAsaasConfig() {
         exit;
     }
     
-    // If API key is empty or contains only masked characters (•), get existing key from database
+    // Check if API key is provided and if it's a new key or masked
     $apiKeyValue = trim($data['asaas_api_key'] ?? '');
-    $isMaskedKey = !empty($apiKeyValue) && preg_match('/^[a-zA-Z0-9]{4}•+[a-zA-Z0-9]{4}$/', $apiKeyValue);
     
+    // Detect if key is masked (contains bullet points) - this means user didn't enter a new key
+    $isMaskedKey = !empty($apiKeyValue) && (
+        strpos($apiKeyValue, '•') !== false || 
+        strpos($apiKeyValue, 'chave salva') !== false ||
+        preg_match('/^[a-zA-Z0-9]{4}[•\s]+[a-zA-Z0-9]{4}$/', $apiKeyValue)
+    );
+    
+    // If key is empty or masked, get existing key from database
     if (empty($apiKeyValue) || $isMaskedKey) {
         // User didn't enter a new key, keep existing one
         try {
@@ -160,7 +167,7 @@ function saveAsaasConfig() {
             exit;
         }
     }
-    // Otherwise, use the new key provided by the user
+    // Otherwise, use the new key provided by the user (it's a real new key)
     
     try {
         $db = \System\Database::getInstance();
@@ -173,8 +180,26 @@ function saveAsaasConfig() {
     }
     
     try {
+        // Always update API URL based on environment
+        $apiUrl = ($data['asaas_environment'] === 'production') 
+            ? 'https://www.asaas.com/api/v3' 
+            : 'https://sandbox.asaas.com/api/v3';
+        
         if ($filial_id) {
             // Update filial configuration
+            // Also update tenant's environment and API URL (always, not just if provided)
+            $tenantUpdateQuery = "UPDATE tenants SET 
+                                 asaas_environment = ?,
+                                 asaas_api_url = ?,
+                                 updated_at = CURRENT_TIMESTAMP
+                                 WHERE id = ?";
+            $tenantStmt = $conn->prepare($tenantUpdateQuery);
+            $tenantStmt->execute([
+                $data['asaas_environment'],
+                $apiUrl,
+                $tenant_id
+            ]);
+            
             $query = "UPDATE filiais SET 
                       asaas_api_key = ?,
                       asaas_customer_id = ?,
@@ -197,6 +222,7 @@ function saveAsaasConfig() {
                       asaas_customer_id = ?,
                       asaas_enabled = ?,
                       asaas_environment = ?,
+                      asaas_api_url = ?,
                       updated_at = CURRENT_TIMESTAMP
                       WHERE id = ?";
             
@@ -206,6 +232,7 @@ function saveAsaasConfig() {
                 $data['asaas_customer_id'] ?? null,
                 $data['asaas_enabled'] ?? false,
                 $data['asaas_environment'],
+                $apiUrl,
                 $tenant_id
             ]);
         }
@@ -214,7 +241,8 @@ function saveAsaasConfig() {
             ob_clean();
             echo json_encode([
                 'success' => true,
-                'message' => 'Configuration saved successfully'
+                'message' => 'Configuration saved successfully',
+                'environment' => $data['asaas_environment'] ?? null
             ]);
             exit;
         } else {

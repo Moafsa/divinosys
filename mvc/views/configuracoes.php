@@ -2658,9 +2658,16 @@ if ($tenant && $filial) {
             .then(data => {
                 if (data.success) {
                     Swal.fire('Sucesso', 'Configuração do Asaas salva com sucesso!', 'success');
-                    carregarConfiguracaoAsaas(); // Recarregar configuração
+                    // Recarregar configuração após salvar para garantir que o ambiente está atualizado
+                    setTimeout(() => {
+                        carregarConfiguracaoAsaas();
+                    }, 500);
                 } else {
                     Swal.fire('Erro', data.error || 'Erro ao salvar configuração', 'error');
+                    // Recarregar configuração mesmo em caso de erro para mostrar estado atual
+                    setTimeout(() => {
+                        carregarConfiguracaoAsaas();
+                    }, 500);
                 }
             })
             .catch(error => {

@@ -35,7 +35,9 @@ class AsaasInvoice {
                         f.asaas_municipal_service_id,
                         f.asaas_municipal_service_code,
                         t.asaas_api_url,
-                        t.asaas_environment
+                        t.asaas_environment,
+                        t.asaas_api_key as tenant_asaas_api_key,
+                        t.asaas_customer_id as tenant_asaas_customer_id
                       FROM filiais f
                       JOIN tenants t ON f.tenant_id = t.id
                       WHERE f.id = ? AND f.tenant_id = ?";
@@ -47,16 +49,22 @@ class AsaasInvoice {
             if ($config) {
                 // If filial doesn't have its own API key, inherit from tenant
                 if (empty($config['asaas_api_key'])) {
-                    $tenant_query = "SELECT asaas_api_key, asaas_customer_id FROM tenants WHERE id = ?";
-                    $tenant_stmt = $this->conn->prepare($tenant_query);
-                    $tenant_stmt->execute([$tenant_id]);
-                    $tenant_config = $tenant_stmt->fetch(\PDO::FETCH_ASSOC);
-                    
-                    if ($tenant_config) {
-                        $config['asaas_api_key'] = $tenant_config['asaas_api_key'];
-                        $config['asaas_customer_id'] = $tenant_config['asaas_customer_id'];
-                    }
+                    $config['asaas_api_key'] = $config['tenant_asaas_api_key'] ?? null;
+                    $config['asaas_customer_id'] = $config['tenant_asaas_customer_id'] ?? $config['asaas_customer_id'];
                 }
+                
+                // Ensure API URL and environment come from tenant (they're always stored there)
+                if (empty($config['asaas_api_url'])) {
+                    // Fallback: construct URL based on environment
+                    $environment = $config['asaas_environment'] ?? 'sandbox';
+                    $config['asaas_api_url'] = ($environment === 'production') 
+                        ? 'https://www.asaas.com/api/v3' 
+                        : 'https://sandbox.asaas.com/api/v3';
+                }
+                
+                // Remove tenant_ prefixed fields from response
+                unset($config['tenant_asaas_api_key']);
+                unset($config['tenant_asaas_customer_id']);
                 
                 return $config;
             }
