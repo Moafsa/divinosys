@@ -307,26 +307,122 @@ class Auth
     public static function sendAccessCodeViaWhatsApp($telefone, $codigo, $tenantId, $filialId)
     {
         try {
-            // Buscar instância WhatsApp ativa
-            $instancia = self::$db->fetch(
-                "SELECT * FROM whatsapp_instances 
-                 WHERE tenant_id = ? AND (filial_id = ? OR filial_id IS NULL) AND status IN ('open', 'connected') 
-                 ORDER BY created_at DESC LIMIT 1",
-                [$tenantId, $filialId]
-            );
+            error_log("Auth::sendAccessCodeViaWhatsApp - Buscando instância - Tenant: $tenantId, Filial: " . ($filialId ?? 'NULL'));
+            
+            // Primeiro, tentar buscar instância específica da filial (com status ativo)
+            $instancia = null;
+            if ($filialId !== null) {
+                $instancia = self::$db->fetch(
+                    "SELECT * FROM whatsapp_instances 
+                     WHERE tenant_id = ? AND filial_id = ? AND ativo = true 
+                     AND status IN ('open', 'connected', 'ativo', 'active') 
+                     ORDER BY created_at DESC LIMIT 1",
+                    [$tenantId, $filialId]
+                );
+                error_log("Auth::sendAccessCodeViaWhatsApp - Busca com filial específica (status ativo): " . ($instancia ? "Encontrada (ID: {$instancia['id']}, Status: {$instancia['status']})" : "Não encontrada"));
+                
+                // Se não encontrou com status ativo, tentar qualquer instância da filial (ativo = true)
+                if (!$instancia) {
+                    $instancia = self::$db->fetch(
+                        "SELECT * FROM whatsapp_instances 
+                         WHERE tenant_id = ? AND filial_id = ? AND ativo = true 
+                         ORDER BY created_at DESC LIMIT 1",
+                        [$tenantId, $filialId]
+                    );
+                    error_log("Auth::sendAccessCodeViaWhatsApp - Busca com filial específica (qualquer status): " . ($instancia ? "Encontrada (ID: {$instancia['id']}, Status: {$instancia['status']})" : "Não encontrada"));
+                }
+            }
+            
+            // Se não encontrou com filial específica, tentar sem filial (instância global do tenant)
+            if (!$instancia) {
+                $instancia = self::$db->fetch(
+                    "SELECT * FROM whatsapp_instances 
+                     WHERE tenant_id = ? AND (filial_id IS NULL OR filial_id = 0) AND ativo = true 
+                     AND status IN ('open', 'connected', 'ativo', 'active') 
+                     ORDER BY created_at DESC LIMIT 1",
+                    [$tenantId]
+                );
+                error_log("Auth::sendAccessCodeViaWhatsApp - Busca sem filial específica (status ativo): " . ($instancia ? "Encontrada (ID: {$instancia['id']}, Status: {$instancia['status']})" : "Não encontrada"));
+                
+                // Se não encontrou com status ativo, tentar qualquer instância global
+                if (!$instancia) {
+                    $instancia = self::$db->fetch(
+                        "SELECT * FROM whatsapp_instances 
+                         WHERE tenant_id = ? AND (filial_id IS NULL OR filial_id = 0) AND ativo = true 
+                         ORDER BY created_at DESC LIMIT 1",
+                        [$tenantId]
+                    );
+                    error_log("Auth::sendAccessCodeViaWhatsApp - Busca sem filial específica (qualquer status): " . ($instancia ? "Encontrada (ID: {$instancia['id']}, Status: {$instancia['status']})" : "Não encontrada"));
+                }
+            }
+            
+            // Se ainda não encontrou, tentar qualquer instância ativa do tenant (qualquer status)
+            // IMPORTANTE: Se ativo=true, usar mesmo que status não esteja como "connected"
+            if (!$instancia) {
+                $instancia = self::$db->fetch(
+                    "SELECT * FROM whatsapp_instances 
+                     WHERE tenant_id = ? AND ativo = true 
+                     ORDER BY 
+                        CASE WHEN status IN ('open', 'connected', 'ativo', 'active') THEN 1 ELSE 2 END,
+                        created_at DESC 
+                     LIMIT 1",
+                    [$tenantId]
+                );
+                error_log("Auth::sendAccessCodeViaWhatsApp - Busca qualquer instância do tenant: " . ($instancia ? "Encontrada (ID: {$instancia['id']}, Status: {$instancia['status']})" : "Não encontrada"));
+            }
 
             if (!$instancia) {
+                error_log("Auth::sendAccessCodeViaWhatsApp - Nenhuma instância encontrada para Tenant: $tenantId, Filial: " . ($filialId ?? 'NULL'));
+                
+                // Log de debug: listar todas as instâncias do tenant
+                $todasInstancias = self::$db->fetchAll(
+                    "SELECT id, tenant_id, filial_id, instance_name, status, ativo 
+                     FROM whatsapp_instances 
+                     WHERE tenant_id = ?",
+                    [$tenantId]
+                );
+                error_log("Auth::sendAccessCodeViaWhatsApp - Todas instâncias do tenant: " . json_encode($todasInstancias));
+                
                 return [
                     'success' => false,
                     'message' => 'Nenhuma instância WhatsApp ativa encontrada'
                 ];
             }
-
-            // Formatar telefone (remover caracteres especiais e adicionar código do país se necessário)
-            $telefoneFormatado = preg_replace('/[^0-9]/', '', $telefone);
-            if (strlen($telefoneFormatado) == 11 && substr($telefoneFormatado, 0, 2) == '11') {
-                $telefoneFormatado = '55' . $telefoneFormatado; // Adicionar código do Brasil
+            
+            error_log("Auth::sendAccessCodeViaWhatsApp - Instância selecionada: ID={$instancia['id']}, Nome={$instancia['instance_name']}, Status={$instancia['status']}");
+            
+            // Verificar e sincronizar status da instância se necessário
+            // Se o status não estiver em um dos status ativos, tentar sincronizar com WuzAPI
+            if (!in_array($instancia['status'], ['open', 'connected', 'ativo', 'active'])) {
+                error_log("Auth::sendAccessCodeViaWhatsApp - Status não está ativo, tentando sincronizar com WuzAPI");
+                try {
+                    $wuzapiManager = new \System\WhatsApp\WuzAPIManager();
+                    $statusSync = $wuzapiManager->syncInstanceStatus($instancia['id']);
+                    if ($statusSync['success']) {
+                        // Buscar instância novamente com status atualizado
+                        $instancia = self::$db->fetch(
+                            "SELECT * FROM whatsapp_instances WHERE id = ?",
+                            [$instancia['id']]
+                        );
+                        error_log("Auth::sendAccessCodeViaWhatsApp - Status sincronizado: {$instancia['status']}");
+                    }
+                } catch (\Exception $e) {
+                    error_log("Auth::sendAccessCodeViaWhatsApp - Erro ao sincronizar status: " . $e->getMessage());
+                    // Continuar mesmo se a sincronização falhar
+                }
             }
+
+            // Formatar telefone (remover caracteres especiais)
+            // O telefone já vem com código do país do frontend (ex: 5511999999999)
+            $telefoneFormatado = preg_replace('/[^0-9]/', '', $telefone);
+            
+            // Se o telefone não começar com código de país (não começa com + ou código), adicionar código do Brasil
+            if (strlen($telefoneFormatado) <= 11 && !preg_match('/^[1-9][0-9]{1,2}/', $telefoneFormatado)) {
+                // Telefone brasileiro sem código do país
+                $telefoneFormatado = '55' . $telefoneFormatado;
+            }
+            
+            error_log("Auth::sendAccessCodeViaWhatsApp - Telefone formatado: $telefoneFormatado");
 
             // Criar mensagem
             $mensagem = "🔐 *Divino Lanches - Código de Acesso*\n\n";
@@ -364,24 +460,31 @@ class Auth
     /**
      * Validar código de acesso
      */
-    public static function validateAccessCode($telefone, $codigo, $tenantId, $filialId = null)
+    public static function validateAccessCode($telefone, $codigo, $tenantId, $filialId = null, $accessType = 'usuario', $tipoUsuarioEspecifico = null)
     {
         try {
-            // Buscar código válido (ignorar filial_id para simplificar)
+            error_log("Auth::validateAccessCode - Telefone: $telefone, Tenant: $tenantId, Filial: " . ($filialId ?? 'NULL') . ", AccessType: $accessType");
+            
+            // Buscar código válido (não depender do tenant_id do código, pois pode ter sido gerado com outro)
+            // O código é válido se o telefone e código batem, independente do tenant
             $codigoData = self::$db->fetch(
                 "SELECT ca.*, ug.* FROM codigos_acesso ca
                  JOIN usuarios_globais ug ON ca.usuario_global_id = ug.id
-                 WHERE ca.telefone = ? AND ca.codigo = ? AND ca.tenant_id = ? 
-                 AND ca.usado = false AND ca.expira_em > NOW()",
-                [$telefone, $codigo, $tenantId]
+                 WHERE ca.telefone = ? AND ca.codigo = ? 
+                 AND ca.usado = false AND ca.expira_em > NOW()
+                 ORDER BY ca.created_at DESC LIMIT 1",
+                [$telefone, $codigo]
             );
 
             if (!$codigoData) {
+                error_log("Auth::validateAccessCode - Código não encontrado ou inválido para telefone: $telefone");
                 return [
                     'success' => false,
                     'message' => 'Código inválido ou expirado'
                 ];
             }
+            
+            error_log("Auth::validateAccessCode - Código válido encontrado. UsuarioID: {$codigoData['usuario_global_id']}, Tenant do código: {$codigoData['tenant_id']}, Tenant escolhido: $tenantId");
 
             // Marcar código como usado
             self::$db->update(
@@ -391,30 +494,147 @@ class Auth
                 [$codigoData['id']]
             );
 
-            // Buscar dados do estabelecimento do usuário (filtrar por filial se fornecida)
-            if ($filialId !== null) {
+            // Se acesso como cliente, criar sessão como cliente
+            if ($accessType === 'cliente') {
+                error_log("Auth::validateAccessCode - Acesso como CLIENTE");
+                
+                // Verificar se já tem vínculo como cliente, se não, criar
                 $userEstablishment = self::$db->fetch(
                     "SELECT * FROM usuarios_estabelecimento 
-                     WHERE usuario_global_id = ? AND tenant_id = ? AND filial_id = ? AND ativo = true
+                     WHERE usuario_global_id = ? AND tenant_id = ? AND tipo_usuario = 'cliente' AND ativo = true
                      LIMIT 1",
-                    [$codigoData['usuario_global_id'], $tenantId, $filialId]
-                );
-            } else {
-                // Se não tem filial específica, buscar qualquer vínculo do tenant
-                $userEstablishment = self::$db->fetch(
-                    "SELECT * FROM usuarios_estabelecimento 
-                     WHERE usuario_global_id = ? AND tenant_id = ? AND ativo = true
-                     ORDER BY filial_id ASC LIMIT 1",
                     [$codigoData['usuario_global_id'], $tenantId]
                 );
+                
+                if (!$userEstablishment) {
+                    // Criar vínculo como cliente
+                    self::$db->insert('usuarios_estabelecimento', [
+                        'usuario_global_id' => $codigoData['usuario_global_id'],
+                        'tenant_id' => $tenantId,
+                        'filial_id' => $filialId,
+                        'tipo_usuario' => 'cliente',
+                        'ativo' => true
+                    ]);
+                    
+                    $userEstablishment = self::$db->fetch(
+                        "SELECT * FROM usuarios_estabelecimento 
+                         WHERE usuario_global_id = ? AND tenant_id = ? AND tipo_usuario = 'cliente' AND ativo = true
+                         LIMIT 1",
+                        [$codigoData['usuario_global_id'], $tenantId]
+                    );
+                }
+                
+                // Criar sessão
+                $sessionToken = self::createSession($codigoData['usuario_global_id'], $tenantId, $filialId);
+                
+                return [
+                    'success' => true,
+                    'message' => 'Login realizado com sucesso',
+                    'user' => $codigoData,
+                    'establishment' => $userEstablishment,
+                    'session_token' => $sessionToken,
+                    'permissions' => self::getUserPermissions('cliente')
+                ];
+            }
+
+            // Acesso como usuário do estabelecimento
+            error_log("Auth::validateAccessCode - Acesso como USUÁRIO - Tipo específico: " . ($tipoUsuarioEspecifico ?? 'N/A'));
+            error_log("Auth::validateAccessCode - Buscando estabelecimento - UsuarioID: {$codigoData['usuario_global_id']}, Tenant: $tenantId, Filial: " . ($filialId ?? 'NULL'));
+            
+            // IMPORTANTE: Usar o tenant/filial escolhido pelo usuário, não o do código
+            // O código pode ter sido gerado com um tenant diferente
+            
+            // Buscar dados do estabelecimento do usuário
+            // Se tipo_usuario foi especificado, usar ele na busca
+            if ($tipoUsuarioEspecifico && $tipoUsuarioEspecifico !== 'cliente') {
+                error_log("Auth::validateAccessCode - Buscando com tipo_usuario específico: $tipoUsuarioEspecifico");
+                if ($filialId !== null) {
+                    $userEstablishment = self::$db->fetch(
+                        "SELECT * FROM usuarios_estabelecimento 
+                         WHERE usuario_global_id = ? AND tenant_id = ? AND filial_id = ? AND tipo_usuario = ? AND ativo = true
+                         LIMIT 1",
+                        [$codigoData['usuario_global_id'], $tenantId, $filialId, $tipoUsuarioEspecifico]
+                    );
+                } else {
+                    $userEstablishment = self::$db->fetch(
+                        "SELECT * FROM usuarios_estabelecimento 
+                         WHERE usuario_global_id = ? AND tenant_id = ? AND tipo_usuario = ? AND ativo = true
+                         ORDER BY filial_id ASC LIMIT 1",
+                        [$codigoData['usuario_global_id'], $tenantId, $tipoUsuarioEspecifico]
+                    );
+                }
+                
+                if ($userEstablishment) {
+                    error_log("Auth::validateAccessCode - Estabelecimento encontrado com tipo específico: " . $userEstablishment['tipo_usuario']);
+                } else {
+                    error_log("Auth::validateAccessCode - Nenhum estabelecimento encontrado com tipo específico, tentando sem tipo");
+                }
+            }
+            
+            // Se não encontrou com tipo específico, buscar sem filtro de tipo (exceto cliente)
+            if (!isset($userEstablishment) || !$userEstablishment) {
+                error_log("Auth::validateAccessCode - Buscando estabelecimento sem tipo específico (exceto cliente)");
+                // Buscar dados do estabelecimento do usuário (filtrar por filial se fornecida)
+                if ($filialId !== null) {
+                    $userEstablishment = self::$db->fetch(
+                        "SELECT * FROM usuarios_estabelecimento 
+                         WHERE usuario_global_id = ? AND tenant_id = ? AND filial_id = ? AND tipo_usuario != 'cliente' AND ativo = true
+                         LIMIT 1",
+                        [$codigoData['usuario_global_id'], $tenantId, $filialId]
+                    );
+                } else {
+                    // Se não tem filial específica, buscar qualquer vínculo do tenant (exceto cliente)
+                    $userEstablishment = self::$db->fetch(
+                        "SELECT * FROM usuarios_estabelecimento 
+                         WHERE usuario_global_id = ? AND tenant_id = ? AND tipo_usuario != 'cliente' AND ativo = true
+                         ORDER BY filial_id ASC LIMIT 1",
+                        [$codigoData['usuario_global_id'], $tenantId]
+                    );
+                }
+            }
+            
+            // Se ainda não encontrou, listar todos os estabelecimentos do usuário para debug
+            if (!$userEstablishment) {
+                $todosEstabelecimentos = self::$db->fetchAll(
+                    "SELECT * FROM usuarios_estabelecimento 
+                     WHERE usuario_global_id = ? AND ativo = true",
+                    [$codigoData['usuario_global_id']]
+                );
+                error_log("Auth::validateAccessCode - Todos estabelecimentos do usuário: " . json_encode($todosEstabelecimentos));
+                error_log("Auth::validateAccessCode - Buscando: Tenant=$tenantId, Filial=" . ($filialId ?? 'NULL') . ", Tipo=" . ($tipoUsuarioEspecifico ?? 'N/A'));
             }
 
             if (!$userEstablishment) {
-                return [
-                    'success' => false,
-                    'message' => 'Usuário não tem acesso a este estabelecimento'
-                ];
+                error_log("Auth::validateAccessCode - Estabelecimento não encontrado para usuário");
+                error_log("Auth::validateAccessCode - Parâmetros da busca: UsuarioID={$codigoData['usuario_global_id']}, Tenant=$tenantId, Filial=" . ($filialId ?? 'NULL') . ", Tipo=" . ($tipoUsuarioEspecifico ?? 'N/A'));
+                
+                // Tentar buscar qualquer estabelecimento ativo do usuário neste tenant (última tentativa)
+                $userEstablishment = self::$db->fetch(
+                    "SELECT * FROM usuarios_estabelecimento 
+                     WHERE usuario_global_id = ? AND tenant_id = ? AND ativo = true
+                     ORDER BY tipo_usuario != 'cliente' DESC, filial_id ASC LIMIT 1",
+                    [$codigoData['usuario_global_id'], $tenantId]
+                );
+                
+                if ($userEstablishment) {
+                    error_log("Auth::validateAccessCode - Estabelecimento encontrado na busca alternativa: " . $userEstablishment['tipo_usuario']);
+                } else {
+                    // Listar todos os estabelecimentos do usuário para debug
+                    $todosEstabelecimentos = self::$db->fetchAll(
+                        "SELECT * FROM usuarios_estabelecimento 
+                         WHERE usuario_global_id = ? AND ativo = true",
+                        [$codigoData['usuario_global_id']]
+                    );
+                    error_log("Auth::validateAccessCode - Nenhum estabelecimento encontrado. Todos estabelecimentos do usuário: " . json_encode($todosEstabelecimentos));
+                    
+                    return [
+                        'success' => false,
+                        'message' => 'Usuário não tem acesso a este estabelecimento. Verifique se você selecionou o estabelecimento correto.'
+                    ];
+                }
             }
+
+            error_log("Auth::validateAccessCode - Estabelecimento encontrado: Tipo=" . $userEstablishment['tipo_usuario'] . ", Tenant=" . $tenantId . ", Filial=" . ($filialId ?? 'NULL'));
 
             // Criar sessão
             $sessionToken = self::createSession($codigoData['usuario_global_id'], $tenantId, $filialId);
@@ -425,7 +645,8 @@ class Auth
                 'user' => $codigoData,
                 'establishment' => $userEstablishment,
                 'session_token' => $sessionToken,
-                'permissions' => self::getUserPermissions($userEstablishment['tipo_usuario'])
+                'permissions' => self::getUserPermissions($userEstablishment['tipo_usuario']),
+                'tipo_usuario' => $userEstablishment['tipo_usuario'] // Garantir que tipo_usuario está na resposta
             ];
 
         } catch (\Exception $e) {

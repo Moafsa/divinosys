@@ -100,6 +100,29 @@ try {
     
     error_log('INDEX: Sistema inicializado');
     
+    // Processar lembretes de pagamento agendados (com throttling usando arquivo de lock)
+    // Verifica se já processou nos últimos 2 minutos para evitar sobrecarga
+    $lockFile = sys_get_temp_dir() . '/payment_reminders_lock';
+    $shouldProcess = false;
+    
+    if (!file_exists($lockFile) || (time() - filemtime($lockFile)) >= 120) {
+        // Criar lock file
+        @file_put_contents($lockFile, time());
+        $shouldProcess = true;
+    }
+    
+    if ($shouldProcess) {
+        try {
+            require_once __DIR__ . '/system/WhatsApp/PaymentNotificationService.php';
+            $paymentNotification = new \System\WhatsApp\PaymentNotificationService();
+            $result = $paymentNotification->processScheduledReminders();
+            error_log('INDEX: Lembretes processados - ' . json_encode($result));
+        } catch (Exception $e) {
+            // Não falhar a aplicação se o processamento de lembretes falhar
+            error_log('INDEX: Erro ao processar lembretes: ' . $e->getMessage());
+        }
+    }
+    
     // Auto-fix sequences after system initialization (only once per session)
     if (!isset($_SESSION['sequences_fixed'])) {
         $autoFixFile = __DIR__ . '/auto_fix_sequences.php';

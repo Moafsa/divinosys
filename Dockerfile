@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y \
     libpng-dev \
     postgresql-client \
     redis-tools \
+    cron \
     && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions

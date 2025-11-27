@@ -998,9 +998,19 @@ try {
                 ]);
             }
             
+            // Buscar pedido atualizado para retornar
+            $pedidoAtualizado = $db->fetch(
+                "SELECT p.*, m.nome as mesa_nome
+                 FROM pedido p
+                 LEFT JOIN mesas m ON p.idmesa::varchar = m.id_mesa AND m.tenant_id = p.tenant_id AND m.filial_id = p.filial_id
+                 WHERE p.idpedido = ? AND p.tenant_id = ? AND p.filial_id = ?",
+                [$pedidoId, $tenantId, $filialId]
+            );
+            
             echo json_encode([
                 'success' => true,
-                'message' => 'Pedido atualizado com sucesso!'
+                'message' => 'Pedido atualizado com sucesso!',
+                'pedido' => $pedidoAtualizado
             ]);
             break;
             

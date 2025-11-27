@@ -951,6 +951,46 @@ try {
     // Delivery fee is already included in valor_total, no need to add as separate item
     // If you need to track delivery fee separately, add a 'taxa_entrega' column to pedido table
     
+    // Send WhatsApp notification if online payment was processed
+    if ($paymentProcessed && $paymentDataResult && $billingType) {
+        try {
+            require_once __DIR__ . '/../../system/WhatsApp/PaymentNotificationService.php';
+            $paymentNotification = new \System\WhatsApp\PaymentNotificationService();
+            
+            // Get PIX copy-paste code if available
+            $pixCopyPaste = null;
+            if ($billingType === 'PIX') {
+                $pixCopyPaste = $paymentDataResult['pixCopyPaste'] ?? 
+                               $paymentDataResult['pix_copy_paste'] ?? 
+                               $paymentDataResult['pixCopiaECola'] ?? 
+                               $paymentDataResult['pixQrCode']['payload'] ?? null;
+            }
+            
+            // Send notification
+            $notificationResult = $paymentNotification->sendPaymentNotification(
+                $pedidoId,
+                $tenantId,
+                $filialId,
+                $clienteTelefone,
+                $clienteNome,
+                $valorTotal,
+                $paymentDataResult['id'],
+                $paymentDataResult['invoiceUrl'] ?? null,
+                $pixCopyPaste,
+                $billingType
+            );
+            
+            if ($notificationResult['success']) {
+                error_log("PEDIDOS_ONLINE - Notificação WhatsApp enviada com sucesso para $clienteTelefone");
+            } else {
+                error_log("PEDIDOS_ONLINE - Erro ao enviar notificação WhatsApp: " . ($notificationResult['message'] ?? 'Erro desconhecido'));
+            }
+        } catch (Exception $e) {
+            // Não falhar o pedido se o WhatsApp falhar
+            error_log("PEDIDOS_ONLINE - Exception ao enviar notificação WhatsApp: " . $e->getMessage());
+        }
+    }
+    
     // Build response
     $response = [
         'success' => true,
@@ -961,7 +1001,21 @@ try {
     // If online payment was processed successfully, return payment data for transparent checkout
     if ($paymentProcessed && $paymentDataResult && $billingType) {
         $response['payment_id'] = $paymentDataResult['id'];
-        $response['payment_url'] = $paymentDataResult['invoiceUrl'] ?? null; // Fallback URL
+        
+        // Get payment URL - try multiple sources
+        $paymentUrl = $paymentDataResult['invoiceUrl'] ?? 
+                     $paymentDataResult['invoice_url'] ?? 
+                     $paymentDataResult['invoiceURL'] ?? 
+                     null;
+        
+        // If invoiceUrl is not available, construct it from payment ID
+        if (!$paymentUrl && isset($paymentDataResult['id'])) {
+            $apiUrl = $filial['asaas_api_url'] ?? 'https://sandbox.asaas.com/api/v3';
+            $baseUrl = str_replace('/api/v3', '', $apiUrl);
+            $paymentUrl = $baseUrl . '/payment/' . $paymentDataResult['id'];
+        }
+        
+        $response['payment_url'] = $paymentUrl;
         $response['billing_type'] = $billingType;
         
         // For PIX: return QR code data (check multiple possible field names)

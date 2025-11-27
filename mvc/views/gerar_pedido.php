@@ -99,9 +99,9 @@ if ($tenant && $filial) {
             $placeholders = implode(',', array_fill(0, count($ids), '?'));
             
             $produtosRaw = $db->fetchAll(
-                "SELECT p.id, p.nome, p.preco_normal, p.preco_mini, p.descricao, p.imagem, 
-                        p.categoria_id, p.ativo, p.estoque_atual, p.estoque_minimo, p.preco_custo, 
-                        p.tenant_id, p.filial_id, c.nome as categoria_nome 
+                "SELECT p.id, p.nome, p.preco_normal, p.preco_mini, p.preco_promocional, p.em_promocao, 
+                        p.descricao, p.imagem, p.categoria_id, p.ativo, p.estoque_atual, p.estoque_minimo, 
+                        p.preco_custo, p.tenant_id, p.filial_id, c.nome as categoria_nome 
                  FROM produtos p 
                  LEFT JOIN categorias c ON p.categoria_id = c.id 
                  WHERE p.id IN ($placeholders)
@@ -582,7 +582,21 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                                             
                                             <div class="produto-nome"><?php echo htmlspecialchars($produto['nome']); ?></div>
                                             <div class="produto-preco">
-                                                R$ <?php echo number_format($produto['preco_normal'], 2, ',', '.'); ?>
+                                                <?php 
+                                                $emPromocao = !empty($produto['em_promocao']) && !empty($produto['preco_promocional']) && $produto['preco_promocional'] > 0;
+                                                $precoExibir = $emPromocao ? $produto['preco_promocional'] : $produto['preco_normal'];
+                                                ?>
+                                                <?php if ($emPromocao): ?>
+                                                    <span class="text-decoration-line-through text-muted small me-2">
+                                                        R$ <?php echo number_format($produto['preco_normal'], 2, ',', '.'); ?>
+                                                    </span>
+                                                    <span class="text-danger fw-bold">
+                                                        R$ <?php echo number_format($precoExibir, 2, ',', '.'); ?>
+                                                    </span>
+                                                    <span class="badge bg-danger ms-2">PROMOÇÃO</span>
+                                                <?php else: ?>
+                                                    R$ <?php echo number_format($precoExibir, 2, ',', '.'); ?>
+                                                <?php endif; ?>
                                             </div>
                                             <?php if ($produto['categoria_nome']): ?>
                                                 <div class="text-muted small produto-categoria"><?php echo htmlspecialchars($produto['categoria_nome']); ?></div>
@@ -676,8 +690,8 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                                     </label>
                                 </div>
                                 <button class="btn btn-primary btn-lg w-100 mt-2" onclick="finalizarPedido()">
-                                    <i class="fas fa-check me-2"></i>
-                                    Finalizar Pedido
+                                    <i class="fas fa-<?php echo $editarPedido ? 'save' : 'check'; ?> me-2"></i>
+                                    <?php echo $editarPedido ? 'Salvar Pedido' : 'Finalizar Pedido'; ?>
                                 </button>
                             </div>
                         </div>
@@ -802,6 +816,15 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
+        // Dados do estabelecimento
+        const estabelecimento = {
+            nome: <?php echo json_encode($filial['nome'] ?? 'Divino Lanches'); ?>,
+            endereco: <?php echo json_encode($filial['endereco'] ?? ''); ?>,
+            telefone: <?php echo json_encode($filial['telefone'] ?? ''); ?>,
+            email: <?php echo json_encode($filial['email'] ?? ''); ?>,
+            cnpj: <?php echo json_encode($filial['cnpj'] ?? ''); ?>
+        };
+        
         let mesaSelecionada = null;
         let carrinho = [];
         let produtoAtual = null;
@@ -869,10 +892,17 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
+                    // Verificar se está em promoção
+                    const emPromocao = data.produto.em_promocao && data.produto.preco_promocional && parseFloat(data.produto.preco_promocional) > 0;
+                    const precoBase = emPromocao ? parseFloat(data.produto.preco_promocional) : parseFloat(data.produto.preco_normal);
+                    
                     const produto = {
                         id: data.produto.id,
                         nome: data.produto.nome,
-                        preco: parseFloat(data.produto.preco_normal),
+                        preco: precoBase,
+                        preco_normal: parseFloat(data.produto.preco_normal),
+                        preco_promocional: data.produto.preco_promocional ? parseFloat(data.produto.preco_promocional) : null,
+                        em_promocao: emPromocao,
                         quantidade: 1,
                         tamanho: 'normal',
                         observacao: '',
@@ -909,12 +939,18 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
             .then(data => {
                 console.log('Dados do produto:', data);
                 if (data.success) {
+                    // Verificar se está em promoção
+                    const emPromocao = data.produto.em_promocao && data.produto.preco_promocional && parseFloat(data.produto.preco_promocional) > 0;
+                    const precoBase = emPromocao ? parseFloat(data.produto.preco_promocional) : parseFloat(data.produto.preco_normal);
+                    
                     const produto = {
                         id: data.produto.id,
                         nome: data.produto.nome,
-                        preco: parseFloat(data.produto.preco_normal),
+                        preco: precoBase,
                         preco_normal: parseFloat(data.produto.preco_normal),
+                        preco_promocional: data.produto.preco_promocional ? parseFloat(data.produto.preco_promocional) : null,
                         preco_mini: parseFloat(data.produto.preco_mini || 0),
+                        em_promocao: emPromocao,
                         quantidade: 1,
                         tamanho: 'normal',
                         observacao: '',
@@ -984,7 +1020,8 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
             if (produtoAtual.tamanho === 'mini' && produtoAtual.preco_mini > 0) {
                 precoBase = produtoAtual.preco_mini;
             } else {
-                precoBase = produtoAtual.preco_normal;
+                // Usar preço promocional se estiver em promoção, senão usar preço normal
+                precoBase = (produtoAtual.em_promocao && produtoAtual.preco_promocional) ? produtoAtual.preco_promocional : produtoAtual.preco_normal;
             }
             
             // Atualizar preço do produto
@@ -1069,7 +1106,8 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                 if (produtoAtual.tamanho === 'mini' && produtoAtual.preco_mini > 0) {
                     produtoAtual.preco = produtoAtual.preco_mini;
                 } else {
-                    produtoAtual.preco = produtoAtual.preco_normal;
+                    // Usar preço promocional se estiver em promoção, senão usar preço normal
+                    produtoAtual.preco = (produtoAtual.em_promocao && produtoAtual.preco_promocional) ? produtoAtual.preco_promocional : produtoAtual.preco_normal;
                 }
                 
                 // Calcular preço total (produto base + apenas ingredientes adicionados)
@@ -1337,9 +1375,9 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                 </head>
                 <body>
                     <div class="header">
-                        <div class="empresa">DIVINO LANCHES</div>
-                        <div class="endereco">Rua das Flores, 123 - Centro</div>
-                        <div class="endereco">Tel: (11) 99999-9999</div>
+                        <div class="empresa">${estabelecimento.nome.toUpperCase()}</div>
+                        ${estabelecimento.endereco ? `<div class="endereco">${estabelecimento.endereco}</div>` : ''}
+                        ${estabelecimento.telefone ? `<div class="endereco">Tel: ${estabelecimento.telefone}</div>` : ''}
                     </div>
                     
                     <div class="pedido-info">
@@ -1594,36 +1632,43 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                     console.log('Dados do pedido:', data.pedido);
                     console.log('========================');
                     
-                    if (deveImprimir && data.pedido) {
+                    // Verificar se deve imprimir (tanto para criar quanto para editar)
+                    if (deveImprimir) {
                         console.log('=== INICIANDO IMPRESSÃO ===');
                         
-                        // Preparar dados básicos para impressão (versão simplificada)
-                        const pedidoData = {
-                            id: data.pedido.idpedido || data.pedido.id,
-                            tipo: mesaSelecionada.tipo || 'mesa',
-                            mesa: mesaSelecionada.numero || mesaSelecionada.nome,
-                            cliente: obterDadosCliente() ? obterDadosCliente().nome : (mesaSelecionada.cliente || 'Cliente Mesa'),
-                            telefone: obterDadosCliente() ? obterDadosCliente().telefone : (mesaSelecionada.telefone || ''),
-                            endereco: mesaSelecionada.endereco || '',
-                            itens: carrinho,
-                            valor_total: carrinho.reduce((total, item) => total + (item.preco * item.quantidade), 0),
-                            observacao: document.getElementById('observacaoPedido').value || '',
-                            atendente: 'Usuário',
-                            telefone_atendente: '',
-                            estabelecimento: 'Divino Lanches'
-                        };
+                        // Usar pedidoId do pedido atualizado ou do que está sendo editado
+                        const pedidoIdParaImpressao = data.pedido ? (data.pedido.idpedido || data.pedido.id) : (isEditing ? pedidoId : null);
                         
-                        console.log('Dados preparados para impressão (simplificado):', pedidoData);
-                        
-                        // Imprimir imediatamente
-                        console.log('=== CHAMANDO IMPRIMIRCUPOM (VERSÃO SIMPLIFICADA) ===');
-                        setTimeout(() => {
-                            console.log('Executando imprimirCupom após timeout (versão simplificada)');
-                            imprimirCupom(pedidoData);
-                        }, 1000);
-                        
+                        if (pedidoIdParaImpressao) {
+                            // Preparar dados básicos para impressão
+                            const pedidoData = {
+                                id: pedidoIdParaImpressao,
+                                tipo: mesaSelecionada.tipo || 'mesa',
+                                mesa: mesaSelecionada.numero || mesaSelecionada.nome,
+                                cliente: obterDadosCliente() ? obterDadosCliente().nome : (mesaSelecionada.cliente || 'Cliente Mesa'),
+                                telefone: obterDadosCliente() ? obterDadosCliente().telefone : (mesaSelecionada.telefone || ''),
+                                endereco: mesaSelecionada.endereco || '',
+                                itens: carrinho,
+                                valor_total: carrinho.reduce((total, item) => total + (item.preco * item.quantidade), 0),
+                                observacao: document.getElementById('observacaoPedido').value || '',
+                                atendente: 'Usuário',
+                                telefone_atendente: '',
+                                estabelecimento: estabelecimento.nome
+                            };
+                            
+                            console.log('Dados preparados para impressão:', pedidoData);
+                            
+                            // Imprimir imediatamente
+                            console.log('=== CHAMANDO IMPRIMIRCUPOM ===');
+                            setTimeout(() => {
+                                console.log('Executando imprimirCupom após timeout');
+                                imprimirCupom(pedidoData);
+                            }, 1000);
+                        } else {
+                            console.log('Não foi possível obter ID do pedido para impressão');
+                        }
                     } else {
-                        console.log('Não imprimindo - deveImprimir:', deveImprimir, 'data.pedido:', data.pedido);
+                        console.log('Impressão não solicitada - checkbox desmarcado');
                     }
                     
                     if (!isEditing) {

@@ -101,26 +101,133 @@ function handleRequestCode() {
     
     // Buscar estabelecimento do usuário pelo telefone
     $db = Database::getInstance();
-    $usuario = $db->fetch(
-        "SELECT ue.tenant_id, ue.filial_id 
+    
+    error_log("phone_auth_clean.php - Buscando usuário para telefone: $telefone");
+    
+    // Preparar variações do telefone para busca
+    $telefoneVariacoes = [$telefone];
+    
+    // Se telefone começa com 55 (Brasil), adicionar variação sem o 55
+    if (strlen($telefone) > 11 && substr($telefone, 0, 2) == '55') {
+        $telefoneSemCodigo = substr($telefone, 2);
+        $telefoneVariacoes[] = $telefoneSemCodigo;
+        error_log("phone_auth_clean.php - Adicionando variação sem código: $telefoneSemCodigo");
+    }
+    
+    // Se telefone não começa com 55, adicionar variação com 55
+    if (strlen($telefone) <= 11 && !str_starts_with($telefone, '55')) {
+        $telefoneComCodigo = '55' . $telefone;
+        $telefoneVariacoes[] = $telefoneComCodigo;
+        error_log("phone_auth_clean.php - Adicionando variação com código: $telefoneComCodigo");
+    }
+    
+    // Buscar TODOS os estabelecimentos do usuário (pode ter múltiplos)
+    $placeholders = implode(',', array_fill(0, count($telefoneVariacoes), '?'));
+    $usuarioGlobal = $db->fetch(
+        "SELECT ug.id, ug.nome, ug.telefone as telefone_original
          FROM usuarios_globais ug
-         JOIN usuarios_estabelecimento ue ON ug.id = ue.usuario_global_id
-         WHERE ug.telefone = ? AND ue.ativo = true
-         ORDER BY ue.filial_id ASC LIMIT 1",
-        [$telefone]
+         WHERE ug.telefone IN ($placeholders)
+         LIMIT 1",
+        $telefoneVariacoes
     );
     
-    $tenantId = $usuario['tenant_id'] ?? 1;
-    $filialId = $usuario['filial_id'] ?? 1;
+    $estabelecimentosUsuario = [];
+    if ($usuarioGlobal) {
+        // Buscar TODOS os estabelecimentos ativos deste usuário
+        $estabelecimentosUsuario = $db->fetchAll(
+            "SELECT ue.id, ue.tenant_id, ue.filial_id, ue.tipo_usuario, 
+                    t.nome as tenant_nome, f.nome as filial_nome
+             FROM usuarios_estabelecimento ue
+             LEFT JOIN tenants t ON ue.tenant_id = t.id
+             LEFT JOIN filiais f ON ue.filial_id = f.id
+             WHERE ue.usuario_global_id = ? AND ue.ativo = true
+             ORDER BY ue.tenant_id, ue.filial_id",
+            [$usuarioGlobal['id']]
+        );
+        error_log("phone_auth_clean.php - Usuário encontrado: {$usuarioGlobal['nome']} (ID: {$usuarioGlobal['id']})");
+        error_log("phone_auth_clean.php - Estabelecimentos encontrados: " . count($estabelecimentosUsuario));
+    } else {
+        error_log("phone_auth_clean.php - Nenhum usuário encontrado para variações: " . implode(', ', $telefoneVariacoes));
+    }
     
-    error_log("phone_auth_clean.php - Telefone: $telefone, Tenant: $tenantId, Filial: $filialId");
+    // Se encontrou usuário com estabelecimentos, retornar lista para escolha
+    if ($usuarioGlobal && count($estabelecimentosUsuario) > 0) {
+        // Buscar instância ativa para enviar código (usar primeiro estabelecimento como padrão)
+        $primeiroEstabelecimento = $estabelecimentosUsuario[0];
+        $tenantId = $primeiroEstabelecimento['tenant_id'];
+        $filialId = $primeiroEstabelecimento['filial_id'];
+        
+        error_log("phone_auth_clean.php - Usuário tem " . count($estabelecimentosUsuario) . " estabelecimento(s) - Usando primeiro para envio: Tenant=$tenantId, Filial=" . ($filialId ?? 'NULL'));
+        
+        // Gerar código usando primeiro estabelecimento (para envio)
+        $result = Auth::generateAndSendAccessCode($telefone, $tenantId, $filialId);
+        
+        if ($result['success']) {
+            // Adicionar lista de estabelecimentos na resposta
+            $result['usuario'] = [
+                'id' => $usuarioGlobal['id'],
+                'nome' => $usuarioGlobal['nome'],
+                'telefone' => $usuarioGlobal['telefone_original']
+            ];
+            $result['estabelecimentos'] = array_map(function($est) {
+                return [
+                    'id' => $est['id'],
+                    'tenant_id' => $est['tenant_id'],
+                    'filial_id' => $est['filial_id'],
+                    'tipo_usuario' => $est['tipo_usuario'],
+                    'tenant_nome' => $est['tenant_nome'] ?? 'Estabelecimento',
+                    'filial_nome' => $est['filial_nome'] ?? null
+                ];
+            }, $estabelecimentosUsuario);
+            $result['requires_selection'] = count($estabelecimentosUsuario) > 1; // Se tiver mais de um, precisa escolher
+        }
+        
+        ob_clean();
+        echo json_encode($result);
+        exit;
+    }
     
-    // Generate and send access code
-    $result = Auth::generateAndSendAccessCode($telefone, $tenantId, $filialId);
-    
-    ob_clean();
-    echo json_encode($result);
-    exit;
+    // Se não encontrou usuário com estabelecimentos, tratar como cliente
+    if (!$usuarioGlobal || count($estabelecimentosUsuario) == 0) {
+        // Tratar como cliente - buscar qualquer instância ativa para usar como fallback
+        error_log("phone_auth_clean.php - Usuário não encontrado ou sem estabelecimentos - Tratando como cliente");
+        error_log("phone_auth_clean.php - Buscando instância ativa como fallback");
+        
+        // Buscar instância ativa (priorizar status ativo, mas aceitar qualquer se ativo=true)
+        $instanciaAtiva = $db->fetch(
+            "SELECT tenant_id, filial_id, id, instance_name, status 
+             FROM whatsapp_instances 
+             WHERE ativo = true
+             ORDER BY 
+                CASE WHEN status IN ('open', 'connected', 'ativo', 'active') THEN 1 ELSE 2 END,
+                created_at DESC 
+             LIMIT 1"
+        );
+        
+        if ($instanciaAtiva) {
+            $tenantId = $instanciaAtiva['tenant_id'];
+            $filialId = $instanciaAtiva['filial_id'];
+            error_log("phone_auth_clean.php - Usando instância ativa como fallback - ID: {$instanciaAtiva['id']}, Nome: {$instanciaAtiva['instance_name']}, Status: {$instanciaAtiva['status']}, Tenant: $tenantId, Filial: " . ($filialId ?? 'NULL'));
+        } else {
+            // Se não tem instância ativa, usar valores padrão
+            $tenantId = 1;
+            $filialId = null;
+            error_log("phone_auth_clean.php - Nenhuma instância ativa encontrada, usando valores padrão - Tenant: $tenantId, Filial: NULL");
+        }
+        
+        // Generate and send access code (como cliente)
+        $result = Auth::generateAndSendAccessCode($telefone, $tenantId, $filialId);
+        
+        // Marcar que é acesso como cliente
+        if ($result['success']) {
+            $result['access_type'] = 'cliente';
+            $result['requires_selection'] = false;
+        }
+        
+        ob_clean();
+        echo json_encode($result);
+        exit;
+    }
 }
 
 /**
@@ -129,6 +236,12 @@ function handleRequestCode() {
 function handleValidateCode() {
     $telefone = $_POST['telefone'] ?? '';
     $codigo = $_POST['codigo'] ?? '';
+    $accessType = $_POST['access_type'] ?? 'usuario'; // 'usuario' ou 'cliente'
+    $tenantId = isset($_POST['tenant_id']) ? (int)$_POST['tenant_id'] : null;
+    $filialId = isset($_POST['filial_id']) ? (int)$_POST['filial_id'] : null;
+    $tipoUsuario = $_POST['tipo_usuario'] ?? null;
+    
+    error_log("phone_auth_clean.php - handleValidateCode - AccessType: $accessType, Tenant: " . ($tenantId ?? 'NULL') . ", Filial: " . ($filialId ?? 'NULL') . ", TipoUsuario: " . ($tipoUsuario ?? 'NULL'));
     
     if (empty($telefone) || empty($codigo)) {
         throw new Exception('Telefone e código são obrigatórios');
@@ -137,26 +250,115 @@ function handleValidateCode() {
     // Clean phone number
     $telefone = preg_replace('/[^0-9]/', '', $telefone);
     
-    // Buscar tenant/filial do usuário pelo telefone
     $db = Database::getInstance();
-    $usuario = $db->fetch(
-        "SELECT ue.tenant_id, ue.filial_id 
-         FROM usuarios_globais ug
-         JOIN usuarios_estabelecimento ue ON ug.id = ue.usuario_global_id
-         WHERE ug.telefone = ? AND ue.ativo = true
-         ORDER BY ue.filial_id ASC LIMIT 1",
-        [$telefone]
-    );
     
-    $tenantId = $usuario['tenant_id'] ?? 1;
-    $filialId = $usuario['filial_id'] ?? null;
-    
-    error_log("phone_auth_clean.php - Validando código - Telefone: $telefone, Tenant: $tenantId, Filial: " . ($filialId ?? 'NULL'));
+    // Se acesso como cliente, buscar qualquer instância ativa
+    if ($accessType === 'cliente') {
+        error_log("phone_auth_clean.php - Validando código como CLIENTE - Telefone: $telefone");
+        
+        // Buscar instância ativa para cliente
+        $instanciaAtiva = $db->fetch(
+            "SELECT tenant_id, filial_id 
+             FROM whatsapp_instances 
+             WHERE ativo = true
+             ORDER BY 
+                CASE WHEN status IN ('open', 'connected', 'ativo', 'active') THEN 1 ELSE 2 END,
+                created_at DESC 
+             LIMIT 1"
+        );
+        
+        if ($instanciaAtiva) {
+            $tenantId = $instanciaAtiva['tenant_id'];
+            $filialId = $instanciaAtiva['filial_id'];
+        } else {
+            $tenantId = 1;
+            $filialId = null;
+        }
+        
+        error_log("phone_auth_clean.php - Cliente usando Tenant: $tenantId, Filial: " . ($filialId ?? 'NULL'));
+    } else {
+        // Acesso como usuário - usar tenant/filial escolhidos
+        if (!$tenantId) {
+            error_log("phone_auth_clean.php - Tenant não fornecido, buscando do usuário");
+            // Se não foi escolhido, buscar do usuário
+            $usuario = $db->fetch(
+                "SELECT ue.tenant_id, ue.filial_id 
+                 FROM usuarios_globais ug
+                 JOIN usuarios_estabelecimento ue ON ug.id = ue.usuario_global_id
+                 WHERE ug.telefone = ? AND ue.ativo = true
+                 ORDER BY ue.filial_id ASC LIMIT 1",
+                [$telefone]
+            );
+            
+            if ($usuario) {
+                $tenantId = $usuario['tenant_id'];
+                $filialId = $usuario['filial_id'];
+            } else {
+                // Fallback: buscar qualquer instância ativa
+                $instanciaAtiva = $db->fetch(
+                    "SELECT tenant_id, filial_id 
+                     FROM whatsapp_instances 
+                     WHERE ativo = true
+                     ORDER BY created_at DESC LIMIT 1"
+                );
+                $tenantId = $instanciaAtiva['tenant_id'] ?? 1;
+                $filialId = $instanciaAtiva['filial_id'] ?? null;
+            }
+        }
+        
+        error_log("phone_auth_clean.php - Validando código como USUÁRIO - Telefone: $telefone, Tenant: $tenantId, Filial: " . ($filialId ?? 'NULL') . ", Tipo: " . ($tipoUsuario ?? 'N/A'));
+        
+        // Verificar se o usuário realmente tem acesso a este estabelecimento
+        if ($tenantId) {
+            $usuarioGlobal = $db->fetch(
+                "SELECT id FROM usuarios_globais WHERE telefone = ? LIMIT 1",
+                [$telefone]
+            );
+            
+            if ($usuarioGlobal) {
+                // Construir query e parâmetros corretamente
+                if ($filialId) {
+                    $verificacao = $db->fetch(
+                        "SELECT * FROM usuarios_estabelecimento 
+                         WHERE usuario_global_id = ? AND tenant_id = ? AND filial_id = ? AND ativo = true
+                         LIMIT 1",
+                        [$usuarioGlobal['id'], $tenantId, $filialId]
+                    );
+                } else {
+                    $verificacao = $db->fetch(
+                        "SELECT * FROM usuarios_estabelecimento 
+                         WHERE usuario_global_id = ? AND tenant_id = ? AND ativo = true
+                         LIMIT 1",
+                        [$usuarioGlobal['id'], $tenantId]
+                    );
+                }
+                
+                if (!$verificacao) {
+                    error_log("phone_auth_clean.php - AVISO: Usuário não tem vínculo com Tenant=$tenantId, Filial=" . ($filialId ?? 'NULL'));
+                    // Listar todos os vínculos do usuário
+                    $todosVinculos = $db->fetchAll(
+                        "SELECT * FROM usuarios_estabelecimento WHERE usuario_global_id = ? AND ativo = true",
+                        [$usuarioGlobal['id']]
+                    );
+                    error_log("phone_auth_clean.php - Vínculos disponíveis: " . json_encode($todosVinculos));
+                } else {
+                    error_log("phone_auth_clean.php - Usuário tem vínculo confirmado: Tipo=" . $verificacao['tipo_usuario']);
+                }
+            }
+        }
+    }
     
     // Validate access code
-    $result = Auth::validateAccessCode($telefone, $codigo, $tenantId, $filialId);
+    $result = Auth::validateAccessCode($telefone, $codigo, $tenantId, $filialId, $accessType, $tipoUsuario);
     
     if ($result['success']) {
+        // Garantir que tipo_usuario está na resposta
+        if (!isset($result['tipo_usuario']) && isset($result['establishment']['tipo_usuario'])) {
+            $result['tipo_usuario'] = $result['establishment']['tipo_usuario'];
+        }
+        
+        error_log("phone_auth_clean.php - Validação bem-sucedida - Tipo: " . ($result['tipo_usuario'] ?? 'N/A'));
+        
         // Get tenant and filial data from database
         $db = Database::getInstance();
         $tenant = $db->fetch("SELECT * FROM tenants WHERE id = ?", [$tenantId]);

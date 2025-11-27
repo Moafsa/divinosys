@@ -76,6 +76,43 @@ if ($tenant) {
     }
 }
 
+// Get reservas data - pending and confirmed reservations
+$reservas = [];
+if ($tenant) {
+    try {
+        if ($filial) {
+            $reservas = $db->fetchAll(
+                "SELECT r.*, m.numero as mesa_numero, m.id_mesa, f.nome as filial_nome
+                 FROM reservas r
+                 LEFT JOIN mesas m ON r.mesa_id = m.id
+                 LEFT JOIN filiais f ON r.filial_id = f.id
+                 WHERE r.tenant_id = ? AND r.filial_id = ?
+                 AND r.status IN ('pendente', 'confirmada')
+                 AND (r.data_reserva >= CURRENT_DATE)
+                 ORDER BY r.data_reserva ASC, r.hora_reserva ASC
+                 LIMIT 20",
+                [$tenant['id'], $filial['id']]
+            );
+        } else {
+            $reservas = $db->fetchAll(
+                "SELECT r.*, m.numero as mesa_numero, m.id_mesa, f.nome as filial_nome
+                 FROM reservas r
+                 LEFT JOIN mesas m ON r.mesa_id = m.id
+                 LEFT JOIN filiais f ON r.filial_id = f.id
+                 WHERE r.tenant_id = ?
+                 AND r.status IN ('pendente', 'confirmada')
+                 AND (r.data_reserva >= CURRENT_DATE)
+                 ORDER BY r.data_reserva ASC, r.hora_reserva ASC
+                 LIMIT 20",
+                [$tenant['id']]
+            );
+        }
+    } catch (Exception $e) {
+        error_log("Erro ao buscar reservas: " . $e->getMessage());
+        $reservas = [];
+    }
+}
+
 // Get pedido ativos grouped by mesa - only truly active orders
 $pedido = [];
 if ($tenant) {
@@ -878,6 +915,156 @@ if ($tenant && $filial) {
                             </div>
                         </div>
                     <?php endforeach; ?>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reservas Section -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-gradient-primary text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-calendar-check me-2"></i>
+                            Reservas do Cardápio Online
+                        </h5>
+                        <button class="btn btn-sm btn-light" onclick="atualizarReservas()">
+                            <i class="fas fa-sync-alt me-1"></i>
+                            Atualizar
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="reservasContainer">
+                        <?php if (empty($reservas)): ?>
+                            <div class="text-center py-4">
+                                <i class="fas fa-calendar-times fa-3x text-muted mb-3"></i>
+                                <p class="text-muted">Nenhuma reserva pendente no momento.</p>
+                            </div>
+                        <?php else: ?>
+                            <div class="row">
+                                <?php foreach ($reservas as $reserva): ?>
+                                    <?php
+                                    $statusClass = '';
+                                    $statusIcon = '';
+                                    $statusText = ucfirst($reserva['status']);
+                                    
+                                    switch ($reserva['status']) {
+                                        case 'pendente':
+                                            $statusClass = 'warning';
+                                            $statusIcon = 'clock';
+                                            break;
+                                        case 'confirmada':
+                                            $statusClass = 'success';
+                                            $statusIcon = 'check-circle';
+                                            break;
+                                        case 'cancelada':
+                                            $statusClass = 'danger';
+                                            $statusIcon = 'times-circle';
+                                            break;
+                                        default:
+                                            $statusClass = 'secondary';
+                                            $statusIcon = 'info-circle';
+                                    }
+                                    
+                                    $dataReserva = new DateTime($reserva['data_reserva']);
+                                    $hoje = new DateTime();
+                                    $diasRestantes = $hoje->diff($dataReserva)->days;
+                                    $isHoje = $dataReserva->format('Y-m-d') === $hoje->format('Y-m-d');
+                                    ?>
+                                    <div class="col-md-6 col-lg-4 mb-3">
+                                        <div class="card h-100 border-start border-<?php echo $statusClass; ?>" style="border-left-width: 4px;">
+                                            <div class="card-body">
+                                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                                    <h6 class="card-title mb-0">
+                                                        <i class="fas fa-user me-1"></i>
+                                                        <?php echo htmlspecialchars($reserva['nome']); ?>
+                                                    </h6>
+                                                    <span class="badge bg-<?php echo $statusClass; ?>">
+                                                        <i class="fas fa-<?php echo $statusIcon; ?> me-1"></i>
+                                                        <?php echo $statusText; ?>
+                                                    </span>
+                                                </div>
+                                                
+                                                <div class="reserva-info">
+                                                    <p class="mb-1">
+                                                        <i class="fas fa-users text-muted me-2"></i>
+                                                        <strong><?php echo $reserva['num_convidados']; ?></strong> 
+                                                        <?php echo $reserva['num_convidados'] == 1 ? 'convidado' : 'convidados'; ?>
+                                                    </p>
+                                                    
+                                                    <p class="mb-1">
+                                                        <i class="fas fa-calendar text-muted me-2"></i>
+                                                        <strong><?php echo $dataReserva->format('d/m/Y'); ?></strong>
+                                                        <?php if ($isHoje): ?>
+                                                            <span class="badge bg-info ms-2">Hoje</span>
+                                                        <?php elseif ($diasRestantes == 1): ?>
+                                                            <span class="badge bg-warning ms-2">Amanhã</span>
+                                                        <?php endif; ?>
+                                                    </p>
+                                                    
+                                                    <p class="mb-1">
+                                                        <i class="fas fa-clock text-muted me-2"></i>
+                                                        <strong><?php echo date('H:i', strtotime($reserva['hora_reserva'])); ?></strong>
+                                                    </p>
+                                                    
+                                                    <?php if ($reserva['mesa_numero']): ?>
+                                                        <p class="mb-1">
+                                                            <i class="fas fa-table text-muted me-2"></i>
+                                                            Mesa <strong><?php echo htmlspecialchars($reserva['mesa_numero']); ?></strong>
+                                                        </p>
+                                                    <?php endif; ?>
+                                                    
+                                                    <p class="mb-1">
+                                                        <i class="fas fa-phone text-muted me-2"></i>
+                                                        <?php echo htmlspecialchars($reserva['celular']); ?>
+                                                    </p>
+                                                    
+                                                    <?php if ($reserva['email']): ?>
+                                                        <p class="mb-1">
+                                                            <i class="fas fa-envelope text-muted me-2"></i>
+                                                            <?php echo htmlspecialchars($reserva['email']); ?>
+                                                        </p>
+                                                    <?php endif; ?>
+                                                    
+                                                    <?php if ($reserva['instrucoes']): ?>
+                                                        <p class="mb-0 mt-2">
+                                                            <small class="text-muted">
+                                                                <i class="fas fa-comment me-1"></i>
+                                                                <?php echo htmlspecialchars($reserva['instrucoes']); ?>
+                                                            </small>
+                                                        </p>
+                                                    <?php endif; ?>
+                                                </div>
+                                                
+                                                <div class="mt-3 d-flex gap-2">
+                                                    <?php if ($reserva['status'] === 'pendente'): ?>
+                                                        <button class="btn btn-sm btn-success flex-fill" onclick="confirmarReserva(<?php echo $reserva['id']; ?>)">
+                                                            <i class="fas fa-check me-1"></i>
+                                                            Confirmar
+                                                        </button>
+                                                        <button class="btn btn-sm btn-danger" onclick="cancelarReserva(<?php echo $reserva['id']; ?>)">
+                                                            <i class="fas fa-times"></i>
+                                                        </button>
+                                                    <?php elseif ($reserva['status'] === 'confirmada'): ?>
+                                                        <button class="btn btn-sm btn-primary flex-fill" onclick="atribuirMesa(<?php echo $reserva['id']; ?>)">
+                                                            <i class="fas fa-table me-1"></i>
+                                                            Atribuir Mesa
+                                                        </button>
+                                                        <button class="btn btn-sm btn-danger" onclick="cancelarReserva(<?php echo $reserva['id']; ?>)">
+                                                            <i class="fas fa-times"></i>
+                                                        </button>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2266,6 +2453,180 @@ if ($tenant && $filial) {
                 trocoInput.value = 'Valor insuficiente';
                 trocoInput.style.color = '#dc3545';
             }
+        }
+    </script>
+    
+    <!-- Reservas Management Script -->
+    <script>
+        function atualizarReservas() {
+            location.reload();
+        }
+        
+        function confirmarReserva(reservaId) {
+            Swal.fire({
+                title: 'Confirmar Reserva',
+                text: 'Deseja confirmar esta reserva?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Sim, confirmar',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    atualizarStatusReserva(reservaId, 'confirmada');
+                }
+            });
+        }
+        
+        function cancelarReserva(reservaId) {
+            Swal.fire({
+                title: 'Cancelar Reserva',
+                text: 'Deseja cancelar esta reserva?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sim, cancelar',
+                cancelButtonText: 'Não',
+                confirmButtonColor: '#dc3545'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    atualizarStatusReserva(reservaId, 'cancelada');
+                }
+            });
+        }
+        
+        function atribuirMesa(reservaId) {
+            // Get available mesas
+            fetch('mvc/ajax/dashboard.php?action=get_mesas')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.mesas) {
+                        const mesasOptions = data.mesas.map(m => 
+                            `<option value="${m.id}">Mesa ${m.id_mesa} (Capacidade: ${m.capacidade})</option>`
+                        ).join('');
+                        
+                        Swal.fire({
+                            title: 'Atribuir Mesa',
+                            html: `
+                                <select id="mesaSelect" class="form-select">
+                                    <option value="">Selecione uma mesa</option>
+                                    ${mesasOptions}
+                                </select>
+                            `,
+                            showCancelButton: true,
+                            confirmButtonText: 'Atribuir',
+                            cancelButtonText: 'Cancelar',
+                            preConfirm: () => {
+                                const mesaId = document.getElementById('mesaSelect').value;
+                                if (!mesaId) {
+                                    Swal.showValidationMessage('Por favor, selecione uma mesa');
+                                    return false;
+                                }
+                                return mesaId;
+                            }
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                atribuirMesaReserva(reservaId, result.value);
+                            }
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Erro',
+                            text: 'Não foi possível carregar as mesas disponíveis'
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Erro',
+                        text: 'Erro ao carregar mesas'
+                    });
+                });
+        }
+        
+        function atualizarStatusReserva(reservaId, status) {
+            fetch('mvc/ajax/reservas_online.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    action: 'update_status',
+                    reserva_id: reservaId,
+                    status: status
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Sucesso',
+                        text: data.message || 'Status da reserva atualizado com sucesso!',
+                        timer: 2000,
+                        showConfirmButton: false
+                    }).then(() => {
+                        location.reload();
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Erro',
+                        text: data.message || 'Erro ao atualizar status da reserva'
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Erro',
+                    text: 'Erro ao atualizar reserva'
+                });
+            });
+        }
+        
+        function atribuirMesaReserva(reservaId, mesaId) {
+            fetch('mvc/ajax/reservas_online.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    action: 'atribuir_mesa',
+                    reserva_id: reservaId,
+                    mesa_id: mesaId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Sucesso',
+                        text: data.message || 'Mesa atribuída com sucesso!',
+                        timer: 2000,
+                        showConfirmButton: false
+                    }).then(() => {
+                        location.reload();
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Erro',
+                        text: data.message || 'Erro ao atribuir mesa'
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Erro',
+                    text: 'Erro ao atribuir mesa'
+                });
+            });
         }
     </script>
     

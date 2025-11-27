@@ -272,6 +272,15 @@ foreach ($pedidos as $pedido) {
     <script src="assets/js/pagamentos-parciais.js"></script>
     
     <script>
+        // Dados do estabelecimento
+        const estabelecimento = {
+            nome: <?php echo json_encode($filial['nome'] ?? 'Divino Lanches'); ?>,
+            endereco: <?php echo json_encode($filial['endereco'] ?? ''); ?>,
+            telefone: <?php echo json_encode($filial['telefone'] ?? ''); ?>,
+            email: <?php echo json_encode($filial['email'] ?? ''); ?>,
+            cnpj: <?php echo json_encode($filial['cnpj'] ?? ''); ?>
+        };
+        
         function verPedido(pedidoId) {
             console.log('Buscando pedido:', pedidoId);
             // Buscar dados do pedido via AJAX
@@ -528,9 +537,9 @@ foreach ($pedidos as $pedido) {
                         </head>
                         <body>
                             <div class="header">
-                                <div class="empresa">DIVINO LANCHES</div>
-                                <div class="endereco">Rua das Flores, 123 - Centro</div>
-                                <div class="endereco">Tel: (11) 99999-9999</div>
+                                <div class="empresa">${estabelecimento.nome.toUpperCase()}</div>
+                                ${estabelecimento.endereco ? `<div class="endereco">${estabelecimento.endereco}</div>` : ''}
+                                ${estabelecimento.telefone ? `<div class="endereco">Tel: ${estabelecimento.telefone}</div>` : ''}
                             </div>
                             
                             <div class="pedido-info">

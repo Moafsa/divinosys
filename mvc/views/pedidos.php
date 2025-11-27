@@ -503,6 +503,15 @@ $stats = [
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
+        // Dados do estabelecimento
+        const estabelecimento = {
+            nome: <?php echo json_encode($filial['nome'] ?? 'Divino Lanches'); ?>,
+            endereco: <?php echo json_encode($filial['endereco'] ?? ''); ?>,
+            telefone: <?php echo json_encode($filial['telefone'] ?? ''); ?>,
+            email: <?php echo json_encode($filial['email'] ?? ''); ?>,
+            cnpj: <?php echo json_encode($filial['cnpj'] ?? ''); ?>
+        };
+        
         function verPedido(pedidoId) {
             document.getElementById('pedidoNumero').textContent = pedidoId;
             
@@ -1231,9 +1240,9 @@ $stats = [
                         </head>
                         <body>
                             <div class="header">
-                                <div class="empresa">DIVINO LANCHES</div>
-                                <div class="endereco">Rua das Flores, 123 - Centro</div>
-                                <div class="endereco">Tel: (11) 99999-9999</div>
+                                <div class="empresa">${estabelecimento.nome.toUpperCase()}</div>
+                                ${estabelecimento.endereco ? `<div class="endereco">${estabelecimento.endereco}</div>` : ''}
+                                ${estabelecimento.telefone ? `<div class="endereco">Tel: ${estabelecimento.telefone}</div>` : ''}
                             </div>
                             
                             <div class="pedido-info">

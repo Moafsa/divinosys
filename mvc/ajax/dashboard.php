@@ -64,6 +64,31 @@ try {
             echo json_encode(['success' => true, 'html' => $html]);
             break;
             
+        case 'get_mesas':
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId();
+            $filialId = $session->getFilialId();
+            
+            if ($filialId) {
+                $mesas = $db->fetchAll(
+                    "SELECT id, id_mesa, numero, capacidade, status FROM mesas 
+                     WHERE tenant_id = ? AND filial_id = ? 
+                     ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE id_mesa::integer END",
+                    [$tenantId, $filialId]
+                );
+            } else {
+                $mesas = $db->fetchAll(
+                    "SELECT id, id_mesa, numero, capacidade, status FROM mesas 
+                     WHERE tenant_id = ? AND (filial_id = ? OR filial_id IS NULL)
+                     ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE id_mesa::integer END",
+                    [$tenantId, null]
+                );
+            }
+            
+            echo json_encode(['success' => true, 'mesas' => $mesas]);
+            break;
+            
         default:
             throw new \Exception('Ação não encontrada');
     }

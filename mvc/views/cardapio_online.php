@@ -499,6 +499,14 @@ if (count($enderecoParts) > 2) {
             padding: 2rem;
         }
         
+        /* Permitir que carrosséis ultrapassem o padding do container quando necessário */
+        .carousel-section {
+            margin-left: -2rem;
+            margin-right: -2rem;
+            padding-left: 2rem;
+            padding-right: 2rem;
+        }
+        
         .tab-content {
             display: none;
         }
@@ -571,15 +579,74 @@ if (count($enderecoParts) > 2) {
         .product-card {
             background: white;
             border-radius: 10px;
-            overflow: hidden;
+            overflow: visible;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             cursor: pointer;
             transition: transform 0.3s;
+            position: relative;
         }
         
         .product-card:hover {
             transform: translateY(-5px);
             box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        /* Tooltip para descrição do produto */
+        
+        .product-tooltip {
+            position: absolute;
+            bottom: calc(100% + 10px);
+            left: 50%;
+            transform: translateX(-50%) translateY(-10px);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            white-space: normal;
+            max-width: 250px;
+            min-width: 150px;
+            width: max-content;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s, transform 0.3s;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            word-wrap: break-word;
+            line-height: 1.4;
+        }
+        
+        .product-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 6px solid transparent;
+            border-top-color: rgba(0, 0, 0, 0.9);
+        }
+        
+        .product-card:hover .product-tooltip,
+        .product-card-carousel:hover .product-tooltip {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+        
+        .product-card[data-has-description="true"]:hover {
+            z-index: 10;
+        }
+        
+        .product-card-carousel[data-has-description="true"]:hover {
+            z-index: 10;
+        }
+        
+        /* Ajustes para mobile - tooltip menor */
+        @media (max-width: 768px) {
+            .product-tooltip {
+                max-width: 200px;
+                font-size: 0.85rem;
+                padding: 8px 12px;
+            }
         }
         
         .product-image {
@@ -623,7 +690,7 @@ if (count($enderecoParts) > 2) {
             color: #dc3545;
         }
         
-        /* Carousel Styles */
+        /* Carousel Styles - Implementação SIMPLES com grid */
         .carousel-section {
             margin: 3rem 0;
         }
@@ -642,56 +709,40 @@ if (count($enderecoParts) > 2) {
             color: var(--primary-color);
         }
         
-        .carousel-container {
+        .carousel-wrapper-simple {
             position: relative;
-            display: flex;
-            align-items: center;
-            gap: 1rem;
             width: 100%;
+            max-width: 1200px;
             margin: 0 auto;
         }
         
-        .carousel-wrapper {
-            flex: 1;
-            overflow: hidden;
+        .carousel-slider {
             position: relative;
             width: 100%;
+            overflow: hidden;
         }
         
-        .carousel-track {
-            display: flex !important;
-            gap: 1.5rem;
-            overflow-x: auto;
-            overflow-y: hidden;
-            scroll-behavior: smooth;
-            scrollbar-width: none;
-            -ms-overflow-style: none;
-            min-height: 250px;
-            padding: 0 1rem;
-            box-sizing: border-box;
-            -webkit-overflow-scrolling: touch;
-            width: max-content;
-            min-width: 100%;
-        }
-        
-        /* Centralizar quando há poucos itens */
-        .carousel-track:not(:has(.carousel-item:nth-child(4))) {
-            justify-content: center;
-        }
-        
-        .carousel-track::-webkit-scrollbar {
+        .carousel-slide {
             display: none;
         }
         
-        .carousel-item {
-            flex: 0 0 200px !important;
-            min-width: 200px !important;
-            max-width: 200px !important;
-            display: block !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-            scroll-snap-align: center;
-            flex-shrink: 0;
+        .carousel-slide.active {
+            display: grid !important;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 1.5rem;
+            width: 100%;
+            animation: fadeIn 0.3s;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .carousel-item-simple {
+            width: 100%;
+            min-width: 0;
+            display: block;
         }
         
         .product-card-carousel {
@@ -711,6 +762,10 @@ if (count($enderecoParts) > 2) {
         .product-card-carousel:hover {
             transform: translateY(-5px);
             box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .product-card-carousel {
+            position: relative;
         }
         
         .product-card-carousel .product-image {
@@ -870,14 +925,16 @@ if (count($enderecoParts) > 2) {
         
         /* Cart Button */
         .cart-button {
-            position: fixed;
+            position: fixed !important;
             bottom: 2rem;
             right: 2rem;
             width: 60px;
             height: 60px;
             background-color: var(--primary-color);
             border-radius: 50%;
-            display: flex;
+            display: flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
             align-items: center;
             justify-content: center;
             box-shadow: 0 4px 12px rgba(0,0,0,0.2);
@@ -1229,6 +1286,15 @@ if (count($enderecoParts) > 2) {
             color: #666;
         }
         
+        /* Garantir que carrinho apareça no desktop */
+        @media (min-width: 769px) {
+            .cart-button {
+                display: flex !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+            }
+        }
+        
         /* Responsive */
         @media (max-width: 768px) {
             .header-yellow {
@@ -1315,6 +1381,9 @@ if (count($enderecoParts) > 2) {
                 right: 1rem;
                 width: 50px;
                 height: 50px;
+                display: flex !important;
+                visibility: visible !important;
+                opacity: 1 !important;
             }
             
             .cart-button i {
@@ -1368,9 +1437,8 @@ if (count($enderecoParts) > 2) {
                 margin-bottom: 1rem;
             }
             
-            .carousel-item {
-                flex: 0 0 160px;
-                min-width: 160px;
+            .carousel-slide.active {
+                grid-template-columns: repeat(4, 1fr) !important;
             }
             
             .product-card-carousel .product-image {
@@ -1454,12 +1522,31 @@ if (count($enderecoParts) > 2) {
             }
             
             .products-grid {
-                grid-template-columns: 1fr;
-                gap: 0.75rem;
+                grid-template-columns: repeat(2, 1fr) !important; /* 2 colunas no mobile, igual aos carrosséis */
+                gap: 0.5rem !important; /* Gap menor para encaixar melhor */
+            }
+            
+            .product-card {
+                padding: 0.75rem;
+                box-sizing: border-box;
             }
             
             .product-image {
-                height: 150px;
+                height: 120px;
+                width: 100%;
+            }
+            
+            .product-name {
+                font-size: 0.85rem;
+                line-height: 1.2;
+            }
+            
+            .product-price {
+                font-size: 0.9rem;
+            }
+            
+            .price-new {
+                font-size: 0.95rem;
             }
             
             h3 {
@@ -1488,9 +1575,54 @@ if (count($enderecoParts) > 2) {
             }
             
             /* Carousel mobile */
-            .carousel-item {
-                flex: 0 0 140px;
-                min-width: 140px;
+            .main-content-wrapper {
+                padding: 1rem 0.5rem !important; /* Padding menor no mobile */
+            }
+            
+            .carousel-wrapper-simple {
+                padding: 0;
+                max-width: 100%;
+                margin: 0;
+            }
+            
+            .carousel-slider {
+                width: 100%;
+            }
+            
+            .carousel-slide.active {
+                grid-template-columns: repeat(2, 1fr) !important;
+                gap: 0.5rem !important; /* Gap menor no mobile para encaixar melhor */
+                width: 100%;
+            }
+            
+            .carousel-item-simple {
+                min-width: 0;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            
+            .product-card-carousel {
+                padding: 0.75rem;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            
+            .product-card-carousel .product-image {
+                height: 100px;
+                width: 100px;
+            }
+            
+            .product-card-carousel .product-name {
+                font-size: 0.8rem;
+                line-height: 1.2;
+            }
+            
+            .product-card-carousel .product-price {
+                font-size: 0.9rem;
+            }
+            
+            .product-card-carousel .price-new {
+                font-size: 0.95rem;
             }
             
             .carousel-btn {
@@ -1501,12 +1633,28 @@ if (count($enderecoParts) > 2) {
             
             /* Categories mobile */
             .categories-grid {
-                grid-template-columns: 1fr;
-                gap: 1rem;
+                grid-template-columns: repeat(2, 1fr) !important; /* 2 colunas no mobile, igual aos produtos */
+                gap: 0.75rem !important; /* Gap menor para encaixar melhor */
+            }
+            
+            .category-card {
+                box-sizing: border-box;
             }
             
             .category-image {
-                height: 180px;
+                height: 120px; /* Altura menor para encaixar melhor */
+            }
+            
+            .category-info {
+                padding: 0.75rem;
+            }
+            
+            .category-name {
+                font-size: 0.9rem;
+            }
+            
+            .category-count {
+                font-size: 0.8rem;
             }
             
             .close-checkout {
@@ -1569,57 +1717,74 @@ if (count($enderecoParts) > 2) {
                     <input type="text" id="searchInput" class="search-box" placeholder="Buscar produtos..." autocomplete="off">
                 </div>
                 
-                <!-- Most Sold Products Carousel -->
+                <!-- Most Sold Products - Grid Simples -->
                 <div class="carousel-section">
                     <h3 class="carousel-title">
                         <i class="fas fa-fire"></i> Mais Vendidos 
                         <span style="font-size: 0.8em; color: #666;">(<?php echo count($produtosMaisVendidos); ?> produtos)</span>
                     </h3>
                     <?php if (!empty($produtosMaisVendidos)): ?>
-                    <div class="carousel-container">
-                        <button class="carousel-btn carousel-btn-prev" onclick="scrollCarousel('maisVendidos', -1)">
-                            <i class="fas fa-chevron-left"></i>
-                        </button>
-                        <div class="carousel-wrapper" id="carouselMaisVendidos">
-                            <div class="carousel-track" style="scroll-snap-type: x mandatory;">
-                                <?php foreach ($produtosMaisVendidos as $produto): ?>
-                                    <div class="carousel-item">
-                                        <div class="product-card-carousel" 
-                                             data-product-id="<?php echo $produto['id']; ?>"
-                                             data-product-data="<?php echo htmlspecialchars(json_encode($produto)); ?>"
-                                             style="cursor: pointer;">
-                                            <?php if ($produto['imagem']): ?>
-                                                <img src="<?php echo htmlspecialchars($produto['imagem']); ?>" alt="<?php echo htmlspecialchars($produto['nome']); ?>" class="product-image" onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                                                <div class="product-image" style="display: none; align-items: center; justify-content: center; background: #f5f5f5;">
-                                                    <i class="fas fa-image" style="font-size: 2rem; color: #ccc;"></i>
-                                                </div>
-                                            <?php else: ?>
-                                                <div class="product-image" style="display: flex; align-items: center; justify-content: center; background: #f5f5f5;">
-                                                    <i class="fas fa-image" style="font-size: 2rem; color: #ccc;"></i>
-                                                </div>
-                                            <?php endif; ?>
-                                            <div class="product-info">
-                                                <div class="product-name"><?php echo htmlspecialchars($produto['nome']); ?></div>
-                                                <?php 
-                                                $emPromocao = !empty($produto['em_promocao']) && !empty($produto['preco_promocional']) && $produto['preco_promocional'] > 0;
-                                                ?>
-                                                <?php if ($emPromocao): ?>
-                                                    <div class="product-price-promo">
-                                                        <span class="price-old">R$ <?php echo number_format($produto['preco_normal'], 2, ',', '.'); ?></span>
-                                                        <span class="price-new">R$ <?php echo number_format($produto['preco_promocional'], 2, ',', '.'); ?></span>
+                    <div class="carousel-wrapper-simple" id="wrapperMaisVendidos">
+                        <div class="carousel-slider" id="sliderMaisVendidos">
+                            <?php 
+                            // Dividir em grupos de 2 para mobile (JavaScript vai combinar para desktop)
+                            $produtosChunks = array_chunk($produtosMaisVendidos, 2);
+                            foreach ($produtosChunks as $index => $chunk): 
+                            ?>
+                                <div class="carousel-slide <?php echo $index === 0 ? 'active' : ''; ?>" data-slide="<?php echo $index; ?>">
+                                    <?php foreach ($chunk as $produto): ?>
+                                        <div class="carousel-item-simple">
+                                            <div class="product-card-carousel" 
+                                                 data-product-id="<?php echo $produto['id']; ?>"
+                                                 data-product-data="<?php echo htmlspecialchars(json_encode($produto)); ?>"
+                                                 data-has-description="<?php echo !empty($produto['descricao']) ? 'true' : 'false'; ?>"
+                                                 style="cursor: pointer;">
+                                                <?php if (!empty($produto['descricao'])): ?>
+                                                    <div class="product-tooltip"><?php echo htmlspecialchars($produto['descricao']); ?></div>
+                                                <?php endif; ?>
+                                                <?php if ($produto['imagem']): ?>
+                                                    <img src="<?php echo htmlspecialchars($produto['imagem']); ?>" alt="<?php echo htmlspecialchars($produto['nome']); ?>" class="product-image" onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                                    <div class="product-image" style="display: none; align-items: center; justify-content: center; background: #f5f5f5;">
+                                                        <i class="fas fa-image" style="font-size: 2rem; color: #ccc;"></i>
                                                     </div>
                                                 <?php else: ?>
-                                                    <div class="product-price">R$ <?php echo number_format($produto['preco_normal'], 2, ',', '.'); ?></div>
+                                                    <div class="product-image" style="display: flex; align-items: center; justify-content: center; background: #f5f5f5;">
+                                                        <i class="fas fa-image" style="font-size: 2rem; color: #ccc;"></i>
+                                                    </div>
                                                 <?php endif; ?>
+                                                <div class="product-info">
+                                                    <div class="product-name"><?php echo htmlspecialchars($produto['nome']); ?></div>
+                                                    <?php 
+                                                    $emPromocao = !empty($produto['em_promocao']) && !empty($produto['preco_promocional']) && $produto['preco_promocional'] > 0;
+                                                    ?>
+                                                    <?php if ($emPromocao): ?>
+                                                        <div class="product-price-promo">
+                                                            <span class="price-old">R$ <?php echo number_format($produto['preco_normal'], 2, ',', '.'); ?></span>
+                                                            <span class="price-new">R$ <?php echo number_format($produto['preco_promocional'], 2, ',', '.'); ?></span>
+                                                        </div>
+                                                    <?php else: ?>
+                                                        <div class="product-price">R$ <?php echo number_format($produto['preco_normal'], 2, ',', '.'); ?></div>
+                                                    <?php endif; ?>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endforeach; ?>
                         </div>
-                        <button class="carousel-btn carousel-btn-next" onclick="scrollCarousel('maisVendidos', 1)">
-                            <i class="fas fa-chevron-right"></i>
-                        </button>
+                        <?php if (count($produtosChunks) > 1): ?>
+                        <div style="display: flex; justify-content: center; gap: 1rem; margin-top: 1.5rem;">
+                            <button class="carousel-btn carousel-btn-prev" onclick="changeSlide('maisVendidos', -1)">
+                                <i class="fas fa-chevron-left"></i>
+                            </button>
+                            <span style="line-height: 40px; color: #666;">
+                                <span id="currentMaisVendidos">1</span> / <?php echo count($produtosChunks); ?>
+                            </span>
+                            <button class="carousel-btn carousel-btn-next" onclick="changeSlide('maisVendidos', 1)">
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                        <?php endif; ?>
                     </div>
                     <?php else: ?>
                     <div class="carousel-empty">
@@ -1628,63 +1793,74 @@ if (count($enderecoParts) > 2) {
                     <?php endif; ?>
                 </div>
                 
-                <!-- Promotional Products Carousel -->
+                <!-- Promotional Products - Grid Simples -->
+                <?php if (!empty($produtosPromocao)): ?>
                 <div class="carousel-section">
                     <h3 class="carousel-title">
                         <i class="fas fa-tag"></i> Promoções do Dia
                         <span style="font-size: 0.8em; color: #666;">(<?php echo count($produtosPromocao); ?> produtos)</span>
                     </h3>
-                    <?php if (!empty($produtosPromocao)): ?>
-                    <div class="carousel-container">
-                        <button class="carousel-btn carousel-btn-prev" onclick="scrollCarousel('promocoes', -1)">
-                            <i class="fas fa-chevron-left"></i>
-                        </button>
-                        <div class="carousel-wrapper" id="carouselPromocoes">
-                            <div class="carousel-track" style="scroll-snap-type: x mandatory;">
-                                <?php foreach ($produtosPromocao as $produto): 
-                                    $precoPromo = isset($produto['preco_promocional']) && $produto['preco_promocional'] > 0 ? $produto['preco_promocional'] : $produto['preco_normal'];
-                                ?>
-                                    <div class="carousel-item">
-                                        <div class="product-card-carousel" 
-                                             data-product-id="<?php echo $produto['id']; ?>"
-                                             data-product-data="<?php echo htmlspecialchars(json_encode($produto)); ?>"
-                                             style="cursor: pointer;">
-                                            <?php if ($produto['imagem']): ?>
-                                                <img src="<?php echo htmlspecialchars($produto['imagem']); ?>" alt="<?php echo htmlspecialchars($produto['nome']); ?>" class="product-image" onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                                                <div class="product-image" style="display: none; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--primary-color), #ffd700);">
-                                                    <i class="fas fa-image" style="font-size: 2rem; color: white;"></i>
-                                                </div>
-                                            <?php else: ?>
-                                                <div class="product-image" style="display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--primary-color), #ffd700);">
-                                                    <i class="fas fa-image" style="font-size: 2rem; color: white;"></i>
-                                                </div>
-                                            <?php endif; ?>
-                                            <div class="product-info">
-                                                <div class="product-name"><?php echo htmlspecialchars($produto['nome']); ?></div>
-                                                <?php if (isset($produto['preco_promocional']) && $produto['preco_promocional'] > 0 && $produto['preco_promocional'] < $produto['preco_normal']): ?>
-                                                    <div class="product-price-promo">
-                                                        <span class="price-old">R$ <?php echo number_format($produto['preco_normal'], 2, ',', '.'); ?></span>
-                                                        <span class="price-new">R$ <?php echo number_format($produto['preco_promocional'], 2, ',', '.'); ?></span>
+                    <div class="carousel-wrapper-simple" id="wrapperPromocoes">
+                        <div class="carousel-slider" id="sliderPromocoes">
+                            <?php 
+                            // Dividir em grupos de 2 para mobile (JavaScript vai combinar para desktop)
+                            $promocoesChunks = array_chunk($produtosPromocao, 2);
+                            foreach ($promocoesChunks as $index => $chunk): 
+                            ?>
+                                <div class="carousel-slide <?php echo $index === 0 ? 'active' : ''; ?>" data-slide="<?php echo $index; ?>">
+                                    <?php foreach ($chunk as $produto): ?>
+                                        <div class="carousel-item-simple">
+                                            <div class="product-card-carousel" 
+                                                 data-product-id="<?php echo $produto['id']; ?>"
+                                                 data-product-data="<?php echo htmlspecialchars(json_encode($produto)); ?>"
+                                                 data-has-description="<?php echo !empty($produto['descricao']) ? 'true' : 'false'; ?>"
+                                                 style="cursor: pointer;">
+                                                <?php if (!empty($produto['descricao'])): ?>
+                                                    <div class="product-tooltip"><?php echo htmlspecialchars($produto['descricao']); ?></div>
+                                                <?php endif; ?>
+                                                <?php if ($produto['imagem']): ?>
+                                                    <img src="<?php echo htmlspecialchars($produto['imagem']); ?>" alt="<?php echo htmlspecialchars($produto['nome']); ?>" class="product-image" onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                                    <div class="product-image" style="display: none; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--primary-color), #ffd700);">
+                                                        <i class="fas fa-image" style="font-size: 2rem; color: white;"></i>
                                                     </div>
                                                 <?php else: ?>
-                                                    <div class="product-price">R$ <?php echo number_format($produto['preco_normal'], 2, ',', '.'); ?></div>
+                                                    <div class="product-image" style="display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--primary-color), #ffd700);">
+                                                        <i class="fas fa-image" style="font-size: 2rem; color: white;"></i>
+                                                    </div>
                                                 <?php endif; ?>
+                                                <div class="product-info">
+                                                    <div class="product-name"><?php echo htmlspecialchars($produto['nome']); ?></div>
+                                                    <?php if (isset($produto['preco_promocional']) && $produto['preco_promocional'] > 0 && $produto['preco_promocional'] < $produto['preco_normal']): ?>
+                                                        <div class="product-price-promo">
+                                                            <span class="price-old">R$ <?php echo number_format($produto['preco_normal'], 2, ',', '.'); ?></span>
+                                                            <span class="price-new">R$ <?php echo number_format($produto['preco_promocional'], 2, ',', '.'); ?></span>
+                                                        </div>
+                                                    <?php else: ?>
+                                                        <div class="product-price">R$ <?php echo number_format($produto['preco_normal'], 2, ',', '.'); ?></div>
+                                                    <?php endif; ?>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endforeach; ?>
                         </div>
-                        <button class="carousel-btn carousel-btn-next" onclick="scrollCarousel('promocoes', 1)">
-                            <i class="fas fa-chevron-right"></i>
-                        </button>
+                        <?php if (count($promocoesChunks) > 1): ?>
+                        <div style="display: flex; justify-content: center; gap: 1rem; margin-top: 1.5rem;">
+                            <button class="carousel-btn carousel-btn-prev" onclick="changeSlide('promocoes', -1)">
+                                <i class="fas fa-chevron-left"></i>
+                            </button>
+                            <span style="line-height: 40px; color: #666;">
+                                <span id="currentPromocoes">1</span> / <?php echo count($promocoesChunks); ?>
+                            </span>
+                            <button class="carousel-btn carousel-btn-next" onclick="changeSlide('promocoes', 1)">
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                        <?php endif; ?>
                     </div>
-                    <?php else: ?>
-                    <div class="carousel-empty">
-                        <p class="text-muted text-center py-4">Nenhuma promoção disponível no momento.</p>
-                    </div>
-                    <?php endif; ?>
                 </div>
+                <?php endif; ?>
                 
                 <!-- Categories Grid -->
                 <div class="categories-section">
@@ -1742,7 +1918,11 @@ if (count($enderecoParts) > 2) {
                                          data-category="<?php echo htmlspecialchars(strtolower($categoria)); ?>"
                                          data-product-id="<?php echo $produto['id']; ?>"
                                          data-product-data="<?php echo htmlspecialchars(json_encode($produto)); ?>"
+                                         data-has-description="<?php echo !empty($produto['descricao']) ? 'true' : 'false'; ?>"
                                          style="cursor: pointer;">
+                                        <?php if (!empty($produto['descricao'])): ?>
+                                            <div class="product-tooltip"><?php echo htmlspecialchars($produto['descricao']); ?></div>
+                                        <?php endif; ?>
                                         <?php if ($produto['imagem']): ?>
                                             <img src="<?php echo htmlspecialchars($produto['imagem']); ?>" alt="<?php echo htmlspecialchars($produto['nome']); ?>" class="product-image" onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
                                             <div class="product-image" style="display: none; align-items: center; justify-content: center; background: #f5f5f5;">
@@ -2764,11 +2944,11 @@ if (count($enderecoParts) > 2) {
                                 <div id="onlinePaymentButtons" style="display: none; margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
                                     <h6 class="mb-3">Escolha o método de pagamento:</h6>
                                     <div class="d-grid gap-2">
-                                        <button class="btn btn-success btn-lg" onclick="finalizarPedidoOnline('PIX')" style="margin-bottom: 10px;">
-                                            <i class="fas fa-qrcode"></i> Pagar com PIX
+                                        <button id="btnPix" class="btn btn-success btn-lg" onclick="finalizarPedidoOnline('PIX')" style="margin-bottom: 10px;">
+                                            <i class="fas fa-qrcode"></i> <span class="btn-text">Pagar com PIX</span>
                                         </button>
-                                        <button class="btn btn-primary btn-lg" onclick="finalizarPedidoOnline('CREDIT_CARD')">
-                                            <i class="fas fa-credit-card"></i> Pagar com Cartão
+                                        <button id="btnCartao" class="btn btn-primary btn-lg" onclick="finalizarPedidoOnline('CREDIT_CARD')">
+                                            <i class="fas fa-credit-card"></i> <span class="btn-text">Pagar com Cartão</span>
                                         </button>
                                     </div>
                                 </div>
@@ -2850,13 +3030,21 @@ if (count($enderecoParts) > 2) {
                             <!-- Credit Card Payment -->
                             <div id="creditCardPaymentContainer" style="display: none;">
                                 <h5 class="mb-3">Pagamento via Cartão de Crédito</h5>
-                                <div class="alert alert-warning">
-                                    <i class="fas fa-exclamation-triangle"></i> Para pagamento com cartão, você será redirecionado para a página segura do Asaas.
+                                <div class="alert alert-info mb-4">
+                                    <i class="fas fa-info-circle"></i> Você será redirecionado para a página segura do Asaas para finalizar o pagamento com cartão de crédito.
                                 </div>
-                                <div class="text-center mt-3">
-                                    <button class="btn btn-primary" onclick="abrirPagamentoCartao()">
+                                <div class="text-center mt-4 mb-3">
+                                    <button id="btnIrParaPagamento" class="btn btn-primary btn-lg" onclick="abrirPagamentoCartao()" style="min-width: 280px; padding: 15px 30px; font-size: 1.1rem;">
                                         <i class="fas fa-credit-card"></i> Ir para Pagamento
                                     </button>
+                                </div>
+                                <div class="text-center">
+                                    <small class="text-muted d-block mb-2">
+                                        <i class="fas fa-shield-alt"></i> Página segura do Asaas
+                                    </small>
+                                    <small class="text-muted">
+                                        Após o pagamento, seu pedido será confirmado automaticamente
+                                    </small>
                                 </div>
                             </div>
                             
@@ -4013,6 +4201,29 @@ if (count($enderecoParts) > 2) {
             
             isSubmittingOrder = true;
             
+            // Mostrar indicador de carregamento nos botões
+            const btnPix = document.getElementById('btnPix');
+            const btnCartao = document.getElementById('btnCartao');
+            const loadingText = paymentType === 'PIX' ? 'Processando PIX...' : 'Processando Cartão...';
+            
+            // Desabilitar botões e mostrar loading
+            if (btnPix) {
+                btnPix.disabled = true;
+                const pixText = btnPix.querySelector('.btn-text');
+                if (pixText) {
+                    btnPix.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>' + 
+                                      (paymentType === 'PIX' ? loadingText : 'Pagar com PIX');
+                }
+            }
+            if (btnCartao) {
+                btnCartao.disabled = true;
+                const cartaoText = btnCartao.querySelector('.btn-text');
+                if (cartaoText) {
+                    btnCartao.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>' + 
+                                         (paymentType === 'CREDIT_CARD' ? loadingText : 'Pagar com Cartão');
+                }
+            }
+            
             // Obter dados do formulário
             const customerNameValue = document.getElementById('customerName').value.trim();
             const customerPhoneValue = document.getElementById('customerPhone').value.trim();
@@ -4022,6 +4233,7 @@ if (count($enderecoParts) > 2) {
             // Validar dados básicos
             if (!customerNameValue || !customerPhoneValue) {
                 alert('Por favor, preencha seus dados primeiro.');
+                restorePaymentButtons();
                 isSubmittingOrder = false;
                 return;
             }
@@ -4049,6 +4261,7 @@ if (count($enderecoParts) > 2) {
                     const city = document.getElementById('deliveryCity').value.trim();
                     if (!address || !city) {
                         alert('Por favor, preencha o endereço de entrega.');
+                        restorePaymentButtons();
                         isSubmittingOrder = false;
                         return;
                     }
@@ -4102,36 +4315,90 @@ if (count($enderecoParts) > 2) {
                 console.log('Resultado do pedido:', result);
                 
                 if (result.success) {
-                    // Se tiver payment_url, abrir em nova janela
-                    if (result.payment_url) {
-                        // Abrir URL do Asaas em nova janela
-                        window.open(result.payment_url, '_blank', 'width=800,height=600');
+                    // Marcar checkout como completado para evitar disparar evento de abandono
+                    checkoutCompleted = true;
+                    
+                    // Save order ID to localStorage
+                    if (result.pedido_id) {
+                        localStorage.setItem('last_order_id', result.pedido_id);
+                    }
+                    
+                    if (result.payment_id && result.payment_url) {
+                        // Payment created successfully - open payment URL in new tab
+                        console.log('Payment created:', {
+                            payment_id: result.payment_id,
+                            payment_url: result.payment_url,
+                            billing_type: result.billing_type
+                        });
                         
-                        // Fechar modal e limpar carrinho
+                        // Store payment data with timestamp
+                        localStorage.setItem('pending_payment_order_id', result.pedido_id);
+                        localStorage.setItem('pending_payment_url', result.payment_url);
+                        localStorage.setItem('pending_payment_return_url', window.location.href);
+                        localStorage.setItem('pending_payment_timestamp', Date.now().toString());
+                        
+                        // Restore buttons
+                        restorePaymentButtons();
+                        
+                        // Open payment URL in new tab using a temporary link (avoids popup blocker)
+                        console.log('Opening payment URL in new tab:', result.payment_url);
+                        
+                        // Create temporary link and click it (better compatibility than window.open)
+                        const tempLink = document.createElement('a');
+                        tempLink.href = result.payment_url;
+                        tempLink.target = '_blank';
+                        tempLink.rel = 'noopener noreferrer';
+                        tempLink.style.display = 'none';
+                        document.body.appendChild(tempLink);
+                        
+                        // Use setTimeout to ensure it's in the same execution context
+                        setTimeout(() => {
+                            tempLink.click();
+                            document.body.removeChild(tempLink);
+                        }, 100);
+                        
+                        // Close modal and clear cart in current tab (return to menu)
                         checkoutCompleted = true;
                         cart = [];
                         updateCart();
                         closeCheckoutModal();
                         
-                        // Mostrar mensagem de sucesso
+                        // Show success message
                         if (typeof Swal !== 'undefined') {
                             Swal.fire({
                                 icon: 'success',
                                 title: 'Pedido Criado!',
-                                text: 'Você será redirecionado para a página de pagamento. Após o pagamento, seu pedido será confirmado.',
+                                text: 'A página de pagamento foi aberta em uma nova aba. Após o pagamento, seu pedido será confirmado automaticamente.',
                                 confirmButtonText: 'OK'
                             });
                         } else {
-                            alert('Pedido criado com sucesso! Você será redirecionado para a página de pagamento.');
+                            alert('Pedido criado com sucesso! A página de pagamento foi aberta em uma nova aba.');
                         }
                         
-                        // Iniciar verificação de status do pagamento
+                        // Start polling for payment status (will check when user returns)
                         if (result.pedido_id) {
                             setupPaymentStatusCheck(result.pedido_id);
                         }
+                        
+                        isSubmittingOrder = false;
+                        return; // Stop execution here
+                    } else if (result.payment_id && !result.payment_url) {
+                        // No payment URL - show error
+                        console.error('Payment created but no payment_url returned');
+                        alert('Pedido criado, mas não foi possível obter o link de pagamento. Entre em contato conosco.');
+                        restorePaymentButtons();
+                        isSubmittingOrder = false;
+                        return;
                     } else {
-                        // Pedido criado mas sem URL de pagamento (pode ser que o pagamento foi processado diretamente)
+                        // Pedido criado mas sem payment_id (pode ser que o pagamento foi processado diretamente)
                         checkoutCompleted = true;
+                        
+                        // Limpar dados pendentes de pagamento
+                        localStorage.removeItem('pending_payment_order_id');
+                        localStorage.removeItem('pending_payment_url');
+                        localStorage.removeItem('pending_payment_return_url');
+                        
+                        // Limpar carrinho após pedido criado
                         cart = [];
                         updateCart();
                         closeCheckoutModal();
@@ -4150,13 +4417,30 @@ if (count($enderecoParts) > 2) {
                 } else {
                     console.error('Erro ao criar pedido:', result);
                     alert('Erro ao criar pedido: ' + (result.message || 'Erro desconhecido'));
+                    restorePaymentButtons();
                     isSubmittingOrder = false;
                 }
             } catch (error) {
                 console.error('Erro ao finalizar pedido:', error);
                 console.error('Stack trace:', error.stack);
                 alert('Erro ao processar pedido. Por favor, tente novamente.');
+                restorePaymentButtons();
                 isSubmittingOrder = false;
+            }
+        }
+        
+        // Função para restaurar botões de pagamento ao estado original
+        function restorePaymentButtons() {
+            const btnPix = document.getElementById('btnPix');
+            const btnCartao = document.getElementById('btnCartao');
+            
+            if (btnPix) {
+                btnPix.disabled = false;
+                btnPix.innerHTML = '<i class="fas fa-qrcode"></i> <span class="btn-text">Pagar com PIX</span>';
+            }
+            if (btnCartao) {
+                btnCartao.disabled = false;
+                btnCartao.innerHTML = '<i class="fas fa-credit-card"></i> <span class="btn-text">Pagar com Cartão</span>';
             }
         }
         
@@ -4753,32 +5037,19 @@ if (count($enderecoParts) > 2) {
             }
         }
         
-        // Abrir pagamento de cartão
+        // Abrir pagamento de cartão - redireciona na mesma página
         function abrirPagamentoCartao() {
             if (window.asaasPaymentUrl) {
-                // Open in new window
-                const paymentWindow = window.open(window.asaasPaymentUrl, 'AsaasPayment', 'width=800,height=600');
-                
-                if (!paymentWindow) {
-                    Swal.fire({
-                        icon: 'warning',
-                        title: 'Popup bloqueado',
-                        text: 'Por favor, permita popups para este site e tente novamente'
-                    });
-                    return;
+                // Salvar estado do pedido antes de redirecionar
+                const lastOrderId = localStorage.getItem('last_order_id');
+                if (lastOrderId) {
+                    localStorage.setItem('pending_payment_order_id', lastOrderId);
+                    localStorage.setItem('pending_payment_url', window.asaasPaymentUrl);
+                    localStorage.setItem('pending_payment_return_url', window.location.href);
                 }
                 
-                // Monitor window for payment completion
-                const checkWindow = setInterval(() => {
-                    if (paymentWindow.closed) {
-                        clearInterval(checkWindow);
-                        // Check payment status
-                        const pedidoId = localStorage.getItem('last_order_id');
-                        if (pedidoId) {
-                            setupPaymentStatusCheck(pedidoId);
-                        }
-                    }
-                }, 1000);
+                // Redirecionar para página de pagamento do Asaas
+                window.location.href = window.asaasPaymentUrl;
             } else {
                 Swal.fire({
                     icon: 'error',
@@ -4792,9 +5063,75 @@ if (count($enderecoParts) > 2) {
         document.getElementById('reservationForm').addEventListener('submit', function(e) {
             e.preventDefault();
             
-            const formData = new FormData(this);
-            // Here you would implement the reservation submission
-            alert('Funcionalidade de reserva será implementada em breve.');
+            const formData = {
+                tenant_id: <?php echo $tenantId; ?>,
+                filial_id: <?php echo $filialId; ?>,
+                num_convidados: parseInt(document.getElementById('numConvidados').value),
+                data_reserva: document.getElementById('dataReserva').value,
+                hora_reserva: document.getElementById('horaReserva').value,
+                nome: document.getElementById('nomeReserva').value,
+                email: document.getElementById('emailReserva').value,
+                celular: document.getElementById('celularReserva').value,
+                instrucoes: document.getElementById('instrucoesReserva').value
+            };
+            
+            // Validate date is not in the past
+            const reservaDateTime = new Date(formData.data_reserva + 'T' + formData.hora_reserva);
+            const now = new Date();
+            if (reservaDateTime < now) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Data inválida',
+                    text: 'Não é possível fazer reserva para data/hora no passado.'
+                });
+                return;
+            }
+            
+            // Show loading
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Enviando...';
+            
+            fetch('mvc/ajax/reservas_online.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(formData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Reserva enviada!',
+                        text: data.message || 'Sua reserva foi enviada com sucesso. Aguarde a confirmação do estabelecimento.',
+                        confirmButtonText: 'OK'
+                    }).then(() => {
+                        // Reset form
+                        document.getElementById('reservationForm').reset();
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Erro ao enviar reserva',
+                        text: data.message || 'Ocorreu um erro ao processar sua reserva. Tente novamente.'
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Erro de conexão',
+                    text: 'Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.'
+                });
+            })
+            .finally(() => {
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            });
         });
         
         // Close sidebar when clicking outside
@@ -4848,53 +5185,38 @@ if (count($enderecoParts) > 2) {
         });
         
         // ============================================
-        // CAROUSEL FUNCTIONS
+        // CAROUSEL FUNCTIONS - Implementação SIMPLES com slides
         // ============================================
-        function scrollCarousel(carouselId, direction) {
-            const carouselName = carouselId === 'maisVendidos' ? 'MaisVendidos' : 'Promocoes';
-            const carousel = document.getElementById('carousel' + carouselName);
+        const slideIndex = {
+            maisVendidos: 0,
+            promocoes: 0
+        };
+        
+        function changeSlide(carouselId, direction) {
+            const sliderId = carouselId === 'maisVendidos' ? 'sliderMaisVendidos' : 'sliderPromocoes';
+            const slider = document.getElementById(sliderId);
+            if (!slider) return;
             
-            if (!carousel) {
-                console.error('Carousel não encontrado:', 'carousel' + carouselName);
-                return;
+            const slides = slider.querySelectorAll('.carousel-slide');
+            if (slides.length === 0) return;
+            
+            const currentIndex = slideIndex[carouselId] || 0;
+            let newIndex = currentIndex + direction;
+            
+            if (newIndex < 0) newIndex = slides.length - 1;
+            if (newIndex >= slides.length) newIndex = 0;
+            
+            slides[currentIndex].classList.remove('active');
+            slides[newIndex].classList.add('active');
+            
+            slideIndex[carouselId] = newIndex;
+            
+            // Atualizar contador
+            const counterId = carouselId === 'maisVendidos' ? 'currentMaisVendidos' : 'currentPromocoes';
+            const counter = document.getElementById(counterId);
+            if (counter) {
+                counter.textContent = newIndex + 1;
             }
-            
-            const track = carousel.querySelector('.carousel-track');
-            if (!track) {
-                console.error('Track não encontrado no carousel:', carouselName);
-                return;
-            }
-            
-            // Calcular largura de um item + gap
-            const firstItem = track.querySelector('.carousel-item');
-            if (!firstItem) {
-                console.error('Nenhum item encontrado no carousel:', carouselName);
-                return;
-            }
-            
-            const itemWidth = firstItem.offsetWidth || 200;
-            const gap = 24; // 1.5rem = 24px
-            const scrollAmount = itemWidth + gap;
-            
-            const currentScroll = track.scrollLeft || 0;
-            const newScroll = Math.max(0, currentScroll + (direction * scrollAmount));
-            const maxScroll = track.scrollWidth - track.clientWidth;
-            const finalScroll = Math.min(newScroll, maxScroll);
-            
-            console.log('Scrolling carousel:', {
-                carouselName,
-                currentScroll,
-                newScroll,
-                finalScroll,
-                maxScroll,
-                scrollAmount,
-                itemWidth
-            });
-            
-            track.scrollTo({
-                left: finalScroll,
-                behavior: 'smooth'
-            });
         }
         
         // ============================================
@@ -4951,6 +5273,12 @@ if (count($enderecoParts) > 2) {
                     const produtoNome = (produto.nome || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
                     const produtoImagem = (produto.imagem || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
                     const produtoDataEscaped = JSON.stringify(produto).replace(/\\/g, '\\\\').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                    const produtoDescricao = (produto.descricao || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                    const hasDescricao = produtoDescricao && produtoDescricao.trim().length > 0;
+                    
+                    if (hasDescricao) {
+                        produtoCard.setAttribute('data-has-description', 'true');
+                    }
                     
                     // Verificar se está em promoção
                     const emPromocao = produto.em_promocao && produto.preco_promocional && parseFloat(produto.preco_promocional) > 0;
@@ -4972,7 +5300,12 @@ if (count($enderecoParts) > 2) {
                                <i class="fas fa-image" style="font-size: 3rem; color: #ccc;"></i>
                            </div>`;
                     
+                    const tooltipHtml = hasDescricao 
+                        ? `<div class="product-tooltip">${produtoDescricao}</div>`
+                        : '';
+                    
                     produtoCard.innerHTML = `
+                        ${tooltipHtml}
                         ${imagemHtml}
                         <div class="product-info">
                             <div class="product-name">${produtoNome}</div>
@@ -5021,9 +5354,234 @@ if (count($enderecoParts) > 2) {
         }
         
         // Add click events to carousel product cards and category cards
+        // Verificar status do pagamento quando usuário retorna do Asaas
+        let paymentCheckAttempts = 0;
+        const MAX_PAYMENT_CHECK_ATTEMPTS = 3; // Limitar tentativas
+        
+        async function checkPaymentStatusOnReturn(pedidoId) {
+            if (!pedidoId) {
+                // Limpar se não houver pedido ID
+                localStorage.removeItem('pending_payment_order_id');
+                localStorage.removeItem('pending_payment_url');
+                localStorage.removeItem('pending_payment_return_url');
+                return;
+            }
+            
+            // Limitar tentativas para evitar loops infinitos
+            if (paymentCheckAttempts >= MAX_PAYMENT_CHECK_ATTEMPTS) {
+                console.log('Limite de tentativas de verificação de pagamento atingido. Limpando dados pendentes.');
+                localStorage.removeItem('pending_payment_order_id');
+                localStorage.removeItem('pending_payment_url');
+                localStorage.removeItem('pending_payment_return_url');
+                paymentCheckAttempts = 0;
+                return;
+            }
+            
+            try {
+                console.log('Verificando status do pagamento para pedido:', pedidoId);
+                paymentCheckAttempts++;
+                
+                const response = await fetch(`mvc/ajax/pedidos_online.php?action=check_payment_status&pedido_id=${pedidoId}`);
+                
+                // Se a resposta não for OK, limpar e parar
+                if (!response.ok) {
+                    console.log('Erro ao verificar status do pagamento. Limpando dados pendentes.');
+                    localStorage.removeItem('pending_payment_order_id');
+                    localStorage.removeItem('pending_payment_url');
+                    localStorage.removeItem('pending_payment_return_url');
+                    paymentCheckAttempts = 0;
+                    return;
+                }
+                
+                const result = await response.json();
+                
+                if (!result.success) {
+                    // Se o pedido não foi encontrado ou houve erro, limpar e parar
+                    if (result.message && (result.message.includes('não encontrado') || result.message.includes('não fornecido'))) {
+                        console.log('Pedido não encontrado. Limpando dados pendentes.');
+                        localStorage.removeItem('pending_payment_order_id');
+                        localStorage.removeItem('pending_payment_url');
+                        localStorage.removeItem('pending_payment_return_url');
+                        paymentCheckAttempts = 0;
+                        return;
+                    }
+                }
+                
+                if (result.success && result.status === 'paid') {
+                    // Pagamento confirmado!
+                    localStorage.removeItem('pending_payment_order_id');
+                    localStorage.removeItem('pending_payment_url');
+                    localStorage.removeItem('pending_payment_return_url');
+                    paymentCheckAttempts = 0;
+                    
+                    // Limpar carrinho após pagamento confirmado
+                    cart = [];
+                    updateCart();
+                    
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Pagamento Confirmado!',
+                            text: 'Seu pedido foi confirmado com sucesso!',
+                            confirmButtonText: 'OK'
+                        });
+                    } else {
+                        alert('Pagamento confirmado! Seu pedido foi confirmado com sucesso!');
+                    }
+                } else if (result.success && result.status === 'pending') {
+                    // Ainda pendente, continuar verificando (mas limitado)
+                    console.log('Pagamento ainda pendente, continuando verificação...');
+                    setTimeout(() => {
+                        checkPaymentStatusOnReturn(pedidoId);
+                    }, 5000); // Verificar novamente em 5 segundos
+                } else {
+                    // Status desconhecido ou erro, limpar após algumas tentativas
+                    if (paymentCheckAttempts >= MAX_PAYMENT_CHECK_ATTEMPTS) {
+                        localStorage.removeItem('pending_payment_order_id');
+                        localStorage.removeItem('pending_payment_url');
+                        localStorage.removeItem('pending_payment_return_url');
+                        paymentCheckAttempts = 0;
+                    }
+                }
+            } catch (error) {
+                console.error('Erro ao verificar status do pagamento:', error);
+                // Em caso de erro, limpar após algumas tentativas
+                if (paymentCheckAttempts >= MAX_PAYMENT_CHECK_ATTEMPTS) {
+                    localStorage.removeItem('pending_payment_order_id');
+                    localStorage.removeItem('pending_payment_url');
+                    localStorage.removeItem('pending_payment_return_url');
+                    paymentCheckAttempts = 0;
+                }
+            }
+        }
+        
+        // Reorganizar slides do carrossel baseado no tamanho da tela
+        function reorganizeCarouselSlides() {
+            const isMobile = window.innerWidth < 768;
+            const itemsPerSlide = isMobile ? 2 : 5;
+            
+            // Reorganizar Mais Vendidos
+            const sliderMaisVendidos = document.getElementById('sliderMaisVendidos');
+            if (sliderMaisVendidos) {
+                reorganizeSlider(sliderMaisVendidos, itemsPerSlide, 'maisVendidos');
+            }
+            
+            // Reorganizar Promoções
+            const sliderPromocoes = document.getElementById('sliderPromocoes');
+            if (sliderPromocoes) {
+                reorganizeSlider(sliderPromocoes, itemsPerSlide, 'promocoes');
+            }
+        }
+        
+        function reorganizeSlider(slider, itemsPerSlide, carouselId) {
+            // Coletar todos os itens de todos os slides existentes
+            const existingSlides = slider.querySelectorAll('.carousel-slide');
+            const allItems = [];
+            
+            existingSlides.forEach(slide => {
+                const items = slide.querySelectorAll('.carousel-item-simple');
+                items.forEach(item => {
+                    allItems.push(item.cloneNode(true));
+                });
+            });
+            
+            if (allItems.length === 0) return;
+            
+            // Remover slides existentes
+            existingSlides.forEach(slide => slide.remove());
+            
+            // Criar novos slides com a quantidade correta de itens
+            const totalSlides = Math.ceil(allItems.length / itemsPerSlide);
+            
+            for (let i = 0; i < totalSlides; i++) {
+                const slide = document.createElement('div');
+                slide.className = 'carousel-slide' + (i === 0 ? ' active' : '');
+                slide.setAttribute('data-slide', i);
+                
+                const startIndex = i * itemsPerSlide;
+                const endIndex = Math.min(startIndex + itemsPerSlide, allItems.length);
+                
+                for (let j = startIndex; j < endIndex; j++) {
+                    slide.appendChild(allItems[j]);
+                }
+                
+                slider.appendChild(slide);
+            }
+            
+            // Resetar índice do slide
+            slideIndex[carouselId] = 0;
+            
+            // Atualizar contador
+            const counterId = carouselId === 'maisVendidos' ? 'currentMaisVendidos' : 'currentPromocoes';
+            const counter = document.getElementById(counterId);
+            if (counter) {
+                counter.textContent = '1';
+            }
+            
+            // Atualizar total no contador
+            const wrapper = slider.closest('.carousel-wrapper-simple');
+            if (wrapper && totalSlides > 1) {
+                const totalSpan = wrapper.querySelector('span:not([id])');
+                if (totalSpan && totalSpan.textContent.includes('/')) {
+                    totalSpan.textContent = '/ ' + totalSlides;
+                }
+            }
+        }
+        
+        // Verificar se usuário retornou do pagamento Asaas
         document.addEventListener('DOMContentLoaded', function() {
+            // Garantir que o botão do carrinho apareça no desktop
+            const cartButton = document.querySelector('.cart-button');
+            if (cartButton && window.innerWidth >= 769) {
+                cartButton.style.display = 'flex';
+                cartButton.style.visibility = 'visible';
+                cartButton.style.opacity = '1';
+            }
+            
+            // Reorganizar carrosséis baseado no tamanho da tela
+            reorganizeCarouselSlides();
+            
+            // Reorganizar quando a janela for redimensionada
+            let resizeTimer;
+            window.addEventListener('resize', function() {
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(reorganizeCarouselSlides, 250);
+                
+                // Garantir que o carrinho apareça no desktop após redimensionar
+                if (cartButton && window.innerWidth >= 769) {
+                    cartButton.style.display = 'flex';
+                    cartButton.style.visibility = 'visible';
+                    cartButton.style.opacity = '1';
+                }
+            });
+            
+            // Verificar se há pedido pendente de pagamento
+            const pendingOrderId = localStorage.getItem('pending_payment_order_id');
+            if (pendingOrderId) {
+                // Verificar se o pedido é recente (menos de 1 hora)
+                const pendingOrderTimestamp = localStorage.getItem('pending_payment_timestamp');
+                const now = Date.now();
+                const oneHour = 60 * 60 * 1000; // 1 hora em milissegundos
+                
+                if (pendingOrderTimestamp && (now - parseInt(pendingOrderTimestamp)) > oneHour) {
+                    // Pedido muito antigo, limpar
+                    console.log('Pedido pendente muito antigo. Limpando dados.');
+                    localStorage.removeItem('pending_payment_order_id');
+                    localStorage.removeItem('pending_payment_url');
+                    localStorage.removeItem('pending_payment_return_url');
+                    localStorage.removeItem('pending_payment_timestamp');
+                } else {
+                    console.log('Pedido pendente de pagamento detectado:', pendingOrderId);
+                    
+                    // Verificar status do pagamento apenas uma vez ao carregar
+                    setTimeout(() => {
+                        checkPaymentStatusOnReturn(pendingOrderId);
+                    }, 2000); // Aguardar 2 segundos para garantir que a página carregou
+                }
+            }
+            
             // Mais vendidos carousel
-            const maisVendidosCards = document.querySelectorAll('#carouselMaisVendidos .product-card-carousel');
+            const maisVendidosCards = document.querySelectorAll('#sliderMaisVendidos .product-card-carousel');
             maisVendidosCards.forEach(card => {
                 card.addEventListener('click', function(e) {
                     e.stopPropagation(); // Prevent duplicate events
@@ -5040,7 +5598,7 @@ if (count($enderecoParts) > 2) {
             });
             
             // Promoções carousel
-            const promocoesCards = document.querySelectorAll('#carouselPromocoes .product-card-carousel');
+            const promocoesCards = document.querySelectorAll('#sliderPromocoes .product-card-carousel');
             promocoesCards.forEach(card => {
                 card.addEventListener('click', function(e) {
                     e.stopPropagation(); // Prevent duplicate events
