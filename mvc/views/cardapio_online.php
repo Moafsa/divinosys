@@ -653,11 +653,9 @@ if (count($enderecoParts) > 2) {
         
         .carousel-wrapper {
             flex: 1;
-            overflow: hidden;
+            overflow: visible;
             position: relative;
-            display: flex;
-            justify-content: center;
-            max-width: 100%;
+            width: 100%;
         }
         
         .carousel-track {
@@ -665,14 +663,14 @@ if (count($enderecoParts) > 2) {
             gap: 1.5rem;
             transition: transform 0.3s ease;
             overflow-x: auto;
+            overflow-y: visible;
             scroll-behavior: smooth;
             scrollbar-width: none;
             -ms-overflow-style: none;
             width: 100%;
             min-height: 250px;
-            justify-content: center;
-            align-items: center;
             padding: 0 2rem;
+            box-sizing: border-box;
         }
         
         /* Centralizar quando há poucos itens */
@@ -687,9 +685,12 @@ if (count($enderecoParts) > 2) {
         .carousel-item {
             flex: 0 0 200px !important;
             min-width: 200px !important;
+            max-width: 200px !important;
             display: block !important;
             visibility: visible !important;
+            opacity: 1 !important;
             scroll-snap-align: center;
+            flex-shrink: 0;
         }
         
         .product-card-carousel {
