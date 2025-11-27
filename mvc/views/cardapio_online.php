@@ -653,24 +653,25 @@ if (count($enderecoParts) > 2) {
         
         .carousel-wrapper {
             flex: 1;
-            overflow: visible;
+            overflow: hidden;
             position: relative;
             width: 100%;
+            max-width: 100%;
         }
         
         .carousel-track {
             display: flex !important;
             gap: 1.5rem;
-            transition: transform 0.3s ease;
             overflow-x: auto;
-            overflow-y: visible;
+            overflow-y: hidden;
             scroll-behavior: smooth;
             scrollbar-width: none;
             -ms-overflow-style: none;
             width: 100%;
             min-height: 250px;
-            padding: 0 2rem;
+            padding: 0 1rem;
             box-sizing: border-box;
+            -webkit-overflow-scrolling: touch;
         }
         
         /* Centralizar quando há poucos itens */
@@ -1599,7 +1600,17 @@ if (count($enderecoParts) > 2) {
                                             <?php endif; ?>
                                             <div class="product-info">
                                                 <div class="product-name"><?php echo htmlspecialchars($produto['nome']); ?></div>
-                                                <div class="product-price">R$ <?php echo number_format($produto['preco_normal'], 2, ',', '.'); ?></div>
+                                                <?php 
+                                                $emPromocao = !empty($produto['em_promocao']) && !empty($produto['preco_promocional']) && $produto['preco_promocional'] > 0;
+                                                ?>
+                                                <?php if ($emPromocao): ?>
+                                                    <div class="product-price-promo">
+                                                        <span class="price-old">R$ <?php echo number_format($produto['preco_normal'], 2, ',', '.'); ?></span>
+                                                        <span class="price-new">R$ <?php echo number_format($produto['preco_promocional'], 2, ',', '.'); ?></span>
+                                                    </div>
+                                                <?php else: ?>
+                                                    <div class="product-price">R$ <?php echo number_format($produto['preco_normal'], 2, ',', '.'); ?></div>
+                                                <?php endif; ?>
                                             </div>
                                         </div>
                                     </div>
@@ -1744,7 +1755,17 @@ if (count($enderecoParts) > 2) {
                                         <?php endif; ?>
                                         <div class="product-info">
                                             <div class="product-name"><?php echo htmlspecialchars($produto['nome']); ?></div>
-                                            <div class="product-price">R$ <?php echo number_format($produto['preco_normal'], 2, ',', '.'); ?></div>
+                                            <?php 
+                                            $emPromocao = !empty($produto['em_promocao']) && !empty($produto['preco_promocional']) && $produto['preco_promocional'] > 0;
+                                            ?>
+                                            <?php if ($emPromocao): ?>
+                                                <div class="product-price-promo">
+                                                    <span class="price-old">R$ <?php echo number_format($produto['preco_normal'], 2, ',', '.'); ?></span>
+                                                    <span class="price-new">R$ <?php echo number_format($produto['preco_promocional'], 2, ',', '.'); ?></span>
+                                                </div>
+                                            <?php else: ?>
+                                                <div class="product-price">R$ <?php echo number_format($produto['preco_normal'], 2, ',', '.'); ?></div>
+                                            <?php endif; ?>
                                             <button class="btn btn-primary btn-sm w-100 mt-2" onclick="event.stopPropagation(); personalizarProduto(<?php echo $produto['id']; ?>, <?php echo htmlspecialchars(json_encode($produto)); ?>)">
                                                 <i class="fas fa-edit"></i> Editar
                                             </button>
@@ -2240,7 +2261,9 @@ if (count($enderecoParts) > 2) {
             let total = 0;
             
             cart.forEach((item, index) => {
-                const itemTotal = parseFloat(item.preco_normal || 0) * (item.quantity || 1);
+                // O preco_normal já contém o preço promocional se aplicável (definido em addToCart)
+                const itemPreco = parseFloat(item.preco_normal || 0);
+                const itemTotal = itemPreco * (item.quantity || 1);
                 total += itemTotal;
                 
                 // Mostrar ingredientes personalizados se houver
@@ -2261,7 +2284,7 @@ if (count($enderecoParts) > 2) {
                                 <div style="flex: 1;">
                                     <div><strong>${item.nome}</strong></div>
                                     ${ingredientesInfo}
-                                    <small>R$ ${parseFloat(item.preco_normal || 0).toFixed(2).replace('.', ',')} unidade</small>
+                                    <small>R$ ${itemPreco.toFixed(2).replace('.', ',')} unidade</small>
                                 </div>
                                 <div style="margin-left: 0.5rem;">
                                     <button onclick="removeFromCart(${index})" style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0.25rem;">
@@ -2284,7 +2307,7 @@ if (count($enderecoParts) > 2) {
                                     </button>
                                 </div>
                                 <div style="margin-left: auto; font-weight: bold;">
-                                    R$ ${(parseFloat(item.preco_normal || 0) * (item.quantity || 1)).toFixed(2).replace('.', ',')}
+                                    R$ ${itemTotal.toFixed(2).replace('.', ',')}
                                 </div>
                             </div>
                             <div style="margin-top: 0.5rem;">
@@ -2372,7 +2395,15 @@ if (count($enderecoParts) > 2) {
                         </button>
                         <h3 class="mb-3">Editar ${produto.nome}</h3>
                         <div class="mb-3">
-                            <strong>Preço base: R$ ${parseFloat(produto.preco_normal || 0).toFixed(2).replace('.', ',')}</strong>
+                            ${(() => {
+                                const emPromocao = produto.em_promocao && produto.preco_promocional && parseFloat(produto.preco_promocional) > 0;
+                                const precoBase = emPromocao ? parseFloat(produto.preco_promocional) : parseFloat(produto.preco_normal || 0);
+                                if (emPromocao) {
+                                    return `<strong>Preço base: <span style="text-decoration: line-through; color: #999;">R$ ${parseFloat(produto.preco_normal || 0).toFixed(2).replace('.', ',')}</span> <span style="color: #dc3545;">R$ ${precoBase.toFixed(2).replace('.', ',')}</span></strong>`;
+                                } else {
+                                    return `<strong>Preço base: R$ ${precoBase.toFixed(2).replace('.', ',')}</strong>`;
+                                }
+                            })()}
                         </div>
                         <div class="mb-3">
                             <label class="form-label"><strong>Ingredientes do Produto (clique para remover):</strong></label>
@@ -2458,7 +2489,9 @@ if (count($enderecoParts) > 2) {
         function atualizarPrecoPersonalizado() {
             if (!window.produtoPersonalizacao) return;
             
-            let precoTotal = parseFloat(window.produtoPersonalizacao.preco_normal || 0);
+            // Usar preço promocional se estiver em promoção, senão usar preço normal
+            const emPromocao = window.produtoPersonalizacao.em_promocao && window.produtoPersonalizacao.preco_promocional && parseFloat(window.produtoPersonalizacao.preco_promocional) > 0;
+            let precoTotal = emPromocao ? parseFloat(window.produtoPersonalizacao.preco_promocional) : parseFloat(window.produtoPersonalizacao.preco_normal || 0);
             
             // Adicionar preços dos ingredientes adicionados (que não estavam originalmente)
             window.ingredientesSelecionados.forEach(ing => {
@@ -2491,8 +2524,9 @@ if (count($enderecoParts) > 2) {
                     preco_adicional: ingOriginal.preco_adicional
                 }));
             
-            // Calcular preço final
-            let precoFinal = parseFloat(window.produtoPersonalizacao.preco_normal || 0);
+            // Calcular preço final - usar preço promocional se estiver em promoção
+            const emPromocao = window.produtoPersonalizacao.em_promocao && window.produtoPersonalizacao.preco_promocional && parseFloat(window.produtoPersonalizacao.preco_promocional) > 0;
+            let precoFinal = emPromocao ? parseFloat(window.produtoPersonalizacao.preco_promocional) : parseFloat(window.produtoPersonalizacao.preco_normal || 0);
             ingredientesAdicionados.forEach(ing => {
                 precoFinal += ing.preco_adicional;
             });
@@ -2545,7 +2579,9 @@ if (count($enderecoParts) > 2) {
                 (!item.observacao || item.observacao.trim() === '')
             );
             
-            const productPrice = parseFloat(product.preco_normal) || 0;
+            // Usar preço promocional se estiver em promoção, senão usar preço normal
+            const emPromocao = product.em_promocao && product.preco_promocional && parseFloat(product.preco_promocional) > 0;
+            const productPrice = emPromocao ? parseFloat(product.preco_promocional) : (parseFloat(product.preco_normal) || 0);
             const productCategory = product.categoria_nome || 'Geral';
             
             if (existingItem) {
@@ -4816,12 +4852,28 @@ if (count($enderecoParts) > 2) {
         // ============================================
         function scrollCarousel(carouselId, direction) {
             const carousel = document.getElementById('carousel' + (carouselId === 'maisVendidos' ? 'MaisVendidos' : 'Promocoes'));
-            if (!carousel) return;
+            if (!carousel) {
+                console.error('Carousel não encontrado:', carouselId);
+                return;
+            }
             
             const track = carousel.querySelector('.carousel-track');
-            if (!track) return;
+            if (!track) {
+                console.error('Track não encontrado no carousel:', carouselId);
+                return;
+            }
             
-            const scrollAmount = 220; // Width of item + gap
+            // Calcular largura de um item + gap
+            const firstItem = track.querySelector('.carousel-item');
+            if (!firstItem) {
+                console.error('Nenhum item encontrado no carousel:', carouselId);
+                return;
+            }
+            
+            const itemWidth = firstItem.offsetWidth;
+            const gap = 24; // 1.5rem = 24px
+            const scrollAmount = itemWidth + gap;
+            
             const currentScroll = track.scrollLeft;
             const newScroll = currentScroll + (direction * scrollAmount);
             
@@ -4884,8 +4936,18 @@ if (count($enderecoParts) > 2) {
                     
                     const produtoNome = (produto.nome || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
                     const produtoImagem = (produto.imagem || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
-                    const produtoPreco = parseFloat(produto.preco_normal || 0).toFixed(2).replace('.', ',');
                     const produtoDataEscaped = JSON.stringify(produto).replace(/\\/g, '\\\\').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                    
+                    // Verificar se está em promoção
+                    const emPromocao = produto.em_promocao && produto.preco_promocional && parseFloat(produto.preco_promocional) > 0;
+                    const precoExibir = emPromocao ? parseFloat(produto.preco_promocional) : parseFloat(produto.preco_normal || 0);
+                    
+                    const precoHtml = emPromocao 
+                        ? `<div class="product-price-promo">
+                             <span class="price-old">R$ ${parseFloat(produto.preco_normal || 0).toFixed(2).replace('.', ',')}</span>
+                             <span class="price-new">R$ ${precoExibir.toFixed(2).replace('.', ',')}</span>
+                           </div>`
+                        : `<div class="product-price">R$ ${precoExibir.toFixed(2).replace('.', ',')}</div>`;
                     
                     const imagemHtml = produtoImagem 
                         ? `<img src="${produtoImagem}" alt="${produtoNome}" class="product-image" onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
@@ -4900,7 +4962,7 @@ if (count($enderecoParts) > 2) {
                         ${imagemHtml}
                         <div class="product-info">
                             <div class="product-name">${produtoNome}</div>
-                            <div class="product-price">R$ ${produtoPreco}</div>
+                            ${precoHtml}
                             <button class="btn btn-primary btn-sm w-100 mt-2" onclick="event.stopPropagation(); personalizarProduto(${produto.id}, ${produtoDataEscaped})">
                                 <i class="fas fa-edit"></i> Editar
                             </button>
