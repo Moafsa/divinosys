@@ -646,9 +646,9 @@ if (count($enderecoParts) > 2) {
             position: relative;
             display: flex;
             align-items: center;
-            justify-content: center;
             gap: 1rem;
             width: 100%;
+            margin: 0 auto;
         }
         
         .carousel-wrapper {
@@ -656,7 +656,6 @@ if (count($enderecoParts) > 2) {
             overflow: hidden;
             position: relative;
             width: 100%;
-            max-width: 100%;
         }
         
         .carousel-track {
@@ -667,11 +666,12 @@ if (count($enderecoParts) > 2) {
             scroll-behavior: smooth;
             scrollbar-width: none;
             -ms-overflow-style: none;
-            width: 100%;
             min-height: 250px;
             padding: 0 1rem;
             box-sizing: border-box;
             -webkit-overflow-scrolling: touch;
+            width: max-content;
+            min-width: 100%;
         }
         
         /* Centralizar quando há poucos itens */
@@ -4851,34 +4851,48 @@ if (count($enderecoParts) > 2) {
         // CAROUSEL FUNCTIONS
         // ============================================
         function scrollCarousel(carouselId, direction) {
-            const carousel = document.getElementById('carousel' + (carouselId === 'maisVendidos' ? 'MaisVendidos' : 'Promocoes'));
+            const carouselName = carouselId === 'maisVendidos' ? 'MaisVendidos' : 'Promocoes';
+            const carousel = document.getElementById('carousel' + carouselName);
+            
             if (!carousel) {
-                console.error('Carousel não encontrado:', carouselId);
+                console.error('Carousel não encontrado:', 'carousel' + carouselName);
                 return;
             }
             
             const track = carousel.querySelector('.carousel-track');
             if (!track) {
-                console.error('Track não encontrado no carousel:', carouselId);
+                console.error('Track não encontrado no carousel:', carouselName);
                 return;
             }
             
             // Calcular largura de um item + gap
             const firstItem = track.querySelector('.carousel-item');
             if (!firstItem) {
-                console.error('Nenhum item encontrado no carousel:', carouselId);
+                console.error('Nenhum item encontrado no carousel:', carouselName);
                 return;
             }
             
-            const itemWidth = firstItem.offsetWidth;
+            const itemWidth = firstItem.offsetWidth || 200;
             const gap = 24; // 1.5rem = 24px
             const scrollAmount = itemWidth + gap;
             
-            const currentScroll = track.scrollLeft;
-            const newScroll = currentScroll + (direction * scrollAmount);
+            const currentScroll = track.scrollLeft || 0;
+            const newScroll = Math.max(0, currentScroll + (direction * scrollAmount));
+            const maxScroll = track.scrollWidth - track.clientWidth;
+            const finalScroll = Math.min(newScroll, maxScroll);
+            
+            console.log('Scrolling carousel:', {
+                carouselName,
+                currentScroll,
+                newScroll,
+                finalScroll,
+                maxScroll,
+                scrollAmount,
+                itemWidth
+            });
             
             track.scrollTo({
-                left: newScroll,
+                left: finalScroll,
                 behavior: 'smooth'
             });
         }
