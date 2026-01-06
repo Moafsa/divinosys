@@ -14,3 +14,15 @@ COMMENT ON COLUMN filiais.timezone IS 'Timezone do estabelecimento (ex: America/
 -- Update existing records to use default timezone if null
 UPDATE filiais SET timezone = 'America/Sao_Paulo' WHERE timezone IS NULL;
 
+
+
+
+
+
+
+
+
+
+
+
+

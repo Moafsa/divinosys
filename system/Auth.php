@@ -213,14 +213,68 @@ class Auth
     }
 
     /**
-     * Buscar usuário por telefone
+     * Buscar usuário por telefone (com normalização)
+     * Gera todas as variações possíveis considerando código do país e o 9 opcional
      */
     public static function findUserByPhone($telefone)
     {
+        // Limpar telefone
+        $telefone = preg_replace('/[^0-9]/', '', $telefone);
+        
+        if (empty($telefone)) {
+            return null;
+        }
+        
+        // Gerar variações do telefone
+        $variacoes = [$telefone];
+        
+        // Detectar se é número brasileiro
+        $isBrasil = false;
+        $telefoneSem55 = $telefone;
+        
+        // Se começa com 55 (código do Brasil)
+        if (strlen($telefone) > 11 && substr($telefone, 0, 2) == '55') {
+            $isBrasil = true;
+            $telefoneSem55 = substr($telefone, 2);
+            $variacoes[] = $telefoneSem55; // Adicionar versão sem código do país
+        }
+        // Se tem 10 ou 11 dígitos e não começa com código de país, provavelmente é Brasil
+        elseif (strlen($telefone) >= 10 && strlen($telefone) <= 11 && !preg_match('/^[1-9][0-9]{2,}/', $telefone)) {
+            $isBrasil = true;
+            // Adicionar versão com código do país
+            $variacoes[] = '55' . $telefone;
+        }
+        
+        // Se é número brasileiro, gerar variações com/sem o 9
+        if ($isBrasil && strlen($telefoneSem55) >= 10) {
+            // Se tem 11 dígitos (DDD + 9 + número), gerar versão sem o 9
+            // Exemplo: 54996398430 -> 5496398430
+            if (strlen($telefoneSem55) == 11) {
+                // Verificar se o terceiro dígito (índice 2) é 9
+                if (substr($telefoneSem55, 2, 1) == '9') {
+                    $telefoneSem9 = substr($telefoneSem55, 0, 2) . substr($telefoneSem55, 3);
+                    $variacoes[] = $telefoneSem9;
+                    $variacoes[] = '55' . $telefoneSem9; // Com código do país
+                }
+            }
+            
+            // Se tem 10 dígitos (DDD + número), gerar versão com o 9
+            // Exemplo: 5496398430 -> 54996398430
+            if (strlen($telefoneSem55) == 10) {
+                $telefoneCom9 = substr($telefoneSem55, 0, 2) . '9' . substr($telefoneSem55, 2);
+                $variacoes[] = $telefoneCom9;
+                $variacoes[] = '55' . $telefoneCom9; // Com código do país
+            }
+        }
+        
+        $variacoes = array_values(array_unique($variacoes));
+        $placeholders = implode(',', array_fill(0, count($variacoes), '?'));
+        
         return self::$db->fetch(
             "SELECT * FROM usuarios_globais 
-             WHERE telefone = ? AND ativo = true",
-            [$telefone]
+             WHERE telefone IN ($placeholders) AND ativo = true
+             LIMIT 1",
+            $variacoes
         );
     }
 
@@ -230,18 +284,26 @@ class Auth
     public static function generateAndSendAccessCode($telefone, $tenantId, $filialId = null)
     {
         try {
+            // Normalizar telefone antes de salvar (remover código do país se presente)
+            $telefoneNormalizado = preg_replace('/[^0-9]/', '', $telefone);
+            if (strlen($telefoneNormalizado) > 11 && substr($telefoneNormalizado, 0, 2) == '55') {
+                $telefoneNormalizado = substr($telefoneNormalizado, 2);
+            }
+            
+            error_log("Auth::generateAndSendAccessCode - Telefone original: $telefone, Normalizado: $telefoneNormalizado");
+            
             // Buscar ou criar usuário
-            $usuario = self::findUserByPhone($telefone);
+            $usuario = self::findUserByPhone($telefone); // findUserByPhone já busca com variações
             if (!$usuario) {
-                // Criar novo usuário na tabela usuarios_globais
+                // Criar novo usuário na tabela usuarios_globais com telefone normalizado
                 $usuarioId = self::$db->insert('usuarios_globais', [
-                    'nome' => 'Usuário ' . $telefone,
-                    'telefone' => $telefone,
+                    'nome' => 'Usuário ' . $telefoneNormalizado,
+                    'telefone' => $telefoneNormalizado, // Salvar sem código do país
                     'tipo_usuario' => 'cliente',
                     'ativo' => true
                 ]);
                 
-                $usuario = self::findUserByPhone($telefone);
+                $usuario = self::findUserByPhone($telefoneNormalizado);
             }
 
             // Verificar se usuário tem acesso ao estabelecimento
@@ -268,10 +330,10 @@ class Auth
             // Definir expiração (5 minutos)
             $expiraEm = date('Y-m-d H:i:s', strtotime('+5 minutes'));
 
-            // Salvar código no banco
+            // Salvar código no banco (usar telefone normalizado)
             self::$db->insert('codigos_acesso', [
                 'usuario_global_id' => $usuario['id'],
-                'telefone' => $telefone,
+                'telefone' => $telefoneNormalizado, // Salvar telefone normalizado
                 'codigo' => $codigo,
                 'expira_em' => $expiraEm,
                 'tenant_id' => $tenantId,
@@ -371,6 +433,19 @@ class Auth
                 error_log("Auth::sendAccessCodeViaWhatsApp - Busca qualquer instância do tenant: " . ($instancia ? "Encontrada (ID: {$instancia['id']}, Status: {$instancia['status']})" : "Não encontrada"));
             }
 
+            // Se ainda não encontrou, tentar QUALQUER instância ativa (último recurso)
+            if (!$instancia) {
+                $instancia = self::$db->fetch(
+                    "SELECT * FROM whatsapp_instances 
+                     WHERE ativo = true 
+                     ORDER BY 
+                        CASE WHEN status IN ('open', 'connected', 'ativo', 'active') THEN 1 ELSE 2 END,
+                        created_at DESC 
+                     LIMIT 1"
+                );
+                error_log("Auth::sendAccessCodeViaWhatsApp - Busca qualquer instância ativa (fallback): " . ($instancia ? "Encontrada (ID: {$instancia['id']}, Tenant: {$instancia['tenant_id']}, Status: {$instancia['status']})" : "Não encontrada"));
+            }
+
             if (!$instancia) {
                 error_log("Auth::sendAccessCodeViaWhatsApp - Nenhuma instância encontrada para Tenant: $tenantId, Filial: " . ($filialId ?? 'NULL'));
                 
@@ -382,6 +457,15 @@ class Auth
                     [$tenantId]
                 );
                 error_log("Auth::sendAccessCodeViaWhatsApp - Todas instâncias do tenant: " . json_encode($todasInstancias));
+                
+                // Log de debug: listar TODAS as instâncias ativas
+                $todasInstanciasAtivas = self::$db->fetchAll(
+                    "SELECT id, tenant_id, filial_id, instance_name, status, ativo 
+                     FROM whatsapp_instances 
+                     WHERE ativo = true
+                     LIMIT 10"
+                );
+                error_log("Auth::sendAccessCodeViaWhatsApp - Todas instâncias ativas no sistema: " . json_encode($todasInstanciasAtivas));
                 
                 return [
                     'success' => false,
@@ -465,15 +549,27 @@ class Auth
         try {
             error_log("Auth::validateAccessCode - Telefone: $telefone, Tenant: $tenantId, Filial: " . ($filialId ?? 'NULL') . ", AccessType: $accessType");
             
-            // Buscar código válido (não depender do tenant_id do código, pois pode ter sido gerado com outro)
-            // O código é válido se o telefone e código batem, independente do tenant
+            // Normalizar telefone para busca do código
+            $telefoneNormalizado = preg_replace('/[^0-9]/', '', $telefone);
+            
+            // Gerar variações do telefone para buscar o código
+            $variacoesTelefone = [$telefoneNormalizado];
+            if (strlen($telefoneNormalizado) > 11 && substr($telefoneNormalizado, 0, 2) == '55') {
+                $variacoesTelefone[] = substr($telefoneNormalizado, 2);
+            }
+            if (strlen($telefoneNormalizado) <= 11 && !str_starts_with($telefoneNormalizado, '55')) {
+                $variacoesTelefone[] = '55' . $telefoneNormalizado;
+            }
+            
+            // Buscar código válido com qualquer variação do telefone
+            $placeholders = implode(',', array_fill(0, count($variacoesTelefone), '?'));
             $codigoData = self::$db->fetch(
                 "SELECT ca.*, ug.* FROM codigos_acesso ca
                  JOIN usuarios_globais ug ON ca.usuario_global_id = ug.id
-                 WHERE ca.telefone = ? AND ca.codigo = ? 
+                 WHERE ca.telefone IN ($placeholders) AND ca.codigo = ? 
                  AND ca.usado = false AND ca.expira_em > NOW()
                  ORDER BY ca.created_at DESC LIMIT 1",
-                [$telefone, $codigo]
+                array_merge($variacoesTelefone, [$codigo])
             );
 
             if (!$codigoData) {
@@ -635,6 +731,27 @@ class Auth
             }
 
             error_log("Auth::validateAccessCode - Estabelecimento encontrado: Tipo=" . $userEstablishment['tipo_usuario'] . ", Tenant=" . $tenantId . ", Filial=" . ($filialId ?? 'NULL'));
+            
+            // Se foi especificado um tipo_usuario e ele é diferente do encontrado, usar o especificado
+            // (isso garante que o tipo escolhido pelo usuário seja respeitado)
+            if ($tipoUsuarioEspecifico && $tipoUsuarioEspecifico !== 'cliente' && $tipoUsuarioEspecifico !== $userEstablishment['tipo_usuario']) {
+                error_log("Auth::validateAccessCode - AVISO: Tipo encontrado ({$userEstablishment['tipo_usuario']}) diferente do especificado ($tipoUsuarioEspecifico). Usando o especificado.");
+                // Verificar se o usuário realmente tem esse tipo neste estabelecimento
+                $verificacaoTipo = self::$db->fetch(
+                    "SELECT * FROM usuarios_estabelecimento 
+                     WHERE usuario_global_id = ? AND tenant_id = ? AND tipo_usuario = ? AND ativo = true
+                     " . ($filialId !== null ? "AND filial_id = $filialId" : "") . "
+                     LIMIT 1",
+                    array_filter([$codigoData['usuario_global_id'], $tenantId, $tipoUsuarioEspecifico, $filialId])
+                );
+                
+                if ($verificacaoTipo) {
+                    error_log("Auth::validateAccessCode - Usuário tem o tipo especificado confirmado");
+                    $userEstablishment = $verificacaoTipo;
+                } else {
+                    error_log("Auth::validateAccessCode - Usuário não tem o tipo especificado, usando o encontrado");
+                }
+            }
 
             // Criar sessão
             $sessionToken = self::createSession($codigoData['usuario_global_id'], $tenantId, $filialId);

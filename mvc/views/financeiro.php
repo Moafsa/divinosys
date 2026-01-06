@@ -116,12 +116,13 @@ if ($tenant && $filial) {
         $lancamentos = [];
     }
     
-    // Buscar TODOS os pedidos quitados (com e sem pagamentos fiado)
+    // Buscar TODOS os pedidos quitados (com e sem pagamentos fiado, considerando descontos)
     $pedidosFinanceiros = $db->fetchAll(
         "SELECT p.*, 
-                COALESCE(SUM(CASE WHEN pp.forma_pagamento != 'FIADO' THEN pp.valor_pago ELSE 0 END), 0) as total_pago,
-                COUNT(CASE WHEN pp.forma_pagamento != 'FIADO' THEN pp.id END) as qtd_pagamentos,
-                STRING_AGG(DISTINCT CASE WHEN pp.forma_pagamento != 'FIADO' THEN pp.forma_pagamento END, ', ') as formas_pagamento,
+                COALESCE((SELECT SUM(da.valor_desconto) FROM descontos_aplicados da WHERE da.pedido_id = p.idpedido AND da.tenant_id = p.tenant_id AND da.filial_id = p.filial_id), 0) as total_descontos,
+                COALESCE(SUM(CASE WHEN pp.forma_pagamento != 'FIADO' AND pp.forma_pagamento != 'DESCONTO' THEN pp.valor_pago ELSE 0 END), 0) as total_pago,
+                COUNT(CASE WHEN pp.forma_pagamento != 'FIADO' AND pp.forma_pagamento != 'DESCONTO' THEN pp.id END) as qtd_pagamentos,
+                STRING_AGG(DISTINCT CASE WHEN pp.forma_pagamento != 'FIADO' AND pp.forma_pagamento != 'DESCONTO' THEN pp.forma_pagamento END, ', ') as formas_pagamento,
                 m.nome as mesa_nome,
                 u.login as usuario_nome,
                 t.nome as tenant_nome,
@@ -164,12 +165,13 @@ if ($tenant && $filial) {
         ];
     }
     
-    // Buscar valores dos pedidos quitados
+    // Buscar valores dos pedidos quitados (considerando descontos aplicados)
     $receitasPedidos = $db->fetch(
         "SELECT 
-            COALESCE(SUM(p.valor_total), 0) as total_faturamento,
-            COALESCE(SUM(p.valor_pago), 0) as total_pago,
-            COUNT(DISTINCT p.idpedido) as total_pedidos_quitados
+            COALESCE(SUM(p.valor_total - COALESCE((SELECT SUM(da.valor_desconto) FROM descontos_aplicados da WHERE da.pedido_id = p.idpedido AND da.tenant_id = p.tenant_id AND da.filial_id = p.filial_id), 0)), 0) as total_faturamento,
+            COALESCE(SUM((SELECT SUM(CASE WHEN pp.forma_pagamento != 'DESCONTO' THEN pp.valor_pago ELSE 0 END) FROM pagamentos_pedido pp WHERE pp.pedido_id = p.idpedido AND pp.tenant_id = p.tenant_id AND pp.filial_id = p.filial_id)), 0) as total_pago_real,
+            COUNT(DISTINCT p.idpedido) as total_pedidos_quitados,
+            COALESCE(SUM((SELECT SUM(da.valor_desconto) FROM descontos_aplicados da WHERE da.pedido_id = p.idpedido AND da.tenant_id = p.tenant_id AND da.filial_id = p.filial_id)), 0) as total_descontos
          FROM pedido p
          WHERE p.tenant_id = ? AND p.filial_id = ?
          AND p.data BETWEEN ? AND ?
@@ -177,11 +179,13 @@ if ($tenant && $filial) {
         [$tenant['id'], $filial['id'], $dataInicio, $dataFim]
     );
     
-    // Faturamento = valor_total dos pedidos
+    // Faturamento = valor_total dos pedidos menos descontos aplicados
     $resumoFinanceiro['total_receitas'] += $receitasPedidos['total_faturamento'];
     
-    // Saldo Líquido = SOMA DO CAMPO valor_pago dos pedidos quitados
-    $resumoFinanceiro['saldo_liquido'] = $receitasPedidos['total_pago'];
+    // Saldo Líquido = (Receitas de lançamentos + Faturamento líquido de pedidos) - Despesas
+    // O faturamento já considera descontos aplicados
+    $totalReceitasCompleto = $resumoFinanceiro['total_receitas'];
+    $resumoFinanceiro['saldo_liquido'] = $totalReceitasCompleto - $resumoFinanceiro['total_despesas'];
     
     $resumoFinanceiro['total_lancamentos'] += $receitasPedidos['total_pedidos_quitados'];
 }
@@ -723,8 +727,15 @@ $contas = $db->fetchAll(
                                                             <?php endif; ?>
                                                         </div>
                                                         <div class="text-end">
-                                                            <div class="h5 mb-0">R$ <?= number_format($pedido['valor_total'], 2, ',', '.') ?></div>
-                                                            <small class="text-muted"><?= date('d/m/Y H:i', strtotime($pedido['data'] . ' ' . $pedido['hora_pedido'])) ?></small>
+                                                            <?php 
+                                                            $valorLiquido = $pedido['valor_total'] - ($pedido['total_descontos'] ?? 0);
+                                                            ?>
+                                                            <div class="h5 mb-0">R$ <?= number_format($valorLiquido, 2, ',', '.') ?></div>
+                                                            <?php if (($pedido['total_descontos'] ?? 0) > 0): ?>
+                                                                <small class="text-muted text-decoration-line-through">R$ <?= number_format($pedido['valor_total'], 2, ',', '.') ?></small>
+                                                                <small class="text-warning ms-1">(-R$ <?= number_format($pedido['total_descontos'], 2, ',', '.') ?>)</small>
+                                                            <?php endif; ?>
+                                                            <br><small class="text-muted"><?= date('d/m/Y H:i', strtotime($pedido['data'] . ' ' . $pedido['hora_pedido'])) ?></small>
                                                         </div>
                                                     </div>
                                                 </button>
@@ -745,12 +756,27 @@ $contas = $db->fetchAll(
                                                                 </tr>
                                                                 <tr>
                                                                     <td><strong>Valor Total:</strong></td>
-                                                                    <td class="valor-positivo">R$ <?= number_format($pedido['valor_total'], 2, ',', '.') ?></td>
+                                                                    <td class="valor-positivo">
+                                                                        <?php 
+                                                                        $valorLiquido = $pedido['valor_total'] - ($pedido['total_descontos'] ?? 0);
+                                                                        ?>
+                                                                        R$ <?= number_format($valorLiquido, 2, ',', '.') ?>
+                                                                        <?php if (($pedido['total_descontos'] ?? 0) > 0): ?>
+                                                                            <br><small class="text-muted text-decoration-line-through">R$ <?= number_format($pedido['valor_total'], 2, ',', '.') ?></small>
+                                                                            <small class="text-warning">(-R$ <?= number_format($pedido['total_descontos'], 2, ',', '.') ?> desconto)</small>
+                                                                        <?php endif; ?>
+                                                                    </td>
                                                                 </tr>
                                                                 <tr>
                                                                     <td><strong>Total Pago:</strong></td>
                                                                     <td class="valor-positivo">R$ <?= number_format($pedido['total_pago'], 2, ',', '.') ?></td>
                                                                 </tr>
+                                                                <?php if (($pedido['total_descontos'] ?? 0) > 0): ?>
+                                                                <tr>
+                                                                    <td><strong>Descontos Aplicados:</strong></td>
+                                                                    <td class="text-warning">-R$ <?= number_format($pedido['total_descontos'], 2, ',', '.') ?></td>
+                                                                </tr>
+                                                                <?php endif; ?>
                                                                 <tr>
                                                                     <td><strong>Qtd Pagamentos:</strong></td>
                                                                     <td><?= $pedido['qtd_pagamentos'] ?></td>
@@ -1471,11 +1497,15 @@ $contas = $db->fetchAll(
                         printHtml += `</div>`;
                     });
                     
+                    const totalDescontos = parseFloat(pedido.total_descontos || 0) || 0;
+                    const valorLiquido = parseFloat(pedido.valor_total) - totalDescontos;
+                    
                     printHtml += `
                             </div>
                             
                             <div class="total">
-                                <strong>TOTAL: R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</strong>
+                                <strong>TOTAL: R$ ${valorLiquido.toFixed(2).replace('.', ',')}</strong>
+                                ${totalDescontos > 0 ? `<br><small style="text-decoration: line-through;">R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</small> <small style="color: #856404;">(-R$ ${totalDescontos.toFixed(2).replace('.', ',')} desconto)</small>` : ''}
                             </div>
                             
                             ${pedido.observacao ? `<div class="pedido-info"><strong>Observação:</strong> ${pedido.observacao}</div>` : ''}
@@ -1526,9 +1556,18 @@ $contas = $db->fetchAll(
                 tbody.innerHTML = '<tr><td colspan="8" class="text-center"><i class="fas fa-spinner fa-spin me-2"></i>Carregando pedidos fiado...</td></tr>';
             }
             
-            console.log('🌐 Fazendo requisição para: mvc/ajax/financeiro.php?action=buscar_pedidos_fiado');
+            // Obter filtros de data do formulário
+            const dataInicio = document.querySelector('input[name="data_inicio"]')?.value || '';
+            const dataFim = document.querySelector('input[name="data_fim"]')?.value || '';
             
-            fetch('mvc/ajax/financeiro.php?action=buscar_pedidos_fiado', {
+            // Construir URL com parâmetros de data
+            let url = 'mvc/ajax/financeiro.php?action=buscar_pedidos_fiado';
+            if (dataInicio) url += '&data_inicio=' + encodeURIComponent(dataInicio);
+            if (dataFim) url += '&data_fim=' + encodeURIComponent(dataFim);
+            
+            console.log('🌐 Fazendo requisição para: ' + url);
+            
+            fetch(url, {
                 method: 'GET',
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest',
@@ -1561,6 +1600,8 @@ $contas = $db->fetchAll(
                         const totalPagoNaoFiado = parseFloat(pedido.total_pago_nao_fiado) || 0;
                         const totalPagoFiado = parseFloat(pedido.total_pago_fiado) || 0;
                         const totalPago = parseFloat(pedido.total_pago) || 0;
+                        const totalDescontos = parseFloat(pedido.total_descontos || 0) || 0;
+                        const valorLiquido = parseFloat(pedido.valor_total) - totalDescontos;
                         
                         // Status baseado no status_pagamento do pedido
                         const statusBadge = pedido.status_pagamento === 'quitado' ? 'bg-success' : 'bg-warning';
@@ -1578,7 +1619,8 @@ $contas = $db->fetchAll(
                             <td>${pedido.telefone_cliente || 'N/A'}</td>
                             <td>${pedido.idmesa == '999' ? 'Delivery' : `Mesa ${pedido.idmesa}`}</td>
                             <td>
-                                <div>Total: R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</div>
+                                <div>Total: R$ ${valorLiquido.toFixed(2).replace('.', ',')}</div>
+                                ${totalDescontos > 0 ? `<small class="text-muted text-decoration-line-through">R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</small><br><small class="text-warning">(-R$ ${totalDescontos.toFixed(2).replace('.', ',')} desconto)</small><br>` : ''}
                                 <small class="text-success">Pago Real: R$ ${totalPagoNaoFiado.toFixed(2).replace('.', ',')}</small>
                                 <small class="text-warning">Fiado: R$ ${totalPagoFiado.toFixed(2).replace('.', ',')}</small>
                                 ${saldoDevedorReal > 0 ? `<div class="text-danger">Saldo: R$ ${saldoDevedorReal.toFixed(2).replace('.', ',')}</div>` : ''}
@@ -1663,8 +1705,17 @@ $contas = $db->fetchAll(
         }
 
         function quitarPedidoFiado(pedidoId) {
+            // Obter filtros de data do formulário
+            const dataInicio = document.querySelector('input[name="data_inicio"]')?.value || '';
+            const dataFim = document.querySelector('input[name="data_fim"]')?.value || '';
+            
+            // Construir URL com parâmetros de data
+            let url = 'mvc/ajax/financeiro.php?action=buscar_pedidos_fiado';
+            if (dataInicio) url += '&data_inicio=' + encodeURIComponent(dataInicio);
+            if (dataFim) url += '&data_fim=' + encodeURIComponent(dataFim);
+            
             // Buscar dados do pedido usando o endpoint que já funciona
-            fetch('mvc/ajax/financeiro.php?action=buscar_pedidos_fiado', {
+            fetch(url, {
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest'
                 }
@@ -1700,13 +1751,18 @@ $contas = $db->fetchAll(
         }
 
         function abrirModalQuitarFiado(pedidoId, saldoDevedor, pedido) {
+            const totalDescontos = parseFloat(pedido.total_descontos || 0) || 0;
+            const valorLiquido = parseFloat(pedido.valor_total) - totalDescontos;
+            
             Swal.fire({
                 title: 'Quitar Pedido Fiado',
                 html: `
                     <div class="mb-3">
                         <p><strong>Pedido:</strong> #${pedidoId}</p>
                         <p><strong>Cliente:</strong> ${pedido.cliente || 'N/A'}</p>
-                        <p><strong>Valor Total:</strong> R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</p>
+                        <p><strong>Valor Total:</strong> R$ ${valorLiquido.toFixed(2).replace('.', ',')}
+                        ${totalDescontos > 0 ? `<br><small class="text-muted text-decoration-line-through">R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</small> <small class="text-warning">(-R$ ${totalDescontos.toFixed(2).replace('.', ',')} desconto)</small>` : ''}
+                        </p>
                         <p><strong>Pago (não fiado):</strong> R$ ${parseFloat(pedido.total_pago_nao_fiado || 0).toFixed(2).replace('.', ',')}</p>
                         <p><strong>Valor Fiado:</strong> R$ ${parseFloat(pedido.total_pago_fiado || 0).toFixed(2).replace('.', ',')}</p>
                         <p class="text-warning"><strong>Saldo Fiado a Quitar:</strong> R$ ${saldoDevedor.toFixed(2).replace('.', ',')}</p>
@@ -1899,14 +1955,23 @@ $contas = $db->fetchAll(
                 }
             });
             
+            // Obter filtros de data do formulário
+            const dataInicio = document.querySelector('input[name="data_inicio"]')?.value || '';
+            const dataFim = document.querySelector('input[name="data_fim"]')?.value || '';
+            
             // Carregar pedidos
+            const formData = new URLSearchParams();
+            formData.append('action', 'buscar_pedidos_fiado');
+            if (dataInicio) formData.append('data_inicio', dataInicio);
+            if (dataFim) formData.append('data_fim', dataFim);
+            
             fetch('mvc/ajax/financeiro.php', {
                 method: 'POST',
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest',
                     'Content-Type': 'application/x-www-form-urlencoded'
                 },
-                body: 'action=buscar_pedidos_fiado'
+                body: formData.toString()
             })
             .then(response => response.json())
             .then(data => {
@@ -1921,6 +1986,8 @@ $contas = $db->fetchAll(
                             data.pedidos.forEach(pedido => {
                                 const saldoDevedorReal = parseFloat(pedido.saldo_fiado_pendente) || 0;
                                 const totalFiado = parseFloat(pedido.total_pago_fiado) || 0;
+                                const totalDescontos = parseFloat(pedido.total_descontos || 0) || 0;
+                                const valorLiquido = parseFloat(pedido.valor_total) - totalDescontos;
                                 
                                 const row = `
                                     <tr>
@@ -1930,7 +1997,8 @@ $contas = $db->fetchAll(
                                         <td>${pedido.telefone_cliente || 'N/A'}</td>
                                         <td>Mesa ${pedido.idmesa}</td>
                                         <td>
-                                            <strong>R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</strong>
+                                            <strong>R$ ${valorLiquido.toFixed(2).replace('.', ',')}</strong>
+                                            ${totalDescontos > 0 ? `<br><small class="text-muted text-decoration-line-through">R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</small> <small class="text-warning">(-R$ ${totalDescontos.toFixed(2).replace('.', ',')})</small>` : ''}
                                             ${saldoDevedorReal > 0.01 ? `<br><small class="text-warning">Fiado: R$ ${saldoDevedorReal.toFixed(2).replace('.', ',')}</small>` : ''}
                                         </td>
                                         <td>
@@ -2185,15 +2253,24 @@ $contas = $db->fetchAll(
                 console.error('❌ Erro ao carregar recebíveis:', error);
             });
             
+            // Obter filtros de data do formulário
+            const dataInicio = document.querySelector('input[name="data_inicio"]')?.value || '';
+            const dataFim = document.querySelector('input[name="data_fim"]')?.value || '';
+            
             // Carregar pedidos fiado automaticamente
             console.log('📋 Carregando pedidos fiado automaticamente...');
+            const formData = new URLSearchParams();
+            formData.append('action', 'buscar_pedidos_fiado');
+            if (dataInicio) formData.append('data_inicio', dataInicio);
+            if (dataFim) formData.append('data_fim', dataFim);
+            
             fetch('mvc/ajax/financeiro.php', {
                 method: 'POST',
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest',
                     'Content-Type': 'application/x-www-form-urlencoded'
                 },
-                body: 'action=buscar_pedidos_fiado'
+                body: formData.toString()
             })
             .then(response => response.json())
             .then(data => {
@@ -2218,6 +2295,8 @@ $contas = $db->fetchAll(
                                 const saldoFiadoPendente = parseFloat(pedido.saldo_fiado_pendente) || 0;
                                 const totalPagoNaoFiado = parseFloat(pedido.total_pago_nao_fiado) || 0;
                                 const totalPagoFiado = parseFloat(pedido.total_pago_fiado) || 0;
+                                const totalDescontos = parseFloat(pedido.total_descontos || 0) || 0;
+                                const valorLiquido = parseFloat(pedido.valor_total) - totalDescontos;
                                 
                                 // Status baseado no status_pagamento do pedido
                                 const statusBadge = pedido.status_pagamento === 'quitado' ? 'bg-success' : 'bg-warning';
@@ -2235,7 +2314,8 @@ $contas = $db->fetchAll(
                                     <td>-</td>
                                     <td>${pedido.idmesa == '999' ? 'Delivery' : `Mesa ${pedido.idmesa}`}</td>
                                     <td>
-                                        <div>Total: R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</div>
+                                        <div>Total: R$ ${valorLiquido.toFixed(2).replace('.', ',')}</div>
+                                        ${totalDescontos > 0 ? `<small class="text-muted text-decoration-line-through">R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</small><br><small class="text-warning">(-R$ ${totalDescontos.toFixed(2).replace('.', ',')} desconto)</small><br>` : ''}
                                         <small class="text-success">Pago Real: R$ ${totalPagoNaoFiado.toFixed(2).replace('.', ',')}</small>
                                         ${saldoFiadoPendente > 0.01 ? `<small class="text-warning">Fiado: R$ ${saldoFiadoPendente.toFixed(2).replace('.', ',')}</small>` : ''}
                                     </td>

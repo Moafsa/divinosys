@@ -304,8 +304,27 @@ try {
         } else {
             echo "WhatsApp tables file not found: $whatsappTablesFile\n";
         }
-        
-        
+
+        // Run desconto_aplicado column migration
+        echo "Running desconto_aplicado column migration...\n";
+        try {
+            // Check if column exists
+            $columnExists = $db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'pagamentos' AND column_name = 'desconto_aplicado'")->fetch();
+
+            if (!$columnExists) {
+                // Add desconto_aplicado column to pagamentos table
+                $db->query("ALTER TABLE pagamentos ADD COLUMN desconto_aplicado DECIMAL(10,2) DEFAULT 0");
+                $db->query("COMMENT ON COLUMN pagamentos.desconto_aplicado IS 'Valor do desconto aplicado ao pagamento (seja fixo ou percentual)'");
+
+                echo "✅ desconto_aplicado column added to pagamentos table\n";
+            } else {
+                echo "ℹ️ desconto_aplicado column already exists in pagamentos table\n";
+            }
+        } catch (Exception $e) {
+            echo "Warning: Error migrating desconto_aplicado column: " . $e->getMessage() . "\n";
+        }
+
+
         // Test login credentials
         echo "Testing login credentials...\n";
         try {

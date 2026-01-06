@@ -34,6 +34,12 @@ $tipoRelatorio = $_GET['tipo'] ?? 'vendas';
 $relatoriosGerados = [];
 $dadosVendas = [];
 $dadosFinanceiros = [];
+// Consolidated financial data structures
+$entradasPorForma = [];
+$entradasPorConta = [];
+$saidasPorConta = [];
+$recebimentosPorUsuario = [];
+$pagamentosFuncionarios = [];
 
 if ($tenant && $filial) {
     // Buscar relatórios já gerados
@@ -45,16 +51,18 @@ if ($tenant && $filial) {
         [$tenant['id'], $filial['id']]
     );
     
-    // Dados de vendas
+    // Dados de vendas (considerando descontos aplicados)
     $dadosVendas = $db->fetchAll(
-        "SELECT 
+        "SELECT
             DATE(p.data) as data_venda,
             COUNT(*) as total_pedidos,
-            SUM(p.valor_total) as total_vendas,
-            AVG(p.valor_total) as ticket_medio,
+            COALESCE(SUM(pg.valor_pago), SUM(p.valor_total)) as total_vendas,
+            AVG(COALESCE(pg.valor_pago, p.valor_total)) as ticket_medio,
             COUNT(CASE WHEN p.delivery = true THEN 1 END) as pedidos_delivery,
-            COUNT(CASE WHEN p.delivery = false THEN 1 END) as pedidos_mesa
+            COUNT(CASE WHEN p.delivery = false THEN 1 END) as pedidos_mesa,
+            COALESCE(SUM(pg.desconto_aplicado), 0) as total_descontos
          FROM pedido p
+         LEFT JOIN pagamentos pg ON p.idpedido = pg.pedido_id
          WHERE p.tenant_id = ? AND p.filial_id = ?
          AND p.data BETWEEN ? AND ?
          AND p.status_pagamento = 'quitado'
@@ -63,20 +71,177 @@ if ($tenant && $filial) {
         [$tenant['id'], $filial['id'], $dataInicio, $dataFim]
     );
     
-    // Dados financeiros
-    $dadosFinanceiros = $db->fetchAll(
-        "SELECT 
-            DATE(l.created_at) as data_lancamento,
-            l.tipo,
-            SUM(l.valor) as total_valor,
-            COUNT(*) as qtd_lancamentos
-         FROM lancamentos_financeiros l
-         WHERE l.tenant_id = ? AND l.filial_id = ?
-         AND l.created_at BETWEEN ? AND ?
-         GROUP BY DATE(l.created_at), l.tipo
-         ORDER BY data_lancamento DESC",
-        [$tenant['id'], $filial['id'], $dataInicio . ' 00:00:00', $dataFim . ' 23:59:59']
-    );
+    // Dados financeiros agregados (receitas x despesas por dia)
+    try {
+        $dadosFinanceiros = $db->fetchAll(
+            "SELECT 
+                DATE(l.created_at) as data_lancamento,
+                l.tipo_lancamento as tipo,
+                SUM(l.valor) as total_valor,
+                COUNT(*) as qtd_lancamentos
+             FROM lancamentos_financeiros l
+             WHERE l.tenant_id = ? AND l.filial_id = ?
+             AND l.created_at BETWEEN ? AND ?
+             GROUP BY DATE(l.created_at), l.tipo_lancamento
+             ORDER BY data_lancamento DESC",
+            [$tenant['id'], $filial['id'], $dataInicio . ' 00:00:00', $dataFim . ' 23:59:59']
+        );
+    } catch (\Exception $e) {
+        error_log('Relatorios: error fetching aggregated financial data: ' . $e->getMessage());
+        $dadosFinanceiros = [];
+    }
+
+    /**
+     * Consolidated report:
+     * - entradasPorForma: amounts per payment method (pedidos quitados)
+     * - entradasPorConta: receivable entries per financial account
+     * - saídasPorConta: expenses per financial account
+     * - recebimentosPorUsuario: how much each user received by payment method
+     * - pagamentosFuncionarios: how much was paid to each employee by type
+     */
+
+    // 1) Entradas por forma de pagamento (pedidos quitados)
+    try {
+        $entradasPorForma = $db->fetchAll(
+            "SELECT 
+                UPPER(COALESCE(pp.forma_pagamento, 'DESCONHECIDO')) as forma,
+                COUNT(DISTINCT p.idpedido) as total_pedidos,
+                COALESCE(SUM(pp.valor_pago), 0) as total_valor
+             FROM pagamentos_pedido pp
+             INNER JOIN pedido p 
+                 ON p.idpedido = pp.pedido_id
+                 AND p.tenant_id = pp.tenant_id
+                 AND p.filial_id = pp.filial_id
+             WHERE 
+                pp.tenant_id = ? 
+                AND pp.filial_id = ?
+                AND p.status_pagamento = 'quitado'
+                AND p.data BETWEEN ? AND ?
+             GROUP BY UPPER(COALESCE(pp.forma_pagamento, 'DESCONHECIDO'))
+             ORDER BY forma",
+            [$tenant['id'], $filial['id'], $dataInicio, $dataFim]
+        );
+    } catch (\Exception $e) {
+        error_log('Relatorios: error fetching entradasPorForma: ' . $e->getMessage());
+        $entradasPorForma = [];
+    }
+
+    // 2) Entradas por conta financeira (receitas) e 3) saídas por conta (despesas)
+    try {
+        $entradasPorConta = $db->fetchAll(
+            "SELECT 
+                cf.nome as conta_nome,
+                cf.tipo as conta_tipo,
+                COALESCE(SUM(l.valor), 0) as total_valor
+             FROM lancamentos_financeiros l
+             INNER JOIN contas_financeiras cf ON cf.id = l.conta_id
+             WHERE 
+                l.tenant_id = ?
+                AND l.filial_id = ?
+                AND l.tipo_lancamento = 'receita'
+                AND l.status IN ('confirmado', 'pago')
+                AND l.data_lancamento BETWEEN ? AND ?
+             GROUP BY cf.nome, cf.tipo
+             ORDER BY cf.tipo, cf.nome",
+            [$tenant['id'], $filial['id'], $dataInicio, $dataFim]
+        );
+
+        $saidasPorConta = $db->fetchAll(
+            "SELECT 
+                cf.nome as conta_nome,
+                cf.tipo as conta_tipo,
+                COALESCE(SUM(l.valor), 0) as total_valor
+             FROM lancamentos_financeiros l
+             INNER JOIN contas_financeiras cf ON cf.id = l.conta_id
+             WHERE 
+                l.tenant_id = ?
+                AND l.filial_id = ?
+                AND l.tipo_lancamento = 'despesa'
+                AND l.status IN ('confirmado', 'pago')
+                AND l.data_lancamento BETWEEN ? AND ?
+             GROUP BY cf.nome, cf.tipo
+             ORDER BY cf.tipo, cf.nome",
+            [$tenant['id'], $filial['id'], $dataInicio, $dataFim]
+        );
+    } catch (\Exception $e) {
+        error_log('Relatorios: error fetching data per account: ' . $e->getMessage());
+        $entradasPorConta = [];
+        $saidasPorConta = [];
+    }
+
+    // 4) Recebimentos por usuário (operador/caixa) por forma de pagamento
+    try {
+        $recebimentosPorUsuario = $db->fetchAll(
+            "SELECT 
+                COALESCE(ug.nome, u.login, 'Usuario ' || COALESCE(pp.usuario_global_id::text, pp.usuario_id::text)) as usuario_nome,
+                UPPER(COALESCE(pp.forma_pagamento, 'DESCONHECIDO')) as forma,
+                COALESCE(SUM(pp.valor_pago), 0) as total_valor
+             FROM pagamentos_pedido pp
+             INNER JOIN pedido p 
+                 ON p.idpedido = pp.pedido_id
+                 AND p.tenant_id = pp.tenant_id
+                 AND p.filial_id = pp.filial_id
+             LEFT JOIN usuarios_globais ug ON ug.id = pp.usuario_global_id
+             LEFT JOIN usuarios u ON u.id = pp.usuario_id AND u.tenant_id = pp.tenant_id
+             WHERE 
+                pp.tenant_id = ?
+                AND pp.filial_id = ?
+                AND p.status_pagamento = 'quitado'
+                AND p.data BETWEEN ? AND ?
+             GROUP BY 
+                COALESCE(ug.nome, u.login, 'Usuario ' || COALESCE(pp.usuario_global_id::text, pp.usuario_id::text)),
+                UPPER(COALESCE(pp.forma_pagamento, 'DESCONHECIDO'))
+             ORDER BY usuario_nome, forma",
+            [$tenant['id'], $filial['id'], $dataInicio, $dataFim]
+        );
+    } catch (\Exception $e) {
+        error_log('Relatorios: error fetching recebimentosPorUsuario: ' . $e->getMessage());
+        $recebimentosPorUsuario = [];
+    }
+
+    // 5) Pagamentos de funcionários (salário/adiantamento/bônus/etc.)
+    try {
+        // Check if pagamentos_funcionarios table exists before querying
+        $pfExists = $db->fetch(
+            "SELECT EXISTS (
+                SELECT 1 
+                FROM information_schema.tables 
+                WHERE table_name = 'pagamentos_funcionarios'
+            ) as exists"
+        );
+
+        if (!empty($pfExists) && !empty($pfExists['exists'])) {
+            $pagamentosFuncionarios = $db->fetchAll(
+                "SELECT 
+                    COALESCE(ug.nome, u.login, 'Usuario ' || pf.usuario_id::text) as funcionario_nome,
+                    pf.tipo_pagamento,
+                    COALESCE(pf.forma_pagamento, 'nao informado') as forma_pagamento,
+                    COALESCE(SUM(pf.valor), 0) as total_valor
+                 FROM pagamentos_funcionarios pf
+                 LEFT JOIN usuarios u 
+                    ON u.id = pf.usuario_id 
+                    AND u.tenant_id = pf.tenant_id
+                 LEFT JOIN usuarios_globais ug 
+                    ON ug.id = pf.usuario_id
+                 WHERE 
+                    pf.tenant_id = ?
+                    AND pf.filial_id = ?
+                    AND pf.status = 'pago'
+                    AND pf.data_pagamento BETWEEN ? AND ?
+                 GROUP BY 
+                    COALESCE(ug.nome, u.login, 'Usuario ' || pf.usuario_id::text),
+                    pf.tipo_pagamento,
+                    COALESCE(pf.forma_pagamento, 'nao informado')
+                 ORDER BY funcionario_nome, pf.tipo_pagamento",
+                [$tenant['id'], $filial['id'], $dataInicio, $dataFim]
+            );
+        } else {
+            $pagamentosFuncionarios = [];
+        }
+    } catch (\Exception $e) {
+        error_log('Relatorios: error fetching pagamentosFuncionarios: ' . $e->getMessage());
+        $pagamentosFuncionarios = [];
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -434,6 +599,12 @@ if ($tenant && $filial) {
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="consolidado-tab" data-bs-toggle="tab" data-bs-target="#consolidado" type="button" role="tab">
+                        <i class="fas fa-file-invoice-dollar me-1"></i>
+                        Financeiro Consolidado
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
                     <button class="nav-link" id="historico-tab" data-bs-toggle="tab" data-bs-target="#historico" type="button" role="tab">
                         <i class="fas fa-history me-1"></i>
                         Histórico
@@ -589,6 +760,232 @@ if ($tenant && $filial) {
                                                         <td><?= $financeiro['qtd_lancamentos'] ?></td>
                                                     </tr>
                                                 <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab Financeiro Consolidado -->
+                <div class="tab-pane fade" id="consolidado" role="tabpanel">
+                    <div class="row mt-3">
+                        <!-- Entradas por forma de pagamento -->
+                        <div class="col-md-6 mb-3">
+                            <div class="card report-card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">
+                                        <i class="fas fa-coins me-2"></i>
+                                        Entradas por Forma de Pagamento (Pedidos Quitados)
+                                    </h5>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div class="table-responsive">
+                                        <table class="table table-hover mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>Forma</th>
+                                                    <th class="text-end">Pedidos</th>
+                                                    <th class="text-end">Total</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php if (empty($entradasPorForma)): ?>
+                                                    <tr>
+                                                        <td colspan="3" class="text-center text-muted py-3">
+                                                            Nenhum dado encontrado para o período.
+                                                        </td>
+                                                    </tr>
+                                                <?php else: ?>
+                                                    <?php foreach ($entradasPorForma as $linha): ?>
+                                                        <tr>
+                                                            <td><?= htmlspecialchars($linha['forma']) ?></td>
+                                                            <td class="text-end"><?= (int) $linha['total_pedidos'] ?></td>
+                                                            <td class="text-end">
+                                                                R$ <?= number_format((float) $linha['total_valor'], 2, ',', '.') ?>
+                                                            </td>
+                                                        </tr>
+                                                    <?php endforeach; ?>
+                                                <?php endif; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Entradas e saídas por conta -->
+                        <div class="col-md-6 mb-3">
+                            <div class="card report-card mb-3">
+                                <div class="card-header">
+                                    <h5 class="mb-0">
+                                        <i class="fas fa-university me-2"></i>
+                                        Entradas por Conta Financeira
+                                    </h5>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div class="table-responsive">
+                                        <table class="table table-hover mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>Conta</th>
+                                                    <th>Tipo</th>
+                                                    <th class="text-end">Total Entradas</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php if (empty($entradasPorConta)): ?>
+                                                    <tr>
+                                                        <td colspan="3" class="text-center text-muted py-3">
+                                                            Nenhuma entrada encontrada para o período.
+                                                        </td>
+                                                    </tr>
+                                                <?php else: ?>
+                                                    <?php foreach ($entradasPorConta as $linha): ?>
+                                                        <tr>
+                                                            <td><?= htmlspecialchars($linha['conta_nome']) ?></td>
+                                                            <td><?= htmlspecialchars($linha['conta_tipo']) ?></td>
+                                                            <td class="text-end">
+                                                                R$ <?= number_format((float) $linha['total_valor'], 2, ',', '.') ?>
+                                                            </td>
+                                                        </tr>
+                                                    <?php endforeach; ?>
+                                                <?php endif; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card report-card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">
+                                        <i class="fas fa-wallet me-2"></i>
+                                        Saídas por Conta Financeira
+                                    </h5>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div class="table-responsive">
+                                        <table class="table table-hover mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>Conta</th>
+                                                    <th>Tipo</th>
+                                                    <th class="text-end">Total Saídas</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php if (empty($saidasPorConta)): ?>
+                                                    <tr>
+                                                        <td colspan="3" class="text-center text-muted py-3">
+                                                            Nenhuma saída encontrada para o período.
+                                                        </td>
+                                                    </tr>
+                                                <?php else: ?>
+                                                    <?php foreach ($saidasPorConta as $linha): ?>
+                                                        <tr>
+                                                            <td><?= htmlspecialchars($linha['conta_nome']) ?></td>
+                                                            <td><?= htmlspecialchars($linha['conta_tipo']) ?></td>
+                                                            <td class="text-end">
+                                                                R$ <?= number_format((float) $linha['total_valor'], 2, ',', '.') ?>
+                                                            </td>
+                                                        </tr>
+                                                    <?php endforeach; ?>
+                                                <?php endif; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mt-3">
+                        <!-- Recebimentos por usuário (caixa) -->
+                        <div class="col-md-6 mb-3">
+                            <div class="card report-card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">
+                                        <i class="fas fa-user-check me-2"></i>
+                                        Recebimentos por Usuário / Forma de Pagamento
+                                    </h5>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div class="table-responsive">
+                                        <table class="table table-hover mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>Usuário</th>
+                                                    <th>Forma</th>
+                                                    <th class="text-end">Total Recebido</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php if (empty($recebimentosPorUsuario)): ?>
+                                                    <tr>
+                                                        <td colspan="3" class="text-center text-muted py-3">
+                                                            Nenhum recebimento encontrado para o período.
+                                                        </td>
+                                                    </tr>
+                                                <?php else: ?>
+                                                    <?php foreach ($recebimentosPorUsuario as $linha): ?>
+                                                        <tr>
+                                                            <td><?= htmlspecialchars($linha['usuario_nome']) ?></td>
+                                                            <td><?= htmlspecialchars($linha['forma']) ?></td>
+                                                            <td class="text-end">
+                                                                R$ <?= number_format((float) $linha['total_valor'], 2, ',', '.') ?>
+                                                            </td>
+                                                        </tr>
+                                                    <?php endforeach; ?>
+                                                <?php endif; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Pagamentos a funcionários -->
+                        <div class="col-md-6 mb-3">
+                            <div class="card report-card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">
+                                        <i class="fas fa-users me-2"></i>
+                                        Pagamentos a Funcionários
+                                    </h5>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div class="table-responsive">
+                                        <table class="table table-hover mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>Funcionário</th>
+                                                    <th>Tipo</th>
+                                                    <th>Forma</th>
+                                                    <th class="text-end">Total Pago</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php if (empty($pagamentosFuncionarios)): ?>
+                                                    <tr>
+                                                        <td colspan="4" class="text-center text-muted py-3">
+                                                            Nenhum pagamento de funcionário encontrado para o período.
+                                                        </td>
+                                                    </tr>
+                                                <?php else: ?>
+                                                    <?php foreach ($pagamentosFuncionarios as $linha): ?>
+                                                        <tr>
+                                                            <td><?= htmlspecialchars($linha['funcionario_nome']) ?></td>
+                                                            <td><?= htmlspecialchars($linha['tipo_pagamento']) ?></td>
+                                                            <td><?= htmlspecialchars($linha['forma_pagamento']) ?></td>
+                                                            <td class="text-end">
+                                                                R$ <?= number_format((float) $linha['total_valor'], 2, ',', '.') ?>
+                                                            </td>
+                                                        </tr>
+                                                    <?php endforeach; ?>
+                                                <?php endif; ?>
                                             </tbody>
                                         </table>
                                     </div>

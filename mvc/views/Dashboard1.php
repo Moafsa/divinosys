@@ -192,12 +192,25 @@ if ($tenant && $filial) {
              AND p.status_pagamento != 'quitado'",
             [$tenant['id'], $filial['id']]
         )['count'] ?? 0,
-        'delivery_pendentes' => $db->count('pedido', 'tenant_id = ? AND filial_id = ? AND delivery = true AND status IN (?, ?, ?, ?)', [$tenant['id'], $filial['id'], 'Pendente', 'Em Preparo', 'Pronto', 'Saiu para Entrega']),
+        'delivery_pendentes' => $db->fetch(
+            "SELECT COUNT(*) as count 
+             FROM pedido 
+             WHERE tenant_id = ? AND filial_id = ? 
+             AND (
+                 delivery = true 
+                 OR (usuario_global_id IS NOT NULL AND tipo_entrega IS NOT NULL AND tipo_entrega IN ('pickup', 'delivery'))
+             )
+             AND status IN ('Pendente', 'Em Preparo', 'Pronto', 'Saiu para Entrega')",
+            [$tenant['id'], $filial['id']]
+        )['count'] ?? 0,
         'faturamento_delivery' => $db->fetch(
             "SELECT COALESCE(SUM(valor_total), 0) as total 
              FROM pedido 
              WHERE tenant_id = ? AND filial_id = ? 
-             AND delivery = true 
+             AND (
+                 delivery = true 
+                 OR (usuario_global_id IS NOT NULL AND tipo_entrega IS NOT NULL AND tipo_entrega IN ('pickup', 'delivery'))
+             )
              AND data = CURRENT_DATE 
              AND status IN ('Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega', 'Finalizado')",
             [$tenant['id'], $filial['id']]
@@ -219,6 +232,7 @@ if ($tenant && $filial) {
         :root {
             --primary-color: <?php echo $tenant['cor_primaria'] ?? '#007bff'; ?>;
             --primary-light: <?php echo $tenant['cor_primaria'] ?? '#007bff'; ?>20;
+            --online-order-color: <?php echo $tenant['cor_primaria'] ?? '#dc3545'; ?>;
         }
         
         body {
@@ -264,6 +278,28 @@ if ($tenant && $filial) {
         
         .main-content {
             padding: 2rem;
+        }
+        
+        /* Fix para seção de reservas não ficar debaixo da sidebar */
+        .main-content {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .main-content .row {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .main-content .card {
+            position: relative;
+            z-index: 1;
+        }
+        
+        /* Garantir que cards de reserva não fiquem atrás da sidebar */
+        #reservasContainer .card {
+            position: relative;
+            z-index: 1;
         }
         
         .stats-card {
@@ -340,6 +376,28 @@ if ($tenant && $filial) {
         
         .mesa-floating-card.ocupada {
             border-color: #dc3545;
+        }
+
+        .mesa-floating-card.online-order {
+            border-color: var(--online-order-color);
+            background: var(--online-order-color) !important;
+            color: white !important;
+        }
+
+        .mesa-floating-card.online-order .mesa-icon {
+            color: white !important;
+        }
+
+        .mesa-floating-card.online-order .mesa-status-text {
+            color: white !important;
+        }
+
+        .mesa-floating-card.online-order .mesa-number {
+            color: white !important;
+        }
+
+        .mesa-floating-card.online-order .mesa-details {
+            color: rgba(255, 255, 255, 0.9) !important;
         }
         
         .mesa-content {
@@ -599,6 +657,28 @@ if ($tenant && $filial) {
             transform: translateY(-2px);
             box-shadow: 0 4px 16px rgba(0,0,0,0.15);
         }
+
+        .delivery-card-online {
+            border: 2px solid var(--online-order-color);
+            background: var(--online-order-color) !important;
+            color: white !important;
+        }
+
+        .delivery-card-online .delivery-id,
+        .delivery-card-online .delivery-time,
+        .delivery-card-online .delivery-value {
+            color: white !important;
+        }
+
+        .delivery-card-online .btn {
+            background: rgba(255, 255, 255, 0.2) !important;
+            border-color: rgba(255, 255, 255, 0.3) !important;
+            color: white !important;
+        }
+
+        .delivery-card-online:hover {
+            box-shadow: 0 4px 16px rgba(220, 53, 69, 0.4);
+        }
         
         .delivery-header {
             display: flex;
@@ -761,24 +841,42 @@ if ($tenant && $filial) {
                             <div class="card-body">
                                 <div class="row">
                                     <?php
-                                    // Buscar pedido de delivery pendentes
+                                    // Buscar pedido de delivery pendentes E pedidos online (cardápio online)
                                     $pedidoDelivery = $db->fetchAll(
                                         "SELECT p.*, u.login as usuario_nome
                                          FROM pedido p 
                                          LEFT JOIN usuarios u ON p.usuario_id = u.id
                                          WHERE p.tenant_id = ? AND p.filial_id = ? 
-                                         AND p.delivery = true 
+                                         AND (
+                                             p.delivery = true 
+                                             OR (p.usuario_global_id IS NOT NULL AND p.tipo_entrega IS NOT NULL AND p.tipo_entrega IN ('pickup', 'delivery'))
+                                         )
                                          AND p.status NOT IN ('Entregue', 'Finalizado', 'Cancelado')
                                          AND NOT (p.status = 'Entregue' AND p.status_pagamento = 'quitado')
                                          ORDER BY p.hora_pedido ASC",
                                         [$tenant['id'], $filial['id']]
                                     );
                                     
-                                    foreach ($pedidoDelivery as $pedido): ?>
+                                    foreach ($pedidoDelivery as $pedido): 
+                                        // Verificar se é pedido do cardápio online
+                                        $isOnlineOrder = (
+                                            !empty($pedido['usuario_global_id']) && 
+                                            !empty($pedido['tipo_entrega']) && 
+                                            in_array($pedido['tipo_entrega'], ['pickup', 'delivery'])
+                                        );
+                                        $deliveryCardClass = $isOnlineOrder ? 'delivery-card delivery-card-online' : 'delivery-card';
+                                    ?>
                                     <div class="col-md-6 col-lg-4 mb-3">
-                                        <div class="delivery-card">
+                                        <div class="<?php echo $deliveryCardClass; ?>">
                                             <div class="delivery-header">
-                                                <div class="delivery-id">#<?php echo $pedido['idpedido']; ?></div>
+                                                <div>
+                                                    <div class="delivery-id">#<?php echo $pedido['idpedido']; ?></div>
+                                                    <?php if ($isOnlineOrder): ?>
+                                                        <span class="badge bg-success" style="font-size: 0.7rem; margin-top: 2px;">
+                                                            <i class="fas fa-shopping-cart me-1"></i>Cardápio Online
+                                                        </span>
+                                                    <?php endif; ?>
+                                                </div>
                                                 <div class="delivery-status">
                                                     <span class="badge bg-<?php 
                                                         switch($pedido['status']) {
@@ -887,8 +985,20 @@ if ($tenant && $filial) {
                         <?php
                         $pedidoMesa = isset($pedidoPorMesa[$mesa['id_mesa']]) ? $pedidoPorMesa[$mesa['id_mesa']] : null;
                         $status = $pedidoMesa ? 'ocupada' : 'livre';
+
+                        // Verificar se é pedido do cardápio online
+                        $isOnlineOrder = false;
+                        if ($pedidoMesa && !empty($pedidoMesa['pedido'])) {
+                            $pedido = $pedidoMesa['pedido'][0];
+                            $isOnlineOrder = (
+                                !empty($pedido['usuario_global_id']) && 
+                                !empty($pedido['tipo_entrega']) && 
+                                in_array($pedido['tipo_entrega'], ['pickup', 'delivery'])
+                            );
+                        }
+                        $cardClass = $isOnlineOrder ? 'mesa-floating-card ocupada online-order' : 'mesa-floating-card ' . $status;
                         ?>
-                        <div class="mesa-floating-card <?php echo $status; ?>" onclick="verMesa(<?php echo $mesa['id']; ?>, <?php echo $mesa['id_mesa']; ?>)">
+                        <div class="<?php echo $cardClass; ?>" onclick="verMesa(<?php echo $mesa['id']; ?>, <?php echo $mesa['id_mesa']; ?>)">
                             <div class="mesa-glow-effect"></div>
                             <div class="mesa-content">
                                 <div class="mesa-icon">
@@ -1039,7 +1149,11 @@ if ($tenant && $filial) {
                                                     <?php endif; ?>
                                                 </div>
                                                 
-                                                <div class="mt-3 d-flex gap-2">
+                                                <div class="mt-3 d-flex gap-2 flex-wrap">
+                                                    <button class="btn btn-sm btn-info" onclick="editarReserva(<?php echo $reserva['id']; ?>)">
+                                                        <i class="fas fa-edit me-1"></i>
+                                                        Editar
+                                                    </button>
                                                     <?php if ($reserva['status'] === 'pendente'): ?>
                                                         <button class="btn btn-sm btn-success flex-fill" onclick="confirmarReserva(<?php echo $reserva['id']; ?>)">
                                                             <i class="fas fa-check me-1"></i>
@@ -2543,6 +2657,127 @@ if ($tenant && $filial) {
                         text: 'Erro ao carregar mesas'
                     });
                 });
+        }
+        
+        function editarReserva(reservaId) {
+            // Buscar dados da reserva
+            fetch('mvc/ajax/reservas_online.php?action=get_reserva&reserva_id=' + reservaId)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.reserva) {
+                        const reserva = data.reserva;
+                        
+                        Swal.fire({
+                            title: 'Editar Reserva',
+                            html: `
+                                <div class="text-start">
+                                    <div class="mb-3">
+                                        <label class="form-label">Nome</label>
+                                        <input type="text" id="editNome" class="form-control" value="${reserva.nome || ''}">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Telefone</label>
+                                        <input type="tel" id="editCelular" class="form-control" value="${reserva.celular || ''}">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">E-mail</label>
+                                        <input type="email" id="editEmail" class="form-control" value="${reserva.email || ''}">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Número de Convidados</label>
+                                        <input type="number" id="editNumConvidados" class="form-control" value="${reserva.num_convidados || 1}" min="1">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Data da Reserva</label>
+                                        <input type="date" id="editDataReserva" class="form-control" value="${reserva.data_reserva || ''}">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Hora</label>
+                                        <input type="time" id="editHoraReserva" class="form-control" value="${reserva.hora_reserva || ''}">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Instruções</label>
+                                        <textarea id="editInstrucoes" class="form-control" rows="3">${reserva.instrucoes || ''}</textarea>
+                                    </div>
+                                </div>
+                            `,
+                            showCancelButton: true,
+                            confirmButtonText: 'Salvar',
+                            cancelButtonText: 'Cancelar',
+                            preConfirm: () => {
+                                return {
+                                    nome: document.getElementById('editNome').value.trim(),
+                                    celular: document.getElementById('editCelular').value.trim(),
+                                    email: document.getElementById('editEmail').value.trim(),
+                                    num_convidados: parseInt(document.getElementById('editNumConvidados').value) || 1,
+                                    data_reserva: document.getElementById('editDataReserva').value,
+                                    hora_reserva: document.getElementById('editHoraReserva').value,
+                                    instrucoes: document.getElementById('editInstrucoes').value.trim()
+                                };
+                            }
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                salvarEdicaoReserva(reservaId, result.value);
+                            }
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Erro',
+                            text: 'Não foi possível carregar os dados da reserva'
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Erro',
+                        text: 'Erro ao carregar dados da reserva'
+                    });
+                });
+        }
+        
+        function salvarEdicaoReserva(reservaId, dados) {
+            fetch('mvc/ajax/reservas_online.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    action: 'editar',
+                    reserva_id: reservaId,
+                    ...dados
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Sucesso',
+                        text: 'Reserva atualizada com sucesso!',
+                        timer: 2000,
+                        showConfirmButton: false
+                    }).then(() => {
+                        location.reload();
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Erro',
+                        text: data.message || 'Erro ao atualizar reserva'
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Erro',
+                    text: 'Erro ao atualizar reserva'
+                });
+            });
         }
         
         function atualizarStatusReserva(reservaId, status) {

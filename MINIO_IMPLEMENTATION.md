@@ -183,3 +183,15 @@ Os erros de MinIO são logados automaticamente. Para debug, verifique:
 - Verifique se o `MINIO_PUBLIC_URL` está correto
 - Verifique CORS do MinIO
 
+
+
+
+
+
+
+
+
+
+
+
+

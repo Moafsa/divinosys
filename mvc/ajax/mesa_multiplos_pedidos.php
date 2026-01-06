@@ -329,6 +329,8 @@ try {
             $formaPagamento = $_POST['forma_pagamento'] ?? '';
             $numeroPessoas = (int)($_POST['numero_pessoas'] ?? 1);
             $observacao = $_POST['observacao'] ?? '';
+            $valorDesconto = (float)($_POST['valor_desconto'] ?? 0);
+            $tipoDesconto = $_POST['tipo_desconto'] ?? 'valor_fixo'; // 'valor_fixo' ou 'percentual'
             
             if (empty($mesaId) || empty($formaPagamento)) {
                 throw new \Exception('Mesa e forma de pagamento são obrigatórios');
@@ -346,11 +348,36 @@ try {
             
             $valorTotal = 0;
             $valorPorPessoa = 0;
-            
-            // Close all pedidos - usar saldo_devedor em vez de valor_total
+            $totalDescontoAplicado = 0;
+
+            // Calcular valor total primeiro
             foreach ($pedidos as $pedido) {
                 $valorTotal += (float)($pedido['saldo_devedor'] ?? $pedido['valor_total']);
-                
+            }
+
+            // Calcular desconto sobre o valor total da mesa
+            if ($valorDesconto > 0) {
+                if ($tipoDesconto === 'percentual') {
+                    $totalDescontoAplicado = $valorTotal * ($valorDesconto / 100);
+                } else {
+                    $totalDescontoAplicado = $valorDesconto;
+                }
+            }
+
+            $valorTotalComDesconto = $valorTotal - $totalDescontoAplicado;
+
+            // Close all pedidos - usar saldo_devedor em vez de valor_total
+            foreach ($pedidos as $pedido) {
+                $valorPedido = (float)($pedido['saldo_devedor'] ?? $pedido['valor_total']);
+
+                // Calcular desconto proporcional para este pedido
+                $descontoPedido = 0;
+                if ($totalDescontoAplicado > 0 && $valorTotal > 0) {
+                    $descontoPedido = ($valorPedido / $valorTotal) * $totalDescontoAplicado;
+                }
+
+                $valorPagoPedido = $valorPedido - $descontoPedido;
+
                 $db->update(
                     'pedido',
                     [
@@ -362,9 +389,52 @@ try {
                     'idpedido = ?',
                     [$pedido['idpedido']]
                 );
+
+                // Registrar desconto se houver
+                if ($descontoPedido > 0) {
+                    $db->insert('descontos_aplicados', [
+                        'pedido_id' => $pedido['idpedido'],
+                        'tipo_desconto_id' => 1, // Tipo genérico para desconto manual
+                        'valor_desconto' => $descontoPedido,
+                        'motivo' => 'Desconto aplicado no fechamento da mesa',
+                        'autorizado_por' => $user['id'],
+                        'tenant_id' => $tenantId,
+                        'filial_id' => $filialId
+                    ]);
+
+                    // Registrar no audit_logs
+                    $db->insert('audit_logs', [
+                        'tenant_id' => $tenantId,
+                        'usuario_id' => $user['id'],
+                        'acao' => 'aplicar_desconto_mesa_multiplos',
+                        'entidade' => 'pedido',
+                        'entidade_id' => $pedido['idpedido'],
+                        'dados_anteriores' => json_encode(['valor_pedido' => $valorPedido]),
+                        'dados_novos' => json_encode([
+                            'desconto_proporcional' => $descontoPedido,
+                            'valor_final' => $valorPagoPedido,
+                            'mesa_id' => $mesaId
+                        ]),
+                        'ip_address' => $_SERVER['REMOTE_ADDR'] ?? null,
+                        'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? null
+                    ]);
+                }
+
+                // Create payment record for each pedido
+                $db->insert('pagamentos', [
+                    'pedido_id' => $pedido['idpedido'],
+                    'valor_pago' => $valorPagoPedido,
+                    'desconto_aplicado' => $descontoPedido,
+                    'forma_pagamento' => $formaPagamento,
+                    'numero_pessoas' => $numeroPessoas,
+                    'observacao' => $observacao,
+                    'usuario_id' => $user['id'],
+                    'tenant_id' => $tenantId,
+                    'filial_id' => $filialId
+                ]);
             }
             
-            $valorPorPessoa = $valorTotal / $numeroPessoas;
+            $valorPorPessoa = $valorTotalComDesconto / $numeroPessoas;
             
             // Free the mesa
             $db->update(
@@ -493,7 +563,7 @@ try {
                 // Fechamento dividido por pessoas
                 $numeroPessoas = (int)$dadosFechamento['numeroPessoas'];
                 $formaPagamento = $dadosFechamento['formaPagamento'];
-                $valorPorPessoa = $valorTotal / $numeroPessoas;
+                $valorPorPessoa = $valorTotalComDesconto / $numeroPessoas;
                 
                 foreach ($pedidos as $pedido) {
                     $db->execute(

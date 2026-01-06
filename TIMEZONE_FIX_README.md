@@ -113,3 +113,15 @@ echo "Dia da Semana: " . \System\TimeHelper::currentDayName($filialId) . "\n";
 
 Após executar a migration, **reinicie o servidor web** (se aplicável) para garantir que as mudanças sejam aplicadas.
 
+
+
+
+
+
+
+
+
+
+
+
+

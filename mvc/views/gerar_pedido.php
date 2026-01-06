@@ -32,11 +32,11 @@ if ($pedidoId) {
     $editarPedido = $db->fetch(
         "SELECT p.*, 
                 CASE 
-                    WHEN p.idmesa = '999' THEN '999'
+                    WHEN p.delivery = true OR p.tipo_entrega = 'delivery' OR p.idmesa = '999' THEN '999'
                     ELSE p.idmesa
                 END as id_mesa,
                 CASE 
-                    WHEN p.idmesa = '999' THEN 'Delivery'
+                    WHEN p.delivery = true OR p.tipo_entrega = 'delivery' OR p.idmesa = '999' THEN 'Delivery'
                     WHEN m.nome IS NOT NULL THEN m.nome
                     ELSE 'Mesa ' || p.idmesa
                 END as mesa_nome

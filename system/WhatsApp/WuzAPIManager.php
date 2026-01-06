@@ -60,8 +60,11 @@ class WuzAPIManager
             );
             error_log("WuzAPIManager::createInstance - Conexão PDO estabelecida");
             
-            // Criar usuário na tabela users da WuzAPI
-            // Nota: A tabela users deve existir no banco de dados da WuzAPI
+            // Testar conexão
+            $testStmt = $pdo->query("SELECT COUNT(*) FROM users");
+            $userCount = $testStmt->fetchColumn();
+            error_log("WuzAPIManager::createInstance - Usuários existentes na WuzAPI: $userCount");
+            
             $stmt = $pdo->prepare("
                 INSERT INTO users (name, token, webhook, events) 
                 VALUES (?, ?, ?, ?) 

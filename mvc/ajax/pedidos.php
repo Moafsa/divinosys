@@ -314,9 +314,10 @@ try {
                 
                 error_log("Buscando pedido ID: $pedidoId, Tenant: $tenantId, Filial: $filialId");
             
-                // Buscar dados do pedido
+                // Buscar dados do pedido (incluindo descontos aplicados)
                 $pedido = $db->fetch(
                     "SELECT p.*, 
+                            COALESCE((SELECT SUM(da.valor_desconto) FROM descontos_aplicados da WHERE da.pedido_id = p.idpedido AND da.tenant_id = p.tenant_id AND da.filial_id = p.filial_id), 0) as total_descontos,
                             CASE 
                                 WHEN p.idmesa = '999' THEN 'Delivery'
                                 WHEN m.nome IS NOT NULL THEN m.nome
@@ -894,9 +895,10 @@ try {
                 $filialId = $filial_padrao ? $filial_padrao['id'] : null;
             }
             
-            // Buscar pedido atual para obter valor_pago
+            // Buscar pedido atual para obter valor_pago e campos de delivery
+            // Buscar TODOS os campos do pedido para preservar informações importantes
             $pedidoAtual = $db->fetch(
-                "SELECT valor_pago FROM pedido WHERE idpedido = ? AND tenant_id = ? AND filial_id = ?",
+                "SELECT * FROM pedido WHERE idpedido = ? AND tenant_id = ? AND filial_id = ?",
                 [$pedidoId, $tenantId, $filialId]
             );
             
@@ -934,16 +936,69 @@ try {
                 $usuarioData['telefone'] = $telefoneUsuario['telefone'] ?? '';
             }
             
-            // Atualizar dados do pedido incluindo saldo_devedor
+            // Determinar se é delivery baseado na mesa selecionada
+            $isDelivery = ($mesaId === '999');
+            
+            // Determinar tipo_entrega: preservar se existir, ou definir baseado em isDelivery
+            $tipoEntrega = null;
+            if (!empty($pedidoAtual['tipo_entrega'])) {
+                // Se o pedido original tinha tipo_entrega (pedido do cardápio online), preservar
+                if ($isDelivery) {
+                    // Se está marcando como delivery, usar 'delivery'
+                    $tipoEntrega = 'delivery';
+                } else {
+                    // Se mudou para mesa, manter tipo_entrega original (pode ser 'pickup')
+                    $tipoEntrega = $pedidoAtual['tipo_entrega'];
+                }
+            } else {
+                // Se não tinha tipo_entrega, definir baseado em isDelivery
+                $tipoEntrega = $isDelivery ? 'delivery' : null;
+            }
+            
+            // Preparar dados para atualização
+            $updateData = [
+                'idmesa' => $mesaId,
+                'valor_total' => $valorTotal,
+                'saldo_devedor' => $novoSaldoDevedor,
+                'observacao' => $observacao,
+                'usuario_id' => $usuarioId,
+                'delivery' => $isDelivery ? 1 : 0
+            ];
+            
+            // Preservar tipo_entrega se existir ou se foi definido (para pedidos do cardápio online)
+            if ($tipoEntrega !== null) {
+                $updateData['tipo_entrega'] = $tipoEntrega;
+            }
+            
+            // Preservar TODOS os campos importantes de pedidos do cardápio online
+            if (!empty($pedidoAtual['usuario_global_id'])) {
+                // Preservar usuario_global_id (cliente do cardápio online)
+                $updateData['usuario_global_id'] = $pedidoAtual['usuario_global_id'];
+            }
+            if (!empty($pedidoAtual['telefone_cliente'])) {
+                // Preservar telefone_cliente
+                $updateData['telefone_cliente'] = $pedidoAtual['telefone_cliente'];
+            }
+            if (!empty($pedidoAtual['cliente'])) {
+                // Preservar nome do cliente
+                $updateData['cliente'] = $pedidoAtual['cliente'];
+            }
+            // Preservar campos de pagamento Asaas se existirem
+            if (!empty($pedidoAtual['asaas_payment_id'])) {
+                $updateData['asaas_payment_id'] = $pedidoAtual['asaas_payment_id'];
+            }
+            if (!empty($pedidoAtual['asaas_payment_url'])) {
+                $updateData['asaas_payment_url'] = $pedidoAtual['asaas_payment_url'];
+            }
+            // Preservar forma_pagamento se existir
+            if (!empty($pedidoAtual['forma_pagamento'])) {
+                $updateData['forma_pagamento'] = $pedidoAtual['forma_pagamento'];
+            }
+            
+            // Atualizar dados do pedido incluindo saldo_devedor e campos preservados
             $db->update(
                 'pedido',
-                [
-                    'idmesa' => $mesaId,
-                    'valor_total' => $valorTotal,
-                    'saldo_devedor' => $novoSaldoDevedor,
-                    'observacao' => $observacao,
-                    'usuario_id' => $usuarioId
-                ],
+                $updateData,
                 'idpedido = ? AND tenant_id = ? AND filial_id = ?',
                 [$pedidoId, $tenantId, $filialId]
             );

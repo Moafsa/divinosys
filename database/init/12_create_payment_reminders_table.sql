@@ -45,3 +45,15 @@ COMMENT ON COLUMN payment_reminders.status IS 'Status: pending (aguardando), sen
 COMMENT ON COLUMN payment_reminders.billing_type IS 'Tipo de pagamento: PIX, CREDIT_CARD, BOLETO';
 COMMENT ON COLUMN payment_reminders.pix_copy_paste IS 'Código PIX copia e cola (se disponível)';
 
+
+
+
+
+
+
+
+
+
+
+
+

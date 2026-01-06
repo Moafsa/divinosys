@@ -54,30 +54,53 @@ try {
             // Normalize phone number (remove non-numeric characters)
             $telefoneNormalizado = preg_replace('/[^0-9]/', '', $telefone);
             
-            error_log("clientes_cardapio_online::buscar_por_telefone - Telefone original: $telefone, Normalizado: $telefoneNormalizado");
+            // Generate phone variations for search
+            $telefoneVariacoes = [];
+            $telefoneVariacoes[] = $telefoneNormalizado; // Original cleaned
             
-            // Search for client by phone (include clients with tipo_usuario = 'cliente' or NULL or empty for backward compatibility)
-            // Try multiple search patterns to handle different phone formats
+            // Remove country code (55) if present
+            $telefoneSemPais = $telefoneNormalizado;
+            if (strlen($telefoneNormalizado) > 11 && substr($telefoneNormalizado, 0, 2) == '55') {
+                $telefoneSemPais = substr($telefoneNormalizado, 2);
+                if (!in_array($telefoneSemPais, $telefoneVariacoes)) {
+                    $telefoneVariacoes[] = $telefoneSemPais;
+                }
+            }
+            
+            // Add with country code if not present and phone is valid length
+            if (strlen($telefoneNormalizado) <= 11 && substr($telefoneNormalizado, 0, 2) != '55' && strlen($telefoneNormalizado) >= 10) {
+                $telefoneComPais = '55' . $telefoneNormalizado;
+                if (!in_array($telefoneComPais, $telefoneVariacoes)) {
+                    $telefoneVariacoes[] = $telefoneComPais;
+                }
+            }
+            
+            error_log("clientes_cardapio_online::buscar_por_telefone - Telefone original: $telefone, Normalizado: $telefoneNormalizado");
+            error_log("clientes_cardapio_online::buscar_por_telefone - Variações: " . implode(', ', $telefoneVariacoes));
+            
+            // Build query with multiple phone variations
+            $placeholders = implode(',', array_fill(0, count($telefoneVariacoes), '?'));
+            
+            // Search for client by phone with multiple variations
             $cliente = $db->fetch(
                 "SELECT id, nome, telefone, email, cpf 
                  FROM usuarios_globais 
                  WHERE (
-                     telefone = ? 
-                     OR telefone = ?
+                     telefone IN ($placeholders)
                      OR telefone LIKE ?
                      OR telefone LIKE ?
-                     OR REPLACE(REPLACE(REPLACE(REPLACE(telefone, '(', ''), ')', ''), '-', ''), ' ', '') = ?
+                     OR REPLACE(REPLACE(REPLACE(REPLACE(telefone, '(', ''), ')', ''), '-', ''), ' ', '') IN ($placeholders)
+                     OR REPLACE(REPLACE(REPLACE(REPLACE(telefone, '(', ''), ')', ''), '-', ''), ' ', '') LIKE ?
                  )
                  AND (tipo_usuario = 'cliente' OR tipo_usuario IS NULL OR tipo_usuario = '')
                  AND ativo = true
                  LIMIT 1",
-                [
-                    $telefone, 
-                    $telefoneNormalizado,
-                    '%' . $telefoneNormalizado . '%', 
-                    $telefoneNormalizado . '%',
-                    $telefoneNormalizado
-                ]
+                array_merge(
+                    $telefoneVariacoes, // telefone IN
+                    ['%' . $telefoneNormalizado . '%', $telefoneNormalizado . '%'], // telefone LIKE
+                    $telefoneVariacoes, // REPLACE telefone IN
+                    ['%' . $telefoneNormalizado . '%'] // REPLACE telefone LIKE
+                )
             );
             
             error_log("clientes_cardapio_online::buscar_por_telefone - Cliente encontrado: " . ($cliente ? json_encode($cliente) : 'null'));
@@ -92,41 +115,12 @@ try {
                     'enderecos' => $enderecos
                 ]);
             } else {
-                // Cliente não encontrado - criar automaticamente com apenas o telefone
-                $clienteId = $db->insert('usuarios_globais', [
-                    'nome' => 'Cliente', // Nome temporário, será atualizado depois
-                    'telefone' => $telefoneNormalizado,
-                    'email' => null,
-                    'cpf' => null,
-                    'tipo_usuario' => 'cliente',
-                    'ativo' => true,
-                    'created_at' => date('Y-m-d H:i:s'),
-                    'updated_at' => date('Y-m-d H:i:s')
+                // Cliente não encontrado - retornar sucesso false (não criar automaticamente na busca)
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Cliente não encontrado',
+                    'cliente' => null
                 ]);
-                
-                if ($clienteId) {
-                    // Get created client
-                    $cliente = $db->fetch(
-                        "SELECT id, nome, telefone, email, cpf FROM usuarios_globais WHERE id = ?",
-                        [$clienteId]
-                    );
-                    
-                    $enderecos = [];
-                    
-                    echo json_encode([
-                        'success' => true,
-                        'cliente' => $cliente,
-                        'enderecos' => $enderecos,
-                        'message' => 'Cliente criado automaticamente'
-                    ]);
-                } else {
-                    echo json_encode([
-                        'success' => false,
-                        'message' => 'Erro ao criar cliente',
-                        'cliente' => null,
-                        'enderecos' => []
-                    ]);
-                }
             }
             break;
             

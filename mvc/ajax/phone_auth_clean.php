@@ -87,6 +87,72 @@ try {
 }
 
 /**
+ * Normalizar telefone para busca no banco
+ * Gera todas as variações possíveis considerando:
+ * - Código do país (55 para Brasil)
+ * - O 9 opcional (nono dígito brasileiro)
+ * 
+ * Formato brasileiro:
+ * - Com 9: DDD (2) + 9 + número (8) = 11 dígitos (ex: 54996398430)
+ * - Sem 9: DDD (2) + número (8) = 10 dígitos (ex: 5496398430)
+ * 
+ * IMPORTANTE: Nem todos os números brasileiros têm o 9!
+ * O sistema deve funcionar com qualquer formato.
+ */
+function normalizarTelefoneParaBusca($telefone) {
+    // Limpar caracteres não numéricos
+    $telefone = preg_replace('/[^0-9]/', '', $telefone);
+    
+    if (empty($telefone)) {
+        return [];
+    }
+    
+    $variacoes = [$telefone]; // Incluir o telefone original
+    
+    // Detectar se é número brasileiro (começa com 55 ou tem 10-11 dígitos sem código)
+    $isBrasil = false;
+    $telefoneSem55 = $telefone;
+    
+    // Se começa com 55 (código do Brasil)
+    if (strlen($telefone) > 11 && substr($telefone, 0, 2) == '55') {
+        $isBrasil = true;
+        $telefoneSem55 = substr($telefone, 2);
+        $variacoes[] = $telefoneSem55; // Adicionar versão sem código do país
+    }
+    // Se tem 10 ou 11 dígitos e não começa com código de país, provavelmente é Brasil
+    elseif (strlen($telefone) >= 10 && strlen($telefone) <= 11 && !preg_match('/^[1-9][0-9]{2,}/', $telefone)) {
+        $isBrasil = true;
+        // Adicionar versão com código do país
+        $variacoes[] = '55' . $telefone;
+    }
+    
+    // Se é número brasileiro, gerar variações com/sem o 9
+    if ($isBrasil && strlen($telefoneSem55) >= 10) {
+        // Se tem 11 dígitos (DDD + 9 + número), gerar versão sem o 9
+        // Exemplo: 54996398430 -> 5496398430
+        if (strlen($telefoneSem55) == 11) {
+            // Verificar se o terceiro dígito (índice 2) é 9
+            if (substr($telefoneSem55, 2, 1) == '9') {
+                $telefoneSem9 = substr($telefoneSem55, 0, 2) . substr($telefoneSem55, 3);
+                $variacoes[] = $telefoneSem9;
+                $variacoes[] = '55' . $telefoneSem9; // Com código do país
+            }
+        }
+        
+        // Se tem 10 dígitos (DDD + número), gerar versão com o 9
+        // Exemplo: 5496398430 -> 54996398430
+        if (strlen($telefoneSem55) == 10) {
+            $telefoneCom9 = substr($telefoneSem55, 0, 2) . '9' . substr($telefoneSem55, 2);
+            $variacoes[] = $telefoneCom9;
+            $variacoes[] = '55' . $telefoneCom9; // Com código do país
+        }
+    }
+    
+    // Remover duplicatas e retornar
+    return array_values(array_unique($variacoes));
+}
+
+/**
  * Handle code request
  */
 function handleRequestCode() {
@@ -96,33 +162,22 @@ function handleRequestCode() {
         throw new Exception('Telefone é obrigatório');
     }
     
-    // Clean phone number (remove special characters)
-    $telefone = preg_replace('/[^0-9]/', '', $telefone);
-    
     // Buscar estabelecimento do usuário pelo telefone
     $db = Database::getInstance();
     
-    error_log("phone_auth_clean.php - Buscando usuário para telefone: $telefone");
+    error_log("phone_auth_clean.php - Telefone recebido: $telefone");
     
-    // Preparar variações do telefone para busca
-    $telefoneVariacoes = [$telefone];
+    // Normalizar telefone e gerar todas as variações possíveis
+    $telefoneVariacoes = normalizarTelefoneParaBusca($telefone);
     
-    // Se telefone começa com 55 (Brasil), adicionar variação sem o 55
-    if (strlen($telefone) > 11 && substr($telefone, 0, 2) == '55') {
-        $telefoneSemCodigo = substr($telefone, 2);
-        $telefoneVariacoes[] = $telefoneSemCodigo;
-        error_log("phone_auth_clean.php - Adicionando variação sem código: $telefoneSemCodigo");
-    }
-    
-    // Se telefone não começa com 55, adicionar variação com 55
-    if (strlen($telefone) <= 11 && !str_starts_with($telefone, '55')) {
-        $telefoneComCodigo = '55' . $telefone;
-        $telefoneVariacoes[] = $telefoneComCodigo;
-        error_log("phone_auth_clean.php - Adicionando variação com código: $telefoneComCodigo");
-    }
+    error_log("phone_auth_clean.php - Variações geradas: " . implode(', ', $telefoneVariacoes));
     
     // Buscar TODOS os estabelecimentos do usuário (pode ter múltiplos)
     $placeholders = implode(',', array_fill(0, count($telefoneVariacoes), '?'));
+    
+    // Log de debug: mostrar todas as variações que serão buscadas
+    error_log("phone_auth_clean.php - Buscando usuário com variações: " . implode(', ', $telefoneVariacoes));
+    
     $usuarioGlobal = $db->fetch(
         "SELECT ug.id, ug.nome, ug.telefone as telefone_original
          FROM usuarios_globais ug
@@ -133,6 +188,7 @@ function handleRequestCode() {
     
     $estabelecimentosUsuario = [];
     if ($usuarioGlobal) {
+        error_log("phone_auth_clean.php - Usuário encontrado! ID: {$usuarioGlobal['id']}, Nome: {$usuarioGlobal['nome']}, Telefone no banco: {$usuarioGlobal['telefone_original']}");
         // Buscar TODOS os estabelecimentos ativos deste usuário
         $estabelecimentosUsuario = $db->fetchAll(
             "SELECT ue.id, ue.tenant_id, ue.filial_id, ue.tipo_usuario, 
@@ -148,6 +204,22 @@ function handleRequestCode() {
         error_log("phone_auth_clean.php - Estabelecimentos encontrados: " . count($estabelecimentosUsuario));
     } else {
         error_log("phone_auth_clean.php - Nenhum usuário encontrado para variações: " . implode(', ', $telefoneVariacoes));
+        
+        // Log de debug: verificar se existe algum usuário com telefone similar
+        $telefoneLimpo = preg_replace('/[^0-9]/', '', $telefone);
+        if (strlen($telefoneLimpo) > 2) {
+            $ultimosDigitos = substr($telefoneLimpo, -8); // Últimos 8 dígitos
+            $usuariosSimilares = $db->fetchAll(
+                "SELECT id, nome, telefone 
+                 FROM usuarios_globais 
+                 WHERE telefone LIKE ? AND ativo = true
+                 LIMIT 5",
+                ['%' . $ultimosDigitos]
+            );
+            if (count($usuariosSimilares) > 0) {
+                error_log("phone_auth_clean.php - Usuários com telefone similar encontrados: " . json_encode($usuariosSimilares));
+            }
+        }
     }
     
     // Se encontrou usuário com estabelecimentos, retornar lista para escolha
@@ -159,8 +231,19 @@ function handleRequestCode() {
         
         error_log("phone_auth_clean.php - Usuário tem " . count($estabelecimentosUsuario) . " estabelecimento(s) - Usando primeiro para envio: Tenant=$tenantId, Filial=" . ($filialId ?? 'NULL'));
         
+        // Usar telefone normalizado (sem código do país) para gerar código
+        // Preferir formato sem código do país se existir
+        $telefoneParaCodigo = $telefone;
+        foreach ($telefoneVariacoes as $variacao) {
+            if (strlen($variacao) <= 11 && !str_starts_with($variacao, '55')) {
+                $telefoneParaCodigo = $variacao;
+                break;
+            }
+        }
+        error_log("phone_auth_clean.php - Usando telefone normalizado para código: $telefoneParaCodigo");
+        
         // Gerar código usando primeiro estabelecimento (para envio)
-        $result = Auth::generateAndSendAccessCode($telefone, $tenantId, $filialId);
+        $result = Auth::generateAndSendAccessCode($telefoneParaCodigo, $tenantId, $filialId);
         
         if ($result['success']) {
             // Adicionar lista de estabelecimentos na resposta
@@ -215,8 +298,18 @@ function handleRequestCode() {
             error_log("phone_auth_clean.php - Nenhuma instância ativa encontrada, usando valores padrão - Tenant: $tenantId, Filial: NULL");
         }
         
+        // Usar telefone normalizado (sem código do país) para gerar código
+        $telefoneParaCodigo = $telefone;
+        foreach ($telefoneVariacoes as $variacao) {
+            if (strlen($variacao) <= 11 && !str_starts_with($variacao, '55')) {
+                $telefoneParaCodigo = $variacao;
+                break;
+            }
+        }
+        error_log("phone_auth_clean.php - Cliente - Usando telefone normalizado: $telefoneParaCodigo");
+        
         // Generate and send access code (como cliente)
-        $result = Auth::generateAndSendAccessCode($telefone, $tenantId, $filialId);
+        $result = Auth::generateAndSendAccessCode($telefoneParaCodigo, $tenantId, $filialId);
         
         // Marcar que é acesso como cliente
         if ($result['success']) {
@@ -247,8 +340,22 @@ function handleValidateCode() {
         throw new Exception('Telefone e código são obrigatórios');
     }
     
-    // Clean phone number
-    $telefone = preg_replace('/[^0-9]/', '', $telefone);
+    // Normalizar telefone para busca
+    $telefoneVariacoes = normalizarTelefoneParaBusca($telefone);
+    error_log("phone_auth_clean.php - handleValidateCode - Telefone recebido: $telefone");
+    error_log("phone_auth_clean.php - handleValidateCode - Variações: " . implode(', ', $telefoneVariacoes));
+    
+    // Usar a primeira variação (sem código do país se possível) para validação
+    // Preferir formato sem código do país (55) se existir
+    $telefoneParaValidacao = $telefone;
+    foreach ($telefoneVariacoes as $variacao) {
+        if (strlen($variacao) <= 11 && !str_starts_with($variacao, '55')) {
+            $telefoneParaValidacao = $variacao;
+            break;
+        }
+    }
+    
+    error_log("phone_auth_clean.php - handleValidateCode - Telefone para validação: $telefoneParaValidacao");
     
     $db = Database::getInstance();
     
@@ -280,14 +387,15 @@ function handleValidateCode() {
         // Acesso como usuário - usar tenant/filial escolhidos
         if (!$tenantId) {
             error_log("phone_auth_clean.php - Tenant não fornecido, buscando do usuário");
-            // Se não foi escolhido, buscar do usuário
+            // Se não foi escolhido, buscar do usuário (usar variações do telefone)
+            $placeholders = implode(',', array_fill(0, count($telefoneVariacoes), '?'));
             $usuario = $db->fetch(
                 "SELECT ue.tenant_id, ue.filial_id 
                  FROM usuarios_globais ug
                  JOIN usuarios_estabelecimento ue ON ug.id = ue.usuario_global_id
-                 WHERE ug.telefone = ? AND ue.ativo = true
+                 WHERE ug.telefone IN ($placeholders) AND ue.ativo = true
                  ORDER BY ue.filial_id ASC LIMIT 1",
-                [$telefone]
+                $telefoneVariacoes
             );
             
             if ($usuario) {
@@ -310,9 +418,10 @@ function handleValidateCode() {
         
         // Verificar se o usuário realmente tem acesso a este estabelecimento
         if ($tenantId) {
+            $placeholders = implode(',', array_fill(0, count($telefoneVariacoes), '?'));
             $usuarioGlobal = $db->fetch(
-                "SELECT id FROM usuarios_globais WHERE telefone = ? LIMIT 1",
-                [$telefone]
+                "SELECT id FROM usuarios_globais WHERE telefone IN ($placeholders) LIMIT 1",
+                $telefoneVariacoes
             );
             
             if ($usuarioGlobal) {
@@ -348,8 +457,8 @@ function handleValidateCode() {
         }
     }
     
-    // Validate access code
-    $result = Auth::validateAccessCode($telefone, $codigo, $tenantId, $filialId, $accessType, $tipoUsuario);
+    // Validate access code (usar telefone normalizado)
+    $result = Auth::validateAccessCode($telefoneParaValidacao, $codigo, $tenantId, $filialId, $accessType, $tipoUsuario);
     
     if ($result['success']) {
         // Garantir que tipo_usuario está na resposta
@@ -357,7 +466,31 @@ function handleValidateCode() {
             $result['tipo_usuario'] = $result['establishment']['tipo_usuario'];
         }
         
-        error_log("phone_auth_clean.php - Validação bem-sucedida - Tipo: " . ($result['tipo_usuario'] ?? 'N/A'));
+        error_log("phone_auth_clean.php - Validação bem-sucedida");
+        error_log("phone_auth_clean.php - AccessType recebido: $accessType");
+        error_log("phone_auth_clean.php - TipoUsuario recebido: " . ($tipoUsuario ?? 'N/A'));
+        error_log("phone_auth_clean.php - TipoUsuario na resposta: " . ($result['tipo_usuario'] ?? 'N/A'));
+        error_log("phone_auth_clean.php - Establishment tipo_usuario: " . ($result['establishment']['tipo_usuario'] ?? 'N/A'));
+        
+        // Se foi enviado tipo_usuario específico e accessType é 'usuario', SEMPRE usar o tipo escolhido
+        // O frontend sabe qual estabelecimento o usuário escolheu e qual é o tipo_usuario correto
+        if ($accessType === 'usuario' && $tipoUsuario && $tipoUsuario !== 'cliente') {
+            error_log("phone_auth_clean.php - ===== VERIFICAÇÃO DE TIPO_USUARIO =====");
+            error_log("phone_auth_clean.php - AccessType: $accessType");
+            error_log("phone_auth_clean.php - TipoUsuario recebido (escolhido pelo usuário): $tipoUsuario");
+            error_log("phone_auth_clean.php - Tipo na resposta: " . ($result['tipo_usuario'] ?? 'N/A'));
+            error_log("phone_auth_clean.php - Tipo no establishment: " . ($result['establishment']['tipo_usuario'] ?? 'N/A'));
+            
+            // SEMPRE usar o tipo_usuario enviado pelo frontend quando accessType é 'usuario'
+            // O frontend sabe qual estabelecimento o usuário escolheu
+            $result['tipo_usuario'] = $tipoUsuario;
+            if (isset($result['establishment'])) {
+                $result['establishment']['tipo_usuario'] = $tipoUsuario;
+            }
+            error_log("phone_auth_clean.php - Tipo definido para o escolhido pelo usuário: $tipoUsuario");
+        } else {
+            error_log("phone_auth_clean.php - Não aplicando correção - AccessType: $accessType, TipoUsuario: " . ($tipoUsuario ?? 'N/A'));
+        }
         
         // Get tenant and filial data from database
         $db = Database::getInstance();
@@ -377,12 +510,18 @@ function handleValidateCode() {
         $_SESSION['usuario_global_id'] = $result['user']['usuario_global_id'];
         $_SESSION['tenant_id'] = $tenantId;
         $_SESSION['filial_id'] = $filialId ?? null;
-        $userType = $result['establishment']['tipo_usuario'] ?? 'cliente';
+        
+        // IMPORTANTE: Usar o tipo_usuario corrigido (que já foi atualizado nas linhas anteriores)
+        // Priorizar o tipo_usuario da resposta (que foi corrigido se necessário)
+        // Se não tiver, usar do establishment, e por último 'cliente' como fallback
+        $userType = $result['tipo_usuario'] ?? $result['establishment']['tipo_usuario'] ?? 'cliente';
         $_SESSION['user_type'] = $userType;
         $_SESSION['permissions'] = $result['permissions'] ?? [];
         $_SESSION['user_name'] = $result['user']['nome'] ?? 'Usuário';
         
         error_log("User type set to: $userType");
+        error_log("Tipo_usuario na resposta: " . ($result['tipo_usuario'] ?? 'N/A'));
+        error_log("Tipo_usuario no establishment: " . ($result['establishment']['tipo_usuario'] ?? 'N/A'));
         error_log("Permissions: " . json_encode($_SESSION['permissions'] ?? []));
         
         // Set tenant and filial objects in session (required by views)
@@ -393,20 +532,18 @@ function handleValidateCode() {
             $_SESSION['filial'] = $filial;
         }
         
-        // Determine user level based on tipo_usuario
+        // Determine user level based on tipo_usuario (usar o $userType que já foi definido corretamente)
         $userLevel = 2; // Default user level
-        if (isset($result['establishment']['tipo_usuario'])) {
-            switch (strtolower($result['establishment']['tipo_usuario'])) {
-                case 'admin':
-                case 'administrador':
-                    $userLevel = 1;
-                    break;
-                case 'cliente':
-                    $userLevel = 3;
-                    break;
-                default:
-                    $userLevel = 2;
-            }
+        switch (strtolower($userType)) {
+            case 'admin':
+            case 'administrador':
+                $userLevel = 1;
+                break;
+            case 'cliente':
+                $userLevel = 3;
+                break;
+            default:
+                $userLevel = 2;
         }
         
         // Set session data in the format expected by Session class

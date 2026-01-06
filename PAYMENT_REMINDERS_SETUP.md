@@ -218,3 +218,15 @@ Se os lembretes não estiverem funcionando:
 3. Verifique se há lembretes pendentes no banco
 4. Confirme que a instância WhatsApp está ativa
 
+
+
+
+
+
+
+
+
+
+
+
+

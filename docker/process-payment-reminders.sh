@@ -11,3 +11,15 @@ curl -s "$ENDPOINT_URL" > /dev/null 2>&1
 # Log
 echo "$(date): Processamento de lembretes executado" >> /var/log/payment_reminders.log
 
+
+
+
+
+
+
+
+
+
+
+
+

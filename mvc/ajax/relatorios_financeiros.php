@@ -177,17 +177,30 @@ function resumoGeral($pdo, $tenantId, $filialId) {
     $stmt->execute([$tenantId, $dataInicio ?: '1900-01-01', $dataFim ?: '2099-12-31']);
     $vendasFiadas = $stmt->fetch(PDO::FETCH_ASSOC)['vendas_fiadas'];
     
-    // Total de descontos
+    // Total de descontos (incluindo descontos aplicados manualmente)
     $sqlDescontos = "
-        SELECT COALESCE(SUM(du.valor_desconto), 0) as total_descontos
+        SELECT COALESCE(SUM(du.valor_desconto), 0) as total_descontos_tradicionais
         FROM desconto_usos du
         JOIN descontos d ON du.desconto_id = d.id
         WHERE d.tenant_id = ? AND DATE(du.data_uso) >= ? AND DATE(du.data_uso) <= ?
     ";
-    
+
     $stmt = $pdo->prepare($sqlDescontos);
     $stmt->execute([$tenantId, $dataInicio ?: '1900-01-01', $dataFim ?: '2099-12-31']);
-    $totalDescontos = $stmt->fetch(PDO::FETCH_ASSOC)['total_descontos'];
+    $totalDescontosTradicionais = $stmt->fetch(PDO::FETCH_ASSOC)['total_descontos_tradicionais'];
+
+    // Descontos aplicados manualmente no fechamento de pedidos/mesas
+    $sqlDescontosAplicados = "
+        SELECT COALESCE(SUM(da.valor_desconto), 0) as total_descontos_aplicados
+        FROM descontos_aplicados da
+        WHERE da.tenant_id = ? AND DATE(da.data_aplicacao) >= ? AND DATE(da.data_aplicacao) <= ?
+    ";
+
+    $stmt = $pdo->prepare($sqlDescontosAplicados);
+    $stmt->execute([$tenantId, $dataInicio ?: '1900-01-01', $dataFim ?: '2099-12-31']);
+    $totalDescontosAplicados = $stmt->fetch(PDO::FETCH_ASSOC)['total_descontos_aplicados'];
+
+    $totalDescontos = $totalDescontosTradicionais + $totalDescontosAplicados;
     
     // Total de cortesias
     $sqlCortesias = "
@@ -206,7 +219,8 @@ function resumoGeral($pdo, $tenantId, $filialId) {
             'total_vendas' => floatval($totalVendas),
             'vendas_fiadas' => floatval($vendasFiadas),
             'total_descontos' => floatval($totalDescontos),
-            'total_cortesias' => floatval($totalCortesias)
+            'total_cortesias' => floatval($totalCortesias),
+            'total_descontos_fechamento' => floatval($totalDescontosFechamento)
         ]
     ]);
 }

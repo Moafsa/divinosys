@@ -1,4 +1,4 @@
-FROM php:8.2-apache
+FROM php:8.1-apache
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -16,19 +16,20 @@ RUN apt-get update && apt-get install -y \
     postgresql-client \
     redis-tools \
     cron \
+    libwebp-dev \
+    libxpm-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install PHP extensions
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) \
-    pdo \
-    pdo_pgsql \
-    mbstring \
-    zip \
-    exif \
-    pcntl \
-    gd \
-    bcmath
+# Install PHP extensions one by one to identify issues
+RUN docker-php-ext-install pdo
+RUN docker-php-ext-install pdo_pgsql
+RUN docker-php-ext-install mbstring
+RUN docker-php-ext-install zip
+RUN docker-php-ext-install exif
+RUN docker-php-ext-install pcntl
+RUN docker-php-ext-install gd
+RUN docker-php-ext-install bcmath
+RUN docker-php-ext-install curl
 
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer

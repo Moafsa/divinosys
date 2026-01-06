@@ -566,6 +566,7 @@ if (count($enderecoParts) > 2) {
             grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
                 gap: 1.5rem;
             margin-top: 2rem;
+            overflow: visible;
         }
         
         .category-section {
@@ -628,24 +629,101 @@ if (count($enderecoParts) > 2) {
         
         .product-card:hover .product-tooltip,
         .product-card-carousel:hover .product-tooltip {
-            opacity: 1;
-            transform: translateX(-50%) translateY(0);
+            opacity: 1 !important;
+            transform: translateX(-50%) translateY(0) !important;
+            pointer-events: auto !important;
         }
         
         .product-card[data-has-description="true"]:hover {
-            z-index: 10;
+            z-index: 1001;
         }
         
         .product-card-carousel[data-has-description="true"]:hover {
-            z-index: 10;
+            z-index: 1001;
         }
         
-        /* Ajustes para mobile - tooltip menor */
+        /* Tooltip ativo (mobile - quando clicado) */
+        .product-tooltip.active {
+            opacity: 1 !important;
+            transform: translateX(-50%) translateY(0) !important;
+            pointer-events: auto !important;
+        }
+        
+        .product-card.tooltip-active,
+        .product-card-carousel.tooltip-active {
+            z-index: 1001;
+        }
+        
+        /* Ícone de informação para mobile */
+        .product-info-icon {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 24px;
+            height: 24px;
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            border-radius: 50%;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            cursor: pointer;
+            z-index: 10;
+            transition: background 0.2s;
+        }
+        
+        .product-info-icon:hover {
+            background: rgba(0, 0, 0, 0.8);
+        }
+        
+        .product-info-icon.active {
+            background: var(--primary-color, #FFD700);
+        }
+        
+        /* Mostrar ícone apenas no mobile e quando houver descrição */
         @media (max-width: 768px) {
             .product-tooltip {
                 max-width: 200px;
                 font-size: 0.85rem;
                 padding: 8px 12px;
+            }
+            
+            .product-card[data-has-description="true"] .product-info-icon,
+            .product-card-carousel[data-has-description="true"] .product-info-icon {
+                display: flex;
+            }
+            
+            /* Ajustar posição do tooltip no mobile para não sair da tela */
+            .product-tooltip {
+                bottom: auto;
+                top: calc(100% + 10px);
+                left: 50%;
+                transform: translateX(-50%) translateY(10px);
+            }
+            
+            .product-tooltip.active {
+                transform: translateX(-50%) translateY(0) !important;
+            }
+            
+            .product-tooltip::after {
+                top: auto;
+                bottom: 100%;
+                border-top-color: transparent;
+                border-bottom-color: rgba(0, 0, 0, 0.9);
+            }
+            
+            /* Garantir que o tooltip não saia da tela no mobile */
+            .product-card,
+            .product-card-carousel {
+                overflow: visible;
+            }
+        }
+        
+        /* Desktop: esconder ícone */
+        @media (min-width: 769px) {
+            .product-info-icon {
+                display: none !important;
             }
         }
         
@@ -714,12 +792,13 @@ if (count($enderecoParts) > 2) {
             width: 100%;
             max-width: 1200px;
             margin: 0 auto;
+            overflow: visible;
         }
         
         .carousel-slider {
             position: relative;
             width: 100%;
-            overflow: hidden;
+            overflow: visible;
         }
         
         .carousel-slide {
@@ -756,16 +835,13 @@ if (count($enderecoParts) > 2) {
             display: flex;
             flex-direction: column;
             align-items: center;
+            position: relative;
             padding: 1rem;
         }
         
         .product-card-carousel:hover {
             transform: translateY(-5px);
             box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-        
-        .product-card-carousel {
-            position: relative;
         }
         
         .product-card-carousel .product-image {
@@ -1740,6 +1816,9 @@ if (count($enderecoParts) > 2) {
                                                  data-has-description="<?php echo !empty($produto['descricao']) ? 'true' : 'false'; ?>"
                                                  style="cursor: pointer;">
                                                 <?php if (!empty($produto['descricao'])): ?>
+                                                    <div class="product-info-icon" onclick="event.stopPropagation(); toggleProductTooltip(this);">
+                                                        <i class="fas fa-info"></i>
+                                                    </div>
                                                     <div class="product-tooltip"><?php echo htmlspecialchars($produto['descricao']); ?></div>
                                                 <?php endif; ?>
                                                 <?php if ($produto['imagem']): ?>
@@ -1816,6 +1895,9 @@ if (count($enderecoParts) > 2) {
                                                  data-has-description="<?php echo !empty($produto['descricao']) ? 'true' : 'false'; ?>"
                                                  style="cursor: pointer;">
                                                 <?php if (!empty($produto['descricao'])): ?>
+                                                    <div class="product-info-icon" onclick="event.stopPropagation(); toggleProductTooltip(this);">
+                                                        <i class="fas fa-info"></i>
+                                                    </div>
                                                     <div class="product-tooltip"><?php echo htmlspecialchars($produto['descricao']); ?></div>
                                                 <?php endif; ?>
                                                 <?php if ($produto['imagem']): ?>
@@ -1921,6 +2003,9 @@ if (count($enderecoParts) > 2) {
                                          data-has-description="<?php echo !empty($produto['descricao']) ? 'true' : 'false'; ?>"
                                          style="cursor: pointer;">
                                         <?php if (!empty($produto['descricao'])): ?>
+                                            <div class="product-info-icon" onclick="event.stopPropagation(); toggleProductTooltip(this);">
+                                                <i class="fas fa-info"></i>
+                                            </div>
                                             <div class="product-tooltip"><?php echo htmlspecialchars($produto['descricao']); ?></div>
                                         <?php endif; ?>
                                         <?php if ($produto['imagem']): ?>
@@ -1998,35 +2083,38 @@ if (count($enderecoParts) > 2) {
         <div id="tab-reservas" class="tab-content">
             <h3 class="mb-4">Informações para reservar uma mesa</h3>
             <form class="reservation-form" id="reservationForm">
+                <h5 class="mb-3">Informações de contato</h5>
+                <div class="form-group">
+                    <label for="celularReserva">Celular</label>
+                    <input type="tel" id="celularReserva" name="celular" placeholder="(54) 99999-9999" required autocomplete="tel">
+                    <small class="form-text text-muted" id="clienteBuscaStatus" style="display: none;"></small>
+                </div>
+                <div class="form-group">
+                    <label for="nomeReserva">Nome</label>
+                    <input type="text" id="nomeReserva" name="nome" required autocomplete="name">
+                </div>
+                <div class="form-group">
+                    <label for="emailReserva">E-mail</label>
+                    <input type="email" id="emailReserva" name="email" autocomplete="email">
+                </div>
+                
+                <h5 class="mt-4 mb-3">Detalhes da reserva</h5>
                 <div class="form-group">
                     <label for="numConvidados">Número de convidados</label>
                     <input type="number" id="numConvidados" name="num_convidados" min="1" required>
-            </div>
+                </div>
                 <div class="form-group">
                     <label for="dataReserva">Data da Reserva</label>
                     <input type="date" id="dataReserva" name="data_reserva" required>
-        </div>
+                </div>
                 <div class="form-group">
                     <label for="horaReserva">Hora</label>
                     <input type="time" id="horaReserva" name="hora_reserva" required>
-                                </div>
-                <h5 class="mt-4 mb-3">Informações de contato</h5>
-                <div class="form-group">
-                    <label for="nomeReserva">Nome</label>
-                    <input type="text" id="nomeReserva" name="nome" required>
-                                    </div>
-                <div class="form-group">
-                    <label for="emailReserva">E-mail</label>
-                    <input type="email" id="emailReserva" name="email">
-                                </div>
-                <div class="form-group">
-                    <label for="celularReserva">Celular</label>
-                    <input type="tel" id="celularReserva" name="celular" required>
-                            </div>
+                </div>
                 <div class="form-group">
                     <label for="instrucoesReserva">Suas Instruções</label>
                     <textarea id="instrucoesReserva" name="instrucoes" placeholder="Observações especiais..."></textarea>
-                        </div>
+                </div>
                 <button type="submit" class="btn-reserve">Reservar Mesa</button>
             </form>
     </div>
@@ -2634,6 +2722,59 @@ if (count($enderecoParts) > 2) {
                 ja_estava: true
             }));
         }
+        
+        // Função para controlar tooltip do produto no mobile
+        function toggleProductTooltip(iconElement) {
+            const productCard = iconElement.closest('.product-card, .product-card-carousel');
+            if (!productCard) return;
+            
+            const tooltip = productCard.querySelector('.product-tooltip');
+            if (!tooltip) return;
+            
+            // Fechar outros tooltips abertos
+            document.querySelectorAll('.product-tooltip.active').forEach(activeTooltip => {
+                if (activeTooltip !== tooltip) {
+                    activeTooltip.classList.remove('active');
+                    const activeCard = activeTooltip.closest('.product-card, .product-card-carousel');
+                    if (activeCard) {
+                        activeCard.classList.remove('tooltip-active');
+                        const activeIcon = activeCard.querySelector('.product-info-icon');
+                        if (activeIcon) {
+                            activeIcon.classList.remove('active');
+                        }
+                    }
+                }
+            });
+            
+            // Toggle do tooltip atual
+            const isActive = tooltip.classList.contains('active');
+            if (isActive) {
+                tooltip.classList.remove('active');
+                productCard.classList.remove('tooltip-active');
+                iconElement.classList.remove('active');
+            } else {
+                tooltip.classList.add('active');
+                productCard.classList.add('tooltip-active');
+                iconElement.classList.add('active');
+            }
+        }
+        
+        // Fechar tooltips ao clicar fora
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.product-card') && !e.target.closest('.product-card-carousel') && !e.target.closest('.product-info-icon')) {
+                document.querySelectorAll('.product-tooltip.active').forEach(tooltip => {
+                    tooltip.classList.remove('active');
+                    const card = tooltip.closest('.product-card, .product-card-carousel');
+                    if (card) {
+                        card.classList.remove('tooltip-active');
+                        const icon = card.querySelector('.product-info-icon');
+                        if (icon) {
+                            icon.classList.remove('active');
+                        }
+                    }
+                });
+            }
+        });
         
         function toggleIngrediente(element) {
             const ingredienteId = parseInt(element.dataset.ingredienteId);
@@ -5059,30 +5200,182 @@ if (count($enderecoParts) > 2) {
             }
         }
         
+        // Auto-search client when phone is entered (reservation form)
+        let buscaClienteTimeout;
+        document.getElementById('celularReserva').addEventListener('input', function() {
+            const telefone = this.value.trim();
+            const statusDiv = document.getElementById('clienteBuscaStatus');
+            
+            // Clear previous timeout
+            clearTimeout(buscaClienteTimeout);
+            
+            // Wait for user to finish typing (500ms delay)
+            if (telefone.length >= 10) {
+                buscaClienteTimeout = setTimeout(() => {
+                    buscarClienteReserva(telefone);
+                }, 500);
+            } else {
+                statusDiv.style.display = 'none';
+            }
+        });
+        
+        // Function to search client for reservation
+        async function buscarClienteReserva(telefone) {
+            const statusDiv = document.getElementById('clienteBuscaStatus');
+            const nomeField = document.getElementById('nomeReserva');
+            const emailField = document.getElementById('emailReserva');
+            
+            if (!telefone || telefone.length < 10) {
+                return;
+            }
+            
+            statusDiv.style.display = 'block';
+            statusDiv.className = 'form-text text-muted';
+            statusDiv.textContent = 'Buscando cliente...';
+            
+            try {
+                const url = new URL('mvc/ajax/clientes_cardapio_online.php', window.location.origin);
+                url.searchParams.set('action', 'buscar_por_telefone');
+                url.searchParams.set('tenant_id', <?php echo $tenantId; ?>);
+                url.searchParams.set('telefone', telefone);
+                
+                const response = await fetch(url.toString());
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.success && data.cliente) {
+                    // Fill form fields with client data
+                    if (data.cliente.nome && data.cliente.nome !== 'Cliente') {
+                        nomeField.value = data.cliente.nome;
+                    }
+                    if (data.cliente.email) {
+                        emailField.value = data.cliente.email;
+                    }
+                    
+                    statusDiv.className = 'form-text text-success';
+                    statusDiv.innerHTML = '✅ Cliente encontrado: ' + (data.cliente.nome || 'Cliente cadastrado');
+                    
+                    // Hide status after 3 seconds
+                    setTimeout(() => {
+                        statusDiv.style.display = 'none';
+                    }, 3000);
+                } else {
+                    statusDiv.className = 'form-text text-info';
+                    statusDiv.textContent = 'ℹ️ Cliente não encontrado. Preencha os dados para cadastrar.';
+                    
+                    // Hide status after 3 seconds
+                    setTimeout(() => {
+                        statusDiv.style.display = 'none';
+                    }, 3000);
+                }
+            } catch (error) {
+                console.error('Erro ao buscar cliente:', error);
+                statusDiv.className = 'form-text text-danger';
+                statusDiv.textContent = '❌ Erro ao buscar cliente';
+                
+                // Hide status after 3 seconds
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 3000);
+            }
+        }
+        
         // Reservation form
         document.getElementById('reservationForm').addEventListener('submit', function(e) {
             e.preventDefault();
             
+            // Get form values
+            const dataReserva = document.getElementById('dataReserva').value;
+            const horaReserva = document.getElementById('horaReserva').value;
+            const nome = document.getElementById('nomeReserva').value.trim();
+            const celular = document.getElementById('celularReserva').value.trim();
+            
+            // Validate required fields
+            if (!dataReserva) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Campo obrigatório',
+                    text: 'Por favor, selecione a data da reserva.'
+                });
+                return;
+            }
+            
+            if (!horaReserva) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Campo obrigatório',
+                    text: 'Por favor, selecione a hora da reserva.'
+                });
+                return;
+            }
+            
+            if (!nome) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Campo obrigatório',
+                    text: 'Por favor, informe seu nome.'
+                });
+                return;
+            }
+            
+            if (!celular) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Campo obrigatório',
+                    text: 'Por favor, informe seu número de celular.'
+                });
+                return;
+            }
+            
             const formData = {
                 tenant_id: <?php echo $tenantId; ?>,
                 filial_id: <?php echo $filialId; ?>,
-                num_convidados: parseInt(document.getElementById('numConvidados').value),
-                data_reserva: document.getElementById('dataReserva').value,
-                hora_reserva: document.getElementById('horaReserva').value,
-                nome: document.getElementById('nomeReserva').value,
-                email: document.getElementById('emailReserva').value,
-                celular: document.getElementById('celularReserva').value,
-                instrucoes: document.getElementById('instrucoesReserva').value
+                num_convidados: parseInt(document.getElementById('numConvidados').value) || 1,
+                data_reserva: dataReserva,
+                hora_reserva: horaReserva,
+                nome: nome,
+                email: document.getElementById('emailReserva').value.trim(),
+                celular: celular,
+                instrucoes: document.getElementById('instrucoesReserva').value.trim()
             };
             
             // Validate date is not in the past
-            const reservaDateTime = new Date(formData.data_reserva + 'T' + formData.hora_reserva);
-            const now = new Date();
-            if (reservaDateTime < now) {
+            try {
+                const reservaDateTime = new Date(formData.data_reserva + 'T' + formData.hora_reserva);
+                
+                // Check if date is valid
+                if (isNaN(reservaDateTime.getTime())) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Data inválida',
+                        text: 'Por favor, verifique a data e hora selecionadas.'
+                    });
+                    return;
+                }
+                
+                const now = new Date();
+                // Allow 5 minutes buffer for clock differences
+                const buffer = 5 * 60 * 1000; // 5 minutes in milliseconds
+                
+                if (reservaDateTime.getTime() < (now.getTime() - buffer)) {
+                    const dataFormatada = reservaDateTime.toLocaleString('pt-BR');
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Data inválida',
+                        text: 'Não é possível fazer reserva para data/hora no passado. Data selecionada: ' + dataFormatada
+                    });
+                    return;
+                }
+            } catch (error) {
+                console.error('Erro ao validar data:', error);
                 Swal.fire({
                     icon: 'error',
-                    title: 'Data inválida',
-                    text: 'Não é possível fazer reserva para data/hora no passado.'
+                    title: 'Erro de validação',
+                    text: 'Erro ao validar a data da reserva. Por favor, tente novamente.'
                 });
                 return;
             }
@@ -5100,7 +5393,15 @@ if (count($enderecoParts) > 2) {
                 },
                 body: JSON.stringify(formData)
             })
-            .then(response => response.json())
+            .then(async response => {
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const text = await response.text();
+                    console.error('Resposta não é JSON:', text);
+                    throw new Error('Resposta do servidor não é JSON válido');
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.success) {
                     Swal.fire({
@@ -5125,7 +5426,7 @@ if (count($enderecoParts) > 2) {
                 Swal.fire({
                     icon: 'error',
                     title: 'Erro de conexão',
-                    text: 'Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.'
+                    text: error.message || 'Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.'
                 });
             })
             .finally(() => {
@@ -5301,7 +5602,10 @@ if (count($enderecoParts) > 2) {
                            </div>`;
                     
                     const tooltipHtml = hasDescricao 
-                        ? `<div class="product-tooltip">${produtoDescricao}</div>`
+                        ? `<div class="product-info-icon" onclick="event.stopPropagation(); toggleProductTooltip(this);">
+                               <i class="fas fa-info"></i>
+                           </div>
+                           <div class="product-tooltip">${produtoDescricao}</div>`
                         : '';
                     
                     produtoCard.innerHTML = `

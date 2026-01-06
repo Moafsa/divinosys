@@ -44,6 +44,7 @@ require_once __DIR__ . '/../../system/Database.php';
 require_once __DIR__ . '/../../system/Session.php';
 require_once __DIR__ . '/../model/AsaasInvoice.php';
 require_once __DIR__ . '/../model/AsaasFiscalInfo.php';
+require_once __DIR__ . '/../model/AsaasAPIClient.php';
 
 // Limpar buffer
 ob_clean();
@@ -69,6 +70,10 @@ try {
             
         case 'getConfig':
             getAsaasConfig();
+            break;
+            
+        case 'getConfigForTest':
+            getAsaasConfigForTest();
             break;
             
         case 'createOrFindCustomer':
@@ -185,6 +190,15 @@ function saveAsaasConfig() {
             ? 'https://www.asaas.com/api/v3' 
             : 'https://sandbox.asaas.com/api/v3';
         
+        // Convert asaas_enabled to boolean explicitly for PostgreSQL
+        // Convert to integer (0 or 1) which PostgreSQL accepts as boolean
+        $asaasEnabledRaw = $data['asaas_enabled'] ?? false;
+        if ($asaasEnabledRaw === true || $asaasEnabledRaw === 'true' || $asaasEnabledRaw === 1 || $asaasEnabledRaw === '1') {
+            $asaasEnabled = 1;
+        } else {
+            $asaasEnabled = 0;
+        }
+        
         if ($filial_id) {
             // Update filial configuration
             // Also update tenant's environment and API URL (always, not just if provided)
@@ -211,7 +225,7 @@ function saveAsaasConfig() {
             $result = $stmt->execute([
                 $data['asaas_api_key'],
                 $data['asaas_customer_id'] ?? null,
-                $data['asaas_enabled'] ?? false,
+                $asaasEnabled,
                 $filial_id,
                 $tenant_id
             ]);
@@ -230,7 +244,7 @@ function saveAsaasConfig() {
             $result = $stmt->execute([
                 $data['asaas_api_key'],
                 $data['asaas_customer_id'] ?? null,
-                $data['asaas_enabled'] ?? false,
+                $asaasEnabled,
                 $data['asaas_environment'],
                 $apiUrl,
                 $tenant_id
@@ -270,99 +284,137 @@ function saveAsaasConfig() {
 }
 
 function testAsaasConnection() {
-    ob_clean();
-    
-    $tenant_id = $_GET['tenant_id'] ?? null;
-    $filial_id = $_GET['filial_id'] ?? null;
-    
-    if (!$tenant_id) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'tenant_id is required']);
-        exit;
-    }
+    ob_clean(); // Clear any previous output
     
     try {
-        $asaasInvoice = new AsaasInvoice();
-        $config = $asaasInvoice->getAsaasConfig($tenant_id, $filial_id);
-    } catch (\Exception $e) {
-        error_log('Error creating AsaasInvoice in testAsaasConnection: ' . $e->getMessage());
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Error initializing Asaas: ' . $e->getMessage()]);
-        exit;
-    }
-    
-    if (!$config || !$config['asaas_enabled'] || empty($config['asaas_api_key'])) {
-        echo json_encode([
-            'success' => false,
-            'error' => 'Asaas integration not configured'
-        ]);
-        exit;
-    }
-    
-    // Test connection by making a simple API call to Asaas
-    // Use the same pattern as AsaasPayment::testConnection()
-    $api_url = $config['asaas_api_url'] ?? 'https://sandbox.asaas.com/api/v3';
-    $api_key = $config['asaas_api_key'];
-    
-    // Use customers endpoint with limit=1 (same as AsaasPayment)
-    $testUrl = $api_url . '/customers?limit=1';
-    
-    $headers = [
-        'access_token: ' . $api_key,
-        'Content-Type: application/json',
-        'User-Agent: DivinoSYS/2.0'
-    ];
-    
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $testUrl);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    
-    $response = curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $error = curl_error($ch);
-    curl_close($ch);
-    
-    if ($error) {
-        ob_clean();
-        echo json_encode([
-            'success' => false,
-            'error' => 'Erro de conexão: ' . $error
-        ]);
-        exit;
-    }
-    
-    $decoded_response = json_decode($response, true);
-    
-    if ($http_code >= 200 && $http_code < 300) {
-        ob_clean();
-        echo json_encode([
-            'success' => true,
-            'message' => 'Conexão bem-sucedida! A chave API está válida.',
-            'data' => $decoded_response
-        ]);
-        exit;
-    } else {
-        $errorMsg = 'Erro desconhecido';
+        $tenant_id = $_GET['tenant_id'] ?? null;
+        $filial_id = $_GET['filial_id'] ?? null;
         
-        // Try to extract error message from Asaas response
-        if (isset($decoded_response['errors']) && is_array($decoded_response['errors']) && count($decoded_response['errors']) > 0) {
-            $errorMsg = $decoded_response['errors'][0]['description'] ?? $decoded_response['errors'][0]['code'] ?? 'Erro desconhecido';
-        } elseif (isset($decoded_response['error'])) {
-            $errorMsg = $decoded_response['error'];
-        } elseif (isset($decoded_response['message'])) {
-            $errorMsg = $decoded_response['message'];
+        error_log("testAsaasConnection START - tenant_id: $tenant_id, filial_id: $filial_id");
+        
+        if (!$tenant_id) {
+            ob_clean();
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'tenant_id is required']);
+            exit;
         }
         
-        // Log full response for debugging
-        error_log('Asaas API Error Response (HTTP ' . $http_code . '): ' . json_encode($decoded_response));
+        // Check if AsaasAPIClient class exists
+        if (!class_exists('AsaasAPIClient')) {
+            error_log("testAsaasConnection ERROR: AsaasAPIClient class not found");
+            ob_clean();
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'error' => 'Classe AsaasAPIClient não encontrada. Verifique se o arquivo foi incluído corretamente.'
+            ]);
+            exit;
+        }
         
+        $asaasInvoice = new AsaasInvoice();
+        $config = $asaasInvoice->getAsaasConfig($tenant_id, $filial_id);
+        
+        error_log("testAsaasConnection - Config loaded - enabled: " . ($config['asaas_enabled'] ?? 'not set') . ", has_key: " . (!empty($config['asaas_api_key']) ? 'yes' : 'no'));
+        
+        if (!$config || empty($config['asaas_api_key'])) {
+            ob_clean();
+            echo json_encode([
+                'success' => false,
+                'error' => 'Integração Asaas não configurada ou chave API ausente'
+            ]);
+            exit;
+        }
+        
+        // Check if enabled
+        $isEnabled = ($config['asaas_enabled'] == 1 || $config['asaas_enabled'] === true || $config['asaas_enabled'] === '1');
+        if (!$isEnabled) {
+            ob_clean();
+            echo json_encode([
+                'success' => false,
+                'error' => 'Integração Asaas está desabilitada. Ative primeiro.'
+            ]);
+            exit;
+        }
+        
+        // Get API URL and key
+        $api_url = $config['asaas_api_url'] ?? 'https://sandbox.asaas.com/api/v3';
+        $api_key = $config['asaas_api_key'];
+        
+        // Use centralized AsaasAPIClient to test connection
+        // Uses proper timeouts to prevent system hangs
+        try {
+            error_log("testAsaasConnection - Creating AsaasAPIClient with URL: $api_url, Key length: " . strlen($api_key));
+            $apiClient = new AsaasAPIClient($api_key, $api_url, 10, 5);
+            
+            error_log("testAsaasConnection - Calling testConnection()");
+            $result = $apiClient->testConnection();
+            
+            error_log("testAsaasConnection - Result received: " . json_encode($result));
+            
+            ob_clean(); // Clear buffer before outputting JSON
+            
+            if ($result['success']) {
+                $totalCount = $result['data']['totalCount'] ?? 0;
+                
+                error_log("testAsaasConnection - Connection successful. HTTP {$result['http_code']}. Total customers: $totalCount");
+                
+                $response = [
+                    'success' => true,
+                    'message' => 'Conexão com Asaas bem-sucedida! A API está respondendo corretamente.',
+                    'details' => "Encontrados $totalCount cliente(s) cadastrado(s).",
+                    'statusCode' => $result['http_code'],
+                    'config' => [
+                        'api_url' => $api_url,
+                        'key_length' => strlen($api_key),
+                        'key_prefix' => substr($api_key, 0, 10) . '...'
+                    ]
+                ];
+                
+                error_log("testAsaasConnection - Sending success response");
+                echo json_encode($response);
+                exit;
+            } else {
+                $errorMsg = $result['error'] ?? 'Unknown error';
+                $httpCode = $result['http_code'] ?? 0;
+                error_log("testAsaasConnection - API Error: HTTP $httpCode - $errorMsg");
+                
+                $response = [
+                    'success' => false,
+                    'error' => $errorMsg . ($httpCode > 0 ? " (HTTP $httpCode)" : '')
+                ];
+                
+                error_log("testAsaasConnection - Sending error response");
+                echo json_encode($response);
+                exit;
+            }
+        } catch (\Exception $e) {
+            error_log("testAsaasConnection - Exception: " . $e->getMessage());
+            error_log("testAsaasConnection - Stack trace: " . $e->getTraceAsString());
+            ob_clean();
+            echo json_encode([
+                'success' => false,
+                'error' => 'Erro ao testar conexão: ' . $e->getMessage()
+            ]);
+            exit;
+        }
+    } catch (\Exception $e) {
+        error_log('testAsaasConnection Exception: ' . $e->getMessage());
+        error_log('Stack trace: ' . $e->getTraceAsString());
         ob_clean();
+        http_response_code(500);
         echo json_encode([
             'success' => false,
-            'error' => $errorMsg . ' (HTTP ' . $http_code . ')'
+            'error' => 'Test failed: ' . $e->getMessage()
+        ]);
+        exit;
+    } catch (\Error $e) {
+        error_log('testAsaasConnection Fatal Error: ' . $e->getMessage());
+        error_log('Stack trace: ' . $e->getTraceAsString());
+        ob_clean();
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Fatal error: ' . $e->getMessage()
         ]);
         exit;
     }
@@ -447,6 +499,53 @@ function getAsaasConfig() {
 }
 
 /**
+ * Get Asaas config for connection test (returns API key unmasked for browser to test)
+ */
+function getAsaasConfigForTest() {
+    $tenant_id = $_GET['tenant_id'] ?? null;
+    $filial_id = $_GET['filial_id'] ?? null;
+    
+    if (!$tenant_id) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'tenant_id is required']);
+        exit;
+    }
+    
+    try {
+        $asaasInvoice = new AsaasInvoice();
+        $config = $asaasInvoice->getAsaasConfig($tenant_id, $filial_id);
+        
+        if (!$config) {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Configuração Asaas não encontrada'
+            ]);
+            exit;
+        }
+        
+        // Return config with API key (unmasked) for browser to test
+        echo json_encode([
+            'success' => true,
+            'data' => [
+                'api_url' => $config['asaas_api_url'] ?? 'https://sandbox.asaas.com/api/v3',
+                'api_key' => $config['asaas_api_key'] ?? '',
+                'is_enabled' => ($config['asaas_enabled'] == 1 || $config['asaas_enabled'] === true || $config['asaas_enabled'] === '1')
+            ]
+        ]);
+        exit;
+        
+    } catch (\Exception $e) {
+        error_log('Error in getAsaasConfigForTest: ' . $e->getMessage());
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Erro ao obter configuração: ' . $e->getMessage()
+        ]);
+        exit;
+    }
+}
+
+/**
  * Criar ou buscar cliente no Asaas automaticamente
  * Similar ao que é feito no onboarding de planos
  */
@@ -526,30 +625,27 @@ function createOrFindCustomer() {
     $api_url = $config['asaas_api_url'] ?? 'https://sandbox.asaas.com/api/v3';
     $api_key = $config['asaas_api_key'];
     
-    // Primeiro, tentar buscar cliente existente pelo CNPJ ou email
+    // Use centralized AsaasAPIClient
+    try {
+        $apiClient = new AsaasAPIClient($api_key, $api_url, 15, 5);
+    } catch (\Exception $e) {
+        error_log('Error creating AsaasAPIClient in createOrFindCustomer: ' . $e->getMessage());
+        ob_clean();
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Erro ao inicializar cliente API: ' . $e->getMessage()]);
+        exit;
+    }
+    
+    // Primeiro, tentar buscar cliente existente pelo CNPJ
     $customerId = null;
     
     if (!empty($entityCnpj)) {
         // Buscar por CNPJ
         $cnpjClean = preg_replace('/[^0-9]/', '', $entityCnpj);
-        $searchUrl = $api_url . '/customers?cpfCnpj=' . urlencode($cnpjClean);
+        $searchResult = $apiClient->getCustomers(['cpfCnpj' => $cnpjClean]);
         
-        $ch = curl_init($searchUrl);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'access_token: ' . $api_key,
-            'Content-Type: application/json'
-        ]);
-        
-        $searchResponse = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        
-        if ($httpCode >= 200 && $httpCode < 300) {
-            $searchResult = json_decode($searchResponse, true);
-            if (isset($searchResult['data']) && count($searchResult['data']) > 0) {
-                $customerId = $searchResult['data'][0]['id'];
-            }
+        if ($searchResult['success'] && isset($searchResult['data']['data']) && count($searchResult['data']['data']) > 0) {
+            $customerId = $searchResult['data']['data'][0]['id'];
         }
     }
     
@@ -566,51 +662,22 @@ function createOrFindCustomer() {
             $customerData['cpfCnpj'] = preg_replace('/[^0-9]/', '', $entityCnpj);
         }
         
-        $ch = curl_init($api_url . '/customers');
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($customerData));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'access_token: ' . $api_key,
-            'Content-Type: application/json'
-        ]);
+        $createResult = $apiClient->createCustomer($customerData);
         
-        $createResponse = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        
-        if ($httpCode >= 200 && $httpCode < 300) {
-            $createResult = json_decode($createResponse, true);
-            if (isset($createResult['id'])) {
-                $customerId = $createResult['id'];
-            }
+        if ($createResult['success'] && isset($createResult['data']['id'])) {
+            $customerId = $createResult['data']['id'];
         } else {
-            $errorResult = json_decode($createResponse, true);
-            $errorMsg = $errorResult['errors'][0]['description'] ?? 'Erro ao criar cliente no Asaas';
+            $errorMsg = $createResult['error'] ?? 'Erro ao criar cliente no Asaas';
             
             // Se o erro for que o cliente já existe (duplicado), tentar buscar novamente
             if (strpos($errorMsg, 'já existe') !== false || strpos($errorMsg, 'already exists') !== false) {
                 // Buscar novamente
                 if (!empty($entityCnpj)) {
                     $cnpjClean = preg_replace('/[^0-9]/', '', $entityCnpj);
-                    $searchUrl = $api_url . '/customers?cpfCnpj=' . urlencode($cnpjClean);
+                    $searchResult = $apiClient->getCustomers(['cpfCnpj' => $cnpjClean]);
                     
-                    $ch = curl_init($searchUrl);
-                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                        'access_token: ' . $api_key,
-                        'Content-Type: application/json'
-                    ]);
-                    
-                    $searchResponse = curl_exec($ch);
-                    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                    curl_close($ch);
-                    
-                    if ($httpCode >= 200 && $httpCode < 300) {
-                        $searchResult = json_decode($searchResponse, true);
-                        if (isset($searchResult['data']) && count($searchResult['data']) > 0) {
-                            $customerId = $searchResult['data'][0]['id'];
-                        }
+                    if ($searchResult['success'] && isset($searchResult['data']['data']) && count($searchResult['data']['data']) > 0) {
+                        $customerId = $searchResult['data']['data'][0]['id'];
                     }
                 }
             }

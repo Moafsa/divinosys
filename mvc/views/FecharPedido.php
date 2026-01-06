@@ -312,11 +312,15 @@ if ($tenant && $filial && $pedido['idmesa']) {
                             <p class="text-muted">Nenhum pagamento registrado.</p>
                         <?php else: ?>
                             <?php foreach ($pagamentos as $pagamento): ?>
-                                <div class="pagamento-item">
+                                <div class="pagamento-item" style="<?= $pagamento['forma_pagamento'] === 'DESCONTO' ? 'border-left-color: #ffc107; background-color: #fff3cd;' : '' ?>">
                                     <div class="d-flex justify-content-between">
                                         <div>
-                                            <strong>R$ <?= number_format($pagamento['valor_pago'], 2, ',', '.') ?></strong>
-                                            <span class="badge bg-secondary ms-2"><?= $pagamento['forma_pagamento'] ?></span>
+                                            <strong style="<?= $pagamento['forma_pagamento'] === 'DESCONTO' ? 'color: #856404;' : '' ?>">
+                                                <?= $pagamento['forma_pagamento'] === 'DESCONTO' ? '-' : '' ?>R$ <?= number_format($pagamento['valor_pago'], 2, ',', '.') ?>
+                                            </strong>
+                                            <span class="badge <?= $pagamento['forma_pagamento'] === 'DESCONTO' ? 'bg-warning text-dark' : 'bg-secondary' ?> ms-2">
+                                                <?= $pagamento['forma_pagamento'] === 'DESCONTO' ? '<i class="fas fa-tag"></i> DESCONTO' : $pagamento['forma_pagamento'] ?>
+                                            </span>
                                         </div>
                                         <small class="text-muted"><?= date('d/m/Y H:i', strtotime($pagamento['created_at'])) ?></small>
                                     </div>
@@ -324,7 +328,7 @@ if ($tenant && $filial && $pedido['idmesa']) {
                                         <small class="text-muted">Cliente: <?= $pagamento['nome_cliente'] ?></small><br>
                                     <?php endif; ?>
                                     <?php if ($pagamento['descricao']): ?>
-                                        <small class="text-muted">Obs: <?= $pagamento['descricao'] ?></small>
+                                        <small class="text-muted">Obs: <?= htmlspecialchars($pagamento['descricao']) ?></small>
                                     <?php endif; ?>
                                 </div>
                             <?php endforeach; ?>
@@ -512,6 +516,168 @@ if ($tenant && $filial && $pedido['idmesa']) {
             });
         }
 
+        // Variáveis globais para cálculo de desconto
+        let saldoDevedorOriginalMesa = <?= $pedido['saldo_devedor'] ?? $pedido['valor_total'] ?? 0 ?>;
+        let descontoAplicadoMesa = 0;
+
+        function calcularDescontoMesa() {
+            const valorDescontoInput = document.getElementById('valorDescontoMesa');
+            const tipoDescontoSelect = document.getElementById('tipoDescontoMesa');
+            const saldoComDescontoSpan = document.getElementById('saldoComDescontoMesa');
+            const valorComDescontoDiv = document.getElementById('valorComDescontoMesa');
+            const btnSalvarDesconto = document.getElementById('btnSalvarDescontoMesa');
+            const valorPagarInput = document.getElementById('valorPagarMesa');
+
+            if (!valorDescontoInput || !tipoDescontoSelect) return;
+
+            const valorDesconto = parseFloat(valorDescontoInput.value) || 0;
+            const tipoDesconto = tipoDescontoSelect.value;
+
+            if (valorDesconto <= 0) {
+                descontoAplicadoMesa = 0;
+                if (saldoComDescontoSpan) {
+                    saldoComDescontoSpan.textContent = saldoDevedorOriginalMesa.toFixed(2).replace('.', ',');
+                }
+                if (valorComDescontoDiv) {
+                    valorComDescontoDiv.style.display = 'none';
+                }
+                if (btnSalvarDesconto) {
+                    btnSalvarDesconto.disabled = true;
+                }
+                if (valorPagarInput) {
+                    valorPagarInput.max = saldoDevedorOriginalMesa.toFixed(2);
+                    valorPagarInput.value = saldoDevedorOriginalMesa.toFixed(2);
+                }
+                return;
+            }
+
+            // Calcular desconto
+            if (tipoDesconto === 'percentual') {
+                descontoAplicadoMesa = saldoDevedorOriginalMesa * (valorDesconto / 100);
+            } else {
+                descontoAplicadoMesa = valorDesconto;
+            }
+
+            // Limitar desconto ao saldo devedor
+            if (descontoAplicadoMesa > saldoDevedorOriginalMesa) {
+                descontoAplicadoMesa = saldoDevedorOriginalMesa;
+                valorDescontoInput.value = tipoDesconto === 'percentual' ? '100' : saldoDevedorOriginalMesa.toFixed(2);
+            }
+
+            const saldoComDesconto = saldoDevedorOriginalMesa - descontoAplicadoMesa;
+
+            // Atualizar exibição
+            if (saldoComDescontoSpan) {
+                saldoComDescontoSpan.textContent = saldoComDesconto.toFixed(2).replace('.', ',');
+            }
+            if (valorComDescontoDiv) {
+                valorComDescontoDiv.style.display = 'block';
+            }
+            if (btnSalvarDesconto) {
+                btnSalvarDesconto.disabled = false;
+            }
+            if (valorPagarInput) {
+                valorPagarInput.max = saldoComDesconto.toFixed(2);
+                valorPagarInput.value = saldoComDesconto.toFixed(2);
+            }
+
+            // Se saldo = 0, mostrar opção de fechar automaticamente
+            if (saldoComDesconto <= 0.01) {
+                if (valorComDescontoDiv) {
+                    valorComDescontoDiv.innerHTML = `
+                        <p class="text-success"><strong>Saldo Devedor com Desconto:</strong> R$ 0,00</p>
+                        <p class="text-warning"><strong>⚠️ O desconto cobre todo o valor. Ao salvar, a mesa será fechada automaticamente.</strong></p>
+                    `;
+                }
+            }
+        }
+
+        function salvarDescontoMesa() {
+            const valorDescontoInput = document.getElementById('valorDescontoMesa');
+            const tipoDescontoSelect = document.getElementById('tipoDescontoMesa');
+            const descricaoInput = document.getElementById('descricao');
+
+            if (!valorDescontoInput || !tipoDescontoSelect) return;
+
+            const valorDesconto = parseFloat(valorDescontoInput.value) || 0;
+            const tipoDesconto = tipoDescontoSelect.value;
+
+            if (valorDesconto <= 0) {
+                Swal.fire('Atenção', 'Informe um valor de desconto válido', 'warning');
+                return;
+            }
+
+            // Calcular desconto aplicado
+            let descontoAplicado = 0;
+            if (tipoDesconto === 'percentual') {
+                descontoAplicado = saldoDevedorOriginalMesa * (valorDesconto / 100);
+            } else {
+                descontoAplicado = valorDesconto;
+            }
+
+            if (descontoAplicado > saldoDevedorOriginalMesa) {
+                descontoAplicado = saldoDevedorOriginalMesa;
+            }
+
+            const saldoComDesconto = saldoDevedorOriginalMesa - descontoAplicado;
+
+            const formData = new URLSearchParams();
+            formData.append('action', 'aplicar_desconto_mesa');
+            formData.append('mesa_id', <?= $pedido['idmesa'] ?>);
+            formData.append('valor_desconto', descontoAplicado);
+            formData.append('tipo_desconto', tipoDesconto);
+            formData.append('valor_desconto_original', valorDesconto);
+            formData.append('descricao', descricaoInput ? descricaoInput.value : '');
+
+            Swal.fire({
+                title: 'Salvando desconto...',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            fetch('mvc/ajax/mesa_pedidos.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    if (saldoComDesconto <= 0.01) {
+                        // Fechar mesa automaticamente
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Desconto aplicado!',
+                            text: 'O desconto cobre todo o valor. Fechando a mesa automaticamente...',
+                            showConfirmButton: false,
+                            timer: 2000
+                        }).then(() => {
+                            location.reload();
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Desconto salvo!',
+                            text: `Desconto de R$ ${descontoAplicado.toFixed(2).replace('.', ',')} aplicado com sucesso. Saldo restante: R$ ${saldoComDesconto.toFixed(2).replace('.', ',')}`,
+                            confirmButtonText: 'OK'
+                        }).then(() => {
+                            location.reload();
+                        });
+                    }
+                } else {
+                    Swal.fire('Erro!', data.message || 'Erro ao salvar desconto', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire('Erro!', 'Erro ao processar desconto', 'error');
+            });
+        }
+
         function fecharMesaCompleta() {
             // Buscar saldo devedor total da mesa
             fetch('index.php?action=pagamentos_parciais', {
@@ -550,12 +716,38 @@ if ($tenant && $filial && $pedido['idmesa']) {
                     <div class="mb-3">
                         <p><strong>Valor Total da Mesa:</strong> R$ ${valorTotalMesa.toFixed(2).replace('.', ',')}</p>
                         <p><strong>Já Pago:</strong> R$ ${valorPagoMesa.toFixed(2).replace('.', ',')}</p>
-                        <p class="text-danger"><strong>Saldo Devedor:</strong> R$ ${saldoDevedorMesa.toFixed(2).replace('.', ',')}</p>
+                        <p class="text-danger"><strong>Saldo Devedor:</strong> R$ <span id="saldoDevedorOriginalMesa">${saldoDevedorMesa.toFixed(2).replace('.', ',')}</span></p>
                         <p class="text-info"><strong>Valor por Pessoa (${numeroPessoas} pessoas):</strong> R$ ${valorPorPessoa.toFixed(2).replace('.', ',')}</p>
                     </div>
                     <div class="mb-3">
+                        <label class="form-label">Desconto (opcional)</label>
+                        <div class="row">
+                            <div class="col-6">
+                                <div class="input-group">
+                                    <span class="input-group-text">R$</span>
+                                    <input type="number" class="form-control" id="valorDescontoMesa" step="0.01" min="0" max="${saldoDevedorMesa.toFixed(2)}" value="0" placeholder="0,00" oninput="calcularDescontoMesa()">
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <select class="form-select" id="tipoDescontoMesa" onchange="calcularDescontoMesa()">
+                                    <option value="valor_fixo">Valor Fixo</option>
+                                    <option value="percentual">Percentual</option>
+                                </select>
+                            </div>
+                            <div class="col-2">
+                                <button type="button" class="btn btn-primary w-100" onclick="salvarDescontoMesa()" id="btnSalvarDescontoMesa" disabled>
+                                    <i class="fas fa-save"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <small class="text-muted">Desconto será aplicado sobre o valor total a pagar</small>
+                        <div id="valorComDescontoMesa" class="mt-2" style="display: none;">
+                            <p class="text-success"><strong>Saldo Devedor com Desconto:</strong> R$ <span id="saldoComDescontoMesa">0,00</span></p>
+                        </div>
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label">Forma de Pagamento</label>
-                        <select class="form-select" id="formaPagamento" required onchange="toggleFiadoFields()">
+                        <select class="form-select" id="formaPagamentoMesa" required onchange="toggleFiadoFieldsMesa(); togglePixFaturaButtonMesa()">
                             <option value="">Selecione a forma de pagamento</option>
                             <option value="Dinheiro">Dinheiro</option>
                             <option value="Cartão Débito">Cartão Débito</option>
@@ -568,11 +760,16 @@ if ($tenant && $filial && $pedido['idmesa']) {
                            <label class="form-label">Valor a Pagar</label>
                            <div class="input-group">
                                <span class="input-group-text">R$</span>
-                               <input type="number" class="form-control" id="valorPagar" step="0.01" min="0" max="${saldoDevedorMesa.toFixed(2)}" value="${saldoDevedorMesa.toFixed(2)}" required>
-                               <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('valorPagar').value = '${saldoDevedorMesa.toFixed(2)}'">Saldo Total</button>
+                               <input type="number" class="form-control" id="valorPagarMesa" step="0.01" min="0" max="${saldoDevedorMesa.toFixed(2)}" value="${saldoDevedorMesa.toFixed(2)}" required>
+                               <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('valorPagarMesa').value = document.getElementById('saldoComDescontoMesa') ? parseFloat(document.getElementById('saldoComDescontoMesa').textContent.replace(',', '.')) || ${saldoDevedorMesa.toFixed(2)} : ${saldoDevedorMesa.toFixed(2)}">Saldo Total</button>
                            </div>
                            <small class="text-muted">Informe o valor que deseja pagar agora (pode ser parcial)</small>
                        </div>
+                    <div id="pixFaturaButtonContainerMesa" class="mb-3" style="display: none;">
+                        <button type="button" class="btn btn-success w-100" onclick="gerarFaturaPixMesa()">
+                            <i class="fas fa-qrcode me-2"></i>Gerar Fatura de Pagamento por PIX
+                        </button>
+                    </div>
                     <div class="mb-3">
                         <label class="form-label">Nome do Cliente (opcional)</label>
                         <input type="text" class="form-control" id="nomeCliente" placeholder="Nome do cliente" value="<?= htmlspecialchars($pedido['cliente_nome'] ?? $pedido['cliente'] ?? '') ?>">
@@ -606,11 +803,27 @@ if ($tenant && $filial && $pedido['idmesa']) {
                     }, 300);
                 },
                 preConfirm: () => {
-                    const formaPagamento = document.getElementById('formaPagamento').value;
-                    const valorPagar = parseFloat(document.getElementById('valorPagar').value) || 0;
+                    const formaPagamento = document.getElementById('formaPagamentoMesa').value;
+                    const valorPagar = parseFloat(document.getElementById('valorPagarMesa').value) || 0;
+                    const valorDesconto = parseFloat(document.getElementById('valorDescontoMesa').value) || 0;
+                    const tipoDesconto = document.getElementById('tipoDescontoMesa').value;
                     const nomeCliente = document.getElementById('nomeCliente').value;
                     const telefoneCliente = document.getElementById('telefoneCliente').value;
                     const descricao = document.getElementById('descricao').value;
+                    
+                    // Calcular saldo com desconto
+                    let descontoAplicado = 0;
+                    if (valorDesconto > 0) {
+                        if (tipoDesconto === 'percentual') {
+                            descontoAplicado = saldoDevedorMesa * (valorDesconto / 100);
+                        } else {
+                            descontoAplicado = valorDesconto;
+                        }
+                        if (descontoAplicado > saldoDevedorMesa) {
+                            descontoAplicado = saldoDevedorMesa;
+                        }
+                    }
+                    const saldoComDesconto = saldoDevedorMesa - descontoAplicado;
                     
                     if (!formaPagamento) {
                         Swal.showValidationMessage('Forma de pagamento é obrigatória');
@@ -622,8 +835,8 @@ if ($tenant && $filial && $pedido['idmesa']) {
                         return false;
                     }
                     
-                    if (valorPagar > saldoDevedorMesa + 0.01) {
-                        Swal.showValidationMessage('Valor não pode ser maior que o saldo devedor');
+                    if (valorPagar > saldoComDesconto + 0.01) {
+                        Swal.showValidationMessage(`Valor não pode ser maior que o saldo devedor com desconto (R$ ${saldoComDesconto.toFixed(2).replace('.', ',')})`);
                         return false;
                     }
                     
@@ -639,7 +852,7 @@ if ($tenant && $filial && $pedido['idmesa']) {
                         }
                     }
                     
-                    return { formaPagamento, valorPagar, nomeCliente, telefoneCliente, descricao };
+                    return { formaPagamento, valorPagar, valorDesconto, tipoDesconto, nomeCliente, telefoneCliente, descricao, saldoComDesconto };
                 }
             }).then((result) => {
                 if (result.isConfirmed) {
@@ -649,9 +862,19 @@ if ($tenant && $filial && $pedido['idmesa']) {
         }
 
         function toggleFiadoFieldsMesa() {
-            const formaPagamento = document.getElementById('formaPagamentoMesa').value;
+            const formaPagamentoElement = document.getElementById('formaPagamentoMesa');
+            if (!formaPagamentoElement) {
+                return; // Element not found, exit early
+            }
+            
+            const formaPagamento = formaPagamentoElement.value;
             const nomeClienteField = document.getElementById('nomeClienteMesa');
             const telefoneClienteField = document.getElementById('telefoneClienteMesa');
+            
+            // Only proceed if both fields exist
+            if (!nomeClienteField || !telefoneClienteField) {
+                return; // Fields not found, exit early
+            }
             
             if (formaPagamento === 'FIADO') {
                 nomeClienteField.required = true;
@@ -672,6 +895,8 @@ if ($tenant && $filial && $pedido['idmesa']) {
             formData.append('mesa_id', <?= $pedido['idmesa'] ?>);
             formData.append('forma_pagamento', dados.formaPagamento);
             formData.append('valor_pago', dados.valorPagar);
+            formData.append('valor_desconto', dados.valorDesconto);
+            formData.append('tipo_desconto', dados.tipoDesconto);
             formData.append('nome_cliente', dados.nomeCliente);
             formData.append('telefone_cliente', dados.telefoneCliente);
             formData.append('descricao', dados.descricao);
@@ -719,10 +944,246 @@ if ($tenant && $filial && $pedido['idmesa']) {
             });
         }
 
+        // Variáveis globais para cálculo de desconto do pedido individual
+        // Usar saldo_devedor do banco que já considera descontos aplicados
+        let saldoDevedorOriginalPedido = <?= $pedido['saldo_devedor'] ?? (($pedido['valor_total'] ?? 0) - ($pedido['valor_pago'] ?? 0)) ?>;
+        let descontoAplicadoPedido = 0;
+
+        function calcularDesconto() {
+            const valorDescontoInput = document.getElementById('valorDesconto');
+            const tipoDescontoSelect = document.getElementById('tipoDesconto');
+            const saldoComDescontoSpan = document.getElementById('saldoComDesconto');
+            const valorComDescontoDiv = document.getElementById('valorComDesconto');
+            const btnSalvarDesconto = document.getElementById('btnSalvarDesconto');
+            const valorPagarInput = document.getElementById('valorPagar');
+
+            if (!valorDescontoInput || !tipoDescontoSelect) return;
+
+            const valorDesconto = parseFloat(valorDescontoInput.value) || 0;
+            const tipoDesconto = tipoDescontoSelect.value;
+
+            if (valorDesconto <= 0) {
+                descontoAplicadoPedido = 0;
+                if (saldoComDescontoSpan) {
+                    saldoComDescontoSpan.textContent = saldoDevedorOriginalPedido.toFixed(2).replace('.', ',');
+                }
+                if (valorComDescontoDiv) {
+                    valorComDescontoDiv.style.display = 'none';
+                }
+                if (btnSalvarDesconto) {
+                    btnSalvarDesconto.disabled = true;
+                }
+                if (valorPagarInput) {
+                    valorPagarInput.max = saldoDevedorOriginalPedido.toFixed(2);
+                    valorPagarInput.value = saldoDevedorOriginalPedido.toFixed(2);
+                }
+                return;
+            }
+
+            // Calcular desconto
+            if (tipoDesconto === 'percentual') {
+                descontoAplicadoPedido = saldoDevedorOriginalPedido * (valorDesconto / 100);
+            } else {
+                descontoAplicadoPedido = valorDesconto;
+            }
+
+            // Limitar desconto ao saldo devedor
+            if (descontoAplicadoPedido > saldoDevedorOriginalPedido) {
+                descontoAplicadoPedido = saldoDevedorOriginalPedido;
+                valorDescontoInput.value = tipoDesconto === 'percentual' ? '100' : saldoDevedorOriginalPedido.toFixed(2);
+            }
+
+            const saldoComDesconto = saldoDevedorOriginalPedido - descontoAplicadoPedido;
+
+            // Atualizar exibição
+            if (saldoComDescontoSpan) {
+                saldoComDescontoSpan.textContent = saldoComDesconto.toFixed(2).replace('.', ',');
+            }
+            if (valorComDescontoDiv) {
+                valorComDescontoDiv.style.display = 'block';
+            }
+            if (btnSalvarDesconto) {
+                btnSalvarDesconto.disabled = false;
+            }
+            if (valorPagarInput) {
+                valorPagarInput.max = saldoComDesconto.toFixed(2);
+                valorPagarInput.value = saldoComDesconto.toFixed(2);
+            }
+
+            // Se saldo = 0, mostrar opção de fechar automaticamente
+            if (saldoComDesconto <= 0.01) {
+                if (valorComDescontoDiv) {
+                    valorComDescontoDiv.innerHTML = `
+                        <p class="text-success"><strong>Saldo Devedor com Desconto:</strong> R$ 0,00</p>
+                        <p class="text-warning"><strong>⚠️ O desconto cobre todo o valor. Ao salvar, o pedido será fechado automaticamente.</strong></p>
+                    `;
+                }
+            }
+        }
+
+        function salvarDesconto() {
+            const valorDescontoInput = document.getElementById('valorDesconto');
+            const tipoDescontoSelect = document.getElementById('tipoDesconto');
+            const descricaoInput = document.getElementById('descricao');
+
+            if (!valorDescontoInput || !tipoDescontoSelect) return;
+
+            const valorDesconto = parseFloat(valorDescontoInput.value) || 0;
+            const tipoDesconto = tipoDescontoSelect.value;
+
+            if (valorDesconto <= 0) {
+                Swal.fire('Atenção', 'Informe um valor de desconto válido', 'warning');
+                return;
+            }
+
+            // Calcular desconto aplicado
+            let descontoAplicado = 0;
+            if (tipoDesconto === 'percentual') {
+                descontoAplicado = saldoDevedorOriginalPedido * (valorDesconto / 100);
+            } else {
+                descontoAplicado = valorDesconto;
+            }
+
+            if (descontoAplicado > saldoDevedorOriginalPedido) {
+                descontoAplicado = saldoDevedorOriginalPedido;
+            }
+
+            const saldoComDesconto = saldoDevedorOriginalPedido - descontoAplicado;
+
+            const formData = new URLSearchParams();
+            formData.append('action', 'aplicar_desconto_pedido');
+            formData.append('pedido_id', <?= $pedido['idpedido'] ?>);
+            formData.append('valor_desconto', descontoAplicado);
+            formData.append('tipo_desconto', tipoDesconto);
+            formData.append('valor_desconto_original', valorDesconto);
+            formData.append('descricao', descricaoInput ? descricaoInput.value : '');
+
+            // Mostrar loading sem fechar o modal de pagamento
+            const loadingToast = Swal.mixin({
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 2000,
+                timerProgressBar: true,
+                didOpen: (toast) => {
+                    toast.addEventListener('mouseenter', Swal.stopTimer)
+                    toast.addEventListener('mouseleave', Swal.resumeTimer)
+                }
+            });
+
+            loadingToast.fire({
+                icon: 'info',
+                title: 'Salvando desconto...'
+            });
+
+            fetch('mvc/ajax/mesa_pedidos.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Atualizar saldo devedor original com o novo valor retornado pelo backend
+                    saldoDevedorOriginalPedido = parseFloat(data.saldo_restante) || saldoComDesconto;
+                    
+                    console.log('Saldo devedor atualizado:', saldoDevedorOriginalPedido);
+                    
+                    // Atualizar o saldo devedor no modal se estiver aberto
+                    const saldoDevedorSpan = document.getElementById('saldoDevedorOriginal');
+                    if (saldoDevedorSpan) {
+                        saldoDevedorSpan.textContent = saldoDevedorOriginalPedido.toFixed(2).replace('.', ',');
+                        console.log('Saldo devedor no modal atualizado');
+                    } else {
+                        console.log('Elemento saldoDevedorOriginal não encontrado');
+                    }
+                    
+                    // Atualizar o saldo com desconto no modal
+                    const saldoComDescontoSpan = document.getElementById('saldoComDesconto');
+                    if (saldoComDescontoSpan) {
+                        saldoComDescontoSpan.textContent = saldoDevedorOriginalPedido.toFixed(2).replace('.', ',');
+                    }
+                    
+                    // Atualizar o valor a pagar no modal
+                    const valorPagarInput = document.getElementById('valorPagar');
+                    if (valorPagarInput) {
+                        valorPagarInput.max = saldoDevedorOriginalPedido.toFixed(2);
+                        valorPagarInput.value = saldoDevedorOriginalPedido.toFixed(2);
+                        console.log('Valor a pagar atualizado:', valorPagarInput.value);
+                    }
+                    
+                    // Atualizar o saldo devedor na página principal
+                    const saldoDevedorPage = document.querySelector('.saldo-devedor');
+                    if (saldoDevedorPage) {
+                        saldoDevedorPage.textContent = 'R$ ' + saldoDevedorOriginalPedido.toFixed(2).replace('.', ',');
+                        console.log('Saldo devedor na página atualizado');
+                    }
+                    
+                    // Atualizar também o valor por pessoa se existir
+                    const valorPorPessoaSpan = document.getElementById('valorPorPessoa');
+                    if (valorPorPessoaSpan) {
+                        const numeroPessoas = parseInt(document.getElementById('numeroPessoas')?.value || 1);
+                        const valorPorPessoa = saldoDevedorOriginalPedido / numeroPessoas;
+                        valorPorPessoaSpan.textContent = 'R$ ' + valorPorPessoa.toFixed(2).replace('.', ',');
+                    }
+                    
+                    // Limpar o campo de desconto e recalcular
+                    if (valorDescontoInput) {
+                        valorDescontoInput.value = '0';
+                        // Chamar calcularDesconto após um pequeno delay para garantir que o DOM foi atualizado
+                        setTimeout(() => {
+                            calcularDesconto();
+                        }, 100);
+                    }
+                    
+                    // Desabilitar botão de salvar desconto
+                    const btnSalvarDesconto = document.getElementById('btnSalvarDesconto');
+                    if (btnSalvarDesconto) {
+                        btnSalvarDesconto.disabled = true;
+                    }
+                    
+                    // Ocultar valor com desconto
+                    const valorComDescontoDiv = document.getElementById('valorComDesconto');
+                    if (valorComDescontoDiv) {
+                        valorComDescontoDiv.style.display = 'none';
+                    }
+                    
+                    if (saldoComDesconto <= 0.01) {
+                        // Fechar pedido automaticamente
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Desconto aplicado!',
+                            text: 'O desconto cobre todo o valor. Fechando o pedido automaticamente...',
+                            showConfirmButton: false,
+                            timer: 2000
+                        }).then(() => {
+                            location.reload();
+                        });
+                    } else {
+                        // Mostrar toast de sucesso sem fechar o modal
+                        loadingToast.fire({
+                            icon: 'success',
+                            title: `Desconto de R$ ${descontoAplicado.toFixed(2).replace('.', ',')} aplicado! Saldo: R$ ${saldoDevedorOriginalPedido.toFixed(2).replace('.', ',')}`
+                        });
+                    }
+                } else {
+                    Swal.fire('Erro!', data.message || 'Erro ao salvar desconto', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire('Erro!', 'Erro ao processar desconto', 'error');
+            });
+        }
+
         function abrirModalPagamento() {
             const valorTotal = <?= $pedido['valor_total'] ?>;
             const valorPago = <?= $pedido['valor_pago'] ?? 0 ?>;
-            const saldoDevedor = valorTotal - valorPago;
+            // Usar saldo_devedor do banco que já considera descontos aplicados
+            const saldoDevedor = <?= $pedido['saldo_devedor'] ?? ($pedido['valor_total'] - ($pedido['valor_pago'] ?? 0)) ?>;
+            saldoDevedorOriginalPedido = saldoDevedor;
             
             Swal.fire({
                 title: 'Registrar Pagamento',
@@ -730,11 +1191,37 @@ if ($tenant && $filial && $pedido['idmesa']) {
                     <div class="mb-3">
                         <p><strong>Valor Total:</strong> R$ ${valorTotal.toFixed(2).replace('.', ',')}</p>
                         <p><strong>Já Pago:</strong> R$ ${valorPago.toFixed(2).replace('.', ',')}</p>
-                        <p class="text-danger"><strong>Saldo Devedor:</strong> R$ ${saldoDevedor.toFixed(2).replace('.', ',')}</p>
+                        <p class="text-danger"><strong>Saldo Devedor:</strong> R$ <span id="saldoDevedorOriginal">${saldoDevedor.toFixed(2).replace('.', ',')}</span></p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Desconto (opcional)</label>
+                        <div class="row">
+                            <div class="col-6">
+                                <div class="input-group">
+                                    <span class="input-group-text">R$</span>
+                                    <input type="number" class="form-control" id="valorDesconto" step="0.01" min="0" max="${saldoDevedor.toFixed(2)}" value="0" placeholder="0,00" oninput="calcularDesconto()">
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <select class="form-select" id="tipoDesconto" onchange="calcularDesconto()">
+                                    <option value="valor_fixo">Valor Fixo</option>
+                                    <option value="percentual">Percentual</option>
+                                </select>
+                            </div>
+                            <div class="col-2">
+                                <button type="button" class="btn btn-primary w-100" onclick="salvarDesconto()" id="btnSalvarDesconto" disabled>
+                                    <i class="fas fa-save"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <small class="text-muted">Desconto será aplicado sobre o valor total a pagar</small>
+                        <div id="valorComDesconto" class="mt-2" style="display: none;">
+                            <p class="text-success"><strong>Saldo Devedor com Desconto:</strong> R$ <span id="saldoComDesconto">0,00</span></p>
+                        </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Forma de Pagamento</label>
-                        <select class="form-select" id="formaPagamento" required onchange="toggleFiadoFields()">
+                        <select class="form-select" id="formaPagamento" required onchange="toggleFiadoFields(); togglePixFaturaButton()">
                             <option value="">Selecione a forma de pagamento</option>
                             <option value="Dinheiro">Dinheiro</option>
                             <option value="Cartão Débito">Cartão Débito</option>
@@ -748,9 +1235,14 @@ if ($tenant && $filial && $pedido['idmesa']) {
                         <div class="input-group">
                             <span class="input-group-text">R$</span>
                             <input type="number" class="form-control" id="valorPagar" step="0.01" min="0" max="${saldoDevedor.toFixed(2)}" value="${saldoDevedor.toFixed(2)}" required>
-                            <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('valorPagar').value = '${saldoDevedor.toFixed(2)}'">Saldo Total</button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('valorPagar').value = document.getElementById('saldoComDesconto') ? parseFloat(document.getElementById('saldoComDesconto').textContent.replace(',', '.')) || ${saldoDevedor.toFixed(2)} : ${saldoDevedor.toFixed(2)}">Saldo Total</button>
                         </div>
                         <small class="text-muted">Informe o valor que deseja pagar agora (pode ser parcial)</small>
+                    </div>
+                    <div id="pixFaturaButtonContainer" class="mb-3" style="display: none;">
+                        <button type="button" class="btn btn-success w-100" onclick="gerarFaturaPix()">
+                            <i class="fas fa-qrcode me-2"></i>Gerar Fatura de Pagamento por PIX
+                        </button>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Nome do Cliente (opcional)</label>
@@ -834,6 +1326,8 @@ if ($tenant && $filial && $pedido['idmesa']) {
                 preConfirm: () => {
                     const formaPagamento = document.getElementById('formaPagamento').value;
                     const valorPagar = parseFloat(document.getElementById('valorPagar').value) || 0;
+                    const valorDesconto = parseFloat(document.getElementById('valorDesconto').value) || 0;
+                    const tipoDesconto = document.getElementById('tipoDesconto').value;
                     const nomeCliente = document.getElementById('nomeCliente').value;
                     const telefoneCliente = document.getElementById('telefoneCliente').value;
                     const descricao = document.getElementById('descricao').value;
@@ -851,8 +1345,22 @@ if ($tenant && $filial && $pedido['idmesa']) {
                         return false;
                     }
                     
-                    if (valorPagar > saldoDevedor + 0.01) {
-                        Swal.showValidationMessage('Valor não pode ser maior que o saldo devedor');
+                    // Calcular saldo com desconto
+                    let descontoAplicado = 0;
+                    if (valorDesconto > 0) {
+                        if (tipoDesconto === 'percentual') {
+                            descontoAplicado = saldoDevedor * (valorDesconto / 100);
+                        } else {
+                            descontoAplicado = valorDesconto;
+                        }
+                        if (descontoAplicado > saldoDevedor) {
+                            descontoAplicado = saldoDevedor;
+                        }
+                    }
+                    const saldoComDesconto = saldoDevedor - descontoAplicado;
+                    
+                    if (valorPagar > saldoComDesconto + 0.01) {
+                        Swal.showValidationMessage(`Valor não pode ser maior que o saldo devedor com desconto (R$ ${saldoComDesconto.toFixed(2).replace('.', ',')})`);
                         return false;
                     }
                     
@@ -892,11 +1400,13 @@ if ($tenant && $filial && $pedido['idmesa']) {
                         }
                     }
                     
-                    return { 
-                        formaPagamento, 
-                        valorPagar, 
-                        nomeCliente, 
-                        telefoneCliente, 
+                    return {
+                        formaPagamento,
+                        valorPagar,
+                        valorDesconto,
+                        tipoDesconto,
+                        nomeCliente,
+                        telefoneCliente,
                         descricao,
                         gerarNotaFiscal,
                         valorNotaFiscal,
@@ -941,12 +1451,363 @@ if ($tenant && $filial && $pedido['idmesa']) {
             }
         }
 
+        function togglePixFaturaButton() {
+            const formaPagamento = document.getElementById('formaPagamento').value;
+            const pixFaturaContainer = document.getElementById('pixFaturaButtonContainer');
+            
+            if (formaPagamento === 'PIX') {
+                pixFaturaContainer.style.display = 'block';
+            } else {
+                pixFaturaContainer.style.display = 'none';
+            }
+        }
+
+        function togglePixFaturaButtonMesa() {
+            const formaPagamento = document.getElementById('formaPagamentoMesa').value;
+            const pixFaturaContainer = document.getElementById('pixFaturaButtonContainerMesa');
+            
+            if (formaPagamento === 'PIX') {
+                pixFaturaContainer.style.display = 'block';
+            } else {
+                pixFaturaContainer.style.display = 'none';
+            }
+        }
+
+        window.lastGeneratedPixInvoice = null;
+        const PIX_INVOICE_TTL = 5 * 60 * 1000; // keep a generated invoice remembered for 5 minutes
+
+        function setLastPixInvoice(payload) {
+            window.lastGeneratedPixInvoice = {
+                type: payload.type,
+                pedidoId: payload.pedido_id ?? null,
+                mesaId: payload.mesa_id ?? null,
+                valor: Number(payload.valor || 0).toFixed(2),
+                timestamp: Date.now()
+            };
+        }
+
+        function clearLastPixInvoice() {
+            window.lastGeneratedPixInvoice = null;
+        }
+
+        function shouldSkipPixInvoice(payload) {
+            const record = window.lastGeneratedPixInvoice;
+            if (!record) {
+                return false;
+            }
+
+            if (record.type !== payload.type) {
+                return false;
+            }
+
+            if (payload.pedido_id && String(record.pedidoId) !== String(payload.pedido_id)) {
+                return false;
+            }
+
+            if (payload.mesa_id && String(record.mesaId) !== String(payload.mesa_id)) {
+                return false;
+            }
+
+            if (Number(record.valor).toFixed(2) !== Number(payload.valor || 0).toFixed(2)) {
+                return false;
+            }
+
+            if (Date.now() - record.timestamp > PIX_INVOICE_TTL) {
+                clearLastPixInvoice();
+                return false;
+            }
+
+            return true;
+        }
+
+        function requestPixInvoice(action, payload) {
+            // All API calls are now done via PHP endpoints (no CORS issues)
+            // Step 1: Ensure customer exists in Asaas (or create if not exists)
+            // Step 2: Create payment in Asaas and get PIX QR Code
+            // Step 3: Save payment to database
+            
+            // Get client data from order if not provided in payload
+            const clienteNome = payload.nome_cliente || <?= json_encode($pedido['cliente'] ?? 'Cliente'); ?>;
+            const clienteTelefone = payload.telefone_cliente || <?= json_encode($pedido['telefone_cliente'] ?? ''); ?>;
+            
+            // Prepare customer data
+            const customerData = {
+                nome_cliente: clienteNome || 'Cliente',
+                telefone_cliente: clienteTelefone || '',
+                email_cliente: payload.email_cliente || '',
+                cpf_cnpj: payload.cpf_cnpj || '',
+                external_reference: payload.external_reference || (action === 'gerar_fatura_pix' ? `PED-${payload.pedido_id}` : `MESA-${payload.mesa_id}`)
+            };
+            
+            // Step 1: Ensure customer exists in Asaas
+            const customerBody = new URLSearchParams();
+            customerBody.append('action', 'ensureAsaasCustomer');
+            Object.keys(customerData).forEach(key => {
+                if (customerData[key] !== undefined && customerData[key] !== null) {
+                    customerBody.append(key, customerData[key]);
+                }
+            });
+            
+            return fetch('index.php?action=pagamentos_parciais', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                credentials: 'same-origin',
+                body: customerBody
+            })
+            .then(response => response.json())
+            .then(customerResult => {
+                if (!customerResult.success) {
+                    throw new Error(customerResult.error || customerResult.message || 'Erro ao criar/encontrar cliente no Asaas');
+                }
+                
+                const customerId = customerResult.customer_id;
+                
+                // Step 2: Create payment in Asaas
+                const paymentData = {
+                    customer_id: customerId,
+                    valor: payload.valor,
+                    due_date: payload.due_date || new Date().toISOString().split('T')[0],
+                    description: payload.descricao || (action === 'gerar_fatura_pix' ? `Pedido #${payload.pedido_id}` : `Mesa #${payload.mesa_id}`),
+                    external_reference: customerData.external_reference
+                };
+                
+                const paymentBody = new URLSearchParams();
+                paymentBody.append('action', 'createAsaasPayment');
+                Object.keys(paymentData).forEach(key => {
+                    if (paymentData[key] !== undefined && paymentData[key] !== null) {
+                        paymentBody.append(key, paymentData[key]);
+                    }
+                });
+                
+                return fetch('index.php?action=pagamentos_parciais', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    credentials: 'same-origin',
+                    body: paymentBody
+                })
+                .then(response => response.json())
+                .then(paymentResult => {
+                    if (!paymentResult.success) {
+                        throw new Error(paymentResult.error || paymentResult.message || 'Erro ao criar pagamento no Asaas');
+                    }
+                    
+                    const asaasResponse = paymentResult.payment;
+                    
+                    // Step 3: Save to database
+                    return savePixInvoiceToDatabase(payload, asaasResponse);
+                });
+            });
+        }
+        
+        function savePixInvoiceToDatabase(originalPayload, asaasResponse) {
+            const body = new URLSearchParams();
+            body.append('action', 'salvar_fatura_pix');
+            body.append('pedido_id', originalPayload.pedido_id || '');
+            body.append('mesa_id', originalPayload.mesa_id || '');
+            body.append('valor', originalPayload.valor);
+            body.append('asaas_response', JSON.stringify(asaasResponse));
+            
+            return fetch('index.php?action=pagamentos_parciais', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                credentials: 'same-origin',
+                body
+            })
+            .then(response => response.json())
+            .then((data) => {
+                if (!data.success) {
+                    throw new Error(data.message || data.error || 'Erro ao salvar fatura');
+                }
+                
+                // Return formatted response for display
+                // Handle different response structures
+                const pixQrCode = asaasResponse.pixQrCode || {};
+                const pixPayload = pixQrCode.payload || pixQrCode.pixCopiaECola || '';
+                const pixImage = pixQrCode.encodedImage || pixQrCode.base64 || '';
+                
+                return {
+                    success: true,
+                    pixCopiaECola: pixPayload,
+                    pixQrCode: pixImage,
+                    pix_copy_paste: pixPayload,
+                    pix_qr_code: pixImage,
+                    valor: asaasResponse.value || originalPayload.valor,
+                    vencimento: asaasResponse.dueDate,
+                    invoiceId: asaasResponse.id,
+                    invoiceUrl: asaasResponse.invoiceUrl || asaasResponse.invoiceLink,
+                    payment_url: asaasResponse.invoiceUrl || asaasResponse.invoiceLink
+                };
+            });
+        }
+
+        function showPixInvoiceModal(data, options = {}) {
+            const copyInputId = options.copyInputId || 'pixCopyPaste';
+            const title = options.title || 'Fatura PIX Gerada!';
+            const formattedValor = (typeof data.valor === 'number' ? data.valor : parseFloat(data.valor || 0)).toFixed(2).replace('.', ',');
+            const qrBlock = data.pix_qr_code ? `<div class="mb-3"><img src="${data.pix_qr_code}" alt="QR Code PIX" style="max-width: 250px;"></div>` : '';
+            const copyBlock = data.pix_copy_paste ? `
+                <div class="mb-3">
+                    <label class="form-label"><strong>Código PIX (Copiar e Colar):</strong></label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="${copyInputId}" value="${data.pix_copy_paste}" readonly>
+                        <button class="btn btn-outline-secondary" type="button" onclick="copyPixCode('${copyInputId}')">
+                            <i class="fas fa-copy"></i> Copiar
+                        </button>
+                    </div>
+                </div>
+            ` : '';
+            const linkBlock = data.payment_url ? `<p class="mt-3"><a href="${data.payment_url}" target="_blank" rel="noopener noreferrer" class="btn btn-primary">Ver Fatura Completa</a></p>` : '';
+
+            return Swal.fire({
+                title,
+                html: `
+                    <div class="text-center">
+                        <p><strong>Valor:</strong> R$ ${formattedValor}</p>
+                        ${qrBlock}
+                        ${copyBlock}
+                        ${linkBlock}
+                    </div>
+                `,
+                width: '500px',
+                showConfirmButton: true,
+                confirmButtonText: 'Fechar'
+            });
+        }
+
+        function copyPixCode(inputId) {
+            const pixInput = document.getElementById(inputId);
+            if (!pixInput) {
+                return;
+            }
+
+            pixInput.select();
+            document.execCommand('copy');
+
+            Swal.fire({
+                icon: 'success',
+                title: 'Copiado!',
+                text: 'Código PIX copiado para a área de transferência',
+                timer: 2000,
+                showConfirmButton: false
+            });
+        }
+
+        const CURRENT_PEDIDO_ID = <?= json_encode($pedido['idpedido']) ?>;
+        const CURRENT_MESA_ID = <?= json_encode($pedido['idmesa'] ?? null) ?>;
+
+        function gerarFaturaPixMesa(overrides = {}) {
+            const valorInput = document.getElementById('valorPagarMesa');
+            const valor = overrides.valor !== undefined
+                ? Number(overrides.valor)
+                : valorInput ? parseFloat(valorInput.value) : 0;
+            const nomeCliente = overrides.nomeCliente ?? (document.getElementById('nomeCliente')?.value || '');
+            const telefoneCliente = overrides.telefoneCliente ?? (document.getElementById('telefoneCliente')?.value || '');
+            const descricao = overrides.descricao ?? (document.getElementById('descricao')?.value || '');
+            const mesaId = overrides.mesaId ?? CURRENT_MESA_ID;
+
+            if (valor <= 0) {
+                Swal.fire('Atenção!', 'O valor a pagar deve ser maior que zero', 'warning');
+                return Promise.reject(new Error('Valor inválido'));
+            }
+
+            if (!mesaId) {
+                Swal.fire('Erro!', 'Mesa inválida para gerar fatura PIX', 'error');
+                return Promise.reject(new Error('Mesa inválida'));
+            }
+
+            Swal.fire({
+                title: 'Gerando Fatura PIX...',
+                text: 'Aguarde enquanto geramos a fatura de pagamento por PIX',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            const payload = {
+                type: 'mesa',
+                mesa_id: mesaId,
+                valor: Number(valor).toFixed(2),
+                nome_cliente: nomeCliente,
+                telefone_cliente: telefoneCliente,
+                descricao
+            };
+
+            return requestPixInvoice('gerar_fatura_pix_mesa', payload)
+                .then((data) => {
+                    Swal.close();
+                    setLastPixInvoice(payload);
+                    return showPixInvoiceModal(data, { copyInputId: 'pixCopyPasteMesa' });
+                })
+                .catch((error) => {
+                    Swal.close();
+                    Swal.fire('Erro!', error.message || 'Erro ao gerar fatura PIX', 'error');
+                    throw error;
+                });
+        }
+
+        function gerarFaturaPix(overrides = {}) {
+            const valorInput = document.getElementById('valorPagar');
+            const valor = overrides.valor !== undefined
+                ? Number(overrides.valor)
+                : valorInput ? parseFloat(valorInput.value) : 0;
+            const nomeCliente = overrides.nomeCliente ?? (document.getElementById('nomeCliente')?.value || '');
+            const telefoneCliente = overrides.telefoneCliente ?? (document.getElementById('telefoneCliente')?.value || '');
+            const descricao = overrides.descricao ?? (document.getElementById('descricao')?.value || '');
+
+            if (valor <= 0) {
+                Swal.fire('Atenção!', 'O valor a pagar deve ser maior que zero', 'warning');
+                return Promise.reject(new Error('Valor inválido'));
+            }
+
+            Swal.fire({
+                title: 'Gerando Fatura PIX...',
+                text: 'Aguarde enquanto geramos a fatura de pagamento por PIX',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            const payload = {
+                type: 'pedido',
+                pedido_id: CURRENT_PEDIDO_ID,
+                valor: Number(valor).toFixed(2),
+                nome_cliente: nomeCliente,
+                telefone_cliente: telefoneCliente,
+                descricao
+            };
+
+            return requestPixInvoice('gerar_fatura_pix', payload)
+                .then((data) => {
+                    Swal.close();
+                    setLastPixInvoice(payload);
+                    return showPixInvoiceModal(data);
+                })
+                .catch((error) => {
+                    Swal.close();
+                    Swal.fire('Erro!', error.message || 'Erro ao gerar fatura PIX', 'error');
+                    throw error;
+                });
+        }
+
         function registrarPagamento(dados) {
             const formData = new URLSearchParams();
             formData.append('action', 'registrar_pagamento_parcial');
             formData.append('pedido_id', <?= $pedido['idpedido'] ?>);
             formData.append('forma_pagamento', dados.formaPagamento);
             formData.append('valor_pago', dados.valorPagar);
+            formData.append('valor_desconto', dados.valorDesconto);
+            formData.append('tipo_desconto', dados.tipoDesconto);
             formData.append('nome_cliente', dados.nomeCliente);
             formData.append('telefone_cliente', dados.telefoneCliente);
             formData.append('descricao', dados.descricao);

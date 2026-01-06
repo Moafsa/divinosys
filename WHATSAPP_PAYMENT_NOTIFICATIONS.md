@@ -301,3 +301,15 @@ Em caso de problemas, verifique:
 3. Configuração do Asaas
 4. Tabela `payment_reminders` para ver status dos lembretes
 
+
+
+
+
+
+
+
+
+
+
+
+

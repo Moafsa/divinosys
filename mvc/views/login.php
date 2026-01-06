@@ -379,6 +379,9 @@
             // Resetar para Brasil ao voltar
             document.getElementById('countryCode').value = '55';
             document.getElementById('telefone').placeholder = '(11) 99999-9999';
+            // NÃO resetar selectedEstablishment e accessType aqui - eles devem ser mantidos
+            console.log('Botão voltar clicado - Mantendo selectedEstablishment:', window.selectedEstablishment);
+            console.log('Botão voltar clicado - Mantendo accessType:', window.accessType);
         });
 
         function solicitarCodigo(telefone) {
@@ -422,7 +425,14 @@
                     
                     // Armazenar tipo de acesso
                     window.accessType = data.access_type || 'cliente';
-                    window.selectedEstablishment = null;
+                    // NÃO resetar selectedEstablishment aqui se já foi escolhido
+                    if (data.access_type === 'cliente') {
+                        window.selectedEstablishment = null;
+                    }
+                    // Se access_type não é 'cliente', manter selectedEstablishment se existir
+                    
+                    console.log('Código enviado - accessType:', window.accessType);
+                    console.log('Código enviado - selectedEstablishment:', window.selectedEstablishment);
                     
                     // Timer para expiração do código
                     startCodeTimer(data.expires_in || 300);
@@ -453,8 +463,10 @@
             // Preparar dados para envio
             let bodyData = `action=validar_codigo&telefone=${telefone}&codigo=${codigo}`;
             
-            console.log('Validando código - selectedEstablishment:', window.selectedEstablishment);
-            console.log('Validando código - accessType:', window.accessType);
+            console.log('=== VALIDAÇÃO DE CÓDIGO ===');
+            console.log('selectedEstablishment:', window.selectedEstablishment);
+            console.log('accessType:', window.accessType);
+            console.log('estabelecimentosDisponiveis:', window.estabelecimentosDisponiveis);
             
             // Se tem estabelecimento selecionado e acesso como usuário, enviar
             if (window.selectedEstablishment && window.accessType === 'usuario') {
@@ -463,14 +475,24 @@
                     bodyData += `&filial_id=${window.selectedEstablishment.filial_id}`;
                 }
                 bodyData += `&tipo_usuario=${window.selectedEstablishment.tipo_usuario}`;
-                console.log('Enviando como USUÁRIO - Tenant:', window.selectedEstablishment.tenant_id, 'Filial:', window.selectedEstablishment.filial_id, 'Tipo:', window.selectedEstablishment.tipo_usuario);
+                bodyData += `&access_type=usuario`;
+                console.log('✓ Enviando como USUÁRIO');
+                console.log('  Tenant:', window.selectedEstablishment.tenant_id);
+                console.log('  Filial:', window.selectedEstablishment.filial_id);
+                console.log('  Tipo:', window.selectedEstablishment.tipo_usuario);
             } else {
                 // Acesso como cliente - não enviar tenant/filial específico
                 bodyData += `&access_type=cliente`;
-                console.log('Enviando como CLIENTE');
+                console.log('✓ Enviando como CLIENTE');
+                if (!window.selectedEstablishment) {
+                    console.warn('⚠ selectedEstablishment está null/undefined');
+                }
+                if (window.accessType !== 'cliente') {
+                    console.warn('⚠ accessType não é "cliente":', window.accessType);
+                }
             }
             
-            console.log('Body data:', bodyData);
+            console.log('Body data completo:', bodyData);
             
             fetch('mvc/ajax/phone_auth_clean.php', {
                 method: 'POST',
@@ -699,6 +721,11 @@
             
             document.getElementById('accessAsUser').addEventListener('click', function() {
                 window.accessType = 'usuario';
+                // selectedEstablishment já está definido (foi definido em showAccessTypeSelection)
+                console.log('✓ Acessar como USUÁRIO escolhido');
+                console.log('✓ selectedEstablishment mantido:', window.selectedEstablishment);
+                console.log('✓ accessType definido como:', window.accessType);
+                console.log('✓ Tipo do estabelecimento:', window.selectedEstablishment?.tipo_usuario);
                 accessTypeSelect.style.display = 'none';
                 codeForm.style.display = 'block';
                 document.getElementById('codigo').focus();

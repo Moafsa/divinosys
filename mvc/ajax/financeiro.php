@@ -79,10 +79,11 @@ try {
             $pedido = $db->fetch(
                 "SELECT DISTINCT p.idpedido, p.data, p.hora_pedido, p.cliente, 
                         p.idmesa, p.valor_total, p.status_pagamento, p.status, p.observacao,
-                        (SELECT SUM(CASE WHEN pp.forma_pagamento != 'FIADO' THEN pp.valor_pago ELSE 0 END) FROM pagamentos_pedido pp WHERE pp.pedido_id = p.idpedido AND pp.tenant_id = p.tenant_id AND pp.filial_id = p.filial_id) as total_pago_nao_fiado,
+                        COALESCE((SELECT SUM(da.valor_desconto) FROM descontos_aplicados da WHERE da.pedido_id = p.idpedido AND da.tenant_id = p.tenant_id AND da.filial_id = p.filial_id), 0) as total_descontos,
+                        (SELECT SUM(CASE WHEN pp.forma_pagamento != 'FIADO' AND pp.forma_pagamento != 'DESCONTO' THEN pp.valor_pago ELSE 0 END) FROM pagamentos_pedido pp WHERE pp.pedido_id = p.idpedido AND pp.tenant_id = p.tenant_id AND pp.filial_id = p.filial_id) as total_pago_nao_fiado,
                         (SELECT SUM(CASE WHEN pp.forma_pagamento = 'FIADO' THEN pp.valor_pago ELSE 0 END) FROM pagamentos_pedido pp WHERE pp.pedido_id = p.idpedido AND pp.tenant_id = p.tenant_id AND pp.filial_id = p.filial_id) as total_pago_fiado,
-                        (SELECT SUM(valor_pago) FROM pagamentos_pedido pp WHERE pp.pedido_id = p.idpedido AND pp.tenant_id = p.tenant_id AND pp.filial_id = p.filial_id) as total_pago,
-                        (p.valor_total - COALESCE((SELECT SUM(valor_pago) FROM pagamentos_pedido pp WHERE pp.pedido_id = p.idpedido AND pp.tenant_id = p.tenant_id AND pp.filial_id = p.filial_id), 0)) as saldo_devedor_real
+                        (SELECT SUM(CASE WHEN pp.forma_pagamento != 'DESCONTO' THEN pp.valor_pago ELSE 0 END) FROM pagamentos_pedido pp WHERE pp.pedido_id = p.idpedido AND pp.tenant_id = p.tenant_id AND pp.filial_id = p.filial_id) as total_pago,
+                        (p.valor_total - COALESCE((SELECT SUM(da.valor_desconto) FROM descontos_aplicados da WHERE da.pedido_id = p.idpedido AND da.tenant_id = p.tenant_id AND da.filial_id = p.filial_id), 0) - COALESCE((SELECT SUM(CASE WHEN pp.forma_pagamento != 'DESCONTO' THEN pp.valor_pago ELSE 0 END) FROM pagamentos_pedido pp WHERE pp.pedido_id = p.idpedido AND pp.tenant_id = p.tenant_id AND pp.filial_id = p.filial_id), 0)) as saldo_devedor_real
                  FROM pedido p
                  WHERE p.idpedido = ? 
                  AND p.tenant_id = ? 
@@ -110,26 +111,37 @@ try {
         case 'buscar_pedidos_fiado':
             error_log("financeiro.php - buscar_pedidos_fiado - Tenant: $tenantId, Filial: $filialId");
             
+            // Obter filtros de data (se fornecidos)
+            $dataInicio = $_GET['data_inicio'] ?? $_POST['data_inicio'] ?? null;
+            $dataFim = $_GET['data_fim'] ?? $_POST['data_fim'] ?? null;
+            
+            // Construir condições de data
+            $whereConditions = [
+                "EXISTS (SELECT 1 FROM pagamentos_pedido pp WHERE pp.pedido_id = p.idpedido AND pp.forma_pagamento = 'FIADO' AND pp.tenant_id = ? AND pp.filial_id = ?)",
+                "p.tenant_id = ?",
+                "p.filial_id = ?"
+            ];
+            $params = [$tenantId, $filialId, $tenantId, $filialId];
+            
+            if ($dataInicio && $dataFim) {
+                $whereConditions[] = "p.data BETWEEN ? AND ?";
+                $params[] = $dataInicio;
+                $params[] = $dataFim;
+            }
+            
             // Buscar pedidos que tenham valores FIADO pendentes (não quitados)
             $pedidos = $db->fetchAll(
                 "SELECT DISTINCT p.idpedido, p.data, p.hora_pedido, p.cliente, 
                         p.idmesa, p.valor_total, p.status_pagamento, p.status, p.observacao,
-                        (SELECT SUM(CASE WHEN pp.forma_pagamento != 'FIADO' THEN pp.valor_pago ELSE 0 END) FROM pagamentos_pedido pp WHERE pp.pedido_id = p.idpedido AND pp.tenant_id = p.tenant_id AND pp.filial_id = p.filial_id) as total_pago_nao_fiado,
+                        COALESCE((SELECT SUM(da.valor_desconto) FROM descontos_aplicados da WHERE da.pedido_id = p.idpedido AND da.tenant_id = p.tenant_id AND da.filial_id = p.filial_id), 0) as total_descontos,
+                        (SELECT SUM(CASE WHEN pp.forma_pagamento != 'FIADO' AND pp.forma_pagamento != 'DESCONTO' THEN pp.valor_pago ELSE 0 END) FROM pagamentos_pedido pp WHERE pp.pedido_id = p.idpedido AND pp.tenant_id = p.tenant_id AND pp.filial_id = p.filial_id) as total_pago_nao_fiado,
                         (SELECT SUM(CASE WHEN pp.forma_pagamento = 'FIADO' THEN pp.valor_pago ELSE 0 END) FROM pagamentos_pedido pp WHERE pp.pedido_id = p.idpedido AND pp.tenant_id = p.tenant_id AND pp.filial_id = p.filial_id) as total_pago_fiado,
-                        (SELECT SUM(valor_pago) FROM pagamentos_pedido pp WHERE pp.pedido_id = p.idpedido AND pp.tenant_id = p.tenant_id AND pp.filial_id = p.filial_id) as total_pago,
+                        (SELECT SUM(CASE WHEN pp.forma_pagamento != 'DESCONTO' THEN pp.valor_pago ELSE 0 END) FROM pagamentos_pedido pp WHERE pp.pedido_id = p.idpedido AND pp.tenant_id = p.tenant_id AND pp.filial_id = p.filial_id) as total_pago,
                         (SELECT SUM(CASE WHEN pp.forma_pagamento = 'FIADO' THEN pp.valor_pago ELSE 0 END) FROM pagamentos_pedido pp WHERE pp.pedido_id = p.idpedido AND pp.tenant_id = p.tenant_id AND pp.filial_id = p.filial_id) as saldo_fiado_pendente
                  FROM pedido p
-                 WHERE EXISTS (
-                     SELECT 1 FROM pagamentos_pedido pp 
-                     WHERE pp.pedido_id = p.idpedido 
-                     AND pp.forma_pagamento = 'FIADO'
-                     AND pp.tenant_id = ? 
-                     AND pp.filial_id = ?
-                 )
-                 AND p.tenant_id = ? 
-                 AND p.filial_id = ?
+                 WHERE " . implode(' AND ', $whereConditions) . "
                  ORDER BY p.data DESC, p.hora_pedido DESC",
-                [$tenantId, $filialId, $tenantId, $filialId]
+                $params
             );
             
             error_log("financeiro.php - buscar_pedidos_fiado - Encontrados: " . count($pedidos) . " pedidos");
@@ -348,15 +360,23 @@ try {
                     'filial_id' => $filialId
                 ]);
                 
-                // Recalcular totais após o pagamento (apenas pagamentos não-fiado)
+                // Recalcular totais após o pagamento (apenas pagamentos não-fiado, excluindo descontos)
                 $novoTotalPagoNaoFiado = $db->fetch(
                     "SELECT SUM(valor_pago) as total FROM pagamentos_pedido 
-                     WHERE pedido_id = ? AND forma_pagamento != 'FIADO' AND tenant_id = ? AND filial_id = ?",
+                     WHERE pedido_id = ? AND forma_pagamento != 'FIADO' AND forma_pagamento != 'DESCONTO' AND tenant_id = ? AND filial_id = ?",
+                    [$pedidoId, $tenantId, $filialId]
+                );
+                
+                // Buscar total de descontos aplicados
+                $totalDescontos = $db->fetch(
+                    "SELECT SUM(valor_desconto) as total FROM descontos_aplicados 
+                     WHERE pedido_id = ? AND tenant_id = ? AND filial_id = ?",
                     [$pedidoId, $tenantId, $filialId]
                 );
                 
                 $novoValorPagoNaoFiado = $novoTotalPagoNaoFiado['total'] ?? 0;
-                $novoSaldoDevedor = $pedido['valor_total'] - $novoValorPagoNaoFiado;
+                $totalDescontosAplicados = $totalDescontos['total'] ?? 0;
+                $novoSaldoDevedor = $pedido['valor_total'] - $totalDescontosAplicados - $novoValorPagoNaoFiado;
                 
                 // Manter status como 'quitado' se já estava quitado
                 // (pagamentos parciais de fiado não devem alterar o status)

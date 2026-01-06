@@ -2676,20 +2676,21 @@ if ($tenant && $filial) {
             });
         }
 
-        // Testar conexão com Asaas
+        // Testar conexão com Asaas (via PHP endpoint to avoid CORS)
         function testarConexaoAsaas() {
             const tenantId = <?php echo $tenant['id']; ?>;
             const filialId = <?php echo $filial['id'] ?? 'null'; ?>;
             
             Swal.fire({
                 title: 'Testando Conexão...',
-                text: 'Aguarde enquanto testamos a conexão com o Asaas',
+                html: '<p>Aguarde enquanto testamos a conexão com a API do Asaas</p><p class="text-muted small mt-2">Timeout: 10 segundos</p>',
                 allowOutsideClick: false,
                 didOpen: () => {
                     Swal.showLoading();
                 }
             });
 
+            // Call PHP endpoint that uses cURL to test connection (avoids CORS issues)
             fetch(`mvc/ajax/asaas_config.php?action=testConnection&tenant_id=${tenantId}&filial_id=${filialId}`, {
                 method: 'GET',
                 headers: {
@@ -2697,26 +2698,38 @@ if ($tenant && $filial) {
                 }
             })
             .then(response => response.json())
-            .then(data => {
-                if (data.success) {
+            .then(result => {
+                if (result.success) {
                     Swal.fire({
                         title: 'Conexão Bem-sucedida!',
-                        text: 'Sua integração com o Asaas está funcionando corretamente',
+                        html: `
+                            <p class="mb-2">${result.message}</p>
+                            <p class="text-muted small">${result.details}</p>
+                            <div class="mt-3 p-2 bg-light rounded">
+                                <small><strong>Status:</strong> ${result.statusCode} OK</small>
+                            </div>
+                        `,
                         icon: 'success',
                         confirmButtonText: 'Ótimo!'
                     });
                 } else {
-                    Swal.fire({
-                        title: 'Erro na Conexão',
-                        text: data.error || 'Não foi possível conectar com o Asaas',
-                        icon: 'error',
-                        confirmButtonText: 'Entendi'
-                    });
+                    throw new Error(result.error || 'Erro desconhecido ao testar conexão');
                 }
             })
             .catch(error => {
-                console.error('Erro:', error);
-                Swal.fire('Erro', 'Erro ao testar conexão', 'error');
+                console.error('Erro no teste:', error);
+                
+                Swal.fire({
+                    title: 'Erro na Conexão',
+                    html: `
+                        <p class="mb-2">Não foi possível conectar com a API do Asaas</p>
+                        <div class="mt-3 p-2 bg-light rounded text-start">
+                            <small><strong>Erro:</strong> ${error.message}</small>
+                        </div>
+                    `,
+                    icon: 'error',
+                    confirmButtonText: 'Entendi'
+                });
             });
         }
 

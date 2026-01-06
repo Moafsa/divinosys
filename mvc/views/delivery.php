@@ -25,20 +25,67 @@ if (!$filial) {
     }
 }
 
-// Get delivery pedidos
+// Get delivery pedidos (incluindo pedidos online do tipo delivery)
 $pedidos = [];
 if ($tenant && $filial) {
-    $pedidos = $db->fetchAll(
-        "SELECT p.*, u.login as usuario_nome
-         FROM pedido p 
-         LEFT JOIN usuarios u ON p.usuario_id = u.id
-         WHERE p.tenant_id = ? AND p.filial_id = ? 
-         AND p.delivery = true
-         AND p.data >= CURRENT_DATE - INTERVAL '7 days'
-         AND NOT (p.status = 'Entregue' AND p.status_pagamento = 'quitado')
-         ORDER BY p.hora_pedido DESC",
-        [$tenant['id'], $filial['id']]
-    );
+    try {
+        // Buscar pedidos tradicionais de delivery
+        $pedidosDelivery = $db->fetchAll(
+            "SELECT p.*, u.login as usuario_nome
+             FROM pedido p 
+             LEFT JOIN usuarios u ON p.usuario_id = u.id
+             WHERE p.tenant_id = ? AND p.filial_id = ? 
+             AND p.delivery = true
+             AND p.data >= CURRENT_DATE - INTERVAL '7 days'
+             AND NOT (p.status = 'Entregue' AND p.status_pagamento = 'quitado')
+             ORDER BY p.hora_pedido DESC",
+            [$tenant['id'], $filial['id']]
+        );
+        
+        // Buscar pedidos online do tipo delivery ou pickup (998 e 999)
+        $pedidosOnlineDelivery = $db->fetchAll(
+            "SELECT p.*, u.login as usuario_nome
+             FROM pedido p 
+             LEFT JOIN usuarios u ON p.usuario_id = u.id
+             WHERE p.tenant_id = ? AND p.filial_id = ? 
+             AND p.usuario_global_id IS NOT NULL
+             AND (
+                 p.tipo_entrega = 'delivery' 
+                 OR p.tipo_entrega = 'pickup'
+                 OR p.idmesa::varchar = '999'
+                 OR p.idmesa::varchar = '998'
+             )
+             AND p.data >= CURRENT_DATE - INTERVAL '7 days'
+             AND NOT (p.status = 'Entregue' AND p.status_pagamento = 'quitado')
+             ORDER BY p.hora_pedido DESC",
+            [$tenant['id'], $filial['id']]
+        );
+        
+        // Combinar e remover duplicados
+        $pedidosIds = [];
+        $pedidos = [];
+        
+        foreach ($pedidosDelivery as $pedido) {
+            $pedidosIds[$pedido['idpedido']] = true;
+            $pedidos[] = $pedido;
+        }
+        
+        foreach ($pedidosOnlineDelivery as $pedido) {
+            if (!isset($pedidosIds[$pedido['idpedido']])) {
+                $pedidosIds[$pedido['idpedido']] = true;
+                $pedidos[] = $pedido;
+            }
+        }
+        
+        // Ordenar por hora do pedido
+        usort($pedidos, function($a, $b) {
+            return strcmp($b['hora_pedido'], $a['hora_pedido']);
+        });
+        
+    } catch (Exception $e) {
+        error_log("Erro ao buscar pedidos de delivery: " . $e->getMessage());
+        $pedidos = [];
+    }
 }
 
 // Group by status
@@ -72,6 +119,7 @@ foreach ($pedidos as $pedido) {
         :root {
             --primary-color: <?php echo $tenant['cor_primaria'] ?? '#007bff'; ?>;
             --primary-light: <?php echo $tenant['cor_primaria'] ?? '#007bff'; ?>20;
+            --online-order-color: <?php echo $tenant['cor_primaria'] ?? '#dc3545'; ?>;
         }
         
         body {
@@ -156,6 +204,39 @@ foreach ($pedidos as $pedido) {
             transform: translateY(-3px);
             box-shadow: 0 8px 20px rgba(0,0,0,0.15);
         }
+
+        .pedido-card-online {
+            background: var(--online-order-color) !important;
+            color: white !important;
+            border-left: 4px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .pedido-card-online .text-primary,
+        .pedido-card-online .fw-bold {
+            color: white !important;
+        }
+
+        .pedido-card-online .text-muted {
+            color: rgba(255, 255, 255, 0.9) !important;
+        }
+
+        .pedido-card-online .text-success {
+            color: white !important;
+        }
+
+        .pedido-card-online .btn {
+            background: rgba(255, 255, 255, 0.2) !important;
+            border-color: rgba(255, 255, 255, 0.3) !important;
+            color: white !important;
+        }
+
+        .pedido-card-online .btn:hover {
+            background: rgba(255, 255, 255, 0.3) !important;
+        }
+
+        .pedido-card-online:hover {
+            box-shadow: 0 8px 20px rgba(220, 53, 69, 0.4);
+        }
         
         .btn-primary {
             background: var(--primary-color);
@@ -216,7 +297,19 @@ foreach ($pedidos as $pedido) {
                                 
                                 <div class="pedidos-list">
                                     <?php foreach ($pedidos_status as $pedido): ?>
-                                        <div class="pedido-card" onclick="verPedido(<?php echo $pedido['idpedido']; ?>)">
+                                        <?php
+                                        // Verificar se é pedido do cardápio online
+                                        // Pedidos online têm usuario_global_id e (tipo_entrega definido OU idmesa = '998' ou '999')
+                                        $isOnlineOrder = (
+                                            !empty($pedido['usuario_global_id']) && 
+                                            (
+                                                (!empty($pedido['tipo_entrega']) && in_array($pedido['tipo_entrega'], ['delivery', 'pickup']))
+                                                || in_array($pedido['idmesa'], ['998', '999'])
+                                            )
+                                        );
+                                        $cardClass = $isOnlineOrder ? 'pedido-card pedido-card-online' : 'pedido-card';
+                                        ?>
+                                        <div class="<?php echo $cardClass; ?>" onclick="verPedido(<?php echo $pedido['idpedido']; ?>)">
                                             <div class="d-flex justify-content-between align-items-start mb-2">
                                                 <div class="fw-bold text-primary">#<?php echo $pedido['idpedido']; ?></div>
                                                 <div class="text-muted small"><?php echo $pedido['hora_pedido']; ?></div>
@@ -225,6 +318,11 @@ foreach ($pedidos as $pedido) {
                                             <div class="mb-2">
                                                 <i class="fas fa-motorcycle me-1 text-warning"></i>
                                                 <span class="fw-bold">Delivery</span>
+                                                <?php if ($isOnlineOrder): ?>
+                                                    <span class="badge bg-light text-dark ms-2" style="font-size: 0.7rem;">
+                                                        <i class="fas fa-shopping-cart me-1"></i>Cardápio Online
+                                                    </span>
+                                                <?php endif; ?>
                                             </div>
                                             
                                             <div class="h5 text-success mb-2">
@@ -492,9 +590,6 @@ foreach ($pedidos as $pedido) {
         function imprimirPedidoDelivery(pedidoId) {
             console.log('Imprimindo pedido delivery:', pedidoId);
             
-            // Create a new window for printing
-            const printWindow = window.open('', '_blank', 'width=800,height=600');
-            
             // Fetch pedido data
             fetch('mvc/ajax/pedidos.php', {
                 method: 'POST',
@@ -509,6 +604,14 @@ foreach ($pedidos as $pedido) {
                 if (data.success) {
                     const pedido = data.pedido;
                     const itens = data.itens || [];
+                    const agora = new Date();
+                    const dataHora = agora.toLocaleString('pt-BR');
+                    
+                    // Determinar tipo (delivery ou retirada)
+                    let tipoTexto = 'DELIVERY';
+                    if (pedido.idmesa === '998') {
+                        tipoTexto = 'RETIRADA NO BALCÃO';
+                    }
                     
                     // Generate print HTML using the same format as gerar_pedido.php
                     let printHtml = `
@@ -518,21 +621,92 @@ foreach ($pedidos as $pedido) {
                             <meta charset="UTF-8">
                             <title>Cupom Fiscal - Pedido Delivery #${pedido.idpedido}</title>
                             <style>
-                                body { font-family: 'Courier New', monospace; font-size: 11px; margin: 0; padding: 8px; }
-                                .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
-                                .empresa { font-weight: bold; font-size: 13px; }
-                                .endereco { font-size: 9px; }
-                                .pedido-info { margin: 8px 0; font-size: 10px; }
-                                .item { margin: 3px 0; }
-                                .item-nome { font-weight: bold; font-size: 11px; }
-                                .item-detalhes { font-size: 10px; margin-left: 8px; }
-                                .modificacoes { margin-left: 15px; font-size: 10px; }
-                                .adicionado { color: green; }
-                                .removido { color: red; }
-                                .total { border-top: 1px dashed #000; padding-top: 8px; margin-top: 8px; font-weight: bold; font-size: 12px; }
-                                .footer { text-align: center; margin-top: 15px; font-size: 9px; }
-                                .delivery-info { background-color: #f0f8f0; padding: 8px; margin: 8px 0; border: 1px dashed #000; font-size: 10px; }
-                                @media print { body { margin: 0; padding: 5px; font-size: 10px; } }
+                                body { 
+                                    font-family: 'Courier New', monospace; 
+                                    font-size: 16px; 
+                                    margin: 0; 
+                                    padding: 15px; 
+                                    line-height: 1.4;
+                                }
+                                .header { 
+                                    text-align: center; 
+                                    border-bottom: 2px solid #000; 
+                                    padding-bottom: 15px; 
+                                    margin-bottom: 15px; 
+                                }
+                                .empresa { 
+                                    font-weight: bold; 
+                                    font-size: 20px; 
+                                    margin-bottom: 5px;
+                                }
+                                .endereco { 
+                                    font-size: 14px; 
+                                    margin-bottom: 10px;
+                                }
+                                .pedido-info { 
+                                    margin: 15px 0; 
+                                    font-size: 16px;
+                                    font-weight: bold;
+                                }
+                                .item { 
+                                    margin: 8px 0; 
+                                    padding: 5px 0;
+                                    border-bottom: 1px dotted #ccc;
+                                }
+                                .item-nome { 
+                                    font-weight: bold; 
+                                    font-size: 18px; 
+                                    color: #000;
+                                }
+                                .item-detalhes { 
+                                    font-size: 16px; 
+                                    margin-left: 15px; 
+                                    margin-top: 5px;
+                                }
+                                .modificacoes { 
+                                    margin-left: 25px; 
+                                    font-size: 15px; 
+                                    margin-top: 8px;
+                                }
+                                .adicionado { 
+                                    color: #006400; 
+                                    font-weight: bold;
+                                }
+                                .removido { 
+                                    color: #DC143C; 
+                                    font-weight: bold;
+                                }
+                                .total { 
+                                    border-top: 2px solid #000; 
+                                    padding-top: 15px; 
+                                    margin-top: 20px; 
+                                    font-weight: bold; 
+                                    font-size: 20px;
+                                    text-align: center;
+                                }
+                                .footer { 
+                                    text-align: center; 
+                                    margin-top: 25px; 
+                                    font-size: 14px; 
+                                    font-weight: bold;
+                                }
+                                .observacao {
+                                    margin-top: 15px;
+                                    padding: 10px;
+                                    background-color: #f0f0f0;
+                                    border: 1px solid #000;
+                                    font-size: 16px;
+                                    font-weight: bold;
+                                }
+                                @media print { 
+                                    body { 
+                                        margin: 0; 
+                                        padding: 10px;
+                                        font-size: 14px;
+                                    }
+                                    .item-nome { font-size: 16px; }
+                                    .total { font-size: 18px; }
+                                }
                             </style>
                         </head>
                         <body>
@@ -545,37 +719,52 @@ foreach ($pedidos as $pedido) {
                             <div class="pedido-info">
                                 <strong>PEDIDO #${pedido.idpedido}</strong><br>
                                 Data/Hora: ${pedido.data} ${pedido.hora_pedido}<br>
-                                <strong>DELIVERY</strong><br>
+                                ${tipoTexto}<br>
                                 ${pedido.cliente ? `Cliente: ${pedido.cliente}` : ''}
                                 ${pedido.telefone_cliente ? `<br>Telefone: ${pedido.telefone_cliente}` : ''}
                                 ${pedido.usuario_nome ? `<br>Atendente: ${pedido.usuario_nome}` : ''}
-                            </div>
-                            
-                            <div class="delivery-info">
-                                <strong>🚚 ENTREGA</strong><br>
-                                ${pedido.cliente || 'Cliente Delivery'}
                             </div>
                             
                             <div class="itens">
                                 <strong>ITENS DO PEDIDO:</strong><br>`;
                     
                     itens.forEach(item => {
+                        // Processar ingredientes (podem vir como string separada por vírgula)
+                        let ingredientesCom = [];
+                        let ingredientesSem = [];
+                        
+                        if (item.ingredientes_com) {
+                            if (typeof item.ingredientes_com === 'string') {
+                                ingredientesCom = item.ingredientes_com.split(',').map(i => i.trim()).filter(i => i);
+                            } else if (Array.isArray(item.ingredientes_com)) {
+                                ingredientesCom = item.ingredientes_com;
+                            }
+                        }
+                        
+                        if (item.ingredientes_sem) {
+                            if (typeof item.ingredientes_sem === 'string') {
+                                ingredientesSem = item.ingredientes_sem.split(',').map(i => i.trim()).filter(i => i);
+                            } else if (Array.isArray(item.ingredientes_sem)) {
+                                ingredientesSem = item.ingredientes_sem;
+                            }
+                        }
+                        
                         printHtml += `
                             <div class="item">
                                 <div class="item-nome">${item.quantidade}x ${item.nome_produto || 'Produto'}</div>
-                                <div class="item-detalhes">R$ ${parseFloat(item.valor_unitario).toFixed(2).replace('.', ',')}</div>`;
+                                <div class="item-detalhes">R$ ${parseFloat(item.valor_unitario || 0).toFixed(2).replace('.', ',')}</div>`;
                         
-                        if (item.ingredientes_com && item.ingredientes_com.length > 0) {
+                        if (ingredientesCom.length > 0) {
                             printHtml += `<div class="modificacoes">`;
-                            item.ingredientes_com.forEach(ing => {
+                            ingredientesCom.forEach(ing => {
                                 printHtml += `<div class="adicionado">+ ${ing}</div>`;
                             });
                             printHtml += `</div>`;
                         }
                         
-                        if (item.ingredientes_sem && item.ingredientes_sem.length > 0) {
+                        if (ingredientesSem.length > 0) {
                             printHtml += `<div class="modificacoes">`;
-                            item.ingredientes_sem.forEach(ing => {
+                            ingredientesSem.forEach(ing => {
                                 printHtml += `<div class="removido">- ${ing}</div>`;
                             });
                             printHtml += `</div>`;
@@ -592,29 +781,61 @@ foreach ($pedidos as $pedido) {
                             </div>
                             
                             <div class="total">
-                                <strong>TOTAL: R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</strong>
+                                <strong>TOTAL: R$ ${parseFloat(pedido.valor_total || 0).toFixed(2).replace('.', ',')}</strong>
                             </div>
                             
-                            ${pedido.observacao ? `<div class="pedido-info"><strong>Observação:</strong> ${pedido.observacao}</div>` : ''}
+                            ${pedido.observacao ? `<div class="observacao"><strong>OBSERVAÇÃO:</strong> ${pedido.observacao}</div>` : ''}
                             
                             <div class="footer">
-                                <strong>🚚 DELIVERY</strong><br>
                                 Obrigado pela preferência!<br>
-                                Volte sempre!<br>
-                                Impresso em: ${new Date().toLocaleString('pt-BR')}
+                                Volte sempre!
                             </div>
                         </body>
                         </html>`;
                     
-                    // Write content to print window
+                    // Create a new window for printing
+                    const printWindow = window.open('', '_blank', 'width=400,height=600,scrollbars=yes,resizable=yes');
+                    
+                    if (!printWindow) {
+                        alert('Erro: Não foi possível abrir janela de impressão. Verifique se o popup está bloqueado.');
+                        return;
+                    }
+                    
                     printWindow.document.write(printHtml);
                     printWindow.document.close();
                     
-                    // Print after content loads
-                    printWindow.onload = function() {
-                        printWindow.print();
-                        printWindow.close();
-                    };
+                    // Aguardar carregamento e imprimir automaticamente
+                    printWindow.addEventListener('load', function() {
+                        setTimeout(() => {
+                            try {
+                                printWindow.focus();
+                                printWindow.print();
+                                
+                                // Fechar janela após um tempo
+                                setTimeout(() => {
+                                    printWindow.close();
+                                }, 3000);
+                            } catch (error) {
+                                console.error('Erro ao imprimir:', error);
+                                alert('Erro ao imprimir. Verifique se há uma impressora configurada.');
+                            }
+                        }, 500);
+                    });
+                    
+                    // Fallback caso o evento load não funcione
+                    setTimeout(() => {
+                        try {
+                            printWindow.focus();
+                            printWindow.print();
+                            
+                            setTimeout(() => {
+                                printWindow.close();
+                            }, 3000);
+                        } catch (error) {
+                            console.error('Erro ao imprimir (fallback):', error);
+                            printWindow.close();
+                        }
+                    }, 1500);
                     
                 } else {
                     Swal.fire('Erro', 'Erro ao carregar dados do pedido para impressão', 'error');

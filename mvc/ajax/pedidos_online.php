@@ -991,6 +991,193 @@ try {
         }
     }
     
+    // Enviar notificação WhatsApp para o admin sobre o novo pedido online
+    try {
+        require_once __DIR__ . '/../../system/WhatsApp/WuzAPIManager.php';
+        $wuzapiManager = new \System\WhatsApp\WuzAPIManager();
+        
+        // Buscar instância WhatsApp ativa para o tenant/filial
+        $instancia = null;
+        
+        // Primeiro, tentar buscar instância específica da filial
+        if ($filialId) {
+            $instancia = $db->fetch(
+                "SELECT * FROM whatsapp_instances 
+                 WHERE tenant_id = ? AND filial_id = ? AND ativo = true 
+                 AND status IN ('open', 'connected', 'ativo', 'active') 
+                 ORDER BY created_at DESC LIMIT 1",
+                [$tenantId, $filialId]
+            );
+        }
+        
+        // Se não encontrou, tentar instância global do tenant
+        if (!$instancia) {
+            $instancia = $db->fetch(
+                "SELECT * FROM whatsapp_instances 
+                 WHERE tenant_id = ? AND (filial_id IS NULL OR filial_id = 0) AND ativo = true 
+                 AND status IN ('open', 'connected', 'ativo', 'active') 
+                 ORDER BY created_at DESC LIMIT 1",
+                [$tenantId]
+            );
+        }
+        
+        // Se ainda não encontrou, tentar qualquer instância ativa do tenant
+        if (!$instancia) {
+            $instancia = $db->fetch(
+                "SELECT * FROM whatsapp_instances 
+                 WHERE tenant_id = ? AND ativo = true 
+                 ORDER BY created_at DESC LIMIT 1",
+                [$tenantId]
+            );
+        }
+        
+        if ($instancia && !empty($instancia['phone_number']) && !empty($instancia['id'])) {
+            // Formatar mensagem com detalhes do pedido
+            $tipoEntregaTexto = ($tipoEntrega === 'delivery') ? 'Delivery' : 'Retirada no Balcão';
+            $formaPagamentoTexto = ($formaPagamento === 'online') ? 'Pagamento Online' : 'Pagamento na Entrega';
+            
+            $mensagem = "🛒 *NOVO PEDIDO ONLINE*\n\n";
+            $mensagem .= "📋 Pedido #{$pedidoId}\n";
+            $mensagem .= "👤 Cliente: {$clienteNome}\n";
+            $mensagem .= "📞 Telefone: {$clienteTelefone}\n";
+            $mensagem .= "🏪 Filial: {$filial['nome']}\n";
+            $mensagem .= "🚚 Tipo: {$tipoEntregaTexto}\n";
+            $mensagem .= "💳 Pagamento: {$formaPagamentoTexto}\n";
+            $mensagem .= "💰 Valor Total: R$ " . number_format($valorTotal, 2, ',', '.') . "\n";
+            $mensagem .= "📅 Data/Hora: {$orderDate} {$orderTime}\n\n";
+            
+            // Adicionar itens do pedido
+            if (!empty($itensDetalhados)) {
+                $mensagem .= "*Itens do Pedido:*\n";
+                foreach ($itensDetalhados as $item) {
+                    $mensagem .= "• {$item['quantidade']}x {$item['produto_nome']} - R$ " . number_format($item['subtotal'], 2, ',', '.') . "\n";
+                }
+                $mensagem .= "\n";
+            }
+            
+            // Adicionar endereço se for delivery
+            if ($tipoEntrega === 'delivery' && $enderecoEntrega) {
+                $mensagem .= "*Endereço de Entrega:*\n";
+                $mensagem .= "{$enderecoEntrega['endereco']}, {$enderecoEntrega['numero']}\n";
+                if (!empty($enderecoEntrega['complemento'])) {
+                    $mensagem .= "Complemento: {$enderecoEntrega['complemento']}\n";
+                }
+                $mensagem .= "{$enderecoEntrega['bairro']}, {$enderecoEntrega['cidade']} - {$enderecoEntrega['estado']}\n";
+                if (!empty($enderecoEntrega['cep'])) {
+                    $mensagem .= "CEP: {$enderecoEntrega['cep']}\n";
+                }
+                $mensagem .= "\n";
+            }
+            
+            // Adicionar informações de pagamento se for online
+            if ($formaPagamento === 'online' && $paymentProcessed && $paymentDataResult) {
+                $mensagem .= "*Informações de Pagamento:*\n";
+                $mensagem .= "ID Pagamento: {$paymentDataResult['id']}\n";
+                $mensagem .= "Tipo: {$billingType}\n";
+                if (!empty($paymentDataResult['invoiceUrl'])) {
+                    $mensagem .= "Link: {$paymentDataResult['invoiceUrl']}\n";
+                }
+                $mensagem .= "\n";
+            }
+            
+            $mensagem .= "✅ Acesse o sistema para mais detalhes.";
+            
+            // Enviar mensagem para o número do admin (phone_number da instância)
+            $resultado = $wuzapiManager->sendMessage(
+                $instancia['id'],
+                $instancia['phone_number'],
+                $mensagem
+            );
+            
+            if ($resultado['success']) {
+                error_log("PEDIDOS_ONLINE - Notificação WhatsApp enviada com sucesso para admin ({$instancia['phone_number']})");
+            } else {
+                error_log("PEDIDOS_ONLINE - Erro ao enviar notificação WhatsApp para admin: " . ($resultado['message'] ?? 'Erro desconhecido'));
+            }
+            
+            // Enviar mensagem de confirmação para o cliente
+            if (!empty($clienteTelefone)) {
+                $mensagemCliente = "✅ *Pedido Confirmado!*\n\n";
+                $mensagemCliente .= "Olá, {$clienteNome}!\n\n";
+                $mensagemCliente .= "Seu pedido foi recebido com sucesso!\n\n";
+                $mensagemCliente .= "📋 *Pedido #{$pedidoId}*\n";
+                $mensagemCliente .= "🏪 {$filial['nome']}\n";
+                $mensagemCliente .= "💰 Valor Total: R$ " . number_format($valorTotal, 2, ',', '.') . "\n";
+                $mensagemCliente .= "🚚 Tipo: {$tipoEntregaTexto}\n";
+                $mensagemCliente .= "💳 Pagamento: {$formaPagamentoTexto}\n\n";
+                
+                // Adicionar itens do pedido
+                if (!empty($itensDetalhados)) {
+                    $mensagemCliente .= "*Seu pedido:*\n";
+                    foreach ($itensDetalhados as $item) {
+                        $mensagemCliente .= "• {$item['quantidade']}x {$item['produto_nome']} - R$ " . number_format($item['subtotal'], 2, ',', '.') . "\n";
+                    }
+                    $mensagemCliente .= "\n";
+                }
+                
+                // Adicionar endereço se for delivery
+                if ($tipoEntrega === 'delivery' && $enderecoEntrega) {
+                    $mensagemCliente .= "*Endereço de Entrega:*\n";
+                    $mensagemCliente .= "{$enderecoEntrega['endereco']}, {$enderecoEntrega['numero']}\n";
+                    if (!empty($enderecoEntrega['complemento'])) {
+                        $mensagemCliente .= "Complemento: {$enderecoEntrega['complemento']}\n";
+                    }
+                    $mensagemCliente .= "{$enderecoEntrega['bairro']}, {$enderecoEntrega['cidade']} - {$enderecoEntrega['estado']}\n";
+                    if (!empty($enderecoEntrega['cep'])) {
+                        $mensagemCliente .= "CEP: {$enderecoEntrega['cep']}\n";
+                    }
+                    $mensagemCliente .= "\n";
+                }
+                
+                // Adicionar informações de pagamento se for online
+                if ($formaPagamento === 'online' && $paymentProcessed && $paymentDataResult) {
+                    $mensagemCliente .= "*Pagamento Online:*\n";
+                    if ($billingType === 'PIX') {
+                        $mensagemCliente .= "💰 Pagamento via PIX\n";
+                        if (!empty($paymentDataResult['pixCopyPaste'])) {
+                            $mensagemCliente .= "Código PIX copiado! Use-o para realizar o pagamento.\n";
+                        }
+                    } elseif ($billingType === 'CREDIT_CARD') {
+                        $mensagemCliente .= "💳 Pagamento via Cartão de Crédito\n";
+                    } elseif ($billingType === 'BOLETO') {
+                        $mensagemCliente .= "📄 Boleto gerado\n";
+                    }
+                    
+                    if (!empty($paymentDataResult['invoiceUrl'])) {
+                        $mensagemCliente .= "Link para pagamento: {$paymentDataResult['invoiceUrl']}\n";
+                    }
+                    $mensagemCliente .= "\n";
+                }
+                
+                // Adicionar tempo estimado se disponível
+                if (!empty($filial['tempo_medio_preparo'])) {
+                    $mensagemCliente .= "⏱️ Tempo estimado: {$filial['tempo_medio_preparo']} minutos\n\n";
+                }
+                
+                $mensagemCliente .= "Acompanhe o status do seu pedido em tempo real!\n";
+                $mensagemCliente .= "Obrigado pela preferência! 🎉";
+                
+                // Enviar mensagem para o cliente
+                $resultadoCliente = $wuzapiManager->sendMessage(
+                    $instancia['id'],
+                    $clienteTelefone,
+                    $mensagemCliente
+                );
+                
+                if ($resultadoCliente['success']) {
+                    error_log("PEDIDOS_ONLINE - Notificação WhatsApp enviada com sucesso para cliente ({$clienteTelefone})");
+                } else {
+                    error_log("PEDIDOS_ONLINE - Erro ao enviar notificação WhatsApp para cliente: " . ($resultadoCliente['message'] ?? 'Erro desconhecido'));
+                }
+            }
+        } else {
+            error_log("PEDIDOS_ONLINE - Instância WhatsApp não encontrada ou inativa para tenant_id={$tenantId}, filial_id={$filialId}");
+        }
+    } catch (Exception $e) {
+        // Não falhar o pedido se o WhatsApp falhar
+        error_log("PEDIDOS_ONLINE - Exception ao enviar notificação WhatsApp: " . $e->getMessage());
+    }
+    
     // Build response
     $response = [
         'success' => true,
