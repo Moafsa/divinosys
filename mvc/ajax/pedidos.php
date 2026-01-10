@@ -445,18 +445,14 @@ try {
             $novoStatus = $_POST['status'] ?? '';
             
             if (empty($pedidoId) || empty($novoStatus)) {
-                error_log("PEDIDOS::atualizar_status - Erro: ID do pedido ou status não fornecido. Pedido ID: $pedidoId, Status: $novoStatus");
                 throw new \Exception('ID do pedido e status são obrigatórios');
             }
-            
-            error_log("PEDIDOS::atualizar_status - Iniciando atualização. Pedido ID: $pedidoId, Novo Status: $novoStatus");
             
             $db = \System\Database::getInstance();
             $session = \System\Session::getInstance();
             $tenantId = $session->getTenantId();
             
             if (!$tenantId) {
-                error_log("PEDIDOS::atualizar_status - Erro: Tenant ID não encontrado na sessão");
                 throw new \Exception("Tenant ID não encontrado na sessão. Faça login novamente.");
             }
             
@@ -464,122 +460,43 @@ try {
             if ($filialId === null) {
                 $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
                 $filialId = $filial_padrao ? $filial_padrao['id'] : null;
-                error_log("PEDIDOS::atualizar_status - Filial ID não encontrado na sessão, usando filial padrão: $filialId");
             }
             
-            // Buscar dados do pedido para obter a mesa - tentar primeiro com filial_id
+            // Buscar dados do pedido para obter a mesa
             $pedido = $db->fetch(
-                "SELECT idmesa, tenant_id, filial_id FROM pedido WHERE idpedido = ? AND tenant_id = ? AND filial_id = ?",
+                "SELECT idmesa FROM pedido WHERE idpedido = ? AND tenant_id = ? AND filial_id = ?",
                 [$pedidoId, $tenantId, $filialId]
             );
             
-            // Se não encontrou com filial_id, tentar sem filial_id (caso seja delivery global)
-            if (!$pedido && $filialId) {
-                error_log("PEDIDOS::atualizar_status - Pedido não encontrado com filial_id, tentando sem filial_id");
-                $pedido = $db->fetch(
-                    "SELECT idmesa, tenant_id, filial_id FROM pedido WHERE idpedido = ? AND tenant_id = ?",
-                    [$pedidoId, $tenantId]
-                );
+            if (!$pedido) {
+                throw new \Exception('Pedido não encontrado');
             }
             
-            // Se ainda não encontrou, tentar apenas com pedido_id (último recurso)
-            if (!$pedido) {
-                error_log("PEDIDOS::atualizar_status - Pedido não encontrado com tenant_id, tentando apenas com pedido_id");
-                $pedido = $db->fetch(
-                    "SELECT idmesa, tenant_id, filial_id FROM pedido WHERE idpedido = ?",
-                    [$pedidoId]
+            // Atualizar status do pedido
+            $db->update(
+                'pedido',
+                ['status' => $novoStatus],
+                'idpedido = ? AND tenant_id = ? AND filial_id = ?',
+                [$pedidoId, $tenantId, $filialId]
+            );
+            
+            // Sincronizar status da mesa após atualização do pedido
+            if ($pedido['idmesa'] && $pedido['idmesa'] !== '999') {
+                // Verificar se há outros pedidos ativos para esta mesa
+                $pedidosAtivos = $db->fetchAll(
+                    "SELECT COUNT(*) as total FROM pedido WHERE idmesa::varchar = ? AND tenant_id = ? AND filial_id = ? AND status IN ('Pendente', 'Preparando', 'Pronto', 'Entregue')",
+                    [$pedido['idmesa'], $tenantId, $filialId]
                 );
                 
-                // Se encontrou, usar os tenant_id e filial_id do pedido
-                if ($pedido) {
-                    $tenantId = $pedido['tenant_id'];
-                    $filialId = $pedido['filial_id'];
-                    error_log("PEDIDOS::atualizar_status - Pedido encontrado. Usando Tenant ID: $tenantId, Filial ID: $filialId do pedido");
-                }
-            }
-            
-            if (!$pedido) {
-                error_log("PEDIDOS::atualizar_status - Erro: Pedido não encontrado. Pedido ID: $pedidoId, Tenant ID: $tenantId, Filial ID: $filialId");
-                throw new \Exception('Pedido não encontrado. Verifique se o pedido existe e se você tem permissão para atualizá-lo.');
-            }
-            
-            error_log("PEDIDOS::atualizar_status - Pedido encontrado. ID: $pedidoId, Mesa: " . ($pedido['idmesa'] ?? 'N/A'));
-            
-            // Atualizar status do pedido - usar os valores obtidos na busca
-            $updateResult = false;
-            if ($filialId) {
-                // Tentar atualizar com tenant_id e filial_id
-                $updateResult = $db->update(
-                    'pedido',
-                    ['status' => $novoStatus],
-                    'idpedido = ? AND tenant_id = ? AND filial_id = ?',
-                    [$pedidoId, $tenantId, $filialId]
+                $novoStatusMesa = $pedidosAtivos[0]['total'] > 0 ? 'ocupada' : 'livre';
+                
+                // Atualizar status da mesa
+                $db->update(
+                    'mesas',
+                    ['status' => $novoStatusMesa],
+                    'id_mesa = ? AND tenant_id = ? AND filial_id = ?',
+                    [$pedido['idmesa'], $tenantId, $filialId]
                 );
-            }
-            
-            // Se não atualizou com filial_id, tentar sem filial_id
-            if (!$updateResult) {
-                error_log("PEDIDOS::atualizar_status - Tentando atualizar sem filial_id");
-                $updateResult = $db->update(
-                    'pedido',
-                    ['status' => $novoStatus],
-                    'idpedido = ? AND tenant_id = ?',
-                    [$pedidoId, $tenantId]
-                );
-            }
-            
-            // Se ainda não atualizou, tentar apenas com pedido_id (último recurso)
-            if (!$updateResult) {
-                error_log("PEDIDOS::atualizar_status - Tentando atualizar apenas com pedido_id");
-                $updateResult = $db->update(
-                    'pedido',
-                    ['status' => $novoStatus],
-                    'idpedido = ?',
-                    [$pedidoId]
-                );
-            }
-            
-            if (!$updateResult) {
-                error_log("PEDIDOS::atualizar_status - Erro ao atualizar status no banco de dados");
-                throw new \Exception('Erro ao atualizar status do pedido no banco de dados.');
-            }
-            
-            error_log("PEDIDOS::atualizar_status - Status atualizado com sucesso. Pedido ID: $pedidoId, Novo Status: $novoStatus");
-            
-            // Sincronizar status da mesa após atualização do pedido (apenas se não for delivery)
-            if (isset($pedido['idmesa']) && $pedido['idmesa'] && $pedido['idmesa'] !== '999' && $pedido['idmesa'] !== '998') {
-                try {
-                    // Verificar se há outros pedidos ativos para esta mesa
-                    $pedidosAtivos = $db->fetchAll(
-                        "SELECT COUNT(*) as total FROM pedido WHERE CAST(idmesa AS VARCHAR) = ? AND tenant_id = ? AND (filial_id = ? OR filial_id IS NULL) AND status IN ('Pendente', 'Preparando', 'Pronto', 'Entregue', 'Em Preparo')",
-                        [$pedido['idmesa'], $tenantId, $filialId]
-                    );
-                    
-                    $totalPedidos = $pedidosAtivos[0]['total'] ?? 0;
-                    $novoStatusMesa = $totalPedidos > 0 ? 'ocupada' : 'livre';
-                    
-                    // Atualizar status da mesa
-                    if ($filialId) {
-                        $db->update(
-                            'mesas',
-                            ['status' => $novoStatusMesa],
-                            'id_mesa = ? AND tenant_id = ? AND filial_id = ?',
-                            [$pedido['idmesa'], $tenantId, $filialId]
-                        );
-                    } else {
-                        $db->update(
-                            'mesas',
-                            ['status' => $novoStatusMesa],
-                            'id_mesa = ? AND tenant_id = ?',
-                            [$pedido['idmesa'], $tenantId]
-                        );
-                    }
-                    
-                    error_log("PEDIDOS::atualizar_status - Status da mesa atualizado. Mesa: {$pedido['idmesa']}, Novo Status: $novoStatusMesa");
-                } catch (\Exception $e) {
-                    // Não falhar a atualização do pedido se houver erro ao atualizar a mesa
-                    error_log("PEDIDOS::atualizar_status - Erro ao atualizar status da mesa: " . $e->getMessage());
-                }
             }
             
             echo json_encode([
@@ -1522,22 +1439,6 @@ try {
     }
     
 } catch (\Exception $e) {
-    error_log("PEDIDOS::Erro geral: " . $e->getMessage());
-    error_log("PEDIDOS::Stack trace: " . $e->getTraceAsString());
-    http_response_code(400);
-    echo json_encode([
-        'success' => false, 
-        'message' => $e->getMessage(),
-        'error' => $e->getMessage()
-    ]);
-} catch (\Error $e) {
-    error_log("PEDIDOS::Erro fatal: " . $e->getMessage());
-    error_log("PEDIDOS::Stack trace: " . $e->getTraceAsString());
-    http_response_code(500);
-    echo json_encode([
-        'success' => false, 
-        'message' => 'Erro interno do servidor: ' . $e->getMessage(),
-        'error' => $e->getMessage()
-    ]);
+    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
 }
 ?>
