@@ -3637,6 +3637,7 @@ if (count($enderecoParts) > 2) {
                 const data = await response.json();
                 
                 if (data.success && data.cliente) {
+                    // Cliente encontrado ou criado automaticamente
                     clienteData = data.cliente;
                     clienteEnderecos = data.enderecos || [];
                     
@@ -3646,11 +3647,33 @@ if (count($enderecoParts) > 2) {
                         customerDataFields.style.display = 'block';
                     }
                     
-                    // Preencher campos com dados do cliente (se existirem)
-                    document.getElementById('customerName').value = data.cliente.nome && data.cliente.nome !== 'Cliente' ? data.cliente.nome : '';
-                    document.getElementById('customerEmail').value = data.cliente.email || '';
-                    const cpfField = document.getElementById('customerCpf');
-                    cpfField.value = data.cliente.cpf || '';
+                    // Verificar se cliente foi criado automaticamente (nome = 'Cliente') ou já existia
+                    const foiCriadoAgora = data.cliente.nome === 'Cliente' || data.cliente.nome === null || !data.cliente.nome || data.message === 'Cliente criado automaticamente. Preencha seus dados abaixo.';
+                    
+                    // Preencher campos com dados do cliente (se existirem e não forem temporários)
+                    if (foiCriadoAgora) {
+                        // Cliente foi criado automaticamente - deixar campos vazios para o usuário preencher
+                        document.getElementById('customerName').value = '';
+                        document.getElementById('customerEmail').value = '';
+                        const cpfField = document.getElementById('customerCpf');
+                        if (cpfField) {
+                            cpfField.value = '';
+                        }
+                        
+                        resultDiv.className = 'alert alert-info';
+                        resultDiv.innerHTML = 'ℹ️ Cliente criado automaticamente. Preencha seus dados abaixo para continuar com o pedido.';
+                    } else {
+                        // Cliente já existia - preencher campos com dados existentes
+                        document.getElementById('customerName').value = data.cliente.nome || '';
+                        document.getElementById('customerEmail').value = data.cliente.email || '';
+                        const cpfField = document.getElementById('customerCpf');
+                        if (cpfField) {
+                            cpfField.value = data.cliente.cpf || '';
+                        }
+                        
+                        resultDiv.className = 'alert alert-success';
+                        resultDiv.innerHTML = '✅ Cliente encontrado: ' + (data.cliente.nome || 'Cliente cadastrado');
+                    }
                     
                     // Esconder mensagem de CPF obrigatório se o CPF estiver preenchido
                     // Usar setTimeout para garantir que o valor foi definido antes de verificar
@@ -3658,22 +3681,15 @@ if (count($enderecoParts) > 2) {
                         verificarEesconderMensagemCpf();
                     }, 100);
                     
-                    if (data.cliente.nome && data.cliente.nome !== 'Cliente') {
-                        resultDiv.className = 'alert alert-success';
-                        resultDiv.innerHTML = '✅ Cliente encontrado: ' + data.cliente.nome;
-                    } else {
-                        resultDiv.className = 'alert alert-info';
-                        resultDiv.innerHTML = '✅ Cliente registrado. Preencha seus dados abaixo.';
-                    }
-                    
-                    // Atualizar cliente quando nome/email/cpf forem preenchidos
+                    // Configurar atualização automática quando nome/email/cpf forem preenchidos
                     setupCustomerDataUpdate();
                 } else {
-                    // Erro ao buscar/criar cliente
+                    // Erro ao processar (não deveria acontecer agora, mas mantido como fallback)
                     clienteData = null;
                     clienteEnderecos = [];
                     resultDiv.className = 'alert alert-danger';
                     resultDiv.innerHTML = '❌ Erro ao processar cliente. Tente novamente.';
+                    console.error('Erro ao buscar/criar cliente:', data);
                 }
             } catch (error) {
                 console.error('Erro ao buscar cliente:', error);
@@ -3766,19 +3782,33 @@ if (count($enderecoParts) > 2) {
             const email = document.getElementById('customerEmail').value.trim();
             const cpf = document.getElementById('customerCpf').value.trim();
             
-            // Don't update if name is empty
-            if (!nome) {
+            // Don't update if name is empty (exceto se o nome inicial for 'Cliente')
+            const nomeAtual = clienteData.nome || '';
+            const nomeAtualNormalizado = nomeAtual.trim();
+            
+            if (!nome && nomeAtualNormalizado !== 'Cliente' && nomeAtualNormalizado !== '') {
                 console.log('atualizarDadosCliente: Nome vazio, não atualizando');
                 return;
             }
             
-            // Check if there are any changes
-            const hasChanges = (nome !== clienteData.nome) || 
-                              (email !== (clienteData.email || '')) || 
-                              (cpf !== (clienteData.cpf || ''));
+            // Verificar se houve mudanças
+            // Considerar mudança se o nome atual é 'Cliente' e o novo nome não está vazio
+            const nomeMudou = (nomeAtualNormalizado === 'Cliente' && nome && nome !== 'Cliente') ||
+                             (nomeAtualNormalizado !== 'Cliente' && nome !== nomeAtualNormalizado && nome !== '');
+            
+            const emailMudou = email !== (clienteData.email || '');
+            const cpfMudou = cpf !== (clienteData.cpf || '');
+            
+            const hasChanges = nomeMudou || emailMudou || cpfMudou;
             
             if (!hasChanges) {
-                console.log('atualizarDadosCliente: Nenhuma mudança detectada');
+                console.log('atualizarDadosCliente: Nenhuma mudança detectada', {
+                    nome: nome,
+                    nomeAtual: nomeAtualNormalizado,
+                    nomeMudou: nomeMudou,
+                    emailMudou: emailMudou,
+                    cpfMudou: cpfMudou
+                });
                 return;
             }
             

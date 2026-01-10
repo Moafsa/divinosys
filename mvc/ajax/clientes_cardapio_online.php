@@ -115,12 +115,55 @@ try {
                     'enderecos' => $enderecos
                 ]);
             } else {
-                // Cliente não encontrado - retornar sucesso false (não criar automaticamente na busca)
-                echo json_encode([
-                    'success' => false,
-                    'message' => 'Cliente não encontrado',
-                    'cliente' => null
-                ]);
+                // Cliente não encontrado - CRIAR automaticamente com apenas o telefone
+                error_log("clientes_cardapio_online::buscar_por_telefone - Cliente não encontrado, criando automaticamente...");
+                
+                // Usar telefone sem código do país para salvar (formato padrão brasileiro)
+                $telefoneParaSalvar = $telefoneSemPais;
+                
+                // Verificar se telefone tem tamanho válido (pelo menos 10 dígitos)
+                if (strlen($telefoneParaSalvar) < 10) {
+                    // Se o telefone sem país é muito curto, usar o normalizado original
+                    $telefoneParaSalvar = $telefoneNormalizado;
+                }
+                
+                try {
+                    // Criar cliente com apenas o telefone (nome será atualizado depois quando o usuário preencher)
+                    $clienteId = $db->insert('usuarios_globais', [
+                        'nome' => 'Cliente', // Nome temporário, será atualizado quando o usuário preencher
+                        'telefone' => $telefoneParaSalvar,
+                        'email' => null,
+                        'cpf' => null,
+                        'tipo_usuario' => 'cliente',
+                        'ativo' => true,
+                        'created_at' => date('Y-m-d H:i:s'),
+                        'updated_at' => date('Y-m-d H:i:s')
+                    ]);
+                    
+                    if ($clienteId) {
+                        // Buscar o cliente recém-criado
+                        $clienteCriado = $db->fetch(
+                            "SELECT id, nome, telefone, email, cpf FROM usuarios_globais WHERE id = ?",
+                            [$clienteId]
+                        );
+                        
+                        error_log("clientes_cardapio_online::buscar_por_telefone - Cliente criado automaticamente: ID=$clienteId, Telefone=$telefoneParaSalvar");
+                        
+                        // Retornar cliente criado (sem endereços ainda)
+                        echo json_encode([
+                            'success' => true,
+                            'cliente' => $clienteCriado,
+                            'enderecos' => [],
+                            'message' => 'Cliente criado automaticamente. Preencha seus dados abaixo.'
+                        ]);
+                    } else {
+                        error_log("clientes_cardapio_online::buscar_por_telefone - Erro ao criar cliente automaticamente");
+                        throw new Exception('Erro ao criar cliente automaticamente');
+                    }
+                } catch (Exception $e) {
+                    error_log("clientes_cardapio_online::buscar_por_telefone - Exceção ao criar cliente: " . $e->getMessage());
+                    throw new Exception('Erro ao processar cliente: ' . $e->getMessage());
+                }
             }
             break;
             
