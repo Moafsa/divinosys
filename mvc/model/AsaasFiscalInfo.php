@@ -309,6 +309,17 @@ class AsaasFiscalInfo {
         $stmt->execute($params);
         $result = $stmt->fetch(\PDO::FETCH_ASSOC);
         
+        if ($result) {
+            // Get SEFAZ config from tenant/filial asaas_fiscal_info column
+            $config = $this->getAsaasConfig($tenant_id, $filial_id);
+            if (!empty($config['asaas_fiscal_info'])) {
+                $fiscal_json = is_string($config['asaas_fiscal_info']) ? json_decode($config['asaas_fiscal_info'], true) : $config['asaas_fiscal_info'];
+                if (isset($fiscal_json['sefaz'])) {
+                    $result = array_merge($result, $fiscal_json['sefaz']);
+                }
+            }
+        }
+        
         return $result ?: null;
     }
     

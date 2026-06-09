@@ -474,10 +474,24 @@ try {
                 throw new \Exception('Pedido não encontrado');
             }
             
+            // Tentar criar ou buscar cliente global se telefone for informado
+            $usuarioGlobalId = $pedido['usuario_global_id'] ?? null;
+            if (!empty($telefoneCliente)) {
+                require_once __DIR__ . '/../../mvc/controller/ClienteController.php';
+                $clienteController = new \MVC\Controller\ClienteController();
+                $resultCliente = $clienteController->criarOuBuscarCliente([
+                    'nome' => $nomeCliente,
+                    'telefone' => $telefoneCliente
+                ]);
+                if ($resultCliente['success'] && !empty($resultCliente['cliente'])) {
+                    $usuarioGlobalId = $resultCliente['cliente']['id'];
+                }
+            }
+            
             // Atualizar status do pedido para 'Finalizado'
             $db->execute(
-                'UPDATE pedido SET status = ?, forma_pagamento = ?, valor_pago = ?, nome_cliente = ?, telefone_cliente = ?, observacoes = ? WHERE idpedido = ? AND tenant_id = ? AND filial_id = ?',
-                ['Finalizado', $formaPagamento, $valorPago, $nomeCliente, $telefoneCliente, $observacoes, $pedidoId, $tenantId, $filialId]
+                'UPDATE pedido SET status = ?, forma_pagamento = ?, valor_pago = ?, nome_cliente = ?, telefone_cliente = ?, observacoes = ?, usuario_global_id = ? WHERE idpedido = ? AND tenant_id = ? AND filial_id = ?',
+                ['Finalizado', $formaPagamento, $valorPago, $nomeCliente, $telefoneCliente, $observacoes, $usuarioGlobalId, $pedidoId, $tenantId, $filialId]
             );
             
             // Verificar se a mesa pode ser liberada (excluindo entregues e quitados)

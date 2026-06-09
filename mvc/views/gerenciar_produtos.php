@@ -586,6 +586,46 @@ if ($tenant && $filial) {
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Seção Fiscal -->
+                        <div class="mt-4 pt-3 border-top">
+                            <h6><i class="fas fa-file-invoice-dollar me-2 text-info"></i>Informações Fiscais (NFC-e)</h6>
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <div class="mb-3">
+                                        <label class="form-label">NCM</label>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control" id="produtoNcm" maxlength="8" placeholder="Ex: 21069090">
+                                            <button class="btn btn-outline-secondary" type="button" onclick="buscarNcm()">
+                                                <i class="fas fa-search"></i>
+                                            </button>
+                                        </div>
+                                        <div class="form-text small">Ex: 21069090 (Lanches/Refeições)</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="mb-3">
+                                        <label class="form-label">CEST</label>
+                                        <input type="text" class="form-control" id="produtoCest" maxlength="7" placeholder="Ex: 1700800">
+                                        <div class="form-text">Cod. Esp. Subst. Tributária</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="mb-3">
+                                        <label class="form-label">CFOP Padrão</label>
+                                        <input type="text" class="form-control" id="produtoCfop" maxlength="4" placeholder="Ex: 5102">
+                                        <div class="form-text">Cod. Fiscal de Operações</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="mb-3">
+                                        <label class="form-label">CSOSN</label>
+                                        <input type="text" class="form-control" id="produtoCsosn" maxlength="4" placeholder="Ex: 102">
+                                        <div class="form-text small">102: Simples Nac. / 400: Isento</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                         
                         <div class="row">
                             <div class="col-12">
@@ -797,6 +837,12 @@ if ($tenant && $filial) {
                     document.getElementById('produtoPrecoPromocional').value = data.produto.preco_promocional || '';
                     togglePrecoPromocional(); // Atualizar visibilidade do campo
                     
+                    // Fiscal
+                    document.getElementById('produtoNcm').value = data.produto.ncm || '';
+                    document.getElementById('produtoCest').value = data.produto.cest || '';
+                    document.getElementById('produtoCfop').value = data.produto.cfop || '';
+                    document.getElementById('produtoCsosn').value = data.produto.csosn || '';
+                    
                     // Limpar ingredientes existentes
                     document.getElementById('ingredientes_lista').innerHTML = '';
                     
@@ -878,6 +924,11 @@ if ($tenant && $filial) {
             const emPromocao = document.getElementById('produtoEmPromocao').checked ? 1 : 0;
             let precoPromocional = document.getElementById('produtoPrecoPromocional').value || '';
             
+            const ncm = document.getElementById('produtoNcm').value;
+            const cest = document.getElementById('produtoCest').value;
+            const cfop = document.getElementById('produtoCfop').value;
+            const csosn = document.getElementById('produtoCsosn').value;
+            
             // Converter formato brasileiro (vírgula) para formato numérico (ponto)
             if (precoPromocional) {
                 precoPromocional = precoPromocional.replace(',', '.');
@@ -942,6 +993,10 @@ if ($tenant && $filial) {
             formData.append('exibir_cardapio_online', exibirCardapio);
             formData.append('em_promocao', emPromocao);
             formData.append('preco_promocional', precoPromocional);
+            formData.append('ncm', ncm);
+            formData.append('cest', cest);
+            formData.append('cfop', cfop);
+            formData.append('csosn', csosn);
             formData.append('ingredientes', JSON.stringify(ingredientesSelecionados));
             
             // Adicionar imagem se selecionada
@@ -1435,5 +1490,61 @@ if ($tenant && $filial) {
             </div>
         </div>
     </div>
+    <script>
+        function buscarNcm() {
+            Swal.fire({
+                title: 'Buscar NCM',
+                input: 'text',
+                inputLabel: 'Digite o nome do produto (ex: hambúrguer, cerveja)',
+                inputPlaceholder: 'Termo de busca...',
+                showCancelButton: true,
+                confirmButtonText: 'Buscar',
+                cancelButtonText: 'Cancelar',
+                showLoaderOnConfirm: true,
+                preConfirm: (termo) => {
+                    if (!termo) {
+                        Swal.showValidationMessage('Digite um termo para busca');
+                        return;
+                    }
+                    return fetch(`https://brasilapi.com.br/api/ncm/v1?search=${termo}`)
+                        .then(response => {
+                            if (!response.ok) throw new Error(response.statusText);
+                            return response.json();
+                        })
+                        .catch(error => {
+                            Swal.showValidationMessage(`Erro: ${error}`);
+                        });
+                },
+                allowOutsideClick: () => !Swal.isLoading()
+            }).then((result) => {
+                if (result.isConfirmed && result.value) {
+                    const ncms = result.value;
+                    if (ncms.length === 0) {
+                        Swal.fire('Nenhum resultado', 'Não encontramos NCMs para este termo.', 'info');
+                        return;
+                    }
+
+                    const options = ncms.slice(0, 10).map(n => 
+                        `<button class="btn btn-outline-primary btn-sm m-1 text-start w-100" onclick="aplicarNcm('${n.codigo}')">
+                            <strong>${n.codigo}</strong> - ${n.descricao.substring(0, 80)}...
+                        </button>`
+                    ).join('');
+
+                    Swal.fire({
+                        title: 'Selecione o NCM',
+                        html: `<div class="text-start" style="max-height: 300px; overflow-y: auto;">${options}</div>`,
+                        showConfirmButton: false,
+                        showCancelButton: true,
+                        cancelButtonText: 'Fechar'
+                    });
+                }
+            });
+        }
+
+        function aplicarNcm(codigo) {
+            document.getElementById('produtoNcm').value = codigo.replace(/\./g, '');
+            Swal.close();
+        }
+    </script>
 </body>
 </html>

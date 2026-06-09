@@ -801,6 +801,71 @@ try {
             echo json_encode($response);
             break;
             
+        case 'listar_bairros':
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId();
+            $filialId = $session->getFilialId() ?? $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId])['id'];
+            
+            try {
+                $bairros = $db->fetchAll("SELECT * FROM taxa_entrega_bairros WHERE tenant_id = ? AND filial_id = ? ORDER BY bairro ASC", [$tenantId, $filialId]);
+                echo json_encode(['success' => true, 'bairros' => $bairros]);
+            } catch (\Exception $e) {
+                // Se der erro (ex: tabela não existe), cria dinamicamente
+                $sql = file_get_contents(__DIR__ . '/../../database/migrations/create_taxa_entrega_bairros.sql');
+                $db->getConnection()->exec($sql);
+                $bairros = [];
+                echo json_encode(['success' => true, 'bairros' => $bairros]);
+            }
+            break;
+
+        case 'salvar_bairro':
+            $bairroId = $_POST['id'] ?? null;
+            $bairro = trim($_POST['bairro'] ?? '');
+            $taxa = floatval($_POST['taxa'] ?? 0);
+            $ativo = isset($_POST['ativo']) ? filter_var($_POST['ativo'], FILTER_VALIDATE_BOOLEAN) : true;
+            
+            if (empty($bairro)) {
+                throw new \Exception('Nome do bairro é obrigatório');
+            }
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId();
+            $filialId = $session->getFilialId() ?? $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId])['id'];
+            
+            if ($bairroId) {
+                $db->update('taxa_entrega_bairros', [
+                    'bairro' => $bairro,
+                    'taxa' => $taxa,
+                    'ativo' => $ativo ? 'true' : 'false',
+                    'updated_at' => date('Y-m-d H:i:s')
+                ], 'id = ? AND tenant_id = ? AND filial_id = ?', [$bairroId, $tenantId, $filialId]);
+            } else {
+                $db->insert('taxa_entrega_bairros', [
+                    'tenant_id' => $tenantId,
+                    'filial_id' => $filialId,
+                    'bairro' => $bairro,
+                    'taxa' => $taxa,
+                    'ativo' => $ativo ? 'true' : 'false'
+                ]);
+            }
+            echo json_encode(['success' => true, 'message' => 'Bairro salvo com sucesso!']);
+            break;
+
+        case 'excluir_bairro':
+            $bairroId = $_POST['id'] ?? null;
+            if (!$bairroId) throw new \Exception('ID do bairro não fornecido');
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId();
+            $filialId = $session->getFilialId() ?? $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId])['id'];
+            
+            $db->query("DELETE FROM taxa_entrega_bairros WHERE id = ? AND tenant_id = ? AND filial_id = ?", [$bairroId, $tenantId, $filialId]);
+            echo json_encode(['success' => true, 'message' => 'Bairro excluído com sucesso!']);
+            break;
+            
         default:
             throw new \Exception('Ação não encontrada: ' . $action);
     }

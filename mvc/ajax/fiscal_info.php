@@ -119,6 +119,22 @@ try {
             $controller->deactivateFiscalInfo();
             break;
             
+        case 'processar_certificado':
+            $controller->processarCertificado();
+            break;
+            
+        case 'salvar_config_sefaz':
+            $controller->salvarConfigSefaz();
+            break;
+            
+        case 'testar_status_sefaz':
+            $controller->testarStatusSefaz();
+            break;
+            
+        case 'emitir_nfce':
+            $controller->emitirNfce();
+            break;
+            
         default:
             ob_clean();
             http_response_code(400);

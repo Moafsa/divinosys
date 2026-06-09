@@ -1,4 +1,4 @@
-FROM php:8.1-apache
+FROM php:8.2-apache
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y \
     cron \
     libwebp-dev \
     libxpm-dev \
+    libcurl4-openssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions one by one to identify issues

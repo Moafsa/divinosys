@@ -590,9 +590,24 @@ try {
             $valorPago = (float) ($pedidoAtual['valor_pago'] ?? 0);
             $novoSaldoDevedor = $valorTotal - $valorPago;
             
+            // Tentar criar ou buscar cliente global se telefone for informado
+            $usuarioGlobalId = $pedidoAtual['usuario_global_id'] ?? null;
+            if (!empty($telefoneCliente)) {
+                require_once __DIR__ . '/../../mvc/controller/ClienteController.php';
+                $clienteController = new \MVC\Controller\ClienteController();
+                $resultCliente = $clienteController->criarOuBuscarCliente([
+                    'nome' => $cliente,
+                    'telefone' => $telefoneCliente
+                ]);
+                if ($resultCliente['success'] && !empty($resultCliente['cliente'])) {
+                    $usuarioGlobalId = $resultCliente['cliente']['id'];
+                }
+            }
+            
             // Atualizar pedido
             $atualizado = $db->update('pedido', [
                 'cliente' => $cliente,
+                'usuario_global_id' => $usuarioGlobalId,
                 'telefone_cliente' => $telefoneCliente,
                 'valor_total' => $valorTotal,
                 'saldo_devedor' => $novoSaldoDevedor,

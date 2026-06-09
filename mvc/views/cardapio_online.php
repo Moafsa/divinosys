@@ -54,6 +54,17 @@ if ($corSetting && $corSetting['setting_value']) {
     $filial['cor_primaria'] = $filial['tenant_cor_primaria'] ?? '#FFD700';
 }
 
+// Fetch Bairros for delivery
+$bairrosEntrega = [];
+try {
+    $bairrosEntrega = $db->fetchAll(
+        "SELECT * FROM taxa_entrega_bairros WHERE tenant_id = ? AND filial_id = ? AND ativo = true ORDER BY bairro ASC",
+        [$tenantId, $filialId]
+    );
+} catch (\Exception $e) {
+    // Tabela não existe ou erro, ignorar
+}
+
 // Get products - check if column exists first
 $hasExibirCardapioColumn = false;
 try {
@@ -1757,10 +1768,16 @@ if (count($enderecoParts) > 2) {
                 <?php endif; ?>
                 </div>
         <h1 class="restaurant-name"><?php echo htmlspecialchars($filial['nome']); ?></h1>
+        <p style="color: white; font-size: 1.1rem; max-width: 600px; margin: 0 auto 15px auto; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">
+            Os Melhores Lanches da Cidade, Feitos com Amor e Ingredientes Frescos.
+        </p>
         <span class="status-badge <?php echo $isOpen ? 'aberto' : 'fechado'; ?>">
             <?php echo $isOpen ? 'Aberto' : 'Fechado'; ?>
         </span>
-            </div>
+        <div class="mt-3">
+            <a href="#tab-itens" onclick="document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active')); document.querySelector('[data-tab=\'itens\']').classList.add('active'); document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active')); document.getElementById('tab-itens').classList.add('active');" class="btn btn-light" style="font-weight: bold; color: var(--header-bg); border-radius: 20px; padding: 8px 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">Veja o Cardápio</a>
+        </div>
+    </div>
     
     <!-- Navigation Tabs -->
     <div class="nav-tabs-container">
@@ -2500,6 +2517,7 @@ if (count($enderecoParts) > 2) {
         }
         
         // Cart management
+        const upsellProducts = <?php echo json_encode(!empty($produtosPromocao) ? array_slice($produtosPromocao, 0, 3) : []); ?>;
         let cart = JSON.parse(localStorage.getItem('cart_<?php echo $filialId; ?>')) || [];
         
         function updateCart() {
@@ -2593,6 +2611,34 @@ if (count($enderecoParts) > 2) {
                 `;
             });
             
+            // Add upsell section
+            if (upsellProducts && upsellProducts.length > 0) {
+                let upsellHtml = `
+                    <div style="margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #e0e0e0;">
+                        <h4 style="font-size: 1rem; margin-bottom: 0.8rem; color: #d35400;">
+                            <i class="fas fa-star me-2"></i> Aproveite também:
+                        </h4>
+                        <div style="display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; scrollbar-width: thin;">
+                `;
+                upsellProducts.forEach(prod => {
+                    const imgUrl = prod.imagem ? prod.imagem : 'assets/img/sem-imagem.jpg';
+                    const preco = parseFloat(prod.preco_promocional || prod.preco_normal || 0).toFixed(2).replace('.', ',');
+                    upsellHtml += `
+                            <div style="min-width: 140px; border: 1px solid #eee; border-radius: 8px; padding: 8px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05); flex: 0 0 auto;">
+                                <img src="${imgUrl}" alt="${prod.nome}" style="width: 100%; height: 80px; object-fit: cover; border-radius: 6px; margin-bottom: 5px;">
+                                <div style="font-size: 0.85rem; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${prod.nome}">${prod.nome}</div>
+                                <div style="color: #28a745; font-weight: bold; margin: 5px 0;">R$ ${preco}</div>
+                                <button onclick='adicionarProdutoUpsell(${JSON.stringify(prod).replace(/'/g, "&#39;")})' class="btn btn-sm btn-outline-primary" style="width: 100%; font-size: 0.8rem; padding: 0.2rem;">+ Adicionar</button>
+                            </div>
+                    `;
+                });
+                upsellHtml += `
+                        </div>
+                    </div>
+                `;
+                html += upsellHtml;
+            }
+
             // Add delivery options section before total
             html += `
                 <div style="margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #e0e0e0;">
@@ -2621,6 +2667,47 @@ if (count($enderecoParts) > 2) {
             `;
             
             cartItems.innerHTML = html;
+        }
+        
+        function adicionarProdutoUpsell(produto) {
+            let cartItem = {
+                id: produto.id,
+                nome: produto.nome,
+                preco_normal: produto.preco_promocional && parseFloat(produto.preco_promocional) > 0 ? parseFloat(produto.preco_promocional) : parseFloat(produto.preco_normal),
+                quantity: 1,
+                observacao: '',
+                ingredientes_adicionados: [],
+                ingredientes_removidos: [],
+                ingredientes_obrigatorios: []
+            };
+            
+            const existingItemIndex = cart.findIndex(item => 
+                item.id === cartItem.id && 
+                JSON.stringify(item.ingredientes_adicionados) === JSON.stringify(cartItem.ingredientes_adicionados) &&
+                JSON.stringify(item.ingredientes_removidos) === JSON.stringify(cartItem.ingredientes_removidos) &&
+                JSON.stringify(item.ingredientes_obrigatorios) === JSON.stringify(cartItem.ingredientes_obrigatorios)
+            );
+            
+            if (existingItemIndex > -1) {
+                cart[existingItemIndex].quantity += 1;
+            } else {
+                cart.push(cartItem);
+            }
+            
+            updateCart();
+            
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    toast: true,
+                    position: 'top-end',
+                    icon: 'success',
+                    title: 'Adicionado ao carrinho!',
+                    showConfirmButton: false,
+                    timer: 2000
+                });
+            } else {
+                alert('Adicionado ao carrinho!');
+            }
         }
         
         function toggleSidebar() {
@@ -3010,26 +3097,26 @@ if (count($enderecoParts) > 2) {
                         <h2 class="mb-4">Finalizar Pedido</h2>
                         
                         <div id="checkoutStep1" class="checkout-step">
-                            <h5 class="mb-3">Informe seu telefone</h5>
+                            <h5 class="mb-3">Seus Dados</h5>
+                            <p class="text-muted small mb-3">Preencha seus dados para podermos preparar e entregar seu pedido perfeitamente. Se você já tem cadastro, busque pelo WhatsApp.</p>
+                            <label class="form-label">WhatsApp com DDD</label>
                             <div class="input-group mb-3">
-                                <input type="tel" class="form-control" id="customerPhone" placeholder="(11) 99999-9999" required>
-                                <button class="btn btn-primary" onclick="buscarCliente()">
+                                <input type="tel" class="form-control" id="customerPhone" placeholder="(11) 99999-9999" required oninput="mascaraTelefone(this)" onblur="if(this.value.length >= 14) buscarClienteSilencioso()">
+                                <button class="btn btn-outline-primary" onclick="buscarCliente()" id="btnBuscarCliente" type="button">
                                     <i class="fas fa-search"></i> Buscar
                                 </button>
                             </div>
                             <div id="clienteSearchResult" class="alert" style="display: none;"></div>
                             
-                            <!-- Campos de dados do cliente - aparecem após buscar telefone -->
-                            <div id="customerDataFields" style="display: none; margin-top: 20px;">
-                                <h5 class="mb-3">Dados do Cliente</h5>
+                            <div id="customerDataFields" style="margin-top: 15px;">
                                 <div id="checkoutError" class="alert alert-danger" style="display: none; margin-bottom: 15px;"></div>
-                                <input type="text" class="form-control mb-2" id="customerName" placeholder="Nome completo" required>
+                                <input type="text" class="form-control mb-2" id="customerName" placeholder="Seu Nome completo" required>
                                 <input type="email" class="form-control mb-2" id="customerEmail" placeholder="E-mail (opcional)">
                                 <input type="text" class="form-control mb-2" id="customerCpf" placeholder="CPF (opcional)">
-                                <small class="text-muted d-block mb-2">
-                                    <i class="fas fa-info-circle"></i> CPF é opcional, mas recomendado para pagamentos online
+                                <small class="text-muted d-block mb-3">
+                                    <i class="fas fa-info-circle"></i> CPF é recomendado se for pagar por PIX/Cartão online
                                 </small>
-                                <button class="btn btn-primary w-100 mt-2" onclick="proximoPasso(1)">Continuar</button>
+                                <button class="btn btn-primary w-100 py-2" style="font-weight: bold; font-size: 1.1rem; border-radius: 8px;" onclick="proximoPasso(1)">Continuar para Entrega</button>
                             </div>
                         </div>
                         
@@ -3056,7 +3143,16 @@ if (count($enderecoParts) > 2) {
                             </div>
                             <div id="enderecoSection" style="display: block;">
                                 <input type="text" class="form-control mb-2" id="deliveryAddress" placeholder="Rua, número, complemento">
-                                <input type="text" class="form-control mb-2" id="deliveryNeighborhood" placeholder="Bairro">
+                                <?php if (!empty($bairrosEntrega)): ?>
+                                    <select class="form-select mb-2" id="deliveryNeighborhood" onchange="atualizarTaxaEntregaSelectLocal()">
+                                        <option value="">Selecione seu Bairro</option>
+                                        <?php foreach($bairrosEntrega as $b): ?>
+                                            <option value="<?php echo htmlspecialchars($b['bairro']); ?>" data-taxa="<?php echo $b['taxa']; ?>"><?php echo htmlspecialchars($b['bairro']); ?> - R$ <?php echo number_format($b['taxa'], 2, ',', '.'); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                <?php else: ?>
+                                    <input type="text" class="form-control mb-2" id="deliveryNeighborhood" placeholder="Bairro">
+                                <?php endif; ?>
                                 <input type="text" class="form-control mb-2" id="deliveryCity" placeholder="Cidade">
                                 <input type="text" class="form-control mb-2" id="deliveryCEP" placeholder="CEP">
                                 <input type="text" class="form-control mb-2" id="deliveryEstado" placeholder="Estado (UF)">
@@ -3615,6 +3711,71 @@ if (count($enderecoParts) > 2) {
             }
         }
         
+        async function buscarClienteSilencioso() {
+            const telefone = document.getElementById('customerPhone').value.trim();
+            if (telefone.length < 14) return;
+            
+            try {
+                const url = new URL('mvc/ajax/clientes_cardapio_online.php', window.location.origin);
+                url.searchParams.set('action', 'buscar_cliente_cardapio');
+                url.searchParams.set('tenant_id', <?php echo $tenantId; ?>);
+                url.searchParams.set('telefone', telefone);
+                
+                const response = await fetch(url.toString());
+                const data = await response.json();
+                
+                if (data.success && data.cliente) {
+                    clienteData = data.cliente;
+                    clienteEnderecos = data.enderecos || [];
+                    
+                    const foiCriadoAgora = data.cliente.nome === 'Cliente' || data.cliente.nome === null || !data.cliente.nome || data.message === 'Cliente criado automaticamente. Preencha seus dados abaixo.';
+                    
+                    if (!foiCriadoAgora) {
+                        document.getElementById('customerName').value = data.cliente.nome || '';
+                        document.getElementById('customerEmail').value = data.cliente.email || '';
+                        if (document.getElementById('customerCpf')) document.getElementById('customerCpf').value = data.cliente.cpf || '';
+                        
+                        const resultDiv = document.getElementById('clienteSearchResult');
+                        resultDiv.style.display = 'block';
+                        resultDiv.className = 'alert alert-success';
+                        resultDiv.innerHTML = '✅ Bem-vindo de volta: ' + (data.cliente.nome || '');
+                        
+                        setTimeout(() => verificarEesconderMensagemCpf(), 100);
+                    }
+                }
+            } catch (e) {
+                console.error('Busca silenciosa falhou', e);
+            }
+        }
+
+        function mascaraTelefone(input) {
+            let valor = input.value.replace(/\D/g, '');
+            if (valor.length > 11) valor = valor.slice(0, 11);
+            if (valor.length > 2) valor = `(${valor.substring(0, 2)}) ${valor.substring(2)}`;
+            if (valor.length > 10) valor = `${valor.substring(0, 10)}-${valor.substring(10)}`;
+            input.value = valor;
+        }
+
+        function atualizarTaxaEntregaSelectLocal() {
+            const select = document.getElementById('deliveryNeighborhood');
+            if (select && select.value) {
+                const taxaStr = select.options[select.selectedIndex].getAttribute('data-taxa');
+                if (taxaStr) {
+                    deliveryFee = parseFloat(taxaStr);
+                    atualizarTaxaEntregaInfo();
+                    if (currentCheckoutStep === 5) updateOrderSummary();
+                    
+                    const textoDiv = document.getElementById('taxaEntregaTexto');
+                    const infoDiv = document.getElementById('taxaEntregaInfo');
+                    if (textoDiv && infoDiv) {
+                        textoDiv.innerHTML = `<i class="fas fa-check-circle"></i> Taxa de entrega para ${select.value}: R$ ${deliveryFee.toFixed(2).replace('.', ',')}`;
+                        infoDiv.style.display = 'block';
+                        infoDiv.className = 'alert alert-success mt-2 mb-3';
+                    }
+                }
+            }
+        }
+
         async function buscarCliente() {
             const telefone = document.getElementById('customerPhone').value.trim();
             if (!telefone) {

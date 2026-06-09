@@ -20,6 +20,8 @@
         "ext-zip": "*",
         "aws/aws-sdk-php": "*",
         "firebase/php-jwt": "^6.8",
+        "nfephp-org/posprint": "^0.1.3",
+        "nfephp-org/sped-nfe": "^5.2",
         "phpmailer/phpmailer": "^6.8",
         "predis/predis": "^2.0",
         "ramsey/uuid": "^4.7",

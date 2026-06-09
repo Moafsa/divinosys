@@ -152,6 +152,12 @@ try {
             $estoqueAtual = $_POST['estoque_atual'] ?? 0;
             $estoqueMinimo = $_POST['estoque_minimo'] ?? 0;
             $precoCusto = $_POST['preco_custo'] ?? 0;
+            
+            $ncm = $_POST['ncm'] ?? '';
+            $cest = $_POST['cest'] ?? '';
+            $cfop = $_POST['cfop'] ?? '';
+            $csosn = $_POST['csosn'] ?? '';
+            
             $ingredientes = $_POST['ingredientes'] ?? '[]';
             
             // Promotional fields - SEMPRE processar, assumir que colunas existem
@@ -240,9 +246,9 @@ try {
                 $filialId = $filialIdToUse;
                 
                 // Build INSERT query with optional columns
-                $columns = ['nome', 'descricao', 'preco_normal', 'preco_mini', 'categoria_id', 'ativo', 'estoque_atual', 'estoque_minimo', 'preco_custo', 'imagem', 'tenant_id', 'filial_id'];
-                $values = [$nome, $descricao, $precoNormal, $precoMini, $categoriaId, $ativo, $estoqueAtual, $estoqueMinimo, $precoCusto, $imagemPath, $tenantId, $filialId];
-                $placeholders = ['?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?'];
+                $columns = ['nome', 'descricao', 'preco_normal', 'preco_mini', 'categoria_id', 'ativo', 'estoque_atual', 'estoque_minimo', 'preco_custo', 'imagem', 'tenant_id', 'filial_id', 'ncm', 'cest', 'cfop', 'csosn'];
+                $values = [$nome, $descricao, $precoNormal, $precoMini, $categoriaId, $ativo, $estoqueAtual, $estoqueMinimo, $precoCusto, $imagemPath, $tenantId, $filialId, $ncm, $cest, $cfop, $csosn];
+                $placeholders = ['?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?'];
                 
                 if ($hasExibirCardapioColumn) {
                     $columns[] = 'exibir_cardapio_online';
@@ -308,8 +314,8 @@ try {
                 }
                 
                 // Build UPDATE query with optional columns
-                $setParts = ['nome = ?', 'descricao = ?', 'preco_normal = ?', 'preco_mini = ?', 'categoria_id = ?', 'ativo = ?', 'estoque_atual = ?', 'estoque_minimo = ?', 'preco_custo = ?', 'updated_at = CURRENT_TIMESTAMP'];
-                $updateValues = [$nome, $descricao, $precoNormal, $precoMini, $categoriaId, $ativo, $estoqueAtual, $estoqueMinimo, $precoCusto];
+                $setParts = ['nome = ?', 'descricao = ?', 'preco_normal = ?', 'preco_mini = ?', 'categoria_id = ?', 'ativo = ?', 'estoque_atual = ?', 'estoque_minimo = ?', 'preco_custo = ?', 'ncm = ?', 'cest = ?', 'cfop = ?', 'csosn = ?', 'updated_at = CURRENT_TIMESTAMP'];
+                $updateValues = [$nome, $descricao, $precoNormal, $precoMini, $categoriaId, $ativo, $estoqueAtual, $estoqueMinimo, $precoCusto, $ncm, $cest, $cfop, $csosn];
                 
                 if ($imagemPath) {
                     $setParts[] = 'imagem = ?';

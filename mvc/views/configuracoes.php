@@ -757,6 +757,56 @@ if ($tenant && $filial) {
                     </form>
                 </div>
 
+                <!-- Configurações de Taxa de Entrega por Bairro -->
+                <div class="config-card">
+                    <h5 class="mb-3">
+                        <i class="fas fa-motorcycle me-2"></i>
+                        Taxas de Entrega por Bairro
+                    </h5>
+                    <p class="text-muted mb-3">Defina valores específicos de tele-entrega para cada bairro. Estes valores serão apresentados ao cliente no momento do fechamento do pedido no Cardápio Online.</p>
+                    
+                    <form id="formAddBairro" onsubmit="event.preventDefault(); salvarBairro();">
+                        <input type="hidden" id="bairroId">
+                        <div class="row align-items-end mb-4">
+                            <div class="col-md-5">
+                                <label class="form-label">Nome do Bairro</label>
+                                <input type="text" class="form-control" id="bairroNome" placeholder="Ex: Centro" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Taxa (R$)</label>
+                                <input type="number" class="form-control" id="bairroTaxa" step="0.01" min="0" placeholder="0.00" required>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="bairroAtivo" checked>
+                                    <label class="form-check-label" for="bairroAtivo">Ativo</label>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="fas fa-plus me-1" id="btnSalvarBairroIcon"></i> <span id="btnSalvarBairroText">Adicionar</span>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Bairro</th>
+                                    <th>Taxa</th>
+                                    <th>Status</th>
+                                    <th class="text-end">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="listaBairros">
+                                <tr><td colspan="4" class="text-center text-muted">Carregando bairros...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
                 <!-- Configurações Asaas -->
                 <div class="config-card">
                     <h5 class="mb-3">
@@ -850,14 +900,65 @@ if ($tenant && $filial) {
                         </div>
                     </div>
                     
-                    <!-- Informações Fiscais -->
-                    <?php if ($nfeHabilitado): ?>
+                    <!-- Informações Fiscais SEFAZ (Direto para Restaurantes/Produtos) -->
+                    <hr class="my-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="mb-0">
+                            <i class="fas fa-file-invoice me-2"></i>
+                            Configuração SEFAZ (NFC-e Direta)
+                        </h6>
+                        <span class="badge bg-primary">Recomendado para Restaurantes</span>
+                    </div>
                     <hr class="my-4">
                     <h6 class="mb-3">
                         <i class="fas fa-file-invoice me-2"></i>
-                        Informações Fiscais
+                        Configuração SEFAZ (NFe/NFCe)
                     </h6>
                     
+                    <div class="row">
+                        <div class="col-md-12 mb-4">
+                            <div class="card bg-light border-0 shadow-sm">
+                                <div class="card-body">
+                                    <h6 class="card-title fw-bold text-primary mb-3 small uppercase">
+                                        <i class="fas fa-certificate me-2"></i>Certificado Digital A1
+                                    </h6>
+                                    <div class="row align-items-end">
+                                        <div class="col-md-5 mb-3">
+                                            <label class="form-label small">Arquivo do Certificado (.pfx ou .p12)</label>
+                                            <input type="file" class="form-control" id="certificado-file" accept=".pfx,.p12">
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label small">Senha do Certificado</label>
+                                            <div class="input-group">
+                                                <input type="password" class="form-control" id="certificado-senha" placeholder="Sua senha">
+                                                <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordVisibility('certificado-senha')">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3 mb-3">
+                                            <button type="button" class="btn btn-primary w-100" onclick="processarCertificadoDigital()">
+                                                <i class="fas fa-magic me-1"></i> Extrair Dados
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div id="certificado-status" class="mt-2 small text-muted">
+                                        Selecione o arquivo e digite a senha para carregar os dados automaticamente.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <input type="hidden" id="fiscal-logradouro">
+                    <input type="hidden" id="fiscal-numero">
+                    <input type="hidden" id="fiscal-complemento">
+                    <input type="hidden" id="fiscal-bairro">
+                    <input type="hidden" id="fiscal-cidade">
+                    <input type="hidden" id="fiscal-uf">
+                    <input type="hidden" id="fiscal-cep">
+                    <input type="hidden" id="fiscal-ibge">
+
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
@@ -891,29 +992,69 @@ if ($tenant && $filial) {
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label class="form-label">ID do Serviço Municipal</label>
-                                <input type="text" class="form-control" id="fiscal-municipal-service-id" placeholder="ID do serviço municipal">
+                                <label class="form-label">Ambiente de Emissão</label>
+                                <select class="form-select" id="fiscal-ambiente">
+                                    <option value="1">Produção</option>
+                                    <option value="2" selected>Homologação (Testes)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Regime Tributário</label>
+                                    <select class="form-select" id="fiscal-regime">
+                                        <option value="1">Simples Nacional</option>
+                                        <option value="2">Simples Nacional - Excesso de Sublimite</option>
+                                        <option value="3">Regime Normal</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card border-0 bg-light mb-4 shadow-sm">
+                        <div class="card-body">
+                            <h6 class="fw-bold mb-3 text-secondary small uppercase">Configuração NFC-e (Cupom Fiscal)</h6>
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <div class="mb-3">
+                                        <label class="form-label small">CSC (Código de Segurança do Contribuinte)</label>
+                                        <input type="text" class="form-control" id="fiscal-csc" placeholder="Ex: ABC-123-DEF-456">
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label class="form-label small">ID do Token (CSC)</label>
+                                        <input type="text" class="form-control" id="fiscal-csc-id" placeholder="Ex: 000001">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Próxima Nota (Número)</label>
+                                <input type="number" class="form-control" id="fiscal-proxima-nota" value="1">
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label class="form-label">Código do Serviço Municipal</label>
-                                <input type="text" class="form-control" id="fiscal-municipal-service-code" placeholder="Código do serviço municipal">
+                                <label class="form-label">Série</label>
+                                <input type="number" class="form-control" id="fiscal-serie" value="1">
                             </div>
                         </div>
                     </div>
-                    
-                    <div class="row">
-                        <div class="col-md-6">
-                            <button class="btn btn-info" onclick="salvarInformacoesFiscais()">
+
+                    <div class="row mt-3">
+                        <div class="col-md-12">
+                            <button class="btn btn-success px-4" onclick="salvarConfiguracaoSefaz()">
                                 <i class="fas fa-save me-2"></i>
-                                Salvar Informações Fiscais
+                                Salvar Configuração SEFAZ
                             </button>
-                        </div>
-                        <div class="col-md-6">
-                            <button class="btn btn-outline-info" onclick="carregarOpcoesMunicipais()">
-                                <i class="fas fa-download me-2"></i>
-                                Carregar Opções Municipais
+                            <button class="btn btn-outline-info ms-2" onclick="testarConexaoSefaz()">
+                                <i class="fas fa-plug me-2"></i>
+                                Testar Conexão SEFAZ
                             </button>
                         </div>
                     </div>
@@ -945,16 +1086,6 @@ if ($tenant && $filial) {
                             </button>
                         </div>
                     </div>
-                    <?php else: ?>
-                    <hr class="my-4">
-                    <div class="alert alert-warning">
-                        <i class="fas fa-info-circle me-2"></i>
-                        <strong>Emissão de Nota Fiscal não disponível no seu plano.</strong>
-                        <br>
-                        Para habilitar a emissão de notas fiscais, faça upgrade do seu plano em 
-                        <a href="index.php?view=gerenciar_faturas" class="alert-link">Gerenciar Faturas</a>.
-                    </div>
-                    <?php endif; ?>
                 </div>
 
                 <!-- Configurações de Sistema -->
@@ -2166,6 +2297,8 @@ if ($tenant && $filial) {
         // Carregar filiais ao carregar a página
         document.addEventListener('DOMContentLoaded', function() {
             carregarFiliais();
+            carregarConfiguracaoAsaas();
+            carregarInformacoesFiscais();
         });
 
         function carregarFiliais() {
@@ -2465,6 +2598,128 @@ if ($tenant && $filial) {
                 });
             });
             
+            // --- Funções de Taxa de Entrega por Bairro ---
+            function carregarBairros() {
+                const tbody = document.getElementById('listaBairros');
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Carregando bairros...</td></tr>';
+                
+                const formData = new FormData();
+                formData.append('action', 'listar_bairros');
+                
+                fetch('/mvc/ajax/configuracoes.php', { method: 'POST', body: formData })
+                .then(r => r.json())
+                .then(data => {
+                    if(data.success) {
+                        tbody.innerHTML = '';
+                        if(data.bairros.length === 0) {
+                            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Nenhum bairro cadastrado.</td></tr>';
+                            return;
+                        }
+                        
+                        data.bairros.forEach(b => {
+                            const taxaFmt = parseFloat(b.taxa).toFixed(2).replace('.', ',');
+                            const statusBadge = b.ativo == 1 || b.ativo === true || b.ativo === 'true' || b.ativo === 't' ? '<span class="badge bg-success">Ativo</span>' : '<span class="badge bg-danger">Inativo</span>';
+                            
+                            tbody.innerHTML += `
+                                <tr>
+                                    <td>${b.bairro}</td>
+                                    <td>R$ ${taxaFmt}</td>
+                                    <td>${statusBadge}</td>
+                                    <td class="text-end">
+                                        <button class="btn btn-sm btn-outline-primary" onclick="editarBairro(${b.id}, '${b.bairro.replace(/'/g, "\\'")}', ${b.taxa}, ${b.ativo})"><i class="fas fa-edit"></i></button>
+                                        <button class="btn btn-sm btn-outline-danger ms-1" onclick="excluirBairro(${b.id})"><i class="fas fa-trash"></i></button>
+                                    </td>
+                                </tr>
+                            `;
+                        });
+                    }
+                }).catch(e => console.error('Erro ao carregar bairros', e));
+            }
+
+            window.editarBairro = function(id, nome, taxa, ativo) {
+                document.getElementById('bairroId').value = id;
+                document.getElementById('bairroNome').value = nome;
+                document.getElementById('bairroTaxa').value = taxa;
+                document.getElementById('bairroAtivo').checked = (ativo == 1 || ativo === true || ativo === 'true' || ativo === 't');
+                
+                document.getElementById('btnSalvarBairroText').innerText = 'Atualizar';
+                document.getElementById('btnSalvarBairroIcon').className = 'fas fa-save me-1';
+                
+                // Rolar para o form
+                document.getElementById('formAddBairro').scrollIntoView({behavior: 'smooth', block: 'center'});
+            };
+
+            window.salvarBairro = function() {
+                const id = document.getElementById('bairroId').value;
+                const bairro = document.getElementById('bairroNome').value;
+                const taxa = document.getElementById('bairroTaxa').value;
+                const ativo = document.getElementById('bairroAtivo').checked;
+                
+                if(!bairro || taxa === '') return;
+                
+                const formData = new FormData();
+                formData.append('action', 'salvar_bairro');
+                if(id) formData.append('id', id);
+                formData.append('bairro', bairro);
+                formData.append('taxa', taxa);
+                formData.append('ativo', ativo);
+                
+                fetch('/mvc/ajax/configuracoes.php', { method: 'POST', body: formData })
+                .then(r => r.json())
+                .then(data => {
+                    if(data.success) {
+                        Swal.fire({icon: 'success', title: 'Sucesso', text: data.message, timer: 1500, showConfirmButton: false});
+                        
+                        // Reset form
+                        document.getElementById('formAddBairro').reset();
+                        document.getElementById('bairroId').value = '';
+                        document.getElementById('btnSalvarBairroText').innerText = 'Adicionar';
+                        document.getElementById('btnSalvarBairroIcon').className = 'fas fa-plus me-1';
+                        
+                        carregarBairros();
+                    } else {
+                        Swal.fire({icon: 'error', title: 'Erro', text: data.message});
+                    }
+                }).catch(e => {
+                    Swal.fire({icon: 'error', title: 'Erro', text: 'Erro de comunicação'});
+                });
+            };
+
+            window.excluirBairro = function(id) {
+                Swal.fire({
+                    title: 'Excluir bairro?',
+                    text: 'Você tem certeza que deseja excluir esta taxa de entrega?',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Sim, excluir',
+                    cancelButtonText: 'Cancelar'
+                }).then((result) => {
+                    if(result.isConfirmed) {
+                        const formData = new FormData();
+                        formData.append('action', 'excluir_bairro');
+                        formData.append('id', id);
+                        
+                        fetch('/mvc/ajax/configuracoes.php', { method: 'POST', body: formData })
+                        .then(r => r.json())
+                        .then(data => {
+                            if(data.success) {
+                                Swal.fire({icon: 'success', title: 'Excluído', text: data.message, timer: 1500, showConfirmButton: false});
+                                carregarBairros();
+                            } else {
+                                Swal.fire({icon: 'error', title: 'Erro', text: data.message});
+                            }
+                        });
+                    }
+                });
+            };
+            
+            // Carregar bairros se a aba Cardápio Online estiver ativa ou quando clicar nela
+            document.addEventListener('DOMContentLoaded', function() {
+                // Tenta carregar inicialmente se estiver na aba certa, ou só carrega direto
+                setTimeout(carregarBairros, 1000); // Aguarda a renderização
+            });
+            // ----------------------------------------------------
+
             // Salvar configurações do cardápio online
             const configForm = document.getElementById('configCardapioOnline');
             if (configForm) {
@@ -2828,13 +3083,188 @@ if ($tenant && $filial) {
                         document.getElementById('fiscal-razao-social').value = info.razao_social || '';
                         document.getElementById('fiscal-nome-fantasia').value = info.nome_fantasia || '';
                         document.getElementById('fiscal-inscricao-estadual').value = info.inscricao_estadual || '';
-                        document.getElementById('fiscal-municipal-service-id').value = info.municipal_service_id || '';
-                        document.getElementById('fiscal-municipal-service-code').value = info.municipal_service_code || '';
+                        
+                        // New SEFAZ fields
+                        if (info.ambiente) document.getElementById('fiscal-ambiente').value = info.ambiente;
+                        if (info.regime_tributario) document.getElementById('fiscal-regime').value = info.regime_tributario;
+                        if (info.csc) document.getElementById('fiscal-csc').value = info.csc;
+                        if (info.csc_id) document.getElementById('fiscal-csc-id').value = info.csc_id;
+                        if (info.proxima_nota) document.getElementById('fiscal-proxima-nota').value = info.proxima_nota;
+                        if (info.serie) document.getElementById('fiscal-serie').value = info.serie;
+                        
+                        // Address fields
+                        if (info.endereco) {
+                            try {
+                                const end = typeof info.endereco === 'string' ? JSON.parse(info.endereco) : info.endereco;
+                                document.getElementById('fiscal-logradouro').value = end.logradouro || '';
+                                document.getElementById('fiscal-numero').value = end.numero || '';
+                                document.getElementById('fiscal-complemento').value = end.complemento || '';
+                                document.getElementById('fiscal-bairro').value = end.bairro || '';
+                                document.getElementById('fiscal-cidade').value = end.cidade || '';
+                                document.getElementById('fiscal-uf').value = end.uf || '';
+                                document.getElementById('fiscal-cep').value = end.cep || '';
+                                document.getElementById('fiscal-ibge').value = end.codigo_ibge || '';
+                            } catch (e) { console.error('Erro ao parsear endereço:', e); }
+                        }
+                        
+                        if (info.certificado_vencimento) {
+                            document.getElementById('certificado-status').innerHTML = 
+                                `<span class="text-success"><i class="fas fa-check-circle"></i> Certificado configurado (Vencimento: ${info.certificado_vencimento})</span>`;
+                        }
                     }
                 }
             })
             .catch(error => {
                 console.error('Erro ao carregar informações fiscais:', error);
+            });
+        }
+
+        function processarCertificadoDigital() {
+            const fileInput = document.getElementById('certificado-file');
+            const senha = document.getElementById('certificado-senha').value;
+            
+            if (!fileInput.files.length) {
+                Swal.fire('Erro', 'Selecione o arquivo do certificado (.pfx ou .p12)', 'error');
+                return;
+            }
+            
+            if (!senha) {
+                Swal.fire('Erro', 'Informe a senha do certificado', 'error');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('certificado', fileInput.files[0]);
+            formData.append('senha', senha);
+            formData.append('tenant_id', <?php echo $tenant['id']; ?>);
+            
+            Swal.fire({
+                title: 'Processando Certificado...',
+                text: 'Extraindo dados e consultando CNPJ',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+            
+            fetch('mvc/ajax/fiscal_info.php?action=processar_certificado', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Preencher campos
+                    document.getElementById('fiscal-cnpj').value = data.dados.cnpj || '';
+                    document.getElementById('fiscal-razao-social').value = data.dados.razao_social || '';
+                    document.getElementById('fiscal-nome-fantasia').value = data.dados.nome_fantasia || '';
+                    
+                    if (data.dados.inscricao_estadual) {
+                        document.getElementById('fiscal-inscricao-estadual').value = data.dados.inscricao_estadual;
+                    }
+
+                    // Preencher endereço
+                    if (data.dados.endereco) {
+                        const end = data.dados.endereco;
+                        document.getElementById('fiscal-logradouro').value = end.logradouro || '';
+                        document.getElementById('fiscal-numero').value = end.numero || '';
+                        document.getElementById('fiscal-complemento').value = end.complemento || '';
+                        document.getElementById('fiscal-bairro').value = end.bairro || '';
+                        document.getElementById('fiscal-cidade').value = end.cidade || '';
+                        document.getElementById('fiscal-uf').value = end.uf || '';
+                        document.getElementById('fiscal-cep').value = end.cep || '';
+                        document.getElementById('fiscal-ibge').value = end.codigo_ibge || '';
+                    }
+                    
+                    document.getElementById('certificado-status').innerHTML = 
+                        `<span class="text-success"><i class="fas fa-check-circle"></i> Certificado válido até ${data.dados.vencimento}</span>`;
+                    
+                    Swal.fire('Sucesso', 'Dados extraídos com sucesso!', 'success');
+                } else {
+                    Swal.fire('Erro', data.error || 'Erro ao processar certificado', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire('Erro', 'Erro na comunicação com o servidor', 'error');
+            });
+        }
+
+        function salvarConfiguracaoSefaz() {
+            const data = {
+                tenant_id: <?php echo $tenant['id']; ?>,
+                filial_id: <?php echo $filial['id'] ?? 'null'; ?>,
+                cnpj: document.getElementById('fiscal-cnpj').value,
+                razao_social: document.getElementById('fiscal-razao-social').value,
+                nome_fantasia: document.getElementById('fiscal-nome-fantasia').value,
+                inscricao_estadual: document.getElementById('fiscal-inscricao-estadual').value,
+                ambiente: document.getElementById('fiscal-ambiente').value,
+                regime_tributario: document.getElementById('fiscal-regime').value,
+                csc: document.getElementById('fiscal-csc').value,
+                csc_id: document.getElementById('fiscal-csc-id').value,
+                proxima_nota: document.getElementById('fiscal-proxima-nota').value,
+                serie: document.getElementById('fiscal-serie').value,
+                endereco: {
+                    logradouro: document.getElementById('fiscal-logradouro').value,
+                    numero: document.getElementById('fiscal-numero').value,
+                    complemento: document.getElementById('fiscal-complemento').value,
+                    bairro: document.getElementById('fiscal-bairro').value,
+                    cidade: document.getElementById('fiscal-cidade').value,
+                    uf: document.getElementById('fiscal-uf').value,
+                    cep: document.getElementById('fiscal-cep').value,
+                    codigo_ibge: document.getElementById('fiscal-ibge').value
+                }
+            };
+            
+            Swal.fire({
+                title: 'Salvando...',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+            
+            fetch('mvc/ajax/fiscal_info.php?action=salvar_config_sefaz', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire('Sucesso', 'Configuração SEFAZ salva com sucesso!', 'success');
+                } else {
+                    Swal.fire('Erro', data.error || 'Erro ao salvar', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                Swal.fire('Erro', 'Erro na comunicação', 'error');
+            });
+        }
+
+        function testarConexaoSefaz() {
+            Swal.fire({
+                title: 'Testando Status SEFAZ...',
+                text: 'Consultando servidores do governo',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+            
+            const tenantId = <?php echo $tenant['id']; ?>;
+            fetch(`mvc/ajax/fiscal_info.php?action=testar_status_sefaz&tenant_id=${tenantId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire('Online', data.message || 'Servidores SEFAZ respondendo corretamente!', 'success');
+                } else {
+                    Swal.fire('Erro', data.error || 'Servidores SEFAZ indisponíveis ou erro de configuração', 'error');
+                }
+            })
+            .catch(error => {
+                Swal.fire('Erro', 'Falha ao testar conexão', 'error');
             });
         }
 

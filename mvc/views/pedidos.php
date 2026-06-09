@@ -91,6 +91,14 @@ if ($tenant && isset($tenant['plano_id'])) {
     }
 }
 
+// Também habilitar se houver configuração SEFAZ direta
+if (!$nfeHabilitado && !empty($tenant['asaas_fiscal_info'])) {
+    $fiscal_json = is_string($tenant['asaas_fiscal_info']) ? json_decode($tenant['asaas_fiscal_info'], true) : $tenant['asaas_fiscal_info'];
+    if (isset($fiscal_json['sefaz']) && !empty($fiscal_json['sefaz']['csc'])) {
+        $nfeHabilitado = true;
+    }
+}
+
 // Group pedidos by status
 $pedidos_por_status = [
     'Pendente' => [],
@@ -1692,6 +1700,48 @@ $stats = [
             .catch(error => {
                 console.error('Erro ao imprimir pedido:', error);
                 Swal.fire('Erro', 'Erro ao imprimir pedido', 'error');
+            });
+        }
+        function emitirNotaFiscal(pedidoId) {
+            Swal.fire({
+                title: 'Emitir NFC-e?',
+                text: "Deseja emitir o Cupom Fiscal para este pedido na SEFAZ?",
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#0dcaf0',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Sim, Emitir!',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({
+                        title: 'Transmitindo...',
+                        text: 'Aguarde a resposta da SEFAZ',
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+
+                    fetch(`mvc/ajax/fiscal_info.php?action=emitir_nfce&pedido_id=${pedidoId}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                Swal.fire({
+                                    title: 'Sucesso!',
+                                    text: 'NFC-e emitida e autorizada com sucesso!',
+                                    icon: 'success',
+                                    footer: `Chave: ${data.chave}`
+                                });
+                            } else {
+                                Swal.fire('Erro na Emissão', data.error || 'Erro desconhecido', 'error');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Erro:', error);
+                            Swal.fire('Erro', 'Falha na comunicação com o servidor', 'error');
+                        });
+                }
             });
         }
     </script>

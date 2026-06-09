@@ -9,6 +9,7 @@
 
 class FiscalInfoController {
     private $asaasFiscalInfo;
+    private $sefazService;
     private $conn;
     
     public function __construct() {
@@ -25,6 +26,11 @@ class FiscalInfoController {
             
             // Agora instanciar (o construtor do AsaasFiscalInfo precisa do Database)
             $this->asaasFiscalInfo = new AsaasFiscalInfo();
+            
+            // Instanciar SefazService
+            require_once __DIR__ . '/../model/SefazService.php';
+            $this->sefazService = new SefazService();
+            
             $this->conn = \System\Database::getInstance()->getConnection();
         } catch (\Exception $e) {
             error_log('FiscalInfoController constructor error: ' . $e->getMessage());
@@ -317,6 +323,102 @@ class FiscalInfoController {
                 'success' => false,
                 'error' => 'Failed to deactivate fiscal information'
             ]);
+        }
+    }
+    
+    /**
+     * Process digital certificate upload
+     */
+    public function processarCertificado() {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed']);
+            return;
+        }
+        
+        if (!isset($_FILES['certificado']) || !isset($_POST['senha'])) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Certificado e senha são obrigatórios']);
+            return;
+        }
+        
+        try {
+            $pfxContent = file_get_contents($_FILES['certificado']['tmp_name']);
+            $password = $_POST['senha'];
+            $tenantId = $_POST['tenant_id'];
+            
+            $dados = $this->sefazService->extrairDadosCertificado($pfxContent, $password, $tenantId);
+            
+            echo json_encode([
+                'success' => true,
+                'dados' => $dados
+            ]);
+        } catch (\Exception $e) {
+            echo json_encode([
+                'success' => false,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+    
+    /**
+     * Save SEFAZ configuration
+     */
+    public function salvarConfigSefaz() {
+        $data = json_decode(file_get_contents('php://input'), true);
+        
+        if (!$data || !isset($data['tenant_id']) || !isset($data['cnpj'])) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Dados inválidos']);
+            return;
+        }
+        
+        try {
+            $result = $this->sefazService->salvarConfigSefaz($data);
+            echo json_encode(['success' => true]);
+        } catch (\Exception $e) {
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        }
+    }
+    
+    /**
+     * Test connection to SEFAZ
+     */
+    public function testarStatusSefaz() {
+        $tenant_id = $_GET['tenant_id'] ?? null;
+        
+        if (!$tenant_id) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'tenant_id is required']);
+            return;
+        }
+        
+        try {
+            $result = $this->sefazService->testarStatusSefaz($tenant_id);
+            echo json_encode($result);
+        } catch (\Exception $e) {
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        }
+    }
+    
+    /**
+     * Emit NFC-e
+     */
+    public function emitirNfce() {
+        $pedido_id = $_GET['pedido_id'] ?? null;
+        $tenant_id = $_SESSION['tenant_id'] ?? null;
+        
+        if (!$pedido_id || !$tenant_id) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'pedido_id and session tenant_id are required']);
+            return;
+        }
+        
+        try {
+            $result = $this->sefazService->emitirNfce($pedido_id, $tenant_id);
+            echo json_encode($result);
+        } catch (\Exception $e) {
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
         }
     }
 }

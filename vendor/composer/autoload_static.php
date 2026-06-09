@@ -8,12 +8,13 @@ class ComposerStaticInitb3dae18063bed3ded4c6f27adff20f3d
 {
     public static $files = array (
         '7b11c4dc42b3b3023073cb14e519683c' => __DIR__ . '/..' . '/ralouphie/getallheaders/src/getallheaders.php',
+        '320cde22f66dd4f5d3fd621d3e88b98f' => __DIR__ . '/..' . '/symfony/polyfill-ctype/bootstrap.php',
         '0e6d7bf4a5811bfa5cf40c5ccd6fae6a' => __DIR__ . '/..' . '/symfony/polyfill-mbstring/bootstrap.php',
+        '626dcc41390ebdaa619faa02d99943b0' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/common/customFunctions.php',
         '6e3fae29631ef280660b3cdad06f25a8' => __DIR__ . '/..' . '/symfony/deprecation-contracts/function.php',
         '37a3dc5111fe8f707ab4c132ef1dbc62' => __DIR__ . '/..' . '/guzzlehttp/guzzle/src/functions_include.php',
         'b067bc7112e384b61c701452d53a14a8' => __DIR__ . '/..' . '/mtdowling/jmespath.php/src/JmesPath.php',
         '6124b4c8570aa390c21fafd04a26c69f' => __DIR__ . '/..' . '/myclabs/deep-copy/src/DeepCopy/deep_copy.php',
-        '320cde22f66dd4f5d3fd621d3e88b98f' => __DIR__ . '/..' . '/symfony/polyfill-ctype/bootstrap.php',
         'a4a119a56e50fbb293281d9a48007e0e' => __DIR__ . '/..' . '/symfony/polyfill-php80/bootstrap.php',
         '8a9dc1de0ca7e01f3e08231539562f61' => __DIR__ . '/..' . '/aws/aws-sdk-php/src/functions.php',
         'ec07570ca5a812141189b1fa81503674' => __DIR__ . '/..' . '/phpunit/phpunit/src/Framework/Assert/Functions.php',
@@ -21,56 +22,75 @@ class ComposerStaticInitb3dae18063bed3ded4c6f27adff20f3d
     );
 
     public static $prefixLengthsPsr4 = array (
-        'T' => 
+        'T' =>
         array (
             'Tests\\' => 6,
         ),
-        'S' => 
+        'S' =>
         array (
             'System\\' => 7,
             'Symfony\\Polyfill\\Php80\\' => 23,
             'Symfony\\Polyfill\\Mbstring\\' => 26,
             'Symfony\\Polyfill\\Ctype\\' => 23,
+            'Symfony\\Component\\PropertyAccess\\' => 33,
+            'Symfony\\Component\\OptionsResolver\\' => 34,
         ),
-        'R' => 
+        'R' =>
         array (
             'Ramsey\\Uuid\\' => 12,
             'Ramsey\\Collection\\' => 18,
         ),
-        'P' => 
+        'P' =>
         array (
+            'Psr\\Log\\' => 8,
             'Psr\\Http\\Message\\' => 17,
             'Psr\\Http\\Client\\' => 16,
             'Predis\\' => 7,
+            'Posprint\\' => 9,
             'PhpParser\\' => 10,
             'PhpOption\\' => 10,
             'PHPMailer\\PHPMailer\\' => 20,
         ),
-        'J' => 
+        'N' =>
         array (
+            'NFePHP\\NFe\\' => 11,
+            'NFePHP\\Gtin\\' => 12,
+            'NFePHP\\Common\\' => 14,
+        ),
+        'M' =>
+        array (
+            'MyCLabs\\Enum\\' => 13,
+        ),
+        'J' =>
+        array (
+            'JsonSchema\\' => 11,
             'JmesPath\\' => 9,
         ),
-        'G' => 
+        'G' =>
         array (
             'GuzzleHttp\\Psr7\\' => 16,
             'GuzzleHttp\\Promise\\' => 19,
             'GuzzleHttp\\' => 11,
             'GrahamCampbell\\ResultType\\' => 26,
         ),
-        'F' => 
+        'F' =>
         array (
             'Firebase\\JWT\\' => 13,
         ),
-        'D' => 
+        'E' =>
+        array (
+            'Endroid\\QrCode\\' => 15,
+        ),
+        'D' =>
         array (
             'Dotenv\\' => 7,
             'DeepCopy\\' => 9,
         ),
-        'B' => 
+        'B' =>
         array (
             'Brick\\Math\\' => 11,
         ),
-        'A' => 
+        'A' =>
         array (
             'Aws\\' => 4,
             'App\\' => 4,
@@ -78,102 +98,152 @@ class ComposerStaticInitb3dae18063bed3ded4c6f27adff20f3d
     );
 
     public static $prefixDirsPsr4 = array (
-        'Tests\\' => 
+        'Tests\\' =>
         array (
             0 => __DIR__ . '/../..' . '/tests',
         ),
-        'System\\' => 
+        'System\\' =>
         array (
             0 => __DIR__ . '/../..' . '/system',
         ),
-        'Symfony\\Polyfill\\Php80\\' => 
+        'Symfony\\Polyfill\\Php80\\' =>
         array (
             0 => __DIR__ . '/..' . '/symfony/polyfill-php80',
         ),
-        'Symfony\\Polyfill\\Mbstring\\' => 
+        'Symfony\\Polyfill\\Mbstring\\' =>
         array (
             0 => __DIR__ . '/..' . '/symfony/polyfill-mbstring',
         ),
-        'Symfony\\Polyfill\\Ctype\\' => 
+        'Symfony\\Polyfill\\Ctype\\' =>
         array (
             0 => __DIR__ . '/..' . '/symfony/polyfill-ctype',
         ),
-        'Ramsey\\Uuid\\' => 
+        'Symfony\\Component\\PropertyAccess\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/symfony/property-access',
+        ),
+        'Symfony\\Component\\OptionsResolver\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/symfony/options-resolver',
+        ),
+        'Ramsey\\Uuid\\' =>
         array (
             0 => __DIR__ . '/..' . '/ramsey/uuid/src',
         ),
-        'Ramsey\\Collection\\' => 
+        'Ramsey\\Collection\\' =>
         array (
             0 => __DIR__ . '/..' . '/ramsey/collection/src',
         ),
-        'Psr\\Http\\Message\\' => 
+        'Psr\\Log\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/psr/log/src',
+        ),
+        'Psr\\Http\\Message\\' =>
         array (
             0 => __DIR__ . '/..' . '/psr/http-factory/src',
             1 => __DIR__ . '/..' . '/psr/http-message/src',
         ),
-        'Psr\\Http\\Client\\' => 
+        'Psr\\Http\\Client\\' =>
         array (
             0 => __DIR__ . '/..' . '/psr/http-client/src',
         ),
-        'Predis\\' => 
+        'Predis\\' =>
         array (
             0 => __DIR__ . '/..' . '/predis/predis/src',
         ),
-        'PhpParser\\' => 
+        'Posprint\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/nfephp-org/posprint/src',
+        ),
+        'PhpParser\\' =>
         array (
             0 => __DIR__ . '/..' . '/nikic/php-parser/lib/PhpParser',
         ),
-        'PhpOption\\' => 
+        'PhpOption\\' =>
         array (
             0 => __DIR__ . '/..' . '/phpoption/phpoption/src/PhpOption',
         ),
-        'PHPMailer\\PHPMailer\\' => 
+        'PHPMailer\\PHPMailer\\' =>
         array (
             0 => __DIR__ . '/..' . '/phpmailer/phpmailer/src',
         ),
-        'JmesPath\\' => 
+        'NFePHP\\NFe\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src',
+        ),
+        'NFePHP\\Gtin\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/nfephp-org/sped-gtin/src',
+        ),
+        'NFePHP\\Common\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/nfephp-org/sped-common/src',
+        ),
+        'MyCLabs\\Enum\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/myclabs/php-enum/src',
+        ),
+        'JsonSchema\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema',
+        ),
+        'JmesPath\\' =>
         array (
             0 => __DIR__ . '/..' . '/mtdowling/jmespath.php/src',
         ),
-        'GuzzleHttp\\Psr7\\' => 
+        'GuzzleHttp\\Psr7\\' =>
         array (
             0 => __DIR__ . '/..' . '/guzzlehttp/psr7/src',
         ),
-        'GuzzleHttp\\Promise\\' => 
+        'GuzzleHttp\\Promise\\' =>
         array (
             0 => __DIR__ . '/..' . '/guzzlehttp/promises/src',
         ),
-        'GuzzleHttp\\' => 
+        'GuzzleHttp\\' =>
         array (
             0 => __DIR__ . '/..' . '/guzzlehttp/guzzle/src',
         ),
-        'GrahamCampbell\\ResultType\\' => 
+        'GrahamCampbell\\ResultType\\' =>
         array (
             0 => __DIR__ . '/..' . '/graham-campbell/result-type/src',
         ),
-        'Firebase\\JWT\\' => 
+        'Firebase\\JWT\\' =>
         array (
             0 => __DIR__ . '/..' . '/firebase/php-jwt/src',
         ),
-        'Dotenv\\' => 
+        'Endroid\\QrCode\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/endroid/qrcode/src',
+        ),
+        'Dotenv\\' =>
         array (
             0 => __DIR__ . '/..' . '/vlucas/phpdotenv/src',
         ),
-        'DeepCopy\\' => 
+        'DeepCopy\\' =>
         array (
             0 => __DIR__ . '/..' . '/myclabs/deep-copy/src/DeepCopy',
         ),
-        'Brick\\Math\\' => 
+        'Brick\\Math\\' =>
         array (
             0 => __DIR__ . '/..' . '/brick/math/src',
         ),
-        'Aws\\' => 
+        'Aws\\' =>
         array (
             0 => __DIR__ . '/..' . '/aws/aws-sdk-php/src',
         ),
-        'App\\' => 
+        'App\\' =>
         array (
             0 => __DIR__ . '/../..' . '/app',
+        ),
+    );
+
+    public static $prefixesPsr0 = array (
+        'B' =>
+        array (
+            'BaconQrCode' =>
+            array (
+                0 => __DIR__ . '/..' . '/bacon/bacon-qr-code/src',
+            ),
         ),
     );
 
@@ -1337,6 +1407,45 @@ class ComposerStaticInitb3dae18063bed3ded4c6f27adff20f3d
         'Aws\\mgn\\mgnClient' => __DIR__ . '/..' . '/aws/aws-sdk-php/src/mgn/mgnClient.php',
         'Aws\\signer\\Exception\\signerException' => __DIR__ . '/..' . '/aws/aws-sdk-php/src/signer/Exception/signerException.php',
         'Aws\\signer\\signerClient' => __DIR__ . '/..' . '/aws/aws-sdk-php/src/signer/signerClient.php',
+        'BaconQrCode\\Common\\AbstractEnum' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Common/AbstractEnum.php',
+        'BaconQrCode\\Common\\BitArray' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Common/BitArray.php',
+        'BaconQrCode\\Common\\BitMatrix' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Common/BitMatrix.php',
+        'BaconQrCode\\Common\\BitUtils' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Common/BitUtils.php',
+        'BaconQrCode\\Common\\CharacterSetEci' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Common/CharacterSetEci.php',
+        'BaconQrCode\\Common\\EcBlock' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Common/EcBlock.php',
+        'BaconQrCode\\Common\\EcBlocks' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Common/EcBlocks.php',
+        'BaconQrCode\\Common\\ErrorCorrectionLevel' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Common/ErrorCorrectionLevel.php',
+        'BaconQrCode\\Common\\FormatInformation' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Common/FormatInformation.php',
+        'BaconQrCode\\Common\\Mode' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Common/Mode.php',
+        'BaconQrCode\\Common\\ReedSolomonCodec' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Common/ReedSolomonCodec.php',
+        'BaconQrCode\\Common\\Version' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Common/Version.php',
+        'BaconQrCode\\Encoder\\BlockPair' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Encoder/BlockPair.php',
+        'BaconQrCode\\Encoder\\ByteMatrix' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Encoder/ByteMatrix.php',
+        'BaconQrCode\\Encoder\\Encoder' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Encoder/Encoder.php',
+        'BaconQrCode\\Encoder\\MaskUtil' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Encoder/MaskUtil.php',
+        'BaconQrCode\\Encoder\\MatrixUtil' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Encoder/MatrixUtil.php',
+        'BaconQrCode\\Encoder\\QrCode' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Encoder/QrCode.php',
+        'BaconQrCode\\Exception\\ExceptionInterface' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Exception/ExceptionInterface.php',
+        'BaconQrCode\\Exception\\InvalidArgumentException' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Exception/InvalidArgumentException.php',
+        'BaconQrCode\\Exception\\OutOfBoundsException' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Exception/OutOfBoundsException.php',
+        'BaconQrCode\\Exception\\RuntimeException' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Exception/RuntimeException.php',
+        'BaconQrCode\\Exception\\UnexpectedValueException' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Exception/UnexpectedValueException.php',
+        'BaconQrCode\\Exception\\WriterException' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Exception/WriterException.php',
+        'BaconQrCode\\Renderer\\Color\\Cmyk' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Renderer/Color/Cmyk.php',
+        'BaconQrCode\\Renderer\\Color\\ColorInterface' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Renderer/Color/ColorInterface.php',
+        'BaconQrCode\\Renderer\\Color\\Gray' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Renderer/Color/Gray.php',
+        'BaconQrCode\\Renderer\\Color\\Rgb' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Renderer/Color/Rgb.php',
+        'BaconQrCode\\Renderer\\Image\\AbstractRenderer' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Renderer/Image/AbstractRenderer.php',
+        'BaconQrCode\\Renderer\\Image\\Decorator\\DecoratorInterface' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Renderer/Image/Decorator/DecoratorInterface.php',
+        'BaconQrCode\\Renderer\\Image\\Decorator\\FinderPattern' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Renderer/Image/Decorator/FinderPattern.php',
+        'BaconQrCode\\Renderer\\Image\\Eps' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Renderer/Image/Eps.php',
+        'BaconQrCode\\Renderer\\Image\\Png' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Renderer/Image/Png.php',
+        'BaconQrCode\\Renderer\\Image\\RendererInterface' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Renderer/Image/RendererInterface.php',
+        'BaconQrCode\\Renderer\\Image\\Svg' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Renderer/Image/Svg.php',
+        'BaconQrCode\\Renderer\\RendererInterface' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Renderer/RendererInterface.php',
+        'BaconQrCode\\Renderer\\Text\\Html' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Renderer/Text/Html.php',
+        'BaconQrCode\\Renderer\\Text\\Plain' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Renderer/Text/Plain.php',
+        'BaconQrCode\\Writer' => __DIR__ . '/..' . '/bacon/bacon-qr-code/src/BaconQrCode/Writer.php',
         'Brick\\Math\\BigDecimal' => __DIR__ . '/..' . '/brick/math/src/BigDecimal.php',
         'Brick\\Math\\BigInteger' => __DIR__ . '/..' . '/brick/math/src/BigInteger.php',
         'Brick\\Math\\BigNumber' => __DIR__ . '/..' . '/brick/math/src/BigNumber.php',
@@ -1421,6 +1530,34 @@ class ComposerStaticInitb3dae18063bed3ded4c6f27adff20f3d
         'Dotenv\\Util\\Regex' => __DIR__ . '/..' . '/vlucas/phpdotenv/src/Util/Regex.php',
         'Dotenv\\Util\\Str' => __DIR__ . '/..' . '/vlucas/phpdotenv/src/Util/Str.php',
         'Dotenv\\Validator' => __DIR__ . '/..' . '/vlucas/phpdotenv/src/Validator.php',
+        'Endroid\\QrCode\\Bundle\\QrCodeBundle\\Controller\\QrCodeController' => __DIR__ . '/..' . '/endroid/qrcode/src/Bundle/QrCodeBundle/Controller/QrCodeController.php',
+        'Endroid\\QrCode\\Bundle\\QrCodeBundle\\DependencyInjection\\Compiler\\WriterRegistryCompilerPass' => __DIR__ . '/..' . '/endroid/qrcode/src/Bundle/QrCodeBundle/DependencyInjection/Compiler/WriterRegistryCompilerPass.php',
+        'Endroid\\QrCode\\Bundle\\QrCodeBundle\\DependencyInjection\\Configuration' => __DIR__ . '/..' . '/endroid/qrcode/src/Bundle/QrCodeBundle/DependencyInjection/Configuration.php',
+        'Endroid\\QrCode\\Bundle\\QrCodeBundle\\DependencyInjection\\EndroidQrCodeExtension' => __DIR__ . '/..' . '/endroid/qrcode/src/Bundle/QrCodeBundle/DependencyInjection/EndroidQrCodeExtension.php',
+        'Endroid\\QrCode\\Bundle\\QrCodeBundle\\EndroidQrCodeBundle' => __DIR__ . '/..' . '/endroid/qrcode/src/Bundle/QrCodeBundle/EndroidQrCodeBundle.php',
+        'Endroid\\QrCode\\ErrorCorrectionLevel' => __DIR__ . '/..' . '/endroid/qrcode/src/ErrorCorrectionLevel.php',
+        'Endroid\\QrCode\\Exception\\InvalidPathException' => __DIR__ . '/..' . '/endroid/qrcode/src/Exception/InvalidPathException.php',
+        'Endroid\\QrCode\\Exception\\InvalidWriterException' => __DIR__ . '/..' . '/endroid/qrcode/src/Exception/InvalidWriterException.php',
+        'Endroid\\QrCode\\Exception\\MissingFunctionException' => __DIR__ . '/..' . '/endroid/qrcode/src/Exception/MissingFunctionException.php',
+        'Endroid\\QrCode\\Exception\\QrCodeException' => __DIR__ . '/..' . '/endroid/qrcode/src/Exception/QrCodeException.php',
+        'Endroid\\QrCode\\Exception\\UnsupportedExtensionException' => __DIR__ . '/..' . '/endroid/qrcode/src/Exception/UnsupportedExtensionException.php',
+        'Endroid\\QrCode\\Exception\\ValidationException' => __DIR__ . '/..' . '/endroid/qrcode/src/Exception/ValidationException.php',
+        'Endroid\\QrCode\\Factory\\QrCodeFactory' => __DIR__ . '/..' . '/endroid/qrcode/src/Factory/QrCodeFactory.php',
+        'Endroid\\QrCode\\LabelAlignment' => __DIR__ . '/..' . '/endroid/qrcode/src/LabelAlignment.php',
+        'Endroid\\QrCode\\QrCode' => __DIR__ . '/..' . '/endroid/qrcode/src/QrCode.php',
+        'Endroid\\QrCode\\QrCodeInterface' => __DIR__ . '/..' . '/endroid/qrcode/src/QrCodeInterface.php',
+        'Endroid\\QrCode\\StaticWriterRegistry' => __DIR__ . '/..' . '/endroid/qrcode/src/StaticWriterRegistry.php',
+        'Endroid\\QrCode\\Twig\\Extension\\QrCodeExtension' => __DIR__ . '/..' . '/endroid/qrcode/src/Twig/Extension/QrCodeExtension.php',
+        'Endroid\\QrCode\\WriterRegistry' => __DIR__ . '/..' . '/endroid/qrcode/src/WriterRegistry.php',
+        'Endroid\\QrCode\\WriterRegistryInterface' => __DIR__ . '/..' . '/endroid/qrcode/src/WriterRegistryInterface.php',
+        'Endroid\\QrCode\\Writer\\AbstractBaconWriter' => __DIR__ . '/..' . '/endroid/qrcode/src/Writer/AbstractBaconWriter.php',
+        'Endroid\\QrCode\\Writer\\AbstractWriter' => __DIR__ . '/..' . '/endroid/qrcode/src/Writer/AbstractWriter.php',
+        'Endroid\\QrCode\\Writer\\BinaryWriter' => __DIR__ . '/..' . '/endroid/qrcode/src/Writer/BinaryWriter.php',
+        'Endroid\\QrCode\\Writer\\DebugWriter' => __DIR__ . '/..' . '/endroid/qrcode/src/Writer/DebugWriter.php',
+        'Endroid\\QrCode\\Writer\\EpsWriter' => __DIR__ . '/..' . '/endroid/qrcode/src/Writer/EpsWriter.php',
+        'Endroid\\QrCode\\Writer\\PngWriter' => __DIR__ . '/..' . '/endroid/qrcode/src/Writer/PngWriter.php',
+        'Endroid\\QrCode\\Writer\\SvgWriter' => __DIR__ . '/..' . '/endroid/qrcode/src/Writer/SvgWriter.php',
+        'Endroid\\QrCode\\Writer\\WriterInterface' => __DIR__ . '/..' . '/endroid/qrcode/src/Writer/WriterInterface.php',
         'Firebase\\JWT\\BeforeValidException' => __DIR__ . '/..' . '/firebase/php-jwt/src/BeforeValidException.php',
         'Firebase\\JWT\\CachedKeySet' => __DIR__ . '/..' . '/firebase/php-jwt/src/CachedKeySet.php',
         'Firebase\\JWT\\ExpiredException' => __DIR__ . '/..' . '/firebase/php-jwt/src/ExpiredException.php',
@@ -1529,6 +1666,156 @@ class ComposerStaticInitb3dae18063bed3ded4c6f27adff20f3d
         'JmesPath\\TreeCompiler' => __DIR__ . '/..' . '/mtdowling/jmespath.php/src/TreeCompiler.php',
         'JmesPath\\TreeInterpreter' => __DIR__ . '/..' . '/mtdowling/jmespath.php/src/TreeInterpreter.php',
         'JmesPath\\Utils' => __DIR__ . '/..' . '/mtdowling/jmespath.php/src/Utils.php',
+        'JsonSchema\\Constraints\\BaseConstraint' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Constraints/BaseConstraint.php',
+        'JsonSchema\\Constraints\\CollectionConstraint' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Constraints/CollectionConstraint.php',
+        'JsonSchema\\Constraints\\Constraint' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Constraints/Constraint.php',
+        'JsonSchema\\Constraints\\ConstraintInterface' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Constraints/ConstraintInterface.php',
+        'JsonSchema\\Constraints\\EnumConstraint' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Constraints/EnumConstraint.php',
+        'JsonSchema\\Constraints\\Factory' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Constraints/Factory.php',
+        'JsonSchema\\Constraints\\FormatConstraint' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Constraints/FormatConstraint.php',
+        'JsonSchema\\Constraints\\NumberConstraint' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Constraints/NumberConstraint.php',
+        'JsonSchema\\Constraints\\ObjectConstraint' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Constraints/ObjectConstraint.php',
+        'JsonSchema\\Constraints\\SchemaConstraint' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Constraints/SchemaConstraint.php',
+        'JsonSchema\\Constraints\\StringConstraint' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Constraints/StringConstraint.php',
+        'JsonSchema\\Constraints\\TypeCheck\\LooseTypeCheck' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Constraints/TypeCheck/LooseTypeCheck.php',
+        'JsonSchema\\Constraints\\TypeCheck\\StrictTypeCheck' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Constraints/TypeCheck/StrictTypeCheck.php',
+        'JsonSchema\\Constraints\\TypeCheck\\TypeCheckInterface' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Constraints/TypeCheck/TypeCheckInterface.php',
+        'JsonSchema\\Constraints\\TypeConstraint' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Constraints/TypeConstraint.php',
+        'JsonSchema\\Constraints\\UndefinedConstraint' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Constraints/UndefinedConstraint.php',
+        'JsonSchema\\Entity\\JsonPointer' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Entity/JsonPointer.php',
+        'JsonSchema\\Exception\\ExceptionInterface' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Exception/ExceptionInterface.php',
+        'JsonSchema\\Exception\\InvalidArgumentException' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Exception/InvalidArgumentException.php',
+        'JsonSchema\\Exception\\InvalidConfigException' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Exception/InvalidConfigException.php',
+        'JsonSchema\\Exception\\InvalidSchemaException' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Exception/InvalidSchemaException.php',
+        'JsonSchema\\Exception\\InvalidSchemaMediaTypeException' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Exception/InvalidSchemaMediaTypeException.php',
+        'JsonSchema\\Exception\\InvalidSourceUriException' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Exception/InvalidSourceUriException.php',
+        'JsonSchema\\Exception\\JsonDecodingException' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Exception/JsonDecodingException.php',
+        'JsonSchema\\Exception\\ResourceNotFoundException' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Exception/ResourceNotFoundException.php',
+        'JsonSchema\\Exception\\RuntimeException' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Exception/RuntimeException.php',
+        'JsonSchema\\Exception\\UnresolvableJsonPointerException' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Exception/UnresolvableJsonPointerException.php',
+        'JsonSchema\\Exception\\UriResolverException' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Exception/UriResolverException.php',
+        'JsonSchema\\Exception\\ValidationException' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Exception/ValidationException.php',
+        'JsonSchema\\Iterator\\ObjectIterator' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Iterator/ObjectIterator.php',
+        'JsonSchema\\Rfc3339' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Rfc3339.php',
+        'JsonSchema\\SchemaStorage' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/SchemaStorage.php',
+        'JsonSchema\\SchemaStorageInterface' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/SchemaStorageInterface.php',
+        'JsonSchema\\UriResolverInterface' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/UriResolverInterface.php',
+        'JsonSchema\\UriRetrieverInterface' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/UriRetrieverInterface.php',
+        'JsonSchema\\Uri\\Retrievers\\AbstractRetriever' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Uri/Retrievers/AbstractRetriever.php',
+        'JsonSchema\\Uri\\Retrievers\\Curl' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Uri/Retrievers/Curl.php',
+        'JsonSchema\\Uri\\Retrievers\\FileGetContents' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Uri/Retrievers/FileGetContents.php',
+        'JsonSchema\\Uri\\Retrievers\\PredefinedArray' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Uri/Retrievers/PredefinedArray.php',
+        'JsonSchema\\Uri\\Retrievers\\UriRetrieverInterface' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Uri/Retrievers/UriRetrieverInterface.php',
+        'JsonSchema\\Uri\\UriResolver' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Uri/UriResolver.php',
+        'JsonSchema\\Uri\\UriRetriever' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Uri/UriRetriever.php',
+        'JsonSchema\\Validator' => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema/Validator.php',
+        'MyCLabs\\Enum\\Enum' => __DIR__ . '/..' . '/myclabs/php-enum/src/Enum.php',
+        'MyCLabs\\Enum\\PHPUnit\\Comparator' => __DIR__ . '/..' . '/myclabs/php-enum/src/PHPUnit/Comparator.php',
+        'NFePHP\\Common\\Certificate' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Certificate.php',
+        'NFePHP\\Common\\Certificate\\Asn1' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Certificate/Asn1.php',
+        'NFePHP\\Common\\Certificate\\CertificationChain' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Certificate/CertificationChain.php',
+        'NFePHP\\Common\\Certificate\\Exception\\Expired' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Certificate/Exception/Expired.php',
+        'NFePHP\\Common\\Certificate\\Oids' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Certificate/Oids.php',
+        'NFePHP\\Common\\Certificate\\PrivateKey' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Certificate/PrivateKey.php',
+        'NFePHP\\Common\\Certificate\\PublicKey' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Certificate/PublicKey.php',
+        'NFePHP\\Common\\Certificate\\SignatureInterface' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Certificate/SignatureInterface.php',
+        'NFePHP\\Common\\Certificate\\VerificationInterface' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Certificate/VerificationInterface.php',
+        'NFePHP\\Common\\DOMImproved' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/DOMImproved.php',
+        'NFePHP\\Common\\Encoding' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Encoding.php',
+        'NFePHP\\Common\\Exception\\CertificateException' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Exception/CertificateException.php',
+        'NFePHP\\Common\\Exception\\ExceptionCollection' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Exception/ExceptionCollection.php',
+        'NFePHP\\Common\\Exception\\ExceptionInterface' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Exception/ExceptionInterface.php',
+        'NFePHP\\Common\\Exception\\IOException' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Exception/IOException.php',
+        'NFePHP\\Common\\Exception\\InvalidArgumentException' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Exception/InvalidArgumentException.php',
+        'NFePHP\\Common\\Exception\\InvalidXmlException' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Exception/InvalidXmlException.php',
+        'NFePHP\\Common\\Exception\\LogicException' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Exception/LogicException.php',
+        'NFePHP\\Common\\Exception\\RuntimeException' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Exception/RuntimeException.php',
+        'NFePHP\\Common\\Exception\\SignerException' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Exception/SignerException.php',
+        'NFePHP\\Common\\Exception\\SoapException' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Exception/SoapException.php',
+        'NFePHP\\Common\\Exception\\UnexpectedValueException' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Exception/UnexpectedValueException.php',
+        'NFePHP\\Common\\Exception\\ValidatorException' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Exception/ValidatorException.php',
+        'NFePHP\\Common\\Files' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Files.php',
+        'NFePHP\\Common\\Keys' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Keys.php',
+        'NFePHP\\Common\\Signer' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Signer.php',
+        'NFePHP\\Common\\Soap\\SoapBase' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Soap/SoapBase.php',
+        'NFePHP\\Common\\Soap\\SoapClientExtended' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Soap/SoapClientExtended.php',
+        'NFePHP\\Common\\Soap\\SoapCode' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Soap/SoapCode.php',
+        'NFePHP\\Common\\Soap\\SoapCurl' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Soap/SoapCurl.php',
+        'NFePHP\\Common\\Soap\\SoapFake' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Soap/SoapFake.php',
+        'NFePHP\\Common\\Soap\\SoapInterface' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Soap/SoapInterface.php',
+        'NFePHP\\Common\\Soap\\SoapNative' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Soap/SoapNative.php',
+        'NFePHP\\Common\\Strings' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Strings.php',
+        'NFePHP\\Common\\Tags\\MakeBase' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Tags/MakeBase.php',
+        'NFePHP\\Common\\Tags\\Tag' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Tags/Tag.php',
+        'NFePHP\\Common\\Tags\\TagInterface' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Tags/TagInterface.php',
+        'NFePHP\\Common\\TimeZoneByUF' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/TimeZoneByUF.php',
+        'NFePHP\\Common\\UFList' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/UFList.php',
+        'NFePHP\\Common\\Validator' => __DIR__ . '/..' . '/nfephp-org/sped-common/src/Validator.php',
+        'NFePHP\\Gtin\\Common\\Consulta' => __DIR__ . '/..' . '/nfephp-org/sped-gtin/src/Common/Consulta.php',
+        'NFePHP\\Gtin\\Gtin' => __DIR__ . '/..' . '/nfephp-org/sped-gtin/src/Gtin.php',
+        'NFePHP\\Gtin\\PrefixDefinition' => __DIR__ . '/..' . '/nfephp-org/sped-gtin/src/PrefixDefinition.php',
+        'NFePHP\\NFe\\Common\\Config' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Common/Config.php',
+        'NFePHP\\NFe\\Common\\FakePretty' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Common/FakePretty.php',
+        'NFePHP\\NFe\\Common\\Gtin' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Common/Gtin.php',
+        'NFePHP\\NFe\\Common\\Standardize' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Common/Standardize.php',
+        'NFePHP\\NFe\\Common\\Tools' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Common/Tools.php',
+        'NFePHP\\NFe\\Common\\ValidTXT' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Common/ValidTXT.php',
+        'NFePHP\\NFe\\Common\\Webservices' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Common/Webservices.php',
+        'NFePHP\\NFe\\Complements' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Complements.php',
+        'NFePHP\\NFe\\Convert' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Convert.php',
+        'NFePHP\\NFe\\Exception\\DocumentsException' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Exception/DocumentsException.php',
+        'NFePHP\\NFe\\Exception\\ExceptionInterface' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Exception/ExceptionInterface.php',
+        'NFePHP\\NFe\\Exception\\IOException' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Exception/IOException.php',
+        'NFePHP\\NFe\\Exception\\InvalidArgumentException' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Exception/InvalidArgumentException.php',
+        'NFePHP\\NFe\\Exception\\LogicException' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Exception/LogicException.php',
+        'NFePHP\\NFe\\Exception\\ParserException' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Exception/ParserException.php',
+        'NFePHP\\NFe\\Exception\\RuntimeException' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Exception/RuntimeException.php',
+        'NFePHP\\NFe\\Factories\\Contingency' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Factories/Contingency.php',
+        'NFePHP\\NFe\\Factories\\ContingencyNFe' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Factories/ContingencyNFe.php',
+        'NFePHP\\NFe\\Factories\\Header' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Factories/Header.php',
+        'NFePHP\\NFe\\Factories\\Parser' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Factories/Parser.php',
+        'NFePHP\\NFe\\Factories\\QRCode' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Factories/QRCode.php',
+        'NFePHP\\NFe\\Make' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Make.php',
+        'NFePHP\\NFe\\MakeDev' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/MakeDev.php',
+        'NFePHP\\NFe\\MakeOld' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/MakeOld.php',
+        'NFePHP\\NFe\\Tools' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Tools.php',
+        'NFePHP\\NFe\\Traits\\TraitCalculations' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitCalculations.php',
+        'NFePHP\\NFe\\Traits\\TraitEPECNfce' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitEPECNfce.php',
+        'NFePHP\\NFe\\Traits\\TraitEventsRTC' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitEventsRTC.php',
+        'NFePHP\\NFe\\Traits\\TraitRefNfCt' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitRefNfCt.php',
+        'NFePHP\\NFe\\Traits\\TraitTagAgropecuario' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagAgropecuario.php',
+        'NFePHP\\NFe\\Traits\\TraitTagAutXml' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagAutXml.php',
+        'NFePHP\\NFe\\Traits\\TraitTagCana' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagCana.php',
+        'NFePHP\\NFe\\Traits\\TraitTagCobr' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagCobr.php',
+        'NFePHP\\NFe\\Traits\\TraitTagComb' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagComb.php',
+        'NFePHP\\NFe\\Traits\\TraitTagCompra' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagCompra.php',
+        'NFePHP\\NFe\\Traits\\TraitTagDest' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagDest.php',
+        'NFePHP\\NFe\\Traits\\TraitTagDet' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagDet.php',
+        'NFePHP\\NFe\\Traits\\TraitTagDetCOFINS' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagDetCOFINS.php',
+        'NFePHP\\NFe\\Traits\\TraitTagDetIBSCBS' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagDetIBSCBS.php',
+        'NFePHP\\NFe\\Traits\\TraitTagDetICMS' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagDetICMS.php',
+        'NFePHP\\NFe\\Traits\\TraitTagDetII' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagDetII.php',
+        'NFePHP\\NFe\\Traits\\TraitTagDetIPI' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagDetIPI.php',
+        'NFePHP\\NFe\\Traits\\TraitTagDetIS' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagDetIS.php',
+        'NFePHP\\NFe\\Traits\\TraitTagDetISSQN' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagDetISSQN.php',
+        'NFePHP\\NFe\\Traits\\TraitTagDetImposto' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagDetImposto.php',
+        'NFePHP\\NFe\\Traits\\TraitTagDetOptions' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagDetOptions.php',
+        'NFePHP\\NFe\\Traits\\TraitTagDetPIS' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagDetPIS.php',
+        'NFePHP\\NFe\\Traits\\TraitTagEmit' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagEmit.php',
+        'NFePHP\\NFe\\Traits\\TraitTagEntrega' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagEntrega.php',
+        'NFePHP\\NFe\\Traits\\TraitTagExporta' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagExporta.php',
+        'NFePHP\\NFe\\Traits\\TraitTagGCompraGov' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagGCompraGov.php',
+        'NFePHP\\NFe\\Traits\\TraitTagGPagAntecipado' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagGPagAntecipado.php',
+        'NFePHP\\NFe\\Traits\\TraitTagIde' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagIde.php',
+        'NFePHP\\NFe\\Traits\\TraitTagInfAdic' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagInfAdic.php',
+        'NFePHP\\NFe\\Traits\\TraitTagInfIntermed' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagInfIntermed.php',
+        'NFePHP\\NFe\\Traits\\TraitTagInfNfe' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagInfNfe.php',
+        'NFePHP\\NFe\\Traits\\TraitTagInfRespTec' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagInfRespTec.php',
+        'NFePHP\\NFe\\Traits\\TraitTagPag' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagPag.php',
+        'NFePHP\\NFe\\Traits\\TraitTagRefs' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagRefs.php',
+        'NFePHP\\NFe\\Traits\\TraitTagRetirada' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagRetirada.php',
+        'NFePHP\\NFe\\Traits\\TraitTagTotal' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagTotal.php',
+        'NFePHP\\NFe\\Traits\\TraitTagTransp' => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src/Traits/TraitTagTransp.php',
         'PHPMailer\\PHPMailer\\DSNConfigurator' => __DIR__ . '/..' . '/phpmailer/phpmailer/src/DSNConfigurator.php',
         'PHPMailer\\PHPMailer\\Exception' => __DIR__ . '/..' . '/phpmailer/phpmailer/src/Exception.php',
         'PHPMailer\\PHPMailer\\OAuth' => __DIR__ . '/..' . '/phpmailer/phpmailer/src/OAuth.php',
@@ -2773,6 +3060,26 @@ class ComposerStaticInitb3dae18063bed3ded4c6f27adff20f3d
         'PhpParser\\PrettyPrinter\\Standard' => __DIR__ . '/..' . '/nikic/php-parser/lib/PhpParser/PrettyPrinter/Standard.php',
         'PhpParser\\Token' => __DIR__ . '/..' . '/nikic/php-parser/lib/PhpParser/Token.php',
         'PhpToken' => __DIR__ . '/..' . '/symfony/polyfill-php80/Resources/stubs/PhpToken.php',
+        'Posprint\\Connectors\\Buffer' => __DIR__ . '/..' . '/nfephp-org/posprint/src/Connectors/Buffer.php',
+        'Posprint\\Connectors\\ConnectorInterface' => __DIR__ . '/..' . '/nfephp-org/posprint/src/Connectors/ConnectorInterface.php',
+        'Posprint\\Connectors\\File' => __DIR__ . '/..' . '/nfephp-org/posprint/src/Connectors/File.php',
+        'Posprint\\Connectors\\Network' => __DIR__ . '/..' . '/nfephp-org/posprint/src/Connectors/Network.php',
+        'Posprint\\Connectors\\Serial' => __DIR__ . '/..' . '/nfephp-org/posprint/src/Connectors/Serial.php',
+        'Posprint\\Connectors\\Usb' => __DIR__ . '/..' . '/nfephp-org/posprint/src/Connectors/Usb.php',
+        'Posprint\\DanfcePos' => __DIR__ . '/..' . '/nfephp-org/posprint/src/DanfcePos.php',
+        'Posprint\\Extras\\PhpSerial' => __DIR__ . '/..' . '/nfephp-org/posprint/src/Extras/PhpSerial.php',
+        'Posprint\\Graphics\\Basic' => __DIR__ . '/..' . '/nfephp-org/posprint/src/Graphics/Basic.php',
+        'Posprint\\Graphics\\Graphics' => __DIR__ . '/..' . '/nfephp-org/posprint/src/Graphics/Graphics.php',
+        'Posprint\\Printers\\Barcodes\\Barcode1DAnalysis' => __DIR__ . '/..' . '/nfephp-org/posprint/src/Printers/Barcodes/Barcode1DAnalysis.php',
+        'Posprint\\Printers\\Bematech' => __DIR__ . '/..' . '/nfephp-org/posprint/src/Printers/Bematech.php',
+        'Posprint\\Printers\\Daruma' => __DIR__ . '/..' . '/nfephp-org/posprint/src/Printers/Daruma.php',
+        'Posprint\\Printers\\DefaultPrinter' => __DIR__ . '/..' . '/nfephp-org/posprint/src/Printers/DefaultPrinter.php',
+        'Posprint\\Printers\\Diebold' => __DIR__ . '/..' . '/nfephp-org/posprint/src/Printers/Diebold.php',
+        'Posprint\\Printers\\Elgin' => __DIR__ . '/..' . '/nfephp-org/posprint/src/Printers/Elgin.php',
+        'Posprint\\Printers\\Epson' => __DIR__ . '/..' . '/nfephp-org/posprint/src/Printers/Epson.php',
+        'Posprint\\Printers\\PrinterInterface' => __DIR__ . '/..' . '/nfephp-org/posprint/src/Printers/PrinterInterface.php',
+        'Posprint\\Printers\\Star' => __DIR__ . '/..' . '/nfephp-org/posprint/src/Printers/Star.php',
+        'Posprint\\Printers\\Sweda' => __DIR__ . '/..' . '/nfephp-org/posprint/src/Printers/Sweda.php',
         'Predis\\Autoloader' => __DIR__ . '/..' . '/predis/predis/src/Autoloader.php',
         'Predis\\Client' => __DIR__ . '/..' . '/predis/predis/src/Client.php',
         'Predis\\ClientConfiguration' => __DIR__ . '/..' . '/predis/predis/src/ClientConfiguration.php',
@@ -3340,6 +3647,15 @@ class ComposerStaticInitb3dae18063bed3ded4c6f27adff20f3d
         'Psr\\Http\\Message\\UploadedFileInterface' => __DIR__ . '/..' . '/psr/http-message/src/UploadedFileInterface.php',
         'Psr\\Http\\Message\\UriFactoryInterface' => __DIR__ . '/..' . '/psr/http-factory/src/UriFactoryInterface.php',
         'Psr\\Http\\Message\\UriInterface' => __DIR__ . '/..' . '/psr/http-message/src/UriInterface.php',
+        'Psr\\Log\\AbstractLogger' => __DIR__ . '/..' . '/psr/log/src/AbstractLogger.php',
+        'Psr\\Log\\InvalidArgumentException' => __DIR__ . '/..' . '/psr/log/src/InvalidArgumentException.php',
+        'Psr\\Log\\LogLevel' => __DIR__ . '/..' . '/psr/log/src/LogLevel.php',
+        'Psr\\Log\\LoggerAwareInterface' => __DIR__ . '/..' . '/psr/log/src/LoggerAwareInterface.php',
+        'Psr\\Log\\LoggerAwareTrait' => __DIR__ . '/..' . '/psr/log/src/LoggerAwareTrait.php',
+        'Psr\\Log\\LoggerInterface' => __DIR__ . '/..' . '/psr/log/src/LoggerInterface.php',
+        'Psr\\Log\\LoggerTrait' => __DIR__ . '/..' . '/psr/log/src/LoggerTrait.php',
+        'Psr\\Log\\NullLogger' => __DIR__ . '/..' . '/psr/log/src/NullLogger.php',
+        'QrReader' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/QrReader.php',
         'Ramsey\\Collection\\AbstractArray' => __DIR__ . '/..' . '/ramsey/collection/src/AbstractArray.php',
         'Ramsey\\Collection\\AbstractCollection' => __DIR__ . '/..' . '/ramsey/collection/src/AbstractCollection.php',
         'Ramsey\\Collection\\AbstractSet' => __DIR__ . '/..' . '/ramsey/collection/src/AbstractSet.php',
@@ -3686,6 +4002,36 @@ class ComposerStaticInitb3dae18063bed3ded4c6f27adff20f3d
         'SebastianBergmann\\Type\\VoidType' => __DIR__ . '/..' . '/sebastian/type/src/type/VoidType.php',
         'SebastianBergmann\\Version' => __DIR__ . '/..' . '/sebastian/version/src/Version.php',
         'Stringable' => __DIR__ . '/..' . '/symfony/polyfill-php80/Resources/stubs/Stringable.php',
+        'Symfony\\Component\\OptionsResolver\\Exception\\AccessException' => __DIR__ . '/..' . '/symfony/options-resolver/Exception/AccessException.php',
+        'Symfony\\Component\\OptionsResolver\\Exception\\ExceptionInterface' => __DIR__ . '/..' . '/symfony/options-resolver/Exception/ExceptionInterface.php',
+        'Symfony\\Component\\OptionsResolver\\Exception\\InvalidArgumentException' => __DIR__ . '/..' . '/symfony/options-resolver/Exception/InvalidArgumentException.php',
+        'Symfony\\Component\\OptionsResolver\\Exception\\InvalidOptionsException' => __DIR__ . '/..' . '/symfony/options-resolver/Exception/InvalidOptionsException.php',
+        'Symfony\\Component\\OptionsResolver\\Exception\\MissingOptionsException' => __DIR__ . '/..' . '/symfony/options-resolver/Exception/MissingOptionsException.php',
+        'Symfony\\Component\\OptionsResolver\\Exception\\NoSuchOptionException' => __DIR__ . '/..' . '/symfony/options-resolver/Exception/NoSuchOptionException.php',
+        'Symfony\\Component\\OptionsResolver\\Exception\\OptionDefinitionException' => __DIR__ . '/..' . '/symfony/options-resolver/Exception/OptionDefinitionException.php',
+        'Symfony\\Component\\OptionsResolver\\Exception\\UndefinedOptionsException' => __DIR__ . '/..' . '/symfony/options-resolver/Exception/UndefinedOptionsException.php',
+        'Symfony\\Component\\OptionsResolver\\Options' => __DIR__ . '/..' . '/symfony/options-resolver/Options.php',
+        'Symfony\\Component\\OptionsResolver\\OptionsResolver' => __DIR__ . '/..' . '/symfony/options-resolver/OptionsResolver.php',
+        'Symfony\\Component\\OptionsResolver\\OptionsResolverInterface' => __DIR__ . '/..' . '/symfony/options-resolver/OptionsResolverInterface.php',
+        'Symfony\\Component\\PropertyAccess\\Exception\\AccessException' => __DIR__ . '/..' . '/symfony/property-access/Exception/AccessException.php',
+        'Symfony\\Component\\PropertyAccess\\Exception\\ExceptionInterface' => __DIR__ . '/..' . '/symfony/property-access/Exception/ExceptionInterface.php',
+        'Symfony\\Component\\PropertyAccess\\Exception\\InvalidArgumentException' => __DIR__ . '/..' . '/symfony/property-access/Exception/InvalidArgumentException.php',
+        'Symfony\\Component\\PropertyAccess\\Exception\\InvalidPropertyPathException' => __DIR__ . '/..' . '/symfony/property-access/Exception/InvalidPropertyPathException.php',
+        'Symfony\\Component\\PropertyAccess\\Exception\\NoSuchIndexException' => __DIR__ . '/..' . '/symfony/property-access/Exception/NoSuchIndexException.php',
+        'Symfony\\Component\\PropertyAccess\\Exception\\NoSuchPropertyException' => __DIR__ . '/..' . '/symfony/property-access/Exception/NoSuchPropertyException.php',
+        'Symfony\\Component\\PropertyAccess\\Exception\\OutOfBoundsException' => __DIR__ . '/..' . '/symfony/property-access/Exception/OutOfBoundsException.php',
+        'Symfony\\Component\\PropertyAccess\\Exception\\RuntimeException' => __DIR__ . '/..' . '/symfony/property-access/Exception/RuntimeException.php',
+        'Symfony\\Component\\PropertyAccess\\Exception\\UnexpectedTypeException' => __DIR__ . '/..' . '/symfony/property-access/Exception/UnexpectedTypeException.php',
+        'Symfony\\Component\\PropertyAccess\\PropertyAccess' => __DIR__ . '/..' . '/symfony/property-access/PropertyAccess.php',
+        'Symfony\\Component\\PropertyAccess\\PropertyAccessor' => __DIR__ . '/..' . '/symfony/property-access/PropertyAccessor.php',
+        'Symfony\\Component\\PropertyAccess\\PropertyAccessorBuilder' => __DIR__ . '/..' . '/symfony/property-access/PropertyAccessorBuilder.php',
+        'Symfony\\Component\\PropertyAccess\\PropertyAccessorInterface' => __DIR__ . '/..' . '/symfony/property-access/PropertyAccessorInterface.php',
+        'Symfony\\Component\\PropertyAccess\\PropertyPath' => __DIR__ . '/..' . '/symfony/property-access/PropertyPath.php',
+        'Symfony\\Component\\PropertyAccess\\PropertyPathBuilder' => __DIR__ . '/..' . '/symfony/property-access/PropertyPathBuilder.php',
+        'Symfony\\Component\\PropertyAccess\\PropertyPathInterface' => __DIR__ . '/..' . '/symfony/property-access/PropertyPathInterface.php',
+        'Symfony\\Component\\PropertyAccess\\PropertyPathIterator' => __DIR__ . '/..' . '/symfony/property-access/PropertyPathIterator.php',
+        'Symfony\\Component\\PropertyAccess\\PropertyPathIteratorInterface' => __DIR__ . '/..' . '/symfony/property-access/PropertyPathIteratorInterface.php',
+        'Symfony\\Component\\PropertyAccess\\StringUtil' => __DIR__ . '/..' . '/symfony/property-access/StringUtil.php',
         'Symfony\\Polyfill\\Ctype\\Ctype' => __DIR__ . '/..' . '/symfony/polyfill-ctype/Ctype.php',
         'Symfony\\Polyfill\\Mbstring\\Mbstring' => __DIR__ . '/..' . '/symfony/polyfill-mbstring/Mbstring.php',
         'Symfony\\Polyfill\\Php80\\Php80' => __DIR__ . '/..' . '/symfony/polyfill-php80/Php80.php',
@@ -3705,7 +4051,9 @@ class ComposerStaticInitb3dae18063bed3ded4c6f27adff20f3d
         'System\\Session' => __DIR__ . '/../..' . '/system/Session.php',
         'System\\Storage\\MinIO' => __DIR__ . '/../..' . '/system/Storage/MinIO.php',
         'System\\TenantHelper' => __DIR__ . '/../..' . '/system/TenantHelper.php',
+        'System\\TimeHelper' => __DIR__ . '/../..' . '/system/TimeHelper.php',
         'System\\WhatsApp\\BaileysManager' => __DIR__ . '/../..' . '/system/WhatsApp/BaileysManager.php',
+        'System\\WhatsApp\\PaymentNotificationService' => __DIR__ . '/../..' . '/system/WhatsApp/PaymentNotificationService.php',
         'System\\WhatsApp\\WuzAPIManager' => __DIR__ . '/../..' . '/system/WhatsApp/WuzAPIManager.php',
         'System\\WuzapiService' => __DIR__ . '/../..' . '/system/WuzapiService.php',
         'TheSeer\\Tokenizer\\Exception' => __DIR__ . '/..' . '/theseer/tokenizer/src/Exception.php',
@@ -3718,6 +4066,64 @@ class ComposerStaticInitb3dae18063bed3ded4c6f27adff20f3d
         'TheSeer\\Tokenizer\\XMLSerializer' => __DIR__ . '/..' . '/theseer/tokenizer/src/XMLSerializer.php',
         'UnhandledMatchError' => __DIR__ . '/..' . '/symfony/polyfill-php80/Resources/stubs/UnhandledMatchError.php',
         'ValueError' => __DIR__ . '/..' . '/symfony/polyfill-php80/Resources/stubs/ValueError.php',
+        'Zxing\\Binarizer' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/Binarizer.php',
+        'Zxing\\BinaryBitmap' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/BinaryBitmap.php',
+        'Zxing\\ChecksumException' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/ChecksumException.php',
+        'Zxing\\Common\\BitArray' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/common/BitArray.php',
+        'Zxing\\Common\\BitMatrix' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/common/BitMatrix.php',
+        'Zxing\\Common\\BitSource' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/common/BitSource.php',
+        'Zxing\\Common\\CharacterSetECI' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/common/CharacterSetEci.php',
+        'Zxing\\Common\\CharacterSetEci\\AbstractEnum\\AbstractEnum' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/common/AbstractEnum.php',
+        'Zxing\\Common\\DecoderResult' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/common/DecoderResult.php',
+        'Zxing\\Common\\DefaultGridSampler' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/common/DefaultGridSampler.php',
+        'Zxing\\Common\\DetectorResult' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/common/DetectorResult.php',
+        'Zxing\\Common\\Detector\\MathUtils' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/common/detector/MathUtils.php',
+        'Zxing\\Common\\Detector\\MonochromeRectangleDetector' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/common/detector/MonochromeRectangleDetector.php',
+        'Zxing\\Common\\GlobalHistogramBinarizer' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/common/GlobalHistogramBinarizer.php',
+        'Zxing\\Common\\GridSampler' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/common/GridSampler.php',
+        'Zxing\\Common\\HybridBinarizer' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/common/HybridBinarizer.php',
+        'Zxing\\Common\\PerspectiveTransform' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/common/PerspectiveTransform.php',
+        'Zxing\\Common\\Reedsolomon\\GenericGF' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/common/reedsolomon/GenericGF.php',
+        'Zxing\\Common\\Reedsolomon\\GenericGFPoly' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/common/reedsolomon/GenericGFPoly.php',
+        'Zxing\\Common\\Reedsolomon\\ReedSolomonDecoder' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/common/reedsolomon/ReedSolomonDecoder.php',
+        'Zxing\\Common\\Reedsolomon\\ReedSolomonException' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/common/reedsolomon/ReedSolomonException.php',
+        'Zxing\\FormatException' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/FormatException.php',
+        'Zxing\\GDLuminanceSource' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/GDLuminanceSource.php',
+        'Zxing\\IMagickLuminanceSource' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/IMagickLuminanceSource.php',
+        'Zxing\\LuminanceSource' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/LuminanceSource.php',
+        'Zxing\\NotFoundException' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/NotFoundException.php',
+        'Zxing\\PlanarYUVLuminanceSource' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/PlanarYUVLuminanceSource.php',
+        'Zxing\\Qrcode\\Decoder\\BitMatrixParser' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/decoder/BitMatrixParser.php',
+        'Zxing\\Qrcode\\Decoder\\DataBlock' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/decoder/DataBlock.php',
+        'Zxing\\Qrcode\\Decoder\\DataMask' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/decoder/DataMask.php',
+        'Zxing\\Qrcode\\Decoder\\DataMask000' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/decoder/DataMask.php',
+        'Zxing\\Qrcode\\Decoder\\DataMask001' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/decoder/DataMask.php',
+        'Zxing\\Qrcode\\Decoder\\DataMask010' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/decoder/DataMask.php',
+        'Zxing\\Qrcode\\Decoder\\DataMask011' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/decoder/DataMask.php',
+        'Zxing\\Qrcode\\Decoder\\DataMask100' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/decoder/DataMask.php',
+        'Zxing\\Qrcode\\Decoder\\DataMask101' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/decoder/DataMask.php',
+        'Zxing\\Qrcode\\Decoder\\DataMask110' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/decoder/DataMask.php',
+        'Zxing\\Qrcode\\Decoder\\DataMask111' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/decoder/DataMask.php',
+        'Zxing\\Qrcode\\Decoder\\DecodedBitStreamParser' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/decoder/DecodedBitStreamParser.php',
+        'Zxing\\Qrcode\\Decoder\\Decoder' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/decoder/Decoder.php',
+        'Zxing\\Qrcode\\Decoder\\ECB' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/decoder/Version.php',
+        'Zxing\\Qrcode\\Decoder\\ECBlocks' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/decoder/Version.php',
+        'Zxing\\Qrcode\\Decoder\\ErrorCorrectionLevel' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/decoder/ErrorCorrectionLevel.php',
+        'Zxing\\Qrcode\\Decoder\\FormatInformation' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/decoder/FormatInformation.php',
+        'Zxing\\Qrcode\\Decoder\\Mode' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/decoder/Mode.php',
+        'Zxing\\Qrcode\\Decoder\\Version' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/decoder/Version.php',
+        'Zxing\\Qrcode\\Detector\\AlignmentPattern' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/detector/AlignmentPattern.php',
+        'Zxing\\Qrcode\\Detector\\AlignmentPatternFinder' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/detector/AlignmentPatternFinder.php',
+        'Zxing\\Qrcode\\Detector\\Detector' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/detector/Detector.php',
+        'Zxing\\Qrcode\\Detector\\FinderPattern' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/detector/FinderPattern.php',
+        'Zxing\\Qrcode\\Detector\\FinderPatternFinder' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/detector/FinderPatternFinder.php',
+        'Zxing\\Qrcode\\Detector\\FinderPatternInfo' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/detector/FinderPatternInfo.php',
+        'Zxing\\Qrcode\\QRCodeReader' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/qrcode/QRCodeReader.php',
+        'Zxing\\RGBLuminanceSource' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/RGBLuminanceSource.php',
+        'Zxing\\Reader' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/Reader.php',
+        'Zxing\\ReaderException' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/ReaderException.php',
+        'Zxing\\Result' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/Result.php',
+        'Zxing\\ResultPoint' => __DIR__ . '/..' . '/khanamiryan/qrcode-detector-decoder/lib/ResultPoint.php',
     );
 
     public static function getInitializer(ClassLoader $loader)
@@ -3725,6 +4131,7 @@ class ComposerStaticInitb3dae18063bed3ded4c6f27adff20f3d
         return \Closure::bind(function () use ($loader) {
             $loader->prefixLengthsPsr4 = ComposerStaticInitb3dae18063bed3ded4c6f27adff20f3d::$prefixLengthsPsr4;
             $loader->prefixDirsPsr4 = ComposerStaticInitb3dae18063bed3ded4c6f27adff20f3d::$prefixDirsPsr4;
+            $loader->prefixesPsr0 = ComposerStaticInitb3dae18063bed3ded4c6f27adff20f3d::$prefixesPsr0;
             $loader->classMap = ComposerStaticInitb3dae18063bed3ded4c6f27adff20f3d::$classMap;
 
         }, null, ClassLoader::class);
