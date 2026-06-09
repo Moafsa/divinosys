@@ -31,6 +31,7 @@ RUN docker-php-ext-install pcntl
 RUN docker-php-ext-install gd
 RUN docker-php-ext-install bcmath
 RUN docker-php-ext-install curl
+RUN docker-php-ext-install soap
 
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer

@@ -1,0 +1,6 @@
+-- Adiciona campos fiscais na tabela de produtos
+ALTER TABLE produtos 
+ADD COLUMN IF NOT EXISTS ncm VARCHAR(8),
+ADD COLUMN IF NOT EXISTS cest VARCHAR(7),
+ADD COLUMN IF NOT EXISTS cfop VARCHAR(4),
+ADD COLUMN IF NOT EXISTS origem VARCHAR(1);
