@@ -179,18 +179,28 @@ try {
             
             // Normalize phone for search
             $telefoneNormalizado = preg_replace('/[^0-9]/', '', $telefone);
+            $cpfLimpo = !empty($cpf) ? preg_replace('/[^0-9]/', '', $cpf) : null;
+            $emailLimpo = !empty($email) ? trim($email) : null;
             
-            // Check if client already exists (try multiple formats)
-            $clienteExistente = $db->fetch(
-                "SELECT id FROM usuarios_globais 
-                 WHERE (
-                     telefone = ? 
-                     OR telefone = ?
+            $clienteExistente = null;
+            
+            if ($cpfLimpo) {
+                $clienteExistente = $db->fetch("SELECT id FROM usuarios_globais WHERE regexp_replace(cpf, '[^0-9]', '', 'g') = ? LIMIT 1", [$cpfLimpo]);
+            }
+            
+            if (!$clienteExistente && $emailLimpo) {
+                $clienteExistente = $db->fetch("SELECT id FROM usuarios_globais WHERE email = ? LIMIT 1", [$emailLimpo]);
+            }
+            
+            if (!$clienteExistente && $telefoneNormalizado) {
+                $clienteExistente = $db->fetch(
+                    "SELECT id FROM usuarios_globais 
+                     WHERE telefone = ? 
                      OR REPLACE(REPLACE(REPLACE(REPLACE(telefone, '(', ''), ')', ''), '-', ''), ' ', '') = ?
-                 )
-                 LIMIT 1",
-                [$telefone, $telefoneNormalizado, $telefoneNormalizado]
-            );
+                     LIMIT 1",
+                    [$telefoneNormalizado, $telefoneNormalizado]
+                );
+            }
             
             if ($clienteExistente) {
                 // Get full client data
@@ -202,8 +212,9 @@ try {
                 // Update client data if provided
                 $updateData = [];
                 if (!empty($nome)) $updateData['nome'] = $nome;
-                if (!empty($email)) $updateData['email'] = $email;
-                if (!empty($cpf)) $updateData['cpf'] = $cpf;
+                if (!empty($emailLimpo)) $updateData['email'] = $emailLimpo;
+                if (!empty($cpfLimpo)) $updateData['cpf'] = $cpfLimpo;
+                if (!empty($telefoneNormalizado) && empty($cliente['telefone'])) $updateData['telefone'] = $telefoneNormalizado;
                 
                 if (!empty($updateData)) {
                     $updateData['updated_at'] = date('Y-m-d H:i:s');
@@ -232,8 +243,8 @@ try {
             $clienteId = $db->insert('usuarios_globais', [
                 'nome' => $nome,
                 'telefone' => $telefoneNormalizado,
-                'email' => $email ?: null,
-                'cpf' => $cpf ?: null,
+                'email' => $emailLimpo ?: null,
+                'cpf' => $cpfLimpo ?: null,
                 'tipo_usuario' => 'cliente',
                 'ativo' => true,
                 'created_at' => date('Y-m-d H:i:s'),

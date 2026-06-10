@@ -13,6 +13,8 @@ try {
     // Get filial_id from URL parameter
     $filialId = $_GET['filial'] ?? null;
     $tenantId = $_GET['tenant'] ?? null;
+    $mesaId = $_GET['mesa'] ?? $_GET['comanda'] ?? null;
+    $modoOperacaoLocal = isset($_GET['comanda']) ? 'comanda' : (isset($_GET['mesa']) ? 'mesa' : null);
 
     if (!$filialId || !$tenantId) {
         die('Parâmetros inválidos. Acesso: ?view=cardapio_online&tenant=ID&filial=ID');
@@ -2212,8 +2214,31 @@ if (count($enderecoParts) > 2) {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
+        const mesaId = <?php echo $mesaId ? "'".htmlspecialchars($mesaId)."'" : "null"; ?>;
+        const modoOperacaoLocal = <?php echo $modoOperacaoLocal ? "'".htmlspecialchars($modoOperacaoLocal)."'" : "null"; ?>;
+        
         // ============================================
-        // FUNÇÃO HELPER PARA EVENTOS DE CONVERSÃO DO PIXEL
+        // CONFIGURAÇÃO DO TOAST (Notificações Modernas)
+        // ============================================
+        const Toast = Swal.mixin({
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 3000,
+            timerProgressBar: true,
+            didOpen: (toast) => {
+                toast.addEventListener('mouseenter', Swal.stopTimer)
+                toast.addEventListener('mouseleave', Swal.resumeTimer)
+            }
+        });
+        
+        function showToast(title, icon = 'info') {
+            Toast.fire({
+                icon: icon,
+                title: title
+            });
+        }
+
         // ============================================
         // Detecta automaticamente o tipo de pixel e dispara eventos de conversão
         function trackPixelEvent(eventName, eventData = {}) {
@@ -2517,7 +2542,8 @@ if (count($enderecoParts) > 2) {
         }
         
         // Cart management
-        const upsellProducts = <?php echo json_encode(!empty($produtosPromocao) ? array_slice($produtosPromocao, 0, 3) : []); ?>;
+        // Load more promotional items to ensure we have backups when some are filtered out
+        const upsellProducts = <?php echo json_encode(!empty($produtosPromocao) ? array_slice($produtosPromocao, 0, 10) : []); ?>;
         let cart = JSON.parse(localStorage.getItem('cart_<?php echo $filialId; ?>')) || [];
         
         function updateCart() {
@@ -2612,7 +2638,7 @@ if (count($enderecoParts) > 2) {
             });
             
             // Filter out products that are already in the cart
-            const availableUpsells = upsellProducts ? upsellProducts.filter(prod => !cart.some(item => parseInt(item.id) === parseInt(prod.id))) : [];
+            const availableUpsells = upsellProducts ? upsellProducts.filter(prod => !cart.some(item => parseInt(item.id) === parseInt(prod.id))).slice(0, 3) : [];
             
             // Add upsell section
             if (availableUpsells && availableUpsells.length > 0) {
@@ -2643,21 +2669,31 @@ if (count($enderecoParts) > 2) {
             }
 
             // Add delivery options section before total
-            html += `
-                <div style="margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #e0e0e0;">
-                    <h4 style="font-size: 1rem; margin-bottom: 0.5rem;">
-                        <span class="icon" style="width: 30px; height: 30px; background: var(--primary-color); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #000; margin-right: 0.5rem;">
-                            <i class="fas fa-user"></i>
-                        </span>
-                        Opções de entrega
-                    </h4>
-                    <select class="form-control" id="deliveryTypeSelect" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 1rem;">
-                        <option value="">(Selecione aqui)</option>
-                        <option value="pickup">Retirar no Balcão</option>
-                        <option value="delivery">Delivery</option>
-                    </select>
-                </div>
-            `;
+            if (mesaId) {
+                html += `
+                    <div style="margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #e0e0e0; display: none;">
+                        <select class="form-control" id="deliveryTypeSelect">
+                            <option value="local" selected>Local</option>
+                        </select>
+                    </div>
+                `;
+            } else {
+                html += `
+                    <div style="margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #e0e0e0;">
+                        <h4 style="font-size: 1rem; margin-bottom: 0.5rem;">
+                            <span class="icon" style="width: 30px; height: 30px; background: var(--primary-color); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #000; margin-right: 0.5rem;">
+                                <i class="fas fa-user"></i>
+                            </span>
+                            Opções de entrega
+                        </h4>
+                        <select class="form-control" id="deliveryTypeSelect" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 1rem;">
+                            <option value="">(Selecione aqui)</option>
+                            <option value="pickup">Retirar no Balcão</option>
+                            <option value="delivery">Delivery</option>
+                        </select>
+                    </div>
+                `;
+            }
             
             html += `
                 <div style="margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #e0e0e0;">
@@ -2709,7 +2745,7 @@ if (count($enderecoParts) > 2) {
                     timer: 2000
                 });
             } else {
-                Swal.fire('Aviso', 'Adicionado ao carrinho!', 'info');
+                showToast('Adicionado ao carrinho!', 'info');
             }
         }
         
@@ -2738,7 +2774,7 @@ if (count($enderecoParts) > 2) {
                 mostrarModalPersonalizacao(produto, ingredientesProduto, todosIngredientes);
             } catch (error) {
                 console.error('Erro ao buscar produto:', error);
-                Swal.fire('Aviso', 'Erro ao carregar produto. Adicionando sem personalização.', 'info');
+                showToast('Erro ao carregar produto. Adicionando sem personalização.', 'info');
                 addToCart(produto);
             }
         }
@@ -2978,7 +3014,7 @@ if (count($enderecoParts) > 2) {
         
         function addToCart(product) {
             if (!product || !product.id) {
-                Swal.fire('Aviso', 'Erro: Produto inválido', 'info');
+                showToast('Erro: Produto inválido', 'info');
                 return;
             }
             
@@ -3045,18 +3081,18 @@ if (count($enderecoParts) > 2) {
         
         function finalizarPedido() {
             if (cart.length === 0) {
-                Swal.fire('Aviso', 'Seu carrinho está vazio!', 'info');
+                showToast('Seu carrinho está vazio!', 'info');
                 return;
             }
             
             const deliveryType = document.getElementById('deliveryTypeSelect').value;
             if (!deliveryType) {
-                Swal.fire('Aviso', 'Por favor, selecione uma opção de entrega', 'info');
+                showToast('Por favor, selecione uma opção de entrega', 'info');
                 return;
             }
             
             if (!<?php echo $isOpen ? 'true' : 'false'; ?>) {
-                Swal.fire('Aviso', 'O estabelecimento está fechado no momento. Verifique o horário de funcionamento.', 'info');
+                showToast('O estabelecimento está fechado no momento. Verifique o horário de funcionamento.', 'info');
                 return;
             }
             
@@ -3455,7 +3491,7 @@ if (count($enderecoParts) > 2) {
                 // Validar se telefone foi buscado
                 const customerDataFields = document.getElementById('customerDataFields');
                 if (!customerDataFields || customerDataFields.style.display === 'none') {
-                    Swal.fire('Aviso', 'Por favor, busque o cliente pelo telefone primeiro', 'info');
+                    showToast('Por favor, busque o cliente pelo telefone primeiro', 'info');
                     return;
                 }
                 
@@ -3514,11 +3550,11 @@ if (count($enderecoParts) > 2) {
                     
                     if (enderecoSelecionado === '' && enderecoSectionVisible) {
                         // New address form is visible - user must click "Adicionar Endereço" first
-                        Swal.fire('Aviso', 'Por favor, clique em "Adicionar Endereço" para salvar o endereço antes de continuar.', 'info');
+                        showToast('Por favor, clique em "Adicionar Endereço" para salvar o endereço antes de continuar.', 'info');
                         return;
                     } else if (enderecoSelecionado === '' && !enderecoSectionVisible) {
                         // No address selected and form not visible (shouldn't happen, but check anyway)
-                        Swal.fire('Aviso', 'Por favor, selecione ou cadastre um endereço de entrega', 'info');
+                        showToast('Por favor, selecione ou cadastre um endereço de entrega', 'info');
                         return;
                     }
                 }
@@ -3558,14 +3594,14 @@ if (count($enderecoParts) > 2) {
                 // Validate payment details before proceeding
                 const formaPagamento = document.getElementById('formaPagamentoDetalhada').value;
                 if (!formaPagamento) {
-                    Swal.fire('Aviso', 'Por favor, selecione a forma de pagamento', 'info');
+                    showToast('Por favor, selecione a forma de pagamento', 'info');
                     return;
                 }
                 
                 if (formaPagamento === 'Dinheiro') {
                     const troco = document.getElementById('trocoPara').value;
                     if (!troco || parseFloat(troco) <= 0) {
-                        Swal.fire('Aviso', 'Por favor, informe o valor do troco', 'info');
+                        showToast('Por favor, informe o valor do troco', 'info');
                         return;
                     }
                     trocoPara = parseFloat(troco);
@@ -3786,7 +3822,7 @@ if (count($enderecoParts) > 2) {
         async function buscarCliente() {
             const telefone = document.getElementById('customerPhone').value.trim();
             if (!telefone) {
-                Swal.fire('Aviso', 'Por favor, informe o telefone', 'info');
+                showToast('Por favor, informe o telefone', 'info');
                 return;
             }
             
@@ -4256,7 +4292,7 @@ if (count($enderecoParts) > 2) {
             const city = document.getElementById('deliveryCity').value.trim();
             
             if (!address || !city) {
-                Swal.fire('Aviso', 'Por favor, preencha pelo menos o endereço e a cidade.', 'info');
+                showToast('Por favor, preencha pelo menos o endereço e a cidade.', 'info');
                 return;
             }
             
@@ -4315,7 +4351,7 @@ if (count($enderecoParts) > 2) {
                 }, 500);
             } catch (error) {
                 console.error('Erro ao adicionar endereço:', error);
-                Swal.fire('Aviso', 'Erro ao adicionar endereço: ' + error.message, 'info');
+                showToast('Erro ao adicionar endereço: ' + error.message, 'info');
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = originalText;
@@ -4342,7 +4378,7 @@ if (count($enderecoParts) > 2) {
             
             if (!address || !city) {
                 if (!silent) {
-                    Swal.fire('Aviso', 'Por favor, preencha pelo menos o endereço e a cidade.', 'info');
+                    showToast('Por favor, preencha pelo menos o endereço e a cidade.', 'info');
                 }
                 return;
             }
@@ -4604,7 +4640,7 @@ if (count($enderecoParts) > 2) {
             
             // Validar dados básicos
             if (!customerNameValue || !customerPhoneValue) {
-                Swal.fire('Aviso', 'Por favor, preencha seus dados primeiro.', 'info');
+                showToast('Por favor, preencha seus dados primeiro.', 'info');
                 restorePaymentButtons();
                 isSubmittingOrder = false;
                 return;
@@ -4650,7 +4686,7 @@ if (count($enderecoParts) > 2) {
                     const address = document.getElementById('deliveryAddress').value.trim();
                     const city = document.getElementById('deliveryCity').value.trim();
                     if (!address || !city) {
-                        Swal.fire('Aviso', 'Por favor, preencha o endereço de entrega.', 'info');
+                        showToast('Por favor, preencha o endereço de entrega.', 'info');
                         restorePaymentButtons();
                         isSubmittingOrder = false;
                         return;
@@ -4762,7 +4798,7 @@ if (count($enderecoParts) > 2) {
                                 confirmButtonText: 'OK'
                             });
                         } else {
-                            Swal.fire('Aviso', 'Pedido criado com sucesso! A página de pagamento foi aberta em uma nova aba.', 'info');
+                            showToast('Pedido criado com sucesso! A página de pagamento foi aberta em uma nova aba.', 'info');
                         }
                         
                         // Start polling for payment status (will check when user returns)
@@ -4775,7 +4811,7 @@ if (count($enderecoParts) > 2) {
                     } else if (result.payment_id && !result.payment_url) {
                         // No payment URL - show error
                         console.error('Payment created but no payment_url returned');
-                        Swal.fire('Aviso', 'Pedido criado, mas não foi possível obter o link de pagamento. Entre em contato conosco.', 'info');
+                        showToast('Pedido criado, mas não foi possível obter o link de pagamento. Entre em contato conosco.', 'info');
                         restorePaymentButtons();
                         isSubmittingOrder = false;
                         return;
@@ -4801,19 +4837,19 @@ if (count($enderecoParts) > 2) {
                                 confirmButtonText: 'OK'
                             });
                         } else {
-                            Swal.fire('Aviso', 'Pedido criado com sucesso!', 'info');
+                            showToast('Pedido criado com sucesso!', 'info');
                         }
                     }
                 } else {
                     console.error('Erro ao criar pedido:', result);
-                    Swal.fire('Aviso', 'Erro ao criar pedido: ' + (result.message || 'Erro desconhecido'), 'info');
+                    showToast('Erro ao criar pedido: ' + (result.message || 'Erro desconhecido'), 'info');
                     restorePaymentButtons();
                     isSubmittingOrder = false;
                 }
             } catch (error) {
                 console.error('Erro ao finalizar pedido:', error);
                 console.error('Stack trace:', error.stack);
-                Swal.fire('Aviso', 'Erro ao processar pedido. Por favor, tente novamente.', 'info');
+                showToast('Erro ao processar pedido. Por favor, tente novamente.', 'info');
                 restorePaymentButtons();
                 isSubmittingOrder = false;
             }
@@ -4907,7 +4943,7 @@ if (count($enderecoParts) > 2) {
                     submitButton.style.opacity = '1';
                     submitButton.style.cursor = 'pointer';
                 }
-                Swal.fire('Aviso', 'Por favor, selecione uma opção de entrega no carrinho.', 'info');
+                showToast('Por favor, selecione uma opção de entrega no carrinho.', 'info');
                 return;
             }
             const deliveryType = deliveryTypeSelect.value;
@@ -4920,7 +4956,7 @@ if (count($enderecoParts) > 2) {
                     submitButton.style.opacity = '1';
                     submitButton.style.cursor = 'pointer';
                 }
-                Swal.fire('Aviso', 'Por favor, selecione uma opção de entrega.', 'info');
+                showToast('Por favor, selecione uma opção de entrega.', 'info');
                 return;
             }
             let enderecoEntrega = null;
@@ -4953,7 +4989,7 @@ if (count($enderecoParts) > 2) {
                                 submitButton.style.opacity = '1';
                                 submitButton.style.cursor = 'pointer';
                             }
-                            Swal.fire('Aviso', 'Por favor, preencha o endereço de entrega.', 'info');
+                            showToast('Por favor, preencha o endereço de entrega.', 'info');
                             return;
                         }
                         
@@ -4994,6 +5030,8 @@ if (count($enderecoParts) > 2) {
                 tenant_id: <?php echo $tenantId; ?>,
                 itens: itensDetalhados,
                 tipo_entrega: deliveryType,
+                mesa_id: mesaId,
+                modo_operacao: modoOperacaoLocal,
                 taxa_entrega: deliveryFee,
                 cliente_nome: customerName,
                 cliente_telefone: customerPhone,
@@ -5156,7 +5194,7 @@ if (count($enderecoParts) > 2) {
                         toggleSidebar();
                         cart = [];
                         updateCart();
-                        Swal.fire('Aviso', 'Pedido criado com sucesso! Número do pedido: ' + result.pedido_id, 'info');
+                        showToast('Pedido criado com sucesso! Número do pedido: ' + result.pedido_id, 'info');
                         window.location.reload();
                     }
                 } else {
@@ -5979,7 +6017,7 @@ if (count($enderecoParts) > 2) {
                             confirmButtonText: 'OK'
                         });
                     } else {
-                        Swal.fire('Aviso', 'Pagamento confirmado! Seu pedido foi confirmado com sucesso!', 'info');
+                        showToast('Pagamento confirmado! Seu pedido foi confirmado com sucesso!', 'info');
                     }
                 } else if (result.success && result.status === 'pending') {
                     // Ainda pendente, continuar verificando (mas limitado)

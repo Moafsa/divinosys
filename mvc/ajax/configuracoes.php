@@ -150,21 +150,57 @@ try {
                 $filialId = $filial_padrao ? $filial_padrao['id'] : null;
             }
             
+            // Ler modo de operação atual
+            $modoOperacaoRow = $db->fetch("SELECT setting_value FROM filial_settings WHERE tenant_id = ? AND filial_id = ? AND setting_key = 'modo_operacao'", [$tenantId, $filialId]);
+            $modoOperacao = $modoOperacaoRow ? $modoOperacaoRow['setting_value'] : 'mesas';
+            
             // Deletar mesas existentes
             $db->delete('mesas', 'tenant_id = ? AND filial_id = ?', [$tenantId, $filialId]);
+            
+            $tipoAtendimento = ($modoOperacao === 'comandas') ? 'comanda' : 'mesa';
+            $prefix = ($modoOperacao === 'comandas') ? 'Comanda ' : 'Mesa ';
             
             // Criar novas mesas
             for ($i = 1; $i <= $numeroMesas; $i++) {
                 $db->insert('mesas', [
                     'id_mesa' => (string)$i,
-                    'nome' => "Mesa {$i}",
+                    'nome' => $prefix . $i,
                     'status' => '1', // 1 = livre, 2 = ocupada
                     'tenant_id' => $tenantId,
-                    'filial_id' => $filialId
+                    'filial_id' => $filialId,
+                    'capacidade' => $capacidadeMesa,
+                    'tipo_atendimento' => $tipoAtendimento
                 ]);
             }
             
             echo json_encode(['success' => true, 'message' => 'Configurações de mesas salvas com sucesso!']);
+            break;
+            
+        case 'salvar_modo_operacao':
+            $modoOperacao = $_POST['modo_operacao'] ?? 'mesas';
+            
+            if (!in_array($modoOperacao, ['mesas', 'comandas', 'ambos'])) {
+                $modoOperacao = 'mesas';
+            }
+            
+            $db = \System\Database::getInstance();
+            $session = \System\Session::getInstance();
+            $tenantId = $session->getTenantId() ?? 1;
+            $filialId = $session->getFilialId();
+            
+            if ($filialId === null) {
+                $filial_padrao = $db->fetch("SELECT id FROM filiais WHERE tenant_id = ? LIMIT 1", [$tenantId]);
+                $filialId = $filial_padrao ? $filial_padrao['id'] : null;
+            }
+            
+            $db->query("
+                INSERT INTO filial_settings (tenant_id, filial_id, setting_key, setting_value, updated_at)
+                VALUES (?, ?, 'modo_operacao', ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (tenant_id, filial_id, setting_key) 
+                DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = CURRENT_TIMESTAMP
+            ", [$tenantId, $filialId, $modoOperacao]);
+            
+            echo json_encode(['success' => true, 'message' => 'Modo de operação salvo com sucesso!']);
             break;
             
         // ===== WUZAPI FUNCTIONS =====

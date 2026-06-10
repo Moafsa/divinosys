@@ -43,6 +43,13 @@ if ($tenant && $filial) {
         // Get capacity from first mesa (assuming all have same capacity)
         $capacidadeMesaAtual = $mesasExistentes[0]['capacidade'] ?? 4;
     }
+    
+    // Obter modo_operacao
+    $modoOperacao = 'mesas';
+    $modoOperacaoRow = $db->fetch("SELECT setting_value FROM filial_settings WHERE tenant_id = ? AND filial_id = ? AND setting_key = 'modo_operacao'", [$tenant['id'], $filial['id']]);
+    if ($modoOperacaoRow) {
+        $modoOperacao = $modoOperacaoRow['setting_value'];
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -429,6 +436,72 @@ if ($tenant && $filial) {
                     </div>
                 </div>
                 <?php endif; ?>
+
+                <!-- Configuração do Modo de Operação (Mesas/Comandas) -->
+                <div class="config-card">
+                    <h5 class="mb-3">
+                        <i class="fas fa-concierge-bell me-2"></i>
+                        Modo de Operação (Atendimento Local)
+                    </h5>
+                    <p class="text-muted mb-3">Escolha como sua equipe e o salão funcionam.</p>
+                    
+                    <form id="configModoOperacao">
+                        <div class="mb-4">
+                            <label class="form-label d-block fw-bold mb-3">Sistema Principal</label>
+                            
+                            <div class="form-check custom-radio mb-3 p-3 border rounded shadow-sm">
+                                <input class="form-check-input ms-1 mt-2" type="radio" name="modo_operacao" id="modoMesas" value="mesas" <?php echo ($modoOperacao === 'mesas') ? 'checked' : ''; ?>>
+                                <label class="form-check-label ms-3 w-100" for="modoMesas" style="cursor:pointer;">
+                                    <div class="d-flex align-items-center">
+                                        <div class="bg-primary bg-opacity-10 p-3 rounded-circle me-3">
+                                            <i class="fas fa-chair text-primary fs-4"></i>
+                                        </div>
+                                        <div>
+                                            <strong class="d-block text-dark">Apenas Mesas</strong>
+                                            <span class="text-muted small">Gerencie pedidos de clientes associados a mesas físicas no salão.</span>
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                            
+                            <div class="form-check custom-radio mb-3 p-3 border rounded shadow-sm">
+                                <input class="form-check-input ms-1 mt-2" type="radio" name="modo_operacao" id="modoComandas" value="comandas" <?php echo ($modoOperacao === 'comandas') ? 'checked' : ''; ?>>
+                                <label class="form-check-label ms-3 w-100" for="modoComandas" style="cursor:pointer;">
+                                    <div class="d-flex align-items-center">
+                                        <div class="bg-info bg-opacity-10 p-3 rounded-circle me-3">
+                                            <i class="fas fa-receipt text-info fs-4"></i>
+                                        </div>
+                                        <div>
+                                            <strong class="d-block text-dark">Apenas Comandas</strong>
+                                            <span class="text-muted small">Trabalhe com comandas numeradas ou com nomes na porta de entrada ou balcão.</span>
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+
+                            <div class="form-check custom-radio mb-3 p-3 border rounded shadow-sm">
+                                <input class="form-check-input ms-1 mt-2" type="radio" name="modo_operacao" id="modoAmbos" value="ambos" <?php echo ($modoOperacao === 'ambos') ? 'checked' : ''; ?>>
+                                <label class="form-check-label ms-3 w-100" for="modoAmbos" style="cursor:pointer;">
+                                    <div class="d-flex align-items-center">
+                                        <div class="bg-success bg-opacity-10 p-3 rounded-circle me-3">
+                                            <i class="fas fa-store text-success fs-4"></i>
+                                        </div>
+                                        <div>
+                                            <strong class="d-block text-dark">Híbrido (Mesas e Comandas)</strong>
+                                            <span class="text-muted small">Permite abrir pedidos tanto em Mesas físicas quanto em Comandas avulsas.</span>
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn btn-primary" id="btnSalvarModoOperacao">
+                                <i class="fas fa-save me-2"></i>Salvar Modo de Operação
+                            </button>
+                        </div>
+                    </form>
+                </div>
 
                 <!-- Configurações WhatsApp -->
                 <div class="config-card">
@@ -1235,6 +1308,35 @@ if ($tenant && $filial) {
             .catch(error => {
                 console.error('Error:', error);
                 Swal.fire('Erro', 'Erro ao salvar configurações', 'error');
+            });
+        });
+
+        // Salvar Modo de Operação (Mesas/Comandas)
+        document.getElementById('configModoOperacao').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const modoOperacao = document.querySelector('input[name="modo_operacao"]:checked').value;
+            
+            const formData = new FormData();
+            formData.append('action', 'salvar_modo_operacao');
+            formData.append('modo_operacao', modoOperacao);
+            
+            fetch('mvc/ajax/configuracoes.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire('Sucesso', data.message, 'success');
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    Swal.fire('Erro', data.message || 'Erro ao salvar o modo de operação', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                Swal.fire('Erro', 'Erro ao salvar configurações de modo de operação', 'error');
             });
         });
 

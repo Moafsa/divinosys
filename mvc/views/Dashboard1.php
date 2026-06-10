@@ -58,6 +58,15 @@ if (!$filial && $tenant) {
     error_log("Dashboard: Using tenant as default filial for user {$user['id']}");
 }
 
+// Obter modo de operação
+$modoOperacao = 'mesas';
+if ($tenant && $filial) {
+    $modoRow = $db->fetch("SELECT setting_value FROM filial_settings WHERE tenant_id = ? AND filial_id = ? AND setting_key = 'modo_operacao'", [$tenant['id'], $filial['id']]);
+    if ($modoRow) {
+        $modoOperacao = $modoRow['setting_value'];
+    }
+}
+
 // Get mesas data
 $mesas = [];
 if ($tenant) {
@@ -748,7 +757,7 @@ if ($tenant && $filial) {
                         <div class="col-md-6">
                             <h2 class="mb-0">
                                 <i class="fas fa-tachometer-alt me-2"></i>
-                                Dashboard
+                                Dashboard (<?php echo ucfirst($modoOperacao); ?>)
                             </h2>
                             <p class="text-muted mb-0">Bem-vindo, <?php echo htmlspecialchars($user['login'] ?? 'admin'); ?>!</p>
                         </div>
@@ -969,7 +978,7 @@ if ($tenant && $filial) {
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h5 class="mb-0">
                                 <i class="fas fa-table me-2"></i>
-                                Status das Mesas
+                                Status de <?php echo ($modoOperacao === 'comandas') ? 'Comandas' : (($modoOperacao === 'ambos') ? 'Atendimento' : 'Mesas'); ?>
                             </h5>
                             <button class="btn btn-outline-primary btn-sm" onclick="atualizarMesas()">
                                 <i class="fas fa-sync-alt me-1"></i>
@@ -996,6 +1005,21 @@ if ($tenant && $filial) {
                                 in_array($pedido['tipo_entrega'], ['pickup', 'delivery'])
                             );
                         }
+                        // Adaptar rótulo
+                        $labelName = 'Mesa';
+                        if ($modoOperacao === 'comandas') {
+                            $labelName = 'Comanda';
+                        } elseif ($modoOperacao === 'ambos') {
+                            // Tentar deduzir pelo nome se for cadastrado com prefixo, se não, padroniza
+                            if (stripos($mesa['id_mesa'], 'C') !== false || stripos($mesa['numero'] ?? '', 'C') !== false) {
+                                $labelName = 'Comanda';
+                            } elseif (stripos($mesa['id_mesa'], 'M') !== false || stripos($mesa['numero'] ?? '', 'M') !== false) {
+                                $labelName = 'Mesa';
+                            } else {
+                                $labelName = ($mesa['tipo_atendimento'] ?? '') === 'comanda' ? 'Comanda' : 'Mesa';
+                            }
+                        }
+                        
                         $cardClass = $isOnlineOrder ? 'mesa-floating-card ocupada online-order' : 'mesa-floating-card ' . $status;
                         ?>
                         <div class="<?php echo $cardClass; ?>" onclick="verMesa(<?php echo $mesa['id']; ?>, <?php echo $mesa['id_mesa']; ?>)">
@@ -1008,6 +1032,7 @@ if ($tenant && $filial) {
                                         <i class="fas fa-exclamation-circle"></i>
                                     <?php endif; ?>
                                 </div>
+                                <div class="mesa-number" style="font-size:0.7rem; color:#888;"><?php echo $labelName; ?></div>
                                 <div class="mesa-number"><?php echo $mesa['id_mesa']; ?></div>
                                 <div class="mesa-status-text"><?php echo ucfirst($status); ?></div>
                                 <?php if ($pedidoMesa): ?>

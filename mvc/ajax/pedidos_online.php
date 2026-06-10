@@ -421,11 +421,24 @@ try {
     
     if (!$clienteId) {
         try {
-            // Try to find existing client by phone
-            $clienteExistente = $db->fetch(
-                "SELECT id FROM usuarios_globais WHERE telefone = ? LIMIT 1",
-                [preg_replace('/[^0-9]/', '', $clienteTelefone)]
-            );
+            // Try to find existing client prioritizing CPF, then Email, then Phone
+            $cpfLimpo = !empty($data['cliente_cpf']) ? preg_replace('/[^0-9]/', '', $data['cliente_cpf']) : null;
+            $telefoneLimpo = preg_replace('/[^0-9]/', '', $clienteTelefone);
+            $emailLimpo = !empty($clienteEmail) ? trim($clienteEmail) : null;
+            
+            $clienteExistente = null;
+            
+            if ($cpfLimpo) {
+                $clienteExistente = $db->fetch("SELECT id FROM usuarios_globais WHERE regexp_replace(cpf, '[^0-9]', '', 'g') = ? LIMIT 1", [$cpfLimpo]);
+            }
+            
+            if (!$clienteExistente && $emailLimpo) {
+                $clienteExistente = $db->fetch("SELECT id FROM usuarios_globais WHERE email = ? LIMIT 1", [$emailLimpo]);
+            }
+            
+            if (!$clienteExistente && $telefoneLimpo) {
+                $clienteExistente = $db->fetch("SELECT id FROM usuarios_globais WHERE telefone = ? LIMIT 1", [$telefoneLimpo]);
+            }
             
             if ($clienteExistente) {
                 $clienteId = $clienteExistente['id'];
@@ -433,8 +446,8 @@ try {
                 // Update client data if provided
                 $updateData = [];
                 if (!empty($clienteNome)) $updateData['nome'] = $clienteNome;
-                if (!empty($clienteEmail)) $updateData['email'] = $clienteEmail;
-                if (!empty($data['cliente_cpf'])) $updateData['cpf'] = $data['cliente_cpf'];
+                if (!empty($emailLimpo)) $updateData['email'] = $emailLimpo;
+                if (!empty($cpfLimpo)) $updateData['cpf'] = $cpfLimpo;
                 
                 if (!empty($updateData)) {
                     $updateData['updated_at'] = \System\TimeHelper::now('Y-m-d H:i:s', $filialId);
@@ -489,7 +502,11 @@ try {
     }
     
     // Determine mesa ID
-    $mesaId = ($tipoEntrega === 'delivery') ? '999' : '998'; // 999 = delivery, 998 = pickup
+    if ($tipoEntrega === 'local') {
+        $mesaId = $_POST['mesa_id'] ?? '998'; // Default to pickup if no mesa provided
+    } else {
+        $mesaId = ($tipoEntrega === 'delivery') ? '999' : '998'; // 999 = delivery, 998 = pickup
+    }
     
     // Create order
     $observacao = '';
@@ -499,6 +516,9 @@ try {
             ($enderecoEntrega['bairro'] ?? '') . ", " .
             ($enderecoEntrega['cidade'] ?? '') . " - CEP: " .
             ($enderecoEntrega['cep'] ?? '');
+    } elseif ($tipoEntrega === 'local') {
+        $modoOperacao = $_POST['modo_operacao'] ?? 'Mesa';
+        $observacao = "Pedido via QR Code - " . ucfirst($modoOperacao) . " " . ($mesaId !== '998' ? $mesaId : '');
     } else {
         $observacao = "Pedido Online - Retirada no Balcão";
     }
