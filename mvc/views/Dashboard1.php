@@ -72,17 +72,17 @@ $mesas = [];
 if ($tenant) {
     if ($filial) {
         // Matriz user - get mesas for specific filial
-        $mesas = $db->fetchAll(
-            "SELECT * FROM mesas WHERE tenant_id = ? AND filial_id = ? ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE id_mesa::integer END",
-            [$tenant['id'], $filial['id']]
-        );
-    } else {
-        // Filial user - get mesas for tenant (filial is the main branch)
-        $mesas = $db->fetchAll(
-            "SELECT * FROM mesas WHERE tenant_id = ? AND (filial_id = ? OR filial_id IS NULL) ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE id_mesa::integer END",
-            [$tenant['id'], null]
-        );
-    }
+if ($tenant && $filial) {
+    $mesas = $db->fetchAll(
+        "SELECT * FROM mesas WHERE tenant_id = ? AND filial_id = ? ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE NULLIF(regexp_replace(id_mesa, '\D', '', 'g'), '')::integer END",
+        [$tenant['id'], $filial['id']]
+    );
+} else if ($tenant) {
+    // Fallback se não tiver filial especificada (admin geral)
+    $mesas = $db->fetchAll(
+        "SELECT * FROM mesas WHERE tenant_id = ? AND (filial_id = ? OR filial_id IS NULL) ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE NULLIF(regexp_replace(id_mesa, '\D', '', 'g'), '')::integer END",
+        [$tenant['id'], $filial['id'] ?? null]
+    );
 }
 
 // Get reservas data - pending and confirmed reservations

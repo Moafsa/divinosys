@@ -74,14 +74,14 @@ try {
                 $mesas = $db->fetchAll(
                     "SELECT id, id_mesa, numero, capacidade, status FROM mesas 
                      WHERE tenant_id = ? AND filial_id = ? 
-                     ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE id_mesa::integer END",
+                     ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE NULLIF(regexp_replace(id_mesa, '\D', '', 'g'), '')::integer END",
                     [$tenantId, $filialId]
                 );
             } else {
                 $mesas = $db->fetchAll(
                     "SELECT id, id_mesa, numero, capacidade, status FROM mesas 
                      WHERE tenant_id = ? AND (filial_id = ? OR filial_id IS NULL)
-                     ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE id_mesa::integer END",
+                     ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE NULLIF(regexp_replace(id_mesa, '\D', '', 'g'), '')::integer END",
                     [$tenantId, null]
                 );
             }

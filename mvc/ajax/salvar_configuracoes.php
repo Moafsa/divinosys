@@ -67,7 +67,7 @@ try {
                 // Remover mesas extras
                 $db->delete(
                     'mesas',
-                    'tenant_id = ? AND filial_id = ? AND id_mesa::integer > ?',
+                    "tenant_id = ? AND filial_id = ? AND NULLIF(regexp_replace(id_mesa, '\D', '', 'g'), '')::integer > ?",
                     [$tenantId, $filialId, $numeroMesas]
                 );
             }

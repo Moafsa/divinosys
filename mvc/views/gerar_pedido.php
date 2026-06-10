@@ -73,7 +73,7 @@ if ($pedidoId) {
 $mesas = [];
 if ($tenant && $filial) {
     $mesas = $db->fetchAll(
-        "SELECT * FROM mesas WHERE tenant_id = ? AND filial_id = ? ORDER BY id_mesa::integer",
+        "SELECT * FROM mesas WHERE tenant_id = ? AND filial_id = ? ORDER BY NULLIF(regexp_replace(id_mesa, '\D', '', 'g'), '')::integer, id_mesa",
         [$tenant['id'], $filial['id']]
     );
 }
