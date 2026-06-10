@@ -3114,10 +3114,10 @@ if (count($enderecoParts) > 2) {
                             <div id="customerDataFields" style="margin-top: 15px;">
                                 <div id="checkoutError" class="alert alert-danger" style="display: none; margin-bottom: 15px;"></div>
                                 <input type="text" class="form-control mb-2" id="customerName" placeholder="Seu Nome completo" required>
-                                <input type="email" class="form-control mb-2" id="customerEmail" placeholder="E-mail (opcional)">
-                                <input type="text" class="form-control mb-2" id="customerCpf" placeholder="CPF (opcional)">
+                                <input type="email" class="form-control mb-2" id="customerEmail" placeholder="E-mail (obrigatório para PIX/Cartão online)">
+                                <input type="text" class="form-control mb-2" id="customerCpf" placeholder="CPF/CNPJ (obrigatório para PIX/Cartão online)">
                                 <small class="text-muted d-block mb-3">
-                                    <i class="fas fa-info-circle"></i> CPF é recomendado se for pagar por PIX/Cartão online
+                                    <i class="fas fa-info-circle"></i> CPF e E-mail são obrigatórios para pagamentos via PIX ou Cartão online
                                 </small>
                                 <button class="btn btn-primary w-100 py-2" style="font-weight: bold; font-size: 1.1rem; border-radius: 8px;" onclick="proximoPasso(1)">Continuar para Entrega</button>
                             </div>
@@ -4568,6 +4568,34 @@ if (count($enderecoParts) > 2) {
             // Validar dados básicos
             if (!customerNameValue || !customerPhoneValue) {
                 Swal.fire('Aviso', 'Por favor, preencha seus dados primeiro.', 'info');
+                restorePaymentButtons();
+                isSubmittingOrder = false;
+                return;
+            }
+            
+            // Validar CPF e E-mail para pagamento online (exigência do gateway/Asaas)
+            if (!customerCpfValue || !customerEmailValue) {
+                Swal.fire({
+                    title: 'Dados Obrigatórios',
+                    text: 'Para pagamentos via PIX ou Cartão, é obrigatório informar o CPF/CNPJ e o E-mail. Por favor, preencha esses dados.',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Preencher Dados',
+                    cancelButtonText: 'Cancelar'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        if (typeof mostrarPasso === 'function') {
+                            mostrarPasso(1); // Volta para a aba de dados do cliente
+                            setTimeout(() => {
+                                if (!customerEmailValue) {
+                                    document.getElementById('customerEmail').focus();
+                                } else {
+                                    document.getElementById('customerCpf').focus();
+                                }
+                            }, 300);
+                        }
+                    }
+                });
                 restorePaymentButtons();
                 isSubmittingOrder = false;
                 return;
