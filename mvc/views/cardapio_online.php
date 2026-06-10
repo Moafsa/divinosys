@@ -3114,11 +3114,6 @@ if (count($enderecoParts) > 2) {
                             <div id="customerDataFields" style="margin-top: 15px;">
                                 <div id="checkoutError" class="alert alert-danger" style="display: none; margin-bottom: 15px;"></div>
                                 <input type="text" class="form-control mb-2" id="customerName" placeholder="Seu Nome completo" required>
-                                <input type="email" class="form-control mb-2" id="customerEmail" placeholder="E-mail (obrigatório para PIX/Cartão online)">
-                                <input type="text" class="form-control mb-2" id="customerCpf" placeholder="CPF/CNPJ (obrigatório para PIX/Cartão online)">
-                                <small class="text-muted d-block mb-3">
-                                    <i class="fas fa-info-circle"></i> CPF e E-mail são obrigatórios para pagamentos via PIX ou Cartão online
-                                </small>
                                 <button class="btn btn-primary w-100 py-2" style="font-weight: bold; font-size: 1.1rem; border-radius: 8px;" onclick="proximoPasso(1)">Continuar para Entrega</button>
                             </div>
                         </div>
@@ -3182,7 +3177,16 @@ if (count($enderecoParts) > 2) {
                                 
                                 <!-- Botões de PIX e Cartão - aparecem quando Pagar Online é selecionado -->
                                 <div id="onlinePaymentButtons" style="display: none; margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                                    <h6 class="mb-3">Escolha o método de pagamento:</h6>
+                                    
+                                    <div id="onlinePaymentData" style="display: none; margin-bottom: 15px;">
+                                        <div class="alert alert-warning mb-2" style="font-size: 0.9rem; padding: 10px;">
+                                            <i class="fas fa-exclamation-triangle"></i> Para pagamento online, precisamos destes dados:
+                                        </div>
+                                        <input type="email" class="form-control mb-2" id="customerEmail" placeholder="Seu E-mail" oninput="checkOnlinePaymentFields()">
+                                        <input type="text" class="form-control mb-2" id="customerCpf" placeholder="Seu CPF ou CNPJ" oninput="checkOnlinePaymentFields()">
+                                    </div>
+
+                                    <h6 class="mb-3" id="onlinePaymentTitle">Escolha o método de pagamento:</h6>
                                     <div class="d-grid gap-2">
                                         <button id="btnPix" class="btn btn-success btn-lg" onclick="finalizarPedidoOnline('PIX')" style="margin-bottom: 10px;">
                                             <i class="fas fa-qrcode"></i> <span class="btn-text">Pagar com PIX</span>
@@ -4018,6 +4022,11 @@ if (count($enderecoParts) > 2) {
             const onlineButtons = document.getElementById('onlinePaymentButtons');
             if (onlineButtons) {
                 onlineButtons.style.display = (method === 'online') ? 'block' : 'none';
+                if (method === 'online') {
+                    if (typeof checkOnlinePaymentFields === 'function') {
+                        checkOnlinePaymentFields();
+                    }
+                }
             }
             
             // Esconder/mostrar botão Continuar
@@ -4033,6 +4042,34 @@ if (count($enderecoParts) > 2) {
         function selectOnlinePaymentMethod(method) {
             onlinePaymentMethod = method;
             document.getElementById('onlinePayment' + (method === 'PIX' ? 'PIX' : 'Card')).checked = true;
+        }
+
+        function checkOnlinePaymentFields() {
+            const emailInput = document.getElementById('customerEmail');
+            const cpfInput = document.getElementById('customerCpf');
+            const btnPix = document.getElementById('btnPix');
+            const btnCartao = document.getElementById('btnCartao');
+            const divDados = document.getElementById('onlinePaymentData');
+            const paymentTitle = document.getElementById('onlinePaymentTitle');
+            
+            if (!emailInput || !cpfInput) return;
+            
+            const hasEmail = emailInput.value && emailInput.value.trim() !== '';
+            const hasCpf = cpfInput.value && cpfInput.value.trim() !== '';
+            
+            if (hasEmail && hasCpf) {
+                // Tem os dados: esconde o form e habilita os botões
+                if (divDados) divDados.style.display = 'none';
+                if (paymentTitle) paymentTitle.style.display = 'block';
+                if (btnPix) btnPix.disabled = false;
+                if (btnCartao) btnCartao.disabled = false;
+            } else {
+                // Faltam dados: mostra o form e desabilita os botões
+                if (divDados) divDados.style.display = 'block';
+                if (paymentTitle) paymentTitle.style.display = 'none';
+                if (btnPix) btnPix.disabled = true;
+                if (btnCartao) btnCartao.disabled = true;
+            }
         }
         
         async function salvarNovoEnderecoCliente(enderecoData) {
@@ -4577,23 +4614,13 @@ if (count($enderecoParts) > 2) {
             if (!customerCpfValue || !customerEmailValue) {
                 Swal.fire({
                     title: 'Dados Obrigatórios',
-                    text: 'Para pagamentos via PIX ou Cartão, é obrigatório informar o CPF/CNPJ e o E-mail. Por favor, preencha esses dados.',
-                    icon: 'warning',
-                    showCancelButton: true,
-                    confirmButtonText: 'Preencher Dados',
-                    cancelButtonText: 'Cancelar'
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        if (typeof mostrarPasso === 'function') {
-                            mostrarPasso(1); // Volta para a aba de dados do cliente
-                            setTimeout(() => {
-                                if (!customerEmailValue) {
-                                    document.getElementById('customerEmail').focus();
-                                } else {
-                                    document.getElementById('customerCpf').focus();
-                                }
-                            }, 300);
-                        }
+                    text: 'Para pagamentos via PIX ou Cartão, é obrigatório informar o CPF/CNPJ e o E-mail. Por favor, preencha esses dados nos campos acima.',
+                    icon: 'warning'
+                }).then(() => {
+                    if (!customerEmailValue) {
+                        document.getElementById('customerEmail').focus();
+                    } else {
+                        document.getElementById('customerCpf').focus();
                     }
                 });
                 restorePaymentButtons();
