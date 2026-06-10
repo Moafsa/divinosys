@@ -46,9 +46,9 @@ try {
     switch ($action) {
         case 'mesa_multiplos_pedidos':
         case 'ver_mesa_multiplos_pedidos':
-            $mesaId = (int) ($_GET['mesa_id'] ?? 0);
+            $mesaId = $_GET['mesa_id'] ?? '';
             
-            if ($mesaId <= 0) {
+            if (empty($mesaId)) {
                 throw new \Exception('ID da mesa inválido');
             }
             

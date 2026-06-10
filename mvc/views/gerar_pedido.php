@@ -69,6 +69,15 @@ if ($pedidoId) {
     }
 }
 
+// Obter modo de operação
+$modoOperacao = 'mesas';
+if ($tenant && $filial) {
+    $modoRow = $db->fetch("SELECT setting_value FROM filial_settings WHERE tenant_id = ? AND filial_id = ? AND setting_key = 'modo_operacao'", [$tenant['id'], $filial['id']]);
+    if ($modoRow) {
+        $modoOperacao = $modoRow['setting_value'];
+    }
+}
+
 // Get mesas data
 $mesas = [];
 if ($tenant && $filial) {
@@ -463,7 +472,7 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                                 <i class="fas fa-<?php echo $editarPedido ? 'edit' : 'plus-circle'; ?> me-2"></i>
                                 <?php echo $editarPedido ? 'Editar Pedido #' . $editarPedido['idpedido'] : 'Novo Pedido'; ?>
                             </h2>
-                            <p class="text-muted mb-0"><?php echo $editarPedido ? 'Edite o pedido existente' : 'Selecione uma mesa e adicione produtos ao pedido'; ?></p>
+                            <p class="text-muted mb-0"><?php echo $editarPedido ? 'Edite o pedido existente' : 'Selecione uma ' . ($modoOperacao === 'comandas' ? 'comanda' : ($modoOperacao === 'ambos' ? 'mesa ou comanda' : 'mesa')) . ' e adicione produtos ao pedido'; ?></p>
                         </div>
                         <div class="col-md-6">
                             <div class="d-flex justify-content-end gap-2">
@@ -486,7 +495,7 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                         <div class="mesa-selector">
                             <h5 class="mb-3">
                                 <i class="fas fa-table me-2"></i>
-                                Selecionar Mesa
+                                Selecionar <?php echo ($modoOperacao === 'comandas') ? 'Comanda' : (($modoOperacao === 'ambos') ? 'Mesa / Comanda' : 'Mesa'); ?>
                             </h5>
                             <div class="row" id="mesasGrid">
                                 <?php if (count($mesas) > 0): ?>
@@ -508,7 +517,7 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                                     <div class="col-12 text-center text-muted py-4">
                                         <i class="fas fa-table fa-3x mb-3"></i>
                                         <p>Nenhuma mesa encontrada</p>
-                                        <small>Configure as mesas nas configurações do sistema</small>
+                                        <small>Configure as mesas ou comandas nas configurações do sistema</small>
                                     </div>
                                 <?php endif; ?>
                                 

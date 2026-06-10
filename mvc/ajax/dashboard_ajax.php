@@ -15,9 +15,9 @@ try {
     
     switch ($action) {
         case 'ver_mesa':
-            $mesaId = (int) ($_GET['mesa_id'] ?? 0);
+            $mesaId = $_GET['mesa_id'] ?? '';
             
-            if (!$mesaId) {
+            if (empty($mesaId)) {
                 throw new \Exception('ID da mesa é obrigatório');
             }
             
