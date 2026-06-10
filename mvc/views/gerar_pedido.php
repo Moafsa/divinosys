@@ -30,7 +30,7 @@ $editarPedido = null;
 $pedidoId = $_GET['editar'] ?? '';
 if ($pedidoId) {
     $editarPedido = $db->fetch(
-        "SELECT p.*, 
+        "SELECT p.*, c.nome as cliente_nome, c.telefone as cliente_telefone, c.id as cliente_id,
                 CASE 
                     WHEN p.delivery = true OR p.tipo_entrega = 'delivery' OR p.idmesa = '999' THEN '999'
                     ELSE p.idmesa
@@ -42,6 +42,7 @@ if ($pedidoId) {
                 END as mesa_nome
          FROM pedido p 
          LEFT JOIN mesas m ON p.idmesa::varchar = m.id_mesa AND m.tenant_id = p.tenant_id AND m.filial_id = p.filial_id
+         LEFT JOIN usuarios_globais c ON p.usuario_global_id = c.id
          WHERE p.idpedido = ? AND p.tenant_id = ? AND p.filial_id = ?",
         [$pedidoId, $tenant['id'], $filial['id']]
     );
@@ -1811,6 +1812,20 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
             if (document.getElementById('observacaoPedido')) {
                 document.getElementById('observacaoPedido').value = '<?php echo addslashes($editarPedido['observacao'] ?? ''); ?>';
             }
+            
+            // Carregar dados do cliente do pedido
+            <?php if (!empty($editarPedido['cliente_nome'])): ?>
+            if (document.getElementById('clienteNome')) {
+                document.getElementById('clienteNome').value = '<?php echo addslashes($editarPedido['cliente_nome']); ?>';
+            }
+            <?php endif; ?>
+            
+            <?php if (!empty($editarPedido['cliente_telefone'])): ?>
+            if (document.getElementById('clienteTelefone')) {
+                document.getElementById('clienteTelefone').value = '<?php echo addslashes($editarPedido['cliente_telefone']); ?>';
+            }
+            <?php endif; ?>
+
             
             // Verificar se pedido está "Pronto" e aplicar restrições
             const statusPedido = '<?php echo $editarPedido['status']; ?>';

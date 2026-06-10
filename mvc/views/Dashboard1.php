@@ -70,10 +70,11 @@ if ($tenant && $filial) {
 // Get mesas data
 $mesas = [];
 if ($tenant) {
-    // Condition for comandas mode to hide empty tables
-    $statusCondition = "";
+    // Condition to hide empty comandas (they should only appear when occupied)
+    $statusCondition = " AND (tipo_atendimento != 'comanda' OR status != '1')";
     if ($modoOperacao === 'comandas') {
-        $statusCondition = " AND LOWER(status) != 'livre'";
+        // Se estiver em modo comandas, esconde também as mesas vazias
+        $statusCondition = " AND status != '1'";
     }
 
     if ($filial) {
@@ -1409,6 +1410,25 @@ if ($tenant && $filial) {
                 Swal.fire('Erro!', 'Não foi possível vincular a comanda', 'error');
             });
         }
+        // Auto-fetch client by phone in Vincular Comanda modal
+        document.addEventListener('DOMContentLoaded', function() {
+            const telefoneInput = document.getElementById('vincular_cliente_telefone');
+            if (telefoneInput) {
+                telefoneInput.addEventListener('blur', function() {
+                    const telefone = this.value.replace(/\D/g, '');
+                    if (telefone.length >= 10) {
+                        fetch(`mvc/ajax/buscar_cliente.php?telefone=${telefone}`)
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.success && data.cliente && data.cliente.nome) {
+                                    document.getElementById('vincular_cliente_nome').value = data.cliente.nome;
+                                }
+                            })
+                            .catch(error => console.error('Erro ao buscar cliente:', error));
+                    }
+                });
+            }
+        });
 
         function atualizarMesas() {
             location.reload();

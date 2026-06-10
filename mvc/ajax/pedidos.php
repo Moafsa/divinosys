@@ -214,7 +214,8 @@ try {
                 'usuario_id' => $usuarioId,
                 'tenant_id' => $tenantId,
                 'filial_id' => $filialId,
-                'delivery' => ($mesaId === '999') ? 1 : 0
+                'delivery' => ($mesaId === '999') ? 1 : 0,
+                'tipo_entrega' => ($mesaId === '999') ? 'delivery' : null
             ]);
             
             // Register client interaction if client exists
@@ -956,18 +957,12 @@ try {
             
             // Determinar tipo_entrega: preservar se existir, ou definir baseado em isDelivery
             $tipoEntrega = null;
-            if (!empty($pedidoAtual['tipo_entrega'])) {
-                // Se o pedido original tinha tipo_entrega (pedido do cardápio online), preservar
-                if ($isDelivery) {
-                    // Se está marcando como delivery, usar 'delivery'
-                    $tipoEntrega = 'delivery';
-                } else {
-                    // Se mudou para mesa, manter tipo_entrega original (pode ser 'pickup')
-                    $tipoEntrega = $pedidoAtual['tipo_entrega'];
-                }
+            if ($isDelivery) {
+                $tipoEntrega = 'delivery';
+            } else if ($mesaId === '998') {
+                $tipoEntrega = 'pickup';
             } else {
-                // Se não tinha tipo_entrega, definir baseado em isDelivery
-                $tipoEntrega = $isDelivery ? 'delivery' : null;
+                $tipoEntrega = null;
             }
             
             // Preparar dados para atualização
@@ -977,13 +972,9 @@ try {
                 'saldo_devedor' => $novoSaldoDevedor,
                 'observacao' => $observacao,
                 'usuario_id' => $usuarioId,
-                'delivery' => $isDelivery ? 1 : 0
+                'delivery' => $isDelivery ? 1 : 0,
+                'tipo_entrega' => $tipoEntrega
             ];
-            
-            // Preservar tipo_entrega se existir ou se foi definido (para pedidos do cardápio online)
-            if ($tipoEntrega !== null) {
-                $updateData['tipo_entrega'] = $tipoEntrega;
-            }
             
             // Preservar TODOS os campos importantes de pedidos do cardápio online
             if (!empty($pedidoAtual['usuario_global_id'])) {

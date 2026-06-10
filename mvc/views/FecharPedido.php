@@ -47,14 +47,14 @@ if ($tenant && $filial) {
         
         // Buscar a mesa correspondente - tentar diferentes campos
         $mesa = $db->fetch(
-            "SELECT numero, id_mesa FROM mesas WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?",
+            "SELECT numero, id_mesa, cliente_nome, cliente_telefone FROM mesas WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?",
             [$pedidoRaw['idmesa'], $tenant['id'], $filial['id']]
         );
         
         // Se não encontrou, tentar sem filtro de tenant/filial
         if (!$mesa) {
             $mesa = $db->fetch(
-                "SELECT numero, id_mesa FROM mesas WHERE id_mesa = ?",
+                "SELECT numero, id_mesa, cliente_nome, cliente_telefone FROM mesas WHERE id_mesa = ?",
                 [$pedidoRaw['idmesa']]
             );
         }
@@ -62,7 +62,7 @@ if ($tenant && $filial) {
         // Se ainda não encontrou, tentar pelo campo numero
         if (!$mesa) {
             $mesa = $db->fetch(
-                "SELECT numero, id_mesa FROM mesas WHERE numero = ? AND tenant_id = ? AND filial_id = ?",
+                "SELECT numero, id_mesa, cliente_nome, cliente_telefone FROM mesas WHERE numero = ? AND tenant_id = ? AND filial_id = ?",
                 [$pedidoRaw['idmesa'], $tenant['id'], $filial['id']]
             );
         }
@@ -82,6 +82,15 @@ if ($tenant && $filial) {
                 $pedido['cliente_email'] = $cliente['email'];
                 $pedido['cliente_cpf'] = $cliente['cpf'];
             }
+        }
+        
+        // Se ainda não tiver cliente_nome definido, tenta pegar da mesa ou do próprio pedidoRaw
+        if (empty($pedido['cliente_nome']) && !empty($mesa['cliente_nome'])) {
+            $pedido['cliente_nome'] = $mesa['cliente_nome'];
+            $pedido['cliente_telefone'] = $mesa['cliente_telefone'] ?? '';
+        } else if (empty($pedido['cliente_nome']) && !empty($pedidoRaw['cliente_nome'])) {
+            $pedido['cliente_nome'] = $pedidoRaw['cliente_nome'];
+            $pedido['cliente_telefone'] = $pedidoRaw['cliente_telefone'] ?? '';
         }
         
         error_log('DEBUG FecharPedido: mesa encontrada = ' . ($mesa ? ($mesa['numero'] ?? $mesa['id_mesa']) : 'NULL'));
