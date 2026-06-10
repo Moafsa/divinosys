@@ -56,13 +56,13 @@ if ($tenant && $filial) {
         "SELECT
             DATE(p.data) as data_venda,
             COUNT(*) as total_pedidos,
-            COALESCE(SUM(pg.valor_pago), SUM(p.valor_total)) as total_vendas,
-            AVG(COALESCE(pg.valor_pago, p.valor_total)) as ticket_medio,
+            COALESCE(SUM(CASE WHEN pg.forma_pagamento != 'DESCONTO' THEN pg.valor_pago ELSE 0 END), SUM(p.valor_total)) as total_vendas,
+            AVG(COALESCE((SELECT SUM(CASE WHEN ppi.forma_pagamento != 'DESCONTO' THEN ppi.valor_pago ELSE 0 END) FROM pagamentos_pedido ppi WHERE ppi.pedido_id = p.idpedido), p.valor_total)) as ticket_medio,
             COUNT(CASE WHEN p.delivery = true THEN 1 END) as pedidos_delivery,
             COUNT(CASE WHEN p.delivery = false THEN 1 END) as pedidos_mesa,
-            COALESCE(SUM(pg.desconto_aplicado), 0) as total_descontos
+            COALESCE(SUM(CASE WHEN pg.forma_pagamento = 'DESCONTO' THEN pg.valor_pago ELSE 0 END), 0) as total_descontos
          FROM pedido p
-         LEFT JOIN pagamentos pg ON p.idpedido = pg.pedido_id
+         LEFT JOIN pagamentos_pedido pg ON p.idpedido = pg.pedido_id
          WHERE p.tenant_id = ? AND p.filial_id = ?
          AND p.data BETWEEN ? AND ?
          AND p.status_pagamento = 'quitado'

@@ -24,7 +24,15 @@ try {
             throw new \Exception('Número da comanda é obrigatório');
         }
         
-        // Verifica se a comanda existe e não está sendo usada por outra pessoa
+        // Garante que as colunas cliente_nome e cliente_telefone existem na tabela mesas
+        try {
+            $db->query("ALTER TABLE mesas ADD COLUMN IF NOT EXISTS cliente_nome VARCHAR(255)");
+            $db->query("ALTER TABLE mesas ADD COLUMN IF NOT EXISTS cliente_telefone VARCHAR(20)");
+            $db->query("ALTER TABLE mesas ADD COLUMN IF NOT EXISTS tipo_atendimento VARCHAR(20) DEFAULT 'ambos'");
+        } catch (\Exception $e) {
+            // Ignora se não puder alterar
+        }
+        
         $mesa = $db->fetch(
             'SELECT * FROM mesas WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?',
             [$comandaId, $tenantId, $filialId]
@@ -32,8 +40,13 @@ try {
         
         if (!$mesa) {
             // Se não existir, a gente cria a comanda dinamicamente
+            $numero = (int)preg_replace('/[^0-9]/', '', $comandaId);
+            if ($numero == 0) $numero = rand(100, 999);
+
             $novoId = $db->insert('mesas', [
                 'id_mesa' => $comandaId,
+                'numero' => $numero,
+                'capacidade' => 4,
                 'status' => 'ocupada',
                 'tenant_id' => $tenantId,
                 'filial_id' => $filialId,
