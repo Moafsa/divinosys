@@ -501,14 +501,25 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                                 <?php if (count($mesas) > 0): ?>
                                     <?php foreach ($mesas as $mesa): ?>
                                         <div class="col-lg-2 col-md-3 col-sm-4 col-6 mb-3">
-                                            <div class="mesa-card livre" data-mesa-id="<?php echo $mesa['id_mesa']; ?>" data-mesa-numero="<?php echo $mesa['id_mesa']; ?>" onclick="selecionarMesa(this)">
+                                            <?php
+                                            // Se for comanda vinculada, não mostramos como "Livre", mas sim "Vinculada" (usando a classe 'ocupada' ou similar para estilo)
+                                            $mesaClass = (!empty($mesa['cliente_nome'])) ? 'ocupada' : 'livre';
+                                            $mesaStatus = (!empty($mesa['cliente_nome'])) ? 'Vinculada' : 'Livre';
+                                            $mesaStatusColor = (!empty($mesa['cliente_nome'])) ? 'text-primary' : 'text-success';
+                                            ?>
+                                            <div class="mesa-card <?php echo $mesaClass; ?>" 
+                                                 data-mesa-id="<?php echo $mesa['id_mesa']; ?>" 
+                                                 data-mesa-numero="<?php echo $mesa['id_mesa']; ?>" 
+                                                 data-cliente-nome="<?php echo htmlspecialchars($mesa['cliente_nome'] ?? ''); ?>"
+                                                 data-cliente-telefone="<?php echo htmlspecialchars($mesa['cliente_telefone'] ?? ''); ?>"
+                                                 onclick="selecionarMesa(this)">
                                                 <div class="mesa-numero">
                                                     <i class="fas fa-table me-2"></i>
                                                     <?php echo $mesa['id_mesa']; ?>
                                                 </div>
-                                                <div class="mesa-status text-success">
+                                                <div class="mesa-status <?php echo $mesaStatusColor; ?>">
                                                     <i class="fas fa-circle me-1"></i>
-                                                    Livre
+                                                    <?php echo $mesaStatus; ?>
                                                 </div>
                                             </div>
                                         </div>
@@ -852,6 +863,19 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                 id: element.dataset.mesaId,
                 numero: element.dataset.mesaNumero
             };
+            
+            // Auto-fill client data if mesa is linked
+            if (element.dataset.clienteNome) {
+                document.getElementById('clienteNome').value = element.dataset.clienteNome;
+            } else {
+                document.getElementById('clienteNome').value = '';
+            }
+            
+            if (element.dataset.clienteTelefone) {
+                document.getElementById('clienteTelefone').value = element.dataset.clienteTelefone;
+            } else {
+                document.getElementById('clienteTelefone').value = '';
+            }
             
             console.log('Mesa selecionada:', mesaSelecionada);
         }

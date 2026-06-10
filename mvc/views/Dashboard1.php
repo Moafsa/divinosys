@@ -70,16 +70,22 @@ if ($tenant && $filial) {
 // Get mesas data
 $mesas = [];
 if ($tenant) {
+    // Condition for comandas mode to hide empty tables
+    $statusCondition = "";
+    if ($modoOperacao === 'comandas') {
+        $statusCondition = " AND LOWER(status) != 'livre'";
+    }
+
     if ($filial) {
         // Matriz user - get mesas for specific filial
         $mesas = $db->fetchAll(
-            "SELECT * FROM mesas WHERE tenant_id = ? AND filial_id = ? ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE NULLIF(regexp_replace(id_mesa, '\D', '', 'g'), '')::integer END",
+            "SELECT * FROM mesas WHERE tenant_id = ? AND filial_id = ? {$statusCondition} ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE NULLIF(regexp_replace(id_mesa, '\D', '', 'g'), '')::integer END",
             [$tenant['id'], $filial['id']]
         );
     } else {
         // Fallback se não tiver filial especificada (admin geral)
         $mesas = $db->fetchAll(
-            "SELECT * FROM mesas WHERE tenant_id = ? AND (filial_id = ? OR filial_id IS NULL) ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE NULLIF(regexp_replace(id_mesa, '\D', '', 'g'), '')::integer END",
+            "SELECT * FROM mesas WHERE tenant_id = ? AND (filial_id = ? OR filial_id IS NULL) {$statusCondition} ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE NULLIF(regexp_replace(id_mesa, '\D', '', 'g'), '')::integer END",
             [$tenant['id'], null]
         );
     }
@@ -972,6 +978,18 @@ if ($tenant && $filial) {
                     </div>
                 </div>
 
+                <!-- Big Button for Comandas -->
+                <?php if ($modoOperacao === 'comandas' || $modoOperacao === 'ambos'): ?>
+                <div class="row mb-4">
+                    <div class="col-12 text-center">
+                        <button class="btn btn-success btn-lg shadow-sm" onclick="abrirModalVincularComanda()" style="padding: 15px 40px; font-size: 1.2rem; border-radius: 50px;">
+                            <i class="fas fa-qrcode fa-lg me-2"></i>
+                            Vincular Nova Comanda
+                        </button>
+                    </div>
+                </div>
+                <?php endif; ?>
+
                 <!-- Mesas Grid -->
                 <div class="row">
                     <div class="col-12">
@@ -980,10 +998,12 @@ if ($tenant && $filial) {
                                 <i class="fas fa-table me-2"></i>
                                 Status de <?php echo ($modoOperacao === 'comandas') ? 'Comandas' : (($modoOperacao === 'ambos') ? 'Atendimento' : 'Mesas'); ?>
                             </h5>
-                            <button class="btn btn-outline-primary btn-sm" onclick="atualizarMesas()">
-                                <i class="fas fa-sync-alt me-1"></i>
-                                Atualizar
-                            </button>
+                            <div>
+                                <button class="btn btn-outline-primary btn-sm" onclick="atualizarMesas()">
+                                    <i class="fas fa-sync-alt me-1"></i>
+                                    Atualizar
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1037,14 +1057,22 @@ if ($tenant && $filial) {
                                 <div class="mesa-status-text"><?php echo ucfirst($status); ?></div>
                                 <?php if ($pedidoMesa): ?>
                                     <div class="mesa-details">
+                                        <?php if (!empty($mesa['cliente_nome'])): ?>
+                                            <div class="text-primary fw-bold" style="font-size: 0.8rem; margin-bottom: 2px;"><i class="fas fa-user fa-xs me-1"></i><?php echo htmlspecialchars($mesa['cliente_nome']); ?></div>
+                                        <?php endif; ?>
                                         <div class="mesa-pedido">#<?php echo $pedidoMesa['pedido'][0]['idpedido']; ?></div>
                                         <div class="mesa-valor">R$ <?php echo number_format($pedidoMesa['valor_total'], 2, ',', '.'); ?></div>
                                         <div class="mesa-tempo"><?php echo $pedidoMesa['pedido'][0]['hora_pedido']; ?></div>
                                     </div>
                                 <?php else: ?>
                                     <div class="mesa-disponivel">
-                                        <i class="fas fa-coffee"></i>
-                                        <span>Pronta para uso</span>
+                                        <?php if (!empty($mesa['cliente_nome'])): ?>
+                                            <i class="fas fa-user text-primary"></i>
+                                            <span class="text-primary fw-bold" style="font-size: 0.8rem;"><?php echo htmlspecialchars($mesa['cliente_nome']); ?></span>
+                                        <?php else: ?>
+                                            <i class="fas fa-coffee"></i>
+                                            <span>Pronta para uso</span>
+                                        <?php endif; ?>
                                     </div>
                                 <?php endif; ?>
                             </div>
@@ -1209,6 +1237,44 @@ if ($tenant && $filial) {
         </div>
     </div>
 
+    <!-- Modal Vincular Comanda -->
+    <div class="modal fade" id="modalVincularComanda" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-id-card me-2"></i>
+                        Vincular Comanda ao Cliente
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="formVincularComanda">
+                        <div class="mb-3">
+                            <label class="form-label">Número da Comanda</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-qrcode"></i></span>
+                                <input type="text" class="form-control" id="vincular_comanda_id" required autofocus placeholder="Leia o código de barras ou digite">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Nome do Cliente (Opcional)</label>
+                            <input type="text" class="form-control" id="vincular_cliente_nome" placeholder="Ex: João Silva">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Telefone (Opcional)</label>
+                            <input type="tel" class="form-control" id="vincular_cliente_telefone" placeholder="(11) 99999-9999">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="vincularComandaSubmit()">Vincular</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal Mesa -->
     <div class="modal fade" id="modalMesa" tabindex="-1">
         <div class="modal-dialog modal-lg modal-mesa">
@@ -1271,6 +1337,77 @@ if ($tenant && $filial) {
                     console.error('Error:', error);
                     Swal.fire('Erro', 'Erro ao carregar dados da mesa', 'error');
                 });
+        }
+
+        function abrirModalVincularComanda() {
+            document.getElementById('formVincularComanda').reset();
+            const modal = new bootstrap.Modal(document.getElementById('modalVincularComanda'));
+            modal.show();
+            setTimeout(() => {
+                document.getElementById('vincular_comanda_id').focus();
+            }, 500);
+        }
+
+        document.getElementById('vincular_cliente_telefone').addEventListener('blur', function() {
+            const telefone = this.value.trim();
+            if (telefone) {
+                fetch(`mvc/ajax/clientes.php?action=buscar_por_telefone&telefone=${encodeURIComponent(telefone)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success && data.cliente) {
+                            document.getElementById('vincular_cliente_nome').value = data.cliente.nome || '';
+                            const Toast = Swal.mixin({
+                                toast: true,
+                                position: 'top-end',
+                                showConfirmButton: false,
+                                timer: 3000,
+                                timerProgressBar: true
+                            });
+                            Toast.fire({
+                                icon: 'success',
+                                title: `Cliente encontrado: ${data.cliente.nome}`
+                            });
+                        }
+                    })
+                    .catch(error => console.error('Erro ao buscar cliente:', error));
+            }
+        });
+
+        function vincularComandaSubmit() {
+            const comandaId = document.getElementById('vincular_comanda_id').value;
+            const clienteNome = document.getElementById('vincular_cliente_nome').value;
+            const clienteTelefone = document.getElementById('vincular_cliente_telefone').value;
+
+            if (!comandaId) {
+                Swal.fire('Atenção', 'O número da comanda é obrigatório', 'warning');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('action', 'vincular');
+            formData.append('comanda_id', comandaId);
+            formData.append('cliente_nome', clienteNome);
+            formData.append('cliente_telefone', clienteTelefone);
+
+            fetch('mvc/ajax/vincular_comanda.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire('Sucesso!', data.message, 'success').then(() => {
+                        bootstrap.Modal.getInstance(document.getElementById('modalVincularComanda')).hide();
+                        location.reload();
+                    });
+                } else {
+                    Swal.fire('Erro!', data.message, 'error');
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                Swal.fire('Erro!', 'Não foi possível vincular a comanda', 'error');
+            });
         }
 
         function atualizarMesas() {

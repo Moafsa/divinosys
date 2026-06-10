@@ -311,8 +311,13 @@ try {
                             </div>
                         </div>';
                 }
-                
                 $html .= '
+                        </div>
+                        
+                        <div class="text-center mt-3 mb-3">
+                            <a href="index.php?view=gerar_pedido&mesa=' . $mesa['id_mesa'] . '" class="btn btn-primary btn-lg shadow-sm">
+                                <i class="fas fa-plus-circle me-2"></i> Adicionar Pedido
+                            </a>
                         </div>
                         
                     </div>
@@ -438,7 +443,7 @@ try {
             // Free the mesa
             $db->update(
                 'mesas',
-                ['status' => '1'],
+                ['status' => 'livre', 'cliente_nome' => null, 'cliente_telefone' => null],
                 'id_mesa = ? AND tenant_id = ? AND filial_id = ?',
                 [$mesaId, $tenantId, $filialId]
             );
@@ -502,8 +507,8 @@ try {
             if ($pedidosAtivosNaMesa['total'] == 0) {
                 // Liberar a mesa se não houver mais pedidos ativos
                 $db->execute(
-                    'UPDATE mesas SET status = ? WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?',
-                    ['Livre', $pedido['idmesa'], $tenantId, $filialId]
+                    'UPDATE mesas SET status = ?, cliente_nome = NULL, cliente_telefone = NULL WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?',
+                    ['livre', $pedido['idmesa'], $tenantId, $filialId]
                 );
             }
             
@@ -555,8 +560,8 @@ try {
                 
                 // Liberar a mesa
                 $db->execute(
-                    'UPDATE mesas SET status = ? WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?',
-                    ['Livre', $mesaId, $tenantId, $filialId]
+                    'UPDATE mesas SET status = ?, cliente_nome = NULL, cliente_telefone = NULL WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?',
+                    ['livre', $mesaId, $tenantId, $filialId]
                 );
                 
                 $mensagem = "Mesa fechada com sucesso! Total: R$ " . number_format($valorTotal, 2, ',', '.') . " - {$formaPagamento}";
@@ -628,8 +633,8 @@ try {
                 
                 // Liberar a mesa
                 $db->execute(
-                    'UPDATE mesas SET status = ? WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?',
-                    ['Livre', $mesaId, $tenantId, $filialId]
+                    'UPDATE mesas SET status = ?, cliente_nome = NULL, cliente_telefone = NULL WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?',
+                    ['livre', $mesaId, $tenantId, $filialId]
                 );
                 
                 echo json_encode([

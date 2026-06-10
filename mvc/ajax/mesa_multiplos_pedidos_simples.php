@@ -180,7 +180,7 @@ try {
             
             $html .= '<div class="mesa-actions mt-3">';
             if (empty($pedidos)) {
-                $html .= '<button class="btn btn-success" onclick="fazerPedido(' . $mesaId . ')">Fazer Pedido</button>';
+                $html .= '<button class="btn btn-success" onclick="fazerPedido(\'' . $mesaId . '\')">Fazer Pedido</button>';
             }
             $html .= '</div>';
             $html .= '</div>';
@@ -242,7 +242,7 @@ try {
                 // Liberar a mesa se não houver mais pedidos ativos
                 error_log("Liberando mesa: " . $pedido['idmesa']);
                 $db->query(
-                    'UPDATE mesas SET status = ? WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?',
+                    'UPDATE mesas SET status = ?, cliente_nome = NULL, cliente_telefone = NULL WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?',
                     ['Livre', (string)$pedido['idmesa'], $tenantId, $filialId]
                 );
                 error_log("Mesa liberada com sucesso");
@@ -304,7 +304,7 @@ try {
             // Liberar a mesa
             $db->update(
                 'mesas',
-                ['status' => 'Livre'],
+                ['status' => 'Livre', 'cliente_nome' => null, 'cliente_telefone' => null],
                 'id_mesa = ? AND tenant_id = ? AND filial_id = ?',
                 [(string)$mesaId, $tenantId, $filialId]
             );

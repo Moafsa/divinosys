@@ -1282,20 +1282,24 @@ if ($tenant && $filial && $pedido['idmesa']) {
                             <small class="text-muted">Valor que aparecerá na nota fiscal (pode ser diferente do valor do pedido)</small>
                         </div>
                         
-                        <!-- Dados Fiscais do Cliente -->
+            <!-- Dados Fiscais do Cliente -->
             <div class="mb-3">
-                <label class="form-label">Dados Fiscais do Cliente <span class="text-muted">(Opcional)</span></label>
+                <label class="form-label">Dados do Cliente <span class="text-muted">(Obrigatório para PIX)</span></label>
                 <div class="row">
+                    <div class="col-md-12 mb-2">
+                        <label class="form-label small">Email</label>
+                        <input type="email" class="form-control" id="clienteEmail" placeholder="cliente@email.com" value="<?= htmlspecialchars($pedido['cliente_email'] ?? '') ?>" oninput="togglePixFaturaButtonMesa(); togglePixFaturaButton();">
+                    </div>
                     <div class="col-md-6">
                         <label class="form-label small">CPF</label>
-                        <input type="text" class="form-control" id="clienteCpf" placeholder="000.000.000-00" maxlength="14" oninput="formatarCPF(this)">
+                        <input type="text" class="form-control" id="clienteCpf" placeholder="000.000.000-00" maxlength="14" oninput="formatarCPF(this); togglePixFaturaButtonMesa(); togglePixFaturaButton();">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label small">CNPJ</label>
                         <input type="text" class="form-control" id="clienteCnpj" placeholder="00.000.000/0000-00" maxlength="18" oninput="formatarCNPJ(this)">
                     </div>
                 </div>
-                <small class="text-muted">Informe CPF ou CNPJ para melhor identificação fiscal (recomendado mas não obrigatório)</small>
+                <small class="text-muted">Informe Email e CPF/CNPJ para gerar a fatura PIX e nota fiscal</small>
             </div>
                         
                         <div class="mb-3">
@@ -1454,8 +1458,13 @@ if ($tenant && $filial && $pedido['idmesa']) {
         function togglePixFaturaButton() {
             const formaPagamento = document.getElementById('formaPagamento').value;
             const pixFaturaContainer = document.getElementById('pixFaturaButtonContainer');
+            const email = document.getElementById('clienteEmail')?.value.trim();
+            const cpf = document.getElementById('clienteCpf')?.value.trim();
+            const cnpj = document.getElementById('clienteCnpj')?.value.trim();
             
-            if (formaPagamento === 'PIX') {
+            const hasFiscalData = email && (cpf || cnpj);
+            
+            if (formaPagamento === 'PIX' && hasFiscalData) {
                 pixFaturaContainer.style.display = 'block';
             } else {
                 pixFaturaContainer.style.display = 'none';
@@ -1465,8 +1474,13 @@ if ($tenant && $filial && $pedido['idmesa']) {
         function togglePixFaturaButtonMesa() {
             const formaPagamento = document.getElementById('formaPagamentoMesa').value;
             const pixFaturaContainer = document.getElementById('pixFaturaButtonContainerMesa');
+            const email = document.getElementById('clienteEmail')?.value.trim();
+            const cpf = document.getElementById('clienteCpf')?.value.trim();
+            const cnpj = document.getElementById('clienteCnpj')?.value.trim();
             
-            if (formaPagamento === 'PIX') {
+            const hasFiscalData = email && (cpf || cnpj);
+            
+            if (formaPagamento === 'PIX' && hasFiscalData) {
                 pixFaturaContainer.style.display = 'block';
             } else {
                 pixFaturaContainer.style.display = 'none';
@@ -1535,7 +1549,7 @@ if ($tenant && $filial && $pedido['idmesa']) {
                 nome_cliente: clienteNome || 'Cliente',
                 telefone_cliente: clienteTelefone || '',
                 email_cliente: payload.email_cliente || '',
-                cpf_cnpj: payload.cpf_cnpj || '',
+                cpf_cnpj: payload.cpf_cliente || payload.cpf_cnpj || '',
                 external_reference: payload.external_reference || (action === 'gerar_fatura_pix' ? `PED-${payload.pedido_id}` : `MESA-${payload.mesa_id}`)
             };
             
@@ -1739,6 +1753,8 @@ if ($tenant && $filial && $pedido['idmesa']) {
                 valor: Number(valor).toFixed(2),
                 nome_cliente: nomeCliente,
                 telefone_cliente: telefoneCliente,
+                email_cliente: document.getElementById('clienteEmail')?.value.trim() || '',
+                cpf_cliente: document.getElementById('clienteCpf')?.value.trim() || document.getElementById('clienteCnpj')?.value.trim() || '',
                 descricao
             };
 
@@ -1784,6 +1800,8 @@ if ($tenant && $filial && $pedido['idmesa']) {
                 valor: Number(valor).toFixed(2),
                 nome_cliente: nomeCliente,
                 telefone_cliente: telefoneCliente,
+                email_cliente: document.getElementById('clienteEmail')?.value.trim() || '',
+                cpf_cliente: document.getElementById('clienteCpf')?.value.trim() || document.getElementById('clienteCnpj')?.value.trim() || '',
                 descricao
             };
 

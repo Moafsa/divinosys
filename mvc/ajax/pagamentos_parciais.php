@@ -1748,6 +1748,71 @@ try {
                 }
             }
             
+            // Sync with local database (usuarios_globais)
+            if ($customerId) {
+                try {
+                    $db = \System\Database::getInstance();
+                    $telefoneLimpo = !empty($telefoneCliente) ? preg_replace('/[^0-9]/', '', $telefoneCliente) : null;
+                    $cpfLimpo = !empty($cpfCnpjCliente) ? preg_replace('/[^0-9]/', '', $cpfCnpjCliente) : null;
+                    $emailLimpo = !empty($emailCliente) ? trim($emailCliente) : null;
+                    
+                    $clienteExistente = null;
+                    
+                    if ($cpfLimpo) {
+                        // Support both Postgres and MySQL safely via regex if possible, or just exact match
+                        // Since this project uses PostgreSQL (as seen by ::integer casts elsewhere), we use regexp_replace
+                        $clienteExistente = $db->fetch("SELECT id FROM usuarios_globais WHERE regexp_replace(cpf, '[^0-9]', '', 'g') = ? LIMIT 1", [$cpfLimpo]);
+                    }
+                    
+                    if (!$clienteExistente && $emailLimpo) {
+                        $clienteExistente = $db->fetch("SELECT id FROM usuarios_globais WHERE email = ? LIMIT 1", [$emailLimpo]);
+                    }
+                    
+                    if (!$clienteExistente && $telefoneLimpo) {
+                        $clienteExistente = $db->fetch("SELECT id FROM usuarios_globais WHERE telefone = ? LIMIT 1", [$telefoneLimpo]);
+                    }
+                    
+                    if ($clienteExistente) {
+                        // Update existing client data if provided
+                        $updateData = ['asaas_customer_id' => $customerId];
+                        if (!empty($nomeCliente)) $updateData['nome'] = $nomeCliente;
+                        if (!empty($emailLimpo)) $updateData['email'] = $emailLimpo;
+                        if (!empty($cpfLimpo)) $updateData['cpf'] = $cpfLimpo;
+                        if (!empty($telefoneLimpo)) $updateData['telefone'] = $telefoneLimpo;
+                        
+                        $updateData['updated_at'] = \System\TimeHelper::now('Y-m-d H:i:s', $filialId);
+                        $db->update('usuarios_globais', $updateData, 'id = ?', [$clienteExistente['id']]);
+                    } else if ($telefoneLimpo || $cpfLimpo || $emailLimpo) {
+                        // Create new client
+                        $clienteId = $db->insert('usuarios_globais', [
+                            'nome' => $nomeCliente,
+                            'telefone' => $telefoneLimpo,
+                            'email' => $emailLimpo,
+                            'cpf' => $cpfLimpo,
+                            'asaas_customer_id' => $customerId,
+                            'tipo_usuario' => 'cliente',
+                            'ativo' => true,
+                            'created_at' => \System\TimeHelper::now('Y-m-d H:i:s', $filialId),
+                            'updated_at' => \System\TimeHelper::now('Y-m-d H:i:s', $filialId)
+                        ]);
+                        
+                        if ($clienteId) {
+                            $db->insert('usuarios_estabelecimento', [
+                                'usuario_global_id' => $clienteId,
+                                'tenant_id' => $tenantId,
+                                'filial_id' => $filialId,
+                                'tipo_usuario' => 'cliente',
+                                'ativo' => true,
+                                'created_at' => \System\TimeHelper::now('Y-m-d H:i:s', $filialId)
+                            ]);
+                        }
+                    }
+                } catch (\Exception $dbEx) {
+                    error_log('Sync local user DB Exception: ' . $dbEx->getMessage());
+                    // Don't fail PIX generation just because DB sync failed
+                }
+            }
+            
             echo json_encode([
                 'success' => true,
                 'customer_id' => $customerId

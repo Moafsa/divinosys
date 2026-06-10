@@ -4094,17 +4094,17 @@ if (count($enderecoParts) > 2) {
             const hasCpf = cpfInput.value && cpfInput.value.trim() !== '';
             
             if (hasEmail && hasCpf) {
-                // Tem os dados: esconde o form e habilita os botões
+                // Tem os dados: esconde o form e mostra os botões
                 if (divDados) divDados.style.display = 'none';
                 if (paymentTitle) paymentTitle.style.display = 'block';
-                if (btnPix) btnPix.disabled = false;
-                if (btnCartao) btnCartao.disabled = false;
+                if (btnPix) { btnPix.disabled = false; btnPix.style.display = 'block'; }
+                if (btnCartao) { btnCartao.disabled = false; btnCartao.style.display = 'block'; }
             } else {
-                // Faltam dados: mostra o form e desabilita os botões
+                // Faltam dados: mostra o form e esconde os botões
                 if (divDados) divDados.style.display = 'block';
                 if (paymentTitle) paymentTitle.style.display = 'none';
-                if (btnPix) btnPix.disabled = true;
-                if (btnCartao) btnCartao.disabled = true;
+                if (btnPix) { btnPix.disabled = true; btnPix.style.display = 'none'; }
+                if (btnCartao) { btnCartao.disabled = true; btnCartao.style.display = 'none'; }
             }
         }
         
