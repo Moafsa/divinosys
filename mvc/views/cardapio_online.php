@@ -2611,8 +2611,11 @@ if (count($enderecoParts) > 2) {
                 `;
             });
             
+            // Filter out products that are already in the cart
+            const availableUpsells = upsellProducts ? upsellProducts.filter(prod => !cart.some(item => parseInt(item.id) === parseInt(prod.id))) : [];
+            
             // Add upsell section
-            if (upsellProducts && upsellProducts.length > 0) {
+            if (availableUpsells && availableUpsells.length > 0) {
                 let upsellHtml = `
                     <div style="margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #e0e0e0;">
                         <h4 style="font-size: 1rem; margin-bottom: 0.8rem; color: #d35400;">
@@ -2620,7 +2623,7 @@ if (count($enderecoParts) > 2) {
                         </h4>
                         <div style="display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; scrollbar-width: thin;">
                 `;
-                upsellProducts.forEach(prod => {
+                availableUpsells.forEach(prod => {
                     const imgUrl = prod.imagem ? prod.imagem : 'assets/img/sem-imagem.jpg';
                     const preco = parseFloat(prod.preco_promocional || prod.preco_normal || 0).toFixed(2).replace('.', ',');
                     upsellHtml += `
@@ -2706,7 +2709,7 @@ if (count($enderecoParts) > 2) {
                     timer: 2000
                 });
             } else {
-                alert('Adicionado ao carrinho!');
+                Swal.fire('Aviso', 'Adicionado ao carrinho!', 'info');
             }
         }
         
@@ -2735,7 +2738,7 @@ if (count($enderecoParts) > 2) {
                 mostrarModalPersonalizacao(produto, ingredientesProduto, todosIngredientes);
             } catch (error) {
                 console.error('Erro ao buscar produto:', error);
-                alert('Erro ao carregar produto. Adicionando sem personalização.');
+                Swal.fire('Aviso', 'Erro ao carregar produto. Adicionando sem personalização.', 'info');
                 addToCart(produto);
             }
         }
@@ -2975,7 +2978,7 @@ if (count($enderecoParts) > 2) {
         
         function addToCart(product) {
             if (!product || !product.id) {
-                alert('Erro: Produto inválido');
+                Swal.fire('Aviso', 'Erro: Produto inválido', 'info');
                 return;
             }
             
@@ -3042,18 +3045,18 @@ if (count($enderecoParts) > 2) {
         
         function finalizarPedido() {
             if (cart.length === 0) {
-                alert('Seu carrinho está vazio!');
+                Swal.fire('Aviso', 'Seu carrinho está vazio!', 'info');
                 return;
             }
             
             const deliveryType = document.getElementById('deliveryTypeSelect').value;
             if (!deliveryType) {
-                alert('Por favor, selecione uma opção de entrega');
+                Swal.fire('Aviso', 'Por favor, selecione uma opção de entrega', 'info');
                 return;
             }
             
             if (!<?php echo $isOpen ? 'true' : 'false'; ?>) {
-                alert('O estabelecimento está fechado no momento. Verifique o horário de funcionamento.');
+                Swal.fire('Aviso', 'O estabelecimento está fechado no momento. Verifique o horário de funcionamento.', 'info');
                 return;
             }
             
@@ -3448,7 +3451,7 @@ if (count($enderecoParts) > 2) {
                 // Validar se telefone foi buscado
                 const customerDataFields = document.getElementById('customerDataFields');
                 if (!customerDataFields || customerDataFields.style.display === 'none') {
-                    alert('Por favor, busque o cliente pelo telefone primeiro');
+                    Swal.fire('Aviso', 'Por favor, busque o cliente pelo telefone primeiro', 'info');
                     return;
                 }
                 
@@ -3507,11 +3510,11 @@ if (count($enderecoParts) > 2) {
                     
                     if (enderecoSelecionado === '' && enderecoSectionVisible) {
                         // New address form is visible - user must click "Adicionar Endereço" first
-                        alert('Por favor, clique em "Adicionar Endereço" para salvar o endereço antes de continuar.');
+                        Swal.fire('Aviso', 'Por favor, clique em "Adicionar Endereço" para salvar o endereço antes de continuar.', 'info');
                         return;
                     } else if (enderecoSelecionado === '' && !enderecoSectionVisible) {
                         // No address selected and form not visible (shouldn't happen, but check anyway)
-                        alert('Por favor, selecione ou cadastre um endereço de entrega');
+                        Swal.fire('Aviso', 'Por favor, selecione ou cadastre um endereço de entrega', 'info');
                         return;
                     }
                 }
@@ -3551,14 +3554,14 @@ if (count($enderecoParts) > 2) {
                 // Validate payment details before proceeding
                 const formaPagamento = document.getElementById('formaPagamentoDetalhada').value;
                 if (!formaPagamento) {
-                    alert('Por favor, selecione a forma de pagamento');
+                    Swal.fire('Aviso', 'Por favor, selecione a forma de pagamento', 'info');
                     return;
                 }
                 
                 if (formaPagamento === 'Dinheiro') {
                     const troco = document.getElementById('trocoPara').value;
                     if (!troco || parseFloat(troco) <= 0) {
-                        alert('Por favor, informe o valor do troco');
+                        Swal.fire('Aviso', 'Por favor, informe o valor do troco', 'info');
                         return;
                     }
                     trocoPara = parseFloat(troco);
@@ -3779,7 +3782,7 @@ if (count($enderecoParts) > 2) {
         async function buscarCliente() {
             const telefone = document.getElementById('customerPhone').value.trim();
             if (!telefone) {
-                alert('Por favor, informe o telefone');
+                Swal.fire('Aviso', 'Por favor, informe o telefone', 'info');
                 return;
             }
             
@@ -4216,7 +4219,7 @@ if (count($enderecoParts) > 2) {
             const city = document.getElementById('deliveryCity').value.trim();
             
             if (!address || !city) {
-                alert('Por favor, preencha pelo menos o endereço e a cidade.');
+                Swal.fire('Aviso', 'Por favor, preencha pelo menos o endereço e a cidade.', 'info');
                 return;
             }
             
@@ -4275,7 +4278,7 @@ if (count($enderecoParts) > 2) {
                 }, 500);
             } catch (error) {
                 console.error('Erro ao adicionar endereço:', error);
-                alert('Erro ao adicionar endereço: ' + error.message);
+                Swal.fire('Aviso', 'Erro ao adicionar endereço: ' + error.message, 'info');
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = originalText;
@@ -4302,7 +4305,7 @@ if (count($enderecoParts) > 2) {
             
             if (!address || !city) {
                 if (!silent) {
-                    alert('Por favor, preencha pelo menos o endereço e a cidade.');
+                    Swal.fire('Aviso', 'Por favor, preencha pelo menos o endereço e a cidade.', 'info');
                 }
                 return;
             }
@@ -4450,7 +4453,7 @@ if (count($enderecoParts) > 2) {
                         }
                         
                         if (!silent) {
-                            alert(errorMessage + ' Usando taxa fixa de R$ ' + filialData.taxa_delivery_fixa.toFixed(2).replace('.', ','));
+                            Swal.fire('Aviso', errorMessage + ' Usando taxa fixa de R$ ' + filialData.taxa_delivery_fixa.toFixed(2).replace('.', ','), 'info');
                         }
                         deliveryFee = filialData.taxa_delivery_fixa;
                         atualizarTaxaEntregaInfo();
@@ -4462,7 +4465,7 @@ if (count($enderecoParts) > 2) {
                     }
                 } else {
                     if (!silent) {
-                        alert('Webhook de cálculo de distância não configurado. Usando taxa fixa de R$ ' + filialData.taxa_delivery_fixa.toFixed(2).replace('.', ','));
+                        Swal.fire('Aviso', 'Webhook de cálculo de distância não configurado. Usando taxa fixa de R$ ' + filialData.taxa_delivery_fixa.toFixed(2).replace('.', ','), 'info');
                     }
                     deliveryFee = filialData.taxa_delivery_fixa;
                     atualizarTaxaEntregaInfo();
@@ -4564,7 +4567,7 @@ if (count($enderecoParts) > 2) {
             
             // Validar dados básicos
             if (!customerNameValue || !customerPhoneValue) {
-                alert('Por favor, preencha seus dados primeiro.');
+                Swal.fire('Aviso', 'Por favor, preencha seus dados primeiro.', 'info');
                 restorePaymentButtons();
                 isSubmittingOrder = false;
                 return;
@@ -4592,7 +4595,7 @@ if (count($enderecoParts) > 2) {
                     const address = document.getElementById('deliveryAddress').value.trim();
                     const city = document.getElementById('deliveryCity').value.trim();
                     if (!address || !city) {
-                        alert('Por favor, preencha o endereço de entrega.');
+                        Swal.fire('Aviso', 'Por favor, preencha o endereço de entrega.', 'info');
                         restorePaymentButtons();
                         isSubmittingOrder = false;
                         return;
@@ -4704,7 +4707,7 @@ if (count($enderecoParts) > 2) {
                                 confirmButtonText: 'OK'
                             });
                         } else {
-                            alert('Pedido criado com sucesso! A página de pagamento foi aberta em uma nova aba.');
+                            Swal.fire('Aviso', 'Pedido criado com sucesso! A página de pagamento foi aberta em uma nova aba.', 'info');
                         }
                         
                         // Start polling for payment status (will check when user returns)
@@ -4717,7 +4720,7 @@ if (count($enderecoParts) > 2) {
                     } else if (result.payment_id && !result.payment_url) {
                         // No payment URL - show error
                         console.error('Payment created but no payment_url returned');
-                        alert('Pedido criado, mas não foi possível obter o link de pagamento. Entre em contato conosco.');
+                        Swal.fire('Aviso', 'Pedido criado, mas não foi possível obter o link de pagamento. Entre em contato conosco.', 'info');
                         restorePaymentButtons();
                         isSubmittingOrder = false;
                         return;
@@ -4743,19 +4746,19 @@ if (count($enderecoParts) > 2) {
                                 confirmButtonText: 'OK'
                             });
                         } else {
-                            alert('Pedido criado com sucesso!');
+                            Swal.fire('Aviso', 'Pedido criado com sucesso!', 'info');
                         }
                     }
                 } else {
                     console.error('Erro ao criar pedido:', result);
-                    alert('Erro ao criar pedido: ' + (result.message || 'Erro desconhecido'));
+                    Swal.fire('Aviso', 'Erro ao criar pedido: ' + (result.message || 'Erro desconhecido'), 'info');
                     restorePaymentButtons();
                     isSubmittingOrder = false;
                 }
             } catch (error) {
                 console.error('Erro ao finalizar pedido:', error);
                 console.error('Stack trace:', error.stack);
-                alert('Erro ao processar pedido. Por favor, tente novamente.');
+                Swal.fire('Aviso', 'Erro ao processar pedido. Por favor, tente novamente.', 'info');
                 restorePaymentButtons();
                 isSubmittingOrder = false;
             }
@@ -4849,7 +4852,7 @@ if (count($enderecoParts) > 2) {
                     submitButton.style.opacity = '1';
                     submitButton.style.cursor = 'pointer';
                 }
-                alert('Por favor, selecione uma opção de entrega no carrinho.');
+                Swal.fire('Aviso', 'Por favor, selecione uma opção de entrega no carrinho.', 'info');
                 return;
             }
             const deliveryType = deliveryTypeSelect.value;
@@ -4862,7 +4865,7 @@ if (count($enderecoParts) > 2) {
                     submitButton.style.opacity = '1';
                     submitButton.style.cursor = 'pointer';
                 }
-                alert('Por favor, selecione uma opção de entrega.');
+                Swal.fire('Aviso', 'Por favor, selecione uma opção de entrega.', 'info');
                 return;
             }
             let enderecoEntrega = null;
@@ -4895,7 +4898,7 @@ if (count($enderecoParts) > 2) {
                                 submitButton.style.opacity = '1';
                                 submitButton.style.cursor = 'pointer';
                             }
-                            alert('Por favor, preencha o endereço de entrega.');
+                            Swal.fire('Aviso', 'Por favor, preencha o endereço de entrega.', 'info');
                             return;
                         }
                         
@@ -5098,7 +5101,7 @@ if (count($enderecoParts) > 2) {
                         toggleSidebar();
                         cart = [];
                         updateCart();
-                        alert('Pedido criado com sucesso! Número do pedido: ' + result.pedido_id);
+                        Swal.fire('Aviso', 'Pedido criado com sucesso! Número do pedido: ' + result.pedido_id, 'info');
                         window.location.reload();
                     }
                 } else {
@@ -5921,7 +5924,7 @@ if (count($enderecoParts) > 2) {
                             confirmButtonText: 'OK'
                         });
                     } else {
-                        alert('Pagamento confirmado! Seu pedido foi confirmado com sucesso!');
+                        Swal.fire('Aviso', 'Pagamento confirmado! Seu pedido foi confirmado com sucesso!', 'info');
                     }
                 } else if (result.success && result.status === 'pending') {
                     // Ainda pendente, continuar verificando (mas limitado)
