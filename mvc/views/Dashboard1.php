@@ -72,17 +72,17 @@ $mesas = [];
 if ($tenant) {
     if ($filial) {
         // Matriz user - get mesas for specific filial
-if ($tenant && $filial) {
-    $mesas = $db->fetchAll(
-        "SELECT * FROM mesas WHERE tenant_id = ? AND filial_id = ? ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE NULLIF(regexp_replace(id_mesa, '\D', '', 'g'), '')::integer END",
-        [$tenant['id'], $filial['id']]
-    );
-} else if ($tenant) {
-    // Fallback se não tiver filial especificada (admin geral)
-    $mesas = $db->fetchAll(
-        "SELECT * FROM mesas WHERE tenant_id = ? AND (filial_id = ? OR filial_id IS NULL) ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE NULLIF(regexp_replace(id_mesa, '\D', '', 'g'), '')::integer END",
-        [$tenant['id'], $filial['id'] ?? null]
-    );
+        $mesas = $db->fetchAll(
+            "SELECT * FROM mesas WHERE tenant_id = ? AND filial_id = ? ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE NULLIF(regexp_replace(id_mesa, '\D', '', 'g'), '')::integer END",
+            [$tenant['id'], $filial['id']]
+        );
+    } else {
+        // Fallback se não tiver filial especificada (admin geral)
+        $mesas = $db->fetchAll(
+            "SELECT * FROM mesas WHERE tenant_id = ? AND (filial_id = ? OR filial_id IS NULL) ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE NULLIF(regexp_replace(id_mesa, '\D', '', 'g'), '')::integer END",
+            [$tenant['id'], null]
+        );
+    }
 }
 
 // Get reservas data - pending and confirmed reservations
@@ -810,7 +810,7 @@ if ($tenant && $filial) {
                                 <i class="fas fa-table"></i>
                             </div>
                             <div class="stats-number"><?php echo $stats['mesas_ocupadas']; ?></div>
-                            <div class="stats-label">Mesas Ocupadas</div>
+                            <div class="stats-label"><?php echo ($modoOperacao === 'comandas') ? 'Comandas Ativas' : (($modoOperacao === 'ambos') ? 'Mesas/Comandas' : 'Mesas Ocupadas'); ?></div>
                         </div>
                     </div>
                     
@@ -1022,7 +1022,7 @@ if ($tenant && $filial) {
                         
                         $cardClass = $isOnlineOrder ? 'mesa-floating-card ocupada online-order' : 'mesa-floating-card ' . $status;
                         ?>
-                        <div class="<?php echo $cardClass; ?>" onclick="verMesa(<?php echo $mesa['id']; ?>, <?php echo $mesa['id_mesa']; ?>)">
+                        <div class="<?php echo $cardClass; ?>" onclick="verMesa(<?php echo $mesa['id']; ?>, '<?php echo $mesa['id_mesa']; ?>')">
                             <div class="mesa-glow-effect"></div>
                             <div class="mesa-content">
                                 <div class="mesa-icon">
