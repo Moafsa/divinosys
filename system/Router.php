@@ -58,6 +58,7 @@ class Router
             'gestao_clientes_fiado' => 'gestao_clientes_fiado.php',
         'vendas_fiadas' => 'vendas_fiadas.php',
         'descontos_cortesias' => 'descontos_cortesias.php',
+        'automacoes_ia' => 'automacoes_ia.php',
         'integracao_pagamentos' => 'integracao_pagamentos.php',
         'caixa_avancado' => 'caixa_avancado.php',
         'relatorios_financeiros' => 'relatorios_financeiros.php',

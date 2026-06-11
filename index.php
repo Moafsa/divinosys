@@ -98,6 +98,9 @@ try {
     $config = \System\Config::getInstance();
     $router = \System\Router::getInstance();
     
+    // RUN MIGRATIONS
+    require_once __DIR__ . '/migrate_ai.php';
+
     error_log('INDEX: Sistema inicializado');
     
     // Processar lembretes de pagamento agendados (com throttling usando arquivo de lock)
@@ -202,6 +205,13 @@ try {
         'search_products' => 'ai_chat.php',
         'search_ingredients' => 'ai_chat.php',
         'search_categories' => 'ai_chat.php',
+        
+        // AI Automations and Admins
+        'salvar_whatsapp_admin' => 'ai_automations_ajax.php',
+        'remover_whatsapp_admin' => 'ai_automations_ajax.php',
+        'salvar_ai_automations' => 'ai_automations_ajax.php',
+        'configurar_cobranca_ia' => 'configurar_cobranca_ia.php',
+        
         // SuperAdmin actions
         'getDashboardStats' => 'superadmin.php',
         'listTenants' => 'superadmin.php',

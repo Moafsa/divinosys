@@ -994,13 +994,17 @@ if ($tenant && $filial) {
                 <!-- Mesas Grid -->
                 <div class="row">
                     <div class="col-12">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                             <h5 class="mb-0">
                                 <i class="fas fa-table me-2"></i>
                                 Status de <?php echo ($modoOperacao === 'comandas') ? 'Comandas' : (($modoOperacao === 'ambos') ? 'Atendimento' : 'Mesas'); ?>
                             </h5>
-                            <div>
-                                <button class="btn btn-outline-primary btn-sm" onclick="atualizarMesas()">
+                            <div class="d-flex align-items-center gap-2 flex-grow-1 flex-md-grow-0" style="max-width: 100%; min-width: 250px;">
+                                <div class="input-group input-group-sm w-100">
+                                    <span class="input-group-text bg-white"><i class="fas fa-search text-muted"></i></span>
+                                    <input type="text" id="filtroMesas" class="form-control form-control-sm" placeholder="Buscar ID ou Cliente..." onkeyup="filtrarMesas()">
+                                </div>
+                                <button class="btn btn-outline-primary btn-sm text-nowrap" onclick="atualizarMesas()">
                                     <i class="fas fa-sync-alt me-1"></i>
                                     Atualizar
                                 </button>
@@ -1429,6 +1433,23 @@ if ($tenant && $filial) {
                 });
             }
         });
+
+        function filtrarMesas() {
+            const input = document.getElementById('filtroMesas');
+            const filter = input.value.toLowerCase();
+            const grid = document.getElementById('mesasGrid');
+            const cards = grid.getElementsByClassName('mesa-floating-card');
+            
+            for (let i = 0; i < cards.length; i++) {
+                const card = cards[i];
+                const content = card.textContent || card.innerText;
+                if (content.toLowerCase().indexOf(filter) > -1) {
+                    card.style.display = "";
+                } else {
+                    card.style.display = "none";
+                }
+            }
+        }
 
         function atualizarMesas() {
             location.reload();

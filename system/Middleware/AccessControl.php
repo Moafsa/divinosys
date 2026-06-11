@@ -235,6 +235,16 @@ class AccessControl
                 'icon' => 'fas fa-users',
                 'url' => 'index.php?view=clientes'
             ],
+            'gestao_clientes_fiado' => [
+                'label' => 'Fiados',
+                'icon' => 'fas fa-hand-holding-usd',
+                'url' => 'index.php?view=gestao_clientes_fiado'
+            ],
+            'automacoes_ia' => [
+                'label' => 'Automações IA',
+                'icon' => 'fas fa-robot',
+                'url' => 'index.php?view=automacoes_ia'
+            ],
             'configuracoes' => [
                 'label' => 'Configurações',
                 'icon' => 'fas fa-cog',

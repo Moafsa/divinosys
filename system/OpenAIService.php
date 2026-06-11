@@ -103,6 +103,84 @@ class OpenAIService
     }
 
     /**
+     * Process WhatsApp messages
+     */
+    public function processWhatsAppMessage($message, $tenantId, $filialId, $context)
+    {
+        try {
+            $isAdmin = $context['is_admin'] ?? false;
+            $customerName = $context['customer_name'] ?? 'Cliente';
+            
+            $systemPrompt = "Você é o assistente virtual do restaurante. O nome da pessoa falando é $customerName. ";
+            if ($isAdmin) {
+                $systemPrompt .= "ATENÇÃO: Este usuário é um ADMINISTRADOR do sistema. Você tem permissão para realizar ações sensíveis. Se ele pedir para quitar fatura, cobrar alguém ou consultar devedores, você deve responder no formato JSON: {\"type\":\"function\",\"function\":\"quitar_fatura\",\"params\":{\"cliente\":\"nome do cliente\"}} ou {\"type\":\"function\",\"function\":\"listar_devedores\"}. Senão, responda normalmente com texto limpo.";
+            } else {
+                $systemPrompt .= "Você é apenas um atendente. Responda as dúvidas sobre cardápio de forma simpática. Seu formato de resposta deve ser apenas texto limpo para o WhatsApp.";
+            }
+
+            $messages = [
+                ['role' => 'system', 'content' => $systemPrompt],
+                ['role' => 'user', 'content' => $message]
+            ];
+
+            // Setup curl for OpenAI chat completions
+            $ch = curl_init('https://api.openai.com/v1/chat/completions');
+            $data = [
+                'model' => 'gpt-3.5-turbo',
+                'messages' => $messages,
+                'temperature' => 0.7
+            ];
+            
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Content-Type: application/json',
+                'Authorization: Bearer ' . $this->apiKey
+            ]);
+            
+            $response = curl_exec($ch);
+            curl_close($ch);
+            
+            $result = json_decode($response, true);
+            $aiText = $result['choices'][0]['message']['content'] ?? 'Desculpe, não entendi.';
+            
+            // Check if AI returned a JSON function call
+            if ($isAdmin && strpos(trim($aiText), '{') === 0) {
+                $action = json_decode($aiText, true);
+                if ($action && isset($action['type']) && $action['type'] === 'function') {
+                    if ($action['function'] === 'quitar_fatura') {
+                        $nomeCliente = $action['params']['cliente'] ?? '';
+                        // Buscar cliente fiado
+                        $cliente = $this->db->fetch("SELECT * FROM clientes_fiado WHERE tenant_id = ? AND nome ILIKE ?", [$tenantId, "%$nomeCliente%"]);
+                        if ($cliente) {
+                            $this->db->update('clientes_fiado', ['saldo_devedor' => 0], 'id = ?', [$cliente['id']]);
+                            return ['success' => true, 'response' => ['message' => "Pronto! A fatura de {$cliente['nome']} foi quitada."]];
+                        } else {
+                            return ['success' => true, 'response' => ['message' => "Não encontrei o cliente fiado $nomeCliente."]];
+                        }
+                    } elseif ($action['function'] === 'listar_devedores') {
+                        $devedores = $this->db->fetchAll("SELECT * FROM clientes_fiado WHERE tenant_id = ? AND saldo_devedor > 0", [$tenantId]);
+                        if (empty($devedores)) {
+                            return ['success' => true, 'response' => ['message' => "Nenhum cliente está devendo no momento."]];
+                        }
+                        $msg = "Clientes com dívida:\n";
+                        foreach ($devedores as $d) {
+                            $msg .= "- {$d['nome']}: R$ " . number_format($d['saldo_devedor'], 2, ',', '.') . "\n";
+                        }
+                        return ['success' => true, 'response' => ['message' => $msg]];
+                    }
+                }
+            }
+
+            return ['success' => true, 'response' => ['message' => $aiText]];
+
+        } catch (\Exception $e) {
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
      * Process file attachments (images, PDFs, spreadsheets)
      */
     private function processAttachments($attachments)

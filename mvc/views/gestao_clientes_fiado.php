@@ -236,6 +236,27 @@ if ($tenant && $filial) {
                                     <small class="text-muted"><?= number_format($percentualUso, 1) ?>% do limite usado</small>
                                 </div>
                             <?php endif; ?>
+                            
+                            <hr>
+                            <div class="mt-2 bg-light p-2 rounded">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <small class="fw-bold"><i class="fas fa-robot text-primary"></i> Cobrança IA (WhatsApp)</small>
+                                    <div class="form-check form-switch m-0">
+                                        <input class="form-check-input" type="checkbox" role="switch" 
+                                               id="cobrar_<?= $cliente['id'] ?>" 
+                                               onchange="toggleCobranca(<?= $cliente['id'] ?>, this.checked)"
+                                               <?= !empty($cliente['cobranca_automatica']) && $cliente['cobranca_automatica'] == 't' ? 'checked' : '' ?>>
+                                    </div>
+                                </div>
+                                <select class="form-select form-select-sm" 
+                                        id="freq_<?= $cliente['id'] ?>"
+                                        onchange="mudarFrequencia(<?= $cliente['id'] ?>, this.value)"
+                                        <?= empty($cliente['cobranca_automatica']) || $cliente['cobranca_automatica'] != 't' ? 'disabled' : '' ?>>
+                                    <option value="diaria" <?= isset($cliente['cobranca_frequencia']) && $cliente['cobranca_frequencia'] == 'diaria' ? 'selected' : '' ?>>Diária (Todo dia de manhã)</option>
+                                    <option value="semanal" <?= isset($cliente['cobranca_frequencia']) && $cliente['cobranca_frequencia'] == 'semanal' ? 'selected' : '' ?>>Semanal (Segundas-feiras)</option>
+                                    <option value="mensal" <?= empty($cliente['cobranca_frequencia']) || $cliente['cobranca_frequencia'] == 'mensal' ? 'selected' : '' ?>>Mensal (Dia 1 e 5)</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="card-footer">
                             <div class="btn-group w-100" role="group">
@@ -445,6 +466,64 @@ if ($tenant && $filial) {
         function receberPagamento(id) {
             // TODO: Implementar recebimento de pagamento
             Swal.fire('Em desenvolvimento', 'Funcionalidade de pagamento será implementada em breve', 'info');
+        }
+
+        // Funções para IA e Cobrança
+        function toggleCobranca(id, status) {
+            const select = document.getElementById(`freq_${id}`);
+            select.disabled = !status;
+            
+            const formData = new FormData();
+            formData.append('action', 'configurar_cobranca_ia');
+            formData.append('cliente_id', id);
+            formData.append('cobranca_automatica', status ? '1' : '0');
+            formData.append('cobranca_frequencia', select.value);
+            
+            fetch('index.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.success) {
+                    Swal.fire({
+                        toast: true,
+                        position: 'top-end',
+                        icon: 'success',
+                        title: status ? 'Cobrança ativada' : 'Cobrança desativada',
+                        showConfirmButton: false,
+                        timer: 1500
+                    });
+                } else {
+                    Swal.fire('Erro', data.message || 'Falha ao atualizar cobrança', 'error');
+                }
+            })
+            .catch(() => Swal.fire('Erro', 'Erro na requisição', 'error'));
+        }
+
+        function mudarFrequencia(id, frequencia) {
+            const formData = new FormData();
+            formData.append('action', 'configurar_cobranca_ia');
+            formData.append('cliente_id', id);
+            formData.append('cobranca_frequencia', frequencia);
+            
+            fetch('index.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.success) {
+                    Swal.fire({
+                        toast: true,
+                        position: 'top-end',
+                        icon: 'success',
+                        title: 'Frequência atualizada',
+                        showConfirmButton: false,
+                        timer: 1500
+                    });
+                }
+            });
         }
     </script>
 </body>

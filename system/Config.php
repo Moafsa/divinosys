@@ -46,7 +46,9 @@ class Config
             'UPLOAD_MAX_SIZE', 'ALLOWED_EXTENSIONS',
             'ENABLE_MULTI_TENANT', 'DEFAULT_TENANT_ID',
             'DELIVERY_MAPS_WEBHOOK_URL',
-            'MINIO_ENDPOINT', 'MINIO_ACCESS_KEY', 'MINIO_SECRET_KEY', 'MINIO_BUCKET', 'MINIO_PUBLIC_URL'
+            'MINIO_ENDPOINT', 'MINIO_ACCESS_KEY', 'MINIO_SECRET_KEY', 'MINIO_BUCKET', 'MINIO_PUBLIC_URL',
+            'OPENAI_API_KEY',
+            'WUZAPI_URL', 'WUZAPI_TOKEN', 'WUZAPI_INSTANCE_ID'
         ];
         
         foreach ($envVars as $var) {

@@ -924,7 +924,7 @@ class Auth
             'admin' => [
                 'dashboard', 'pedidos', 'delivery', 'produtos', 'estoque', 
                 'financeiro', 'relatorios', 'clientes', 'configuracoes', 'usuarios',
-                'novo_pedido', 'relatorios_avancados', 'asaas_config', 'gerenciar_faturas', 'logout'
+                'novo_pedido', 'relatorios_avancados', 'asaas_config', 'gerenciar_faturas', 'gestao_clientes_fiado', 'automacoes_ia', 'logout'
             ],
             'cozinha' => [
                 'dashboard', 'pedidos', 'estoque', 'produtos', 'gerenciar_produtos', 'novo_pedido', 'logout'

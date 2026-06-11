@@ -12,7 +12,7 @@ error_reporting(E_ALL);
 require_once __DIR__ . '/../../system/Config.php';
 require_once __DIR__ . '/../../system/Database.php';
 require_once __DIR__ . '/../../system/Session.php';
-require_once __DIR__ . '/../../system/N8nAIService.php';
+require_once __DIR__ . '/../../system/OpenAIService.php';
 require_once __DIR__ . '/../../system/WuzapiService.php';
 
 header('Content-Type: application/json');
@@ -113,18 +113,22 @@ try {
         error_log("Wuzapi Webhook - Existing customer: {$cliente['nome']}");
     }
     
+    // Check if phone number is Admin
+    $isAdmin = $db->exists("whatsapp_admins", "tenant_id = ? AND filial_id = ? AND telefone = ? AND ativo = true", [$tenantId, $filialId, $phoneNumber]);
+
     // Process message with AI
-    $aiService = new \System\N8nAIService();
+    $aiService = new \System\OpenAIService();
     
     // Add context for AI
     $contextData = [
         'customer_phone' => $phoneNumber,
         'customer_name' => $cliente['nome'] ?? 'Cliente WhatsApp',
         'source' => 'whatsapp',
-        'instance_id' => $instanceId
+        'instance_id' => $instanceId,
+        'is_admin' => $isAdmin
     ];
     
-    $aiResponse = $aiService->processMessage($message, [], $tenantId, $filialId, $contextData);
+    $aiResponse = $aiService->processWhatsAppMessage($message, $tenantId, $filialId, $contextData);
     
     if (!$aiResponse['success']) {
         throw new Exception('AI processing failed: ' . ($aiResponse['error'] ?? 'Unknown error'));

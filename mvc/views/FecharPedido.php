@@ -88,9 +88,9 @@ if ($tenant && $filial) {
         if (empty($pedido['cliente_nome']) && !empty($mesa['cliente_nome'])) {
             $pedido['cliente_nome'] = $mesa['cliente_nome'];
             $pedido['cliente_telefone'] = $mesa['cliente_telefone'] ?? '';
-        } else if (empty($pedido['cliente_nome']) && !empty($pedidoRaw['cliente_nome'])) {
-            $pedido['cliente_nome'] = $pedidoRaw['cliente_nome'];
-            $pedido['cliente_telefone'] = $pedidoRaw['cliente_telefone'] ?? '';
+        } else if (empty($pedido['cliente_nome']) && !empty($pedidoRaw['cliente'])) {
+            $pedido['cliente_nome'] = $pedidoRaw['cliente'];
+            $pedido['cliente_telefone'] = $pedidoRaw['telefone_cliente'] ?? '';
         }
         
         error_log('DEBUG FecharPedido: mesa encontrada = ' . ($mesa ? ($mesa['numero'] ?? $mesa['id_mesa']) : 'NULL'));

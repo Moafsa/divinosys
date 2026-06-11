@@ -351,7 +351,7 @@ try {
                         if ($pedidosAbertos['count'] == 0) {
                             $db->update(
                                 'mesas',
-                                ['status' => '1'],
+                                ['status' => '1', 'cliente_nome' => null, 'cliente_telefone' => null],
                                 'id_mesa = ? AND tenant_id = ? AND filial_id = ?',
                                 [$pedido['idmesa'], $tenantId, $filialId]
                             );
@@ -693,10 +693,9 @@ try {
                 }
             }
 
-            $mesaLiberada = false;
             if ($pedidosPendentesAposPagamento == 0) {
                 $db->query(
-                    "UPDATE mesas SET status = 'livre', cliente_nome = NULL, cliente_telefone = NULL WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?",
+                    "UPDATE mesas SET status = '1', cliente_nome = NULL, cliente_telefone = NULL WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?",
                     [$mesaId, $tenantId, $filialId]
                 );
                 $mesaLiberada = true;

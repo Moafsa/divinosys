@@ -1106,10 +1106,25 @@ try {
                 $filialId = $filial_padrao ? $filial_padrao['id'] : null;
             }
             
-            // Atualizar mesa do pedido
+            // Determinar tipo_entrega baseado na nova mesa
+            $isDelivery = ($mesaId === '999');
+            $tipoEntrega = null;
+            if ($isDelivery) {
+                $tipoEntrega = 'delivery';
+            } else if ($mesaId === '998') {
+                $tipoEntrega = 'pickup';
+            } else {
+                $tipoEntrega = null; // Mesa ou comanda
+            }
+
+            // Atualizar mesa do pedido e tipo de entrega
             $db->update(
                 'pedido',
-                ['idmesa' => $mesaId],
+                [
+                    'idmesa' => $mesaId,
+                    'delivery' => $isDelivery ? 1 : 0,
+                    'tipo_entrega' => $tipoEntrega
+                ],
                 'idpedido = ? AND tenant_id = ? AND filial_id = ?',
                 [$pedidoId, $tenantId, $filialId]
             );

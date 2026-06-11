@@ -1814,15 +1814,20 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
             }
             
             // Carregar dados do cliente do pedido
-            <?php if (!empty($editarPedido['cliente_nome'])): ?>
+            <?php 
+            $nomeCliente = !empty($editarPedido['cliente_nome']) ? $editarPedido['cliente_nome'] : (!empty($editarPedido['cliente']) ? $editarPedido['cliente'] : '');
+            $telefoneCliente = !empty($editarPedido['cliente_telefone']) ? $editarPedido['cliente_telefone'] : (!empty($editarPedido['telefone_cliente']) ? $editarPedido['telefone_cliente'] : '');
+            ?>
+            
+            <?php if (!empty($nomeCliente)): ?>
             if (document.getElementById('clienteNome')) {
-                document.getElementById('clienteNome').value = '<?php echo addslashes($editarPedido['cliente_nome']); ?>';
+                document.getElementById('clienteNome').value = '<?php echo addslashes($nomeCliente); ?>';
             }
             <?php endif; ?>
             
-            <?php if (!empty($editarPedido['cliente_telefone'])): ?>
+            <?php if (!empty($telefoneCliente)): ?>
             if (document.getElementById('clienteTelefone')) {
-                document.getElementById('clienteTelefone').value = '<?php echo addslashes($editarPedido['cliente_telefone']); ?>';
+                document.getElementById('clienteTelefone').value = '<?php echo addslashes($telefoneCliente); ?>';
             }
             <?php endif; ?>
 
