@@ -4,526 +4,306 @@ $session = \System\Session::getInstance();
 $router = \System\Router::getInstance();
 $db = \System\Database::getInstance();
 
-// Get current user, tenant and filial
+// Ensure tenant and filial context
+$context = \System\TenantHelper::ensureTenantContext();
+$tenant = $context['tenant'];
+$filial = $context['filial'];
 $user = $session->getUser();
-$tenant = $session->getTenant();
-$filial = $session->getFilial();
 
-// Get clients data
+if (!$tenant || !$filial) {
+    header('Location: index.php?view=login');
+    exit;
+}
+
+// Get clients with fiado orders
 $clientes = [];
 if ($tenant && $filial) {
-    $clientes = $db->fetchAll(
-        'SELECT * FROM clientes_fiado WHERE tenant_id = ? AND filial_id = ? ORDER BY nome ASC',
-        [$tenant['id'], $filial['id']]
-    );
+    // 1. Get all customers that have orders with status 'fiado' OR they have a record in clientes_fiado for AI settings
+    $clientesData = $db->fetchAll("
+        SELECT 
+            ug.id, ug.nome, ug.telefone as wpp, ug.cpf,
+            COUNT(DISTINCT CASE WHEN p.status = 'fiado' THEN p.idpedido END) as qtd_pedidos_fiado,
+            COALESCE(SUM(CASE WHEN p.status = 'fiado' THEN p.valor_total ELSE 0 END), 0) as total_fiado,
+            (
+                SELECT COALESCE(SUM(pp.valor_pago), 0) 
+                FROM pagamentos_pedido pp 
+                JOIN pedido p2 ON pp.pedido_id = p2.idpedido 
+                WHERE p2.usuario_global_id = ug.id AND p2.tenant_id = ? AND p2.status = 'fiado'
+            ) as total_pago_fiado,
+            cf.limite_credito,
+            cf.status,
+            cf.cobranca_automatica,
+            cf.cobranca_frequencia
+        FROM usuarios_globais ug
+        LEFT JOIN pedido p ON p.usuario_global_id = ug.id AND p.tenant_id = ? AND p.filial_id = ? AND p.status = 'fiado'
+        LEFT JOIN clientes_fiado cf ON cf.usuario_global_id = ug.id AND cf.tenant_id = ?
+        WHERE p.idpedido IS NOT NULL OR cf.id IS NOT NULL
+        GROUP BY ug.id, ug.nome, ug.telefone, ug.cpf, cf.limite_credito, cf.status, cf.cobranca_automatica, cf.cobranca_frequencia
+        ORDER BY ug.nome ASC
+    ", [$tenant['id'], $tenant['id'], $filial['id'], $tenant['id']]);
+    
+    // Calculate saldo devedor
+    foreach ($clientesData as $cliente) {
+        $saldo = $cliente['total_fiado'] - $cliente['total_pago_fiado'];
+        if ($saldo > 0 || !empty($cliente['cobranca_automatica'])) {
+            $cliente['saldo_devedor'] = $saldo;
+            // set defaults if missing from clientes_fiado
+            $cliente['status'] = $cliente['status'] ?? 'ativo';
+            $cliente['limite_credito'] = $cliente['limite_credito'] ?? 0;
+            $cliente['cobranca_automatica'] = $cliente['cobranca_automatica'] ?? false;
+            $cliente['cobranca_frequencia'] = $cliente['cobranca_frequencia'] ?? 'semanal';
+            $clientes[] = $cliente;
+        }
+    }
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestão de Clientes Fiado - Divino Lanches</title>
+    <title>Gestão de Fiados - <?php echo $config->get('app.name'); ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="assets/css/sidebar.css" rel="stylesheet">
+    <link href="assets/css/responsive-fix.css" rel="stylesheet">
     <style>
-        .client-card {
-            transition: transform 0.2s;
-            border-left: 4px solid #007bff;
+        :root {
+            --primary-color: <?php echo $tenant['cor_primaria'] ?? '#007bff'; ?>;
+            --primary-light: <?php echo $tenant['cor_primaria'] ?? '#007bff'; ?>20;
         }
+        
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .main-content {
+            padding: 2rem;
+        }
+        
+        .header {
+            background: white;
+            border-radius: 15px;
+            padding: 1.5rem;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            margin-bottom: 2rem;
+        }
+        
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            transition: all 0.3s ease;
+        }
+        
+        .client-card {
+            border-left: 4px solid var(--primary-color);
+        }
+        
         .client-card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.12);
         }
-        .status-badge {
-            font-size: 0.8em;
+        
+        .btn-primary {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
         }
-        .credit-limit {
-            font-size: 1.1em;
-            font-weight: bold;
+        
+        .btn-primary:hover {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+            opacity: 0.9;
         }
-        .debt-amount {
-            font-size: 1.1em;
-            font-weight: bold;
-        }
-        .available-credit {
-            color: #28a745;
-        }
-        .debt-warning {
-            color: #dc3545;
-        }
-        .debt-danger {
-            color: #dc3545;
-            background-color: #f8d7da;
-            padding: 2px 6px;
-            border-radius: 4px;
+        
+        .stats-card {
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+            color: white;
+            border-radius: 15px;
+            padding: 1.5rem;
+            text-align: center;
         }
     </style>
 </head>
-<body>
-    <div class="container-fluid">
-        <!-- Header -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="d-flex justify-content-between align-items-center">
-                    <h2><i class="fas fa-users"></i> Gestão de Clientes Fiado</h2>
-                    <div>
-                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNovoCliente">
-                            <i class="fas fa-plus"></i> Novo Cliente
-                        </button>
-                        <a href="index.php" class="btn btn-secondary">
-                            <i class="fas fa-arrow-left"></i> Voltar
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
+<body class="bg-light">
+    <!-- Overlay for mobile sidebar -->
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    
+    <div class="d-flex">
+        <!-- Sidebar -->
+        <?php include __DIR__ . '/components/sidebar.php'; ?>
+        
+        <!-- Mobile Menu -->
+        <?php include __DIR__ . '/components/mobile_menu.php'; ?>
 
-        <!-- Stats Cards -->
-        <div class="row mb-4">
-            <div class="col-md-3">
-                <div class="card bg-primary text-white">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between">
-                            <div>
-                                <h6 class="card-title">Total Clientes</h6>
-                                <h3><?= count($clientes) ?></h3>
-                            </div>
-                            <div class="align-self-center">
-                                <i class="fas fa-users fa-2x"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card bg-success text-white">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between">
-                            <div>
-                                <h6 class="card-title">Clientes Ativos</h6>
-                                <h3><?= count(array_filter($clientes, fn($c) => $c['status'] === 'ativo')) ?></h3>
-                            </div>
-                            <div class="align-self-center">
-                                <i class="fas fa-check-circle fa-2x"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card bg-warning text-white">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between">
-                            <div>
-                                <h6 class="card-title">Total em Débito</h6>
-                                <h3>R$ <?= number_format(array_sum(array_column($clientes, 'saldo_devedor')), 2, ',', '.') ?></h3>
-                            </div>
-                            <div class="align-self-center">
-                                <i class="fas fa-exclamation-triangle fa-2x"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card bg-info text-white">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between">
-                            <div>
-                                <h6 class="card-title">Limite Total</h6>
-                                <h3>R$ <?= number_format(array_sum(array_column($clientes, 'limite_credito')), 2, ',', '.') ?></h3>
-                            </div>
-                            <div class="align-self-center">
-                                <i class="fas fa-credit-card fa-2x"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <!-- Main Content -->
+        <div class="main-content flex-grow-1 p-4 w-100 position-relative">
+            <!-- Subscription Alert -->
+            <?php include __DIR__ . '/components/subscription_alert.php'; ?>
 
-        <!-- Search and Filters -->
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <div class="input-group">
-                    <span class="input-group-text"><i class="fas fa-search"></i></span>
-                    <input type="text" class="form-control" id="searchClientes" placeholder="Buscar por nome, CPF ou telefone...">
-                </div>
-            </div>
-            <div class="col-md-3">
-                <select class="form-select" id="filterStatus">
-                    <option value="">Todos os Status</option>
-                    <option value="ativo">Ativo</option>
-                    <option value="bloqueado">Bloqueado</option>
-                    <option value="suspenso">Suspenso</option>
-                </select>
-            </div>
-            <div class="col-md-3">
-                <select class="form-select" id="filterDebt">
-                    <option value="">Todos</option>
-                    <option value="com_debito">Com Débito</option>
-                    <option value="sem_debito">Sem Débito</option>
-                    <option value="limite_esgotado">Limite Esgotado</option>
-                </select>
-            </div>
-        </div>
-
-        <!-- Clients Grid -->
-        <div class="row" id="clientesGrid">
-            <?php foreach ($clientes as $cliente): ?>
-                <?php 
-                $limiteDisponivel = $cliente['limite_credito'] - $cliente['saldo_devedor'];
-                $percentualUso = $cliente['limite_credito'] > 0 ? ($cliente['saldo_devedor'] / $cliente['limite_credito']) * 100 : 0;
-                ?>
-                <div class="col-md-6 col-lg-4 mb-4 cliente-card" 
-                     data-nome="<?= strtolower($cliente['nome']) ?>"
-                     data-cpf="<?= $cliente['cpf_cnpj'] ?>"
-                     data-telefone="<?= $cliente['telefone'] ?>"
-                     data-status="<?= $cliente['status'] ?>"
-                     data-debito="<?= $cliente['saldo_devedor'] > 0 ? 'com_debito' : 'sem_debito' ?>"
-                     data-limite="<?= $limiteDisponivel <= 0 ? 'limite_esgotado' : 'com_limite' ?>">
-                    <div class="card client-card h-100">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <h6 class="mb-0"><?= htmlspecialchars($cliente['nome']) ?></h6>
-                            <span class="badge status-badge bg-<?= $cliente['status'] === 'ativo' ? 'success' : ($cliente['status'] === 'bloqueado' ? 'danger' : 'warning') ?>">
-                                <?= ucfirst($cliente['status']) ?>
-                            </span>
+            <div class="container-fluid">
+                <div class="content-wrapper">
+                    <!-- Header -->
+                    <div class="header">
+                        <div class="row align-items-center">
+                            <div class="col-md-6">
+                                <h2 class="mb-0">
+                                    <i class="fas fa-hand-holding-usd me-2"></i>
+                                    Gestão de Fiados
+                                </h2>
+                                <p class="text-muted mb-0">Clientes com pedidos em aberto</p>
+                            </div>
                         </div>
-                        <div class="card-body">
-                            <div class="mb-2">
-                                <small class="text-muted">CPF/CNPJ:</small><br>
-                                <span><?= $cliente['cpf_cnpj'] ?: 'Não informado' ?></span>
-                            </div>
-                            <div class="mb-2">
-                                <small class="text-muted">Telefone:</small><br>
-                                <span><?= $cliente['telefone'] ?: 'Não informado' ?></span>
-                            </div>
-                            <div class="mb-2">
-                                <small class="text-muted">Email:</small><br>
-                                <span><?= $cliente['email'] ?: 'Não informado' ?></span>
-                            </div>
-                            
-                            <hr>
-                            
-                            <div class="row text-center">
-                                <div class="col-6">
-                                    <small class="text-muted">Limite de Crédito</small><br>
-                                    <span class="credit-limit">R$ <?= number_format($cliente['limite_credito'], 2, ',', '.') ?></span>
-                                </div>
-                                <div class="col-6">
-                                    <small class="text-muted">Saldo Devedor</small><br>
-                                    <span class="debt-amount <?= $cliente['saldo_devedor'] > 0 ? 'debt-warning' : '' ?>">
-                                        R$ <?= number_format($cliente['saldo_devedor'], 2, ',', '.') ?>
-                                    </span>
-                                </div>
-                            </div>
-                            
-                            <div class="mt-2">
-                                <small class="text-muted">Limite Disponível</small><br>
-                                <span class="<?= $limiteDisponivel >= 0 ? 'available-credit' : 'debt-danger' ?>">
-                                    R$ <?= number_format($limiteDisponivel, 2, ',', '.') ?>
-                                </span>
-                            </div>
-                            
-                            <?php if ($percentualUso > 0): ?>
-                                <div class="mt-2">
-                                    <div class="progress" style="height: 6px;">
-                                        <div class="progress-bar <?= $percentualUso > 80 ? 'bg-danger' : ($percentualUso > 60 ? 'bg-warning' : 'bg-success') ?>" 
-                                             style="width: <?= min($percentualUso, 100) ?>%"></div>
-                                    </div>
-                                    <small class="text-muted"><?= number_format($percentualUso, 1) ?>% do limite usado</small>
-                                </div>
-                            <?php endif; ?>
-                            
-                            <hr>
-                            <div class="mt-2 bg-light p-2 rounded">
-                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <small class="fw-bold"><i class="fas fa-robot text-primary"></i> Cobrança IA (WhatsApp)</small>
-                                    <div class="form-check form-switch m-0">
-                                        <input class="form-check-input" type="checkbox" role="switch" 
-                                               id="cobrar_<?= $cliente['id'] ?>" 
-                                               onchange="toggleCobranca(<?= $cliente['id'] ?>, this.checked)"
-                                               <?= !empty($cliente['cobranca_automatica']) && $cliente['cobranca_automatica'] == 't' ? 'checked' : '' ?>>
+                    </div>
+
+                    <!-- Stats Cards -->
+                    <div class="row mb-4">
+                        <div class="col-md-4 mb-3">
+                            <div class="card bg-primary text-white">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title">Total Clientes c/ Fiado</h6>
+                                            <h3><?= count($clientes) ?></h3>
+                                        </div>
+                                        <div class="align-self-center">
+                                            <i class="fas fa-users fa-2x"></i>
+                                        </div>
                                     </div>
                                 </div>
-                                <select class="form-select form-select-sm" 
-                                        id="freq_<?= $cliente['id'] ?>"
-                                        onchange="mudarFrequencia(<?= $cliente['id'] ?>, this.value)"
-                                        <?= empty($cliente['cobranca_automatica']) || $cliente['cobranca_automatica'] != 't' ? 'disabled' : '' ?>>
-                                    <option value="diaria" <?= isset($cliente['cobranca_frequencia']) && $cliente['cobranca_frequencia'] == 'diaria' ? 'selected' : '' ?>>Diária (Todo dia de manhã)</option>
-                                    <option value="semanal" <?= isset($cliente['cobranca_frequencia']) && $cliente['cobranca_frequencia'] == 'semanal' ? 'selected' : '' ?>>Semanal (Segundas-feiras)</option>
-                                    <option value="mensal" <?= empty($cliente['cobranca_frequencia']) || $cliente['cobranca_frequencia'] == 'mensal' ? 'selected' : '' ?>>Mensal (Dia 1 e 5)</option>
-                                </select>
                             </div>
                         </div>
-                        <div class="card-footer">
-                            <div class="btn-group w-100" role="group">
-                                <button class="btn btn-sm btn-outline-primary" onclick="editarCliente(<?= $cliente['id'] ?>)">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-info" onclick="verHistorico(<?= $cliente['id'] ?>)">
-                                    <i class="fas fa-history"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-success" onclick="novaVendaFiada(<?= $cliente['id'] ?>)">
-                                    <i class="fas fa-shopping-cart"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-warning" onclick="receberPagamento(<?= $cliente['id'] ?>)">
-                                    <i class="fas fa-money-bill"></i>
-                                </button>
+                        <div class="col-md-4 mb-3">
+                            <div class="card bg-warning text-white">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title">Total em Débito</h6>
+                                            <h3>R$ <?= number_format(array_sum(array_column($clientes, 'saldo_devedor')), 2, ',', '.') ?></h3>
+                                        </div>
+                                        <div class="align-self-center">
+                                            <i class="fas fa-exclamation-triangle fa-2x"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="card bg-info text-white">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title">Pedidos Fiado Pendentes</h6>
+                                            <h3><?= array_sum(array_column($clientes, 'qtd_pedidos_fiado')) ?></h3>
+                                        </div>
+                                        <div class="align-self-center">
+                                            <i class="fas fa-receipt fa-2x"></i>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            <?php endforeach; ?>
-        </div>
 
-        <?php if (empty($clientes)): ?>
-            <div class="row">
-                <div class="col-12">
-                    <div class="text-center py-5">
-                        <i class="fas fa-users fa-3x text-muted mb-3"></i>
-                        <h4 class="text-muted">Nenhum cliente cadastrado</h4>
-                        <p class="text-muted">Comece cadastrando seu primeiro cliente para vendas fiadas.</p>
-                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNovoCliente">
-                            <i class="fas fa-plus"></i> Cadastrar Primeiro Cliente
-                        </button>
+                    <!-- Clients Grid -->
+                    <div class="row" id="clientesGrid">
+                        <?php foreach ($clientes as $cliente): ?>
+                            <div class="col-md-6 col-lg-4 mb-4 cliente-card">
+                                <div class="card client-card h-100">
+                                    <div class="card-header d-flex justify-content-between align-items-center">
+                                        <h6 class="mb-0"><?= htmlspecialchars($cliente['nome']) ?></h6>
+                                        <span class="badge bg-<?= $cliente['saldo_devedor'] > 0 ? 'danger' : 'success' ?>">
+                                            <?= $cliente['saldo_devedor'] > 0 ? 'Inadimplente' : 'Ok' ?>
+                                        </span>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="mb-2">
+                                            <small class="text-muted">Telefone:</small><br>
+                                            <a href="https://wa.me/<?= preg_replace('/[^0-9]/', '', $cliente['wpp']) ?>" target="_blank" class="text-decoration-none">
+                                                <i class="fab fa-whatsapp text-success"></i> <?= $cliente['wpp'] ?: 'Não informado' ?>
+                                            </a>
+                                        </div>
+                                        <hr>
+                                        <div class="d-flex justify-content-between mb-2">
+                                            <span class="text-muted">Dívida Atual:</span>
+                                            <span class="debt-amount text-danger">R$ <?= number_format($cliente['saldo_devedor'], 2, ',', '.') ?></span>
+                                        </div>
+                                        <div class="d-flex justify-content-between mb-2">
+                                            <span class="text-muted">Pedidos Fiado:</span>
+                                            <span><?= $cliente['qtd_pedidos_fiado'] ?></span>
+                                        </div>
+                                        
+                                        <!-- AI settings -->
+                                        <div class="mt-3 p-2 border rounded bg-light">
+                                            <small class="fw-bold d-block mb-1"><i class="fas fa-robot text-primary"></i> Assistente de Cobrança</small>
+                                            <div class="form-check form-switch mb-1">
+                                                <input class="form-check-input" type="checkbox" id="cob-<?= $cliente['id'] ?>" <?= $cliente['cobranca_automatica'] ? 'checked' : '' ?> onchange="updateCobranca(<?= $cliente['id'] ?>, this.checked, document.getElementById('freq-<?= $cliente['id'] ?>').value)">
+                                                <label class="form-check-label" style="font-size: 0.85em;" for="cob-<?= $cliente['id'] ?>">Cobrar via WhatsApp</label>
+                                            </div>
+                                            <select id="freq-<?= $cliente['id'] ?>" class="form-select form-select-sm" onchange="updateCobranca(<?= $cliente['id'] ?>, document.getElementById('cob-<?= $cliente['id'] ?>').checked, this.value)">
+                                                <option value="diaria" <?= $cliente['cobranca_frequencia'] == 'diaria' ? 'selected' : '' ?>>Diária</option>
+                                                <option value="semanal" <?= $cliente['cobranca_frequencia'] == 'semanal' ? 'selected' : '' ?>>Semanal</option>
+                                                <option value="mensal" <?= $cliente['cobranca_frequencia'] == 'mensal' ? 'selected' : '' ?>>Mensal</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="card-footer bg-transparent">
+                                        <a href="index.php?view=clientes&editar=<?= $cliente['id'] ?>" class="btn btn-sm btn-outline-primary w-100">
+                                            <i class="fas fa-user-edit"></i> Ver Perfil do Cliente
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                        
+                        <?php if (empty($clientes)): ?>
+                            <div class="col-12 text-center py-5">
+                                <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
+                                <h4>Nenhum cliente com fiado</h4>
+                                <p class="text-muted">Não há pedidos com status de fiado no momento.</p>
+                            </div>
+                        <?php endif; ?>
                     </div>
                 </div>
-            </div>
-        <?php endif; ?>
-    </div>
-
-    <!-- Modal Novo Cliente -->
-    <div class="modal fade" id="modalNovoCliente" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">
-                        <i class="fas fa-user-plus"></i> Novo Cliente
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <form id="formNovoCliente">
-                    <div class="modal-body">
-                        <div class="row">
-                            <div class="col-md-8">
-                                <div class="mb-3">
-                                    <label class="form-label">Nome Completo *</label>
-                                    <input type="text" class="form-control" name="nome" required>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="mb-3">
-                                    <label class="form-label">CPF/CNPJ</label>
-                                    <input type="text" class="form-control" name="cpf_cnpj" placeholder="000.000.000-00">
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label">Telefone</label>
-                                    <input type="text" class="form-control" name="telefone" placeholder="(00) 00000-0000">
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label">Email</label>
-                                    <input type="email" class="form-control" name="email">
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label class="form-label">Endereço</label>
-                            <textarea class="form-control" name="endereco" rows="2" placeholder="Rua, número, bairro, cidade..."></textarea>
-                        </div>
-                        
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label">Limite de Crédito (R$) *</label>
-                                    <input type="number" class="form-control" name="limite_credito" step="0.01" min="0" required>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label">Status</label>
-                                    <select class="form-select" name="status">
-                                        <option value="ativo">Ativo</option>
-                                        <option value="bloqueado">Bloqueado</option>
-                                        <option value="suspenso">Suspenso</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label class="form-label">Observações</label>
-                            <textarea class="form-control" name="observacoes" rows="3" placeholder="Informações adicionais sobre o cliente..."></textarea>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-save"></i> Salvar Cliente
-                        </button>
-                    </div>
-                </form>
             </div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="assets/js/sidebar.js"></script>
     <script>
-        // Search and Filter functionality
-        document.getElementById('searchClientes').addEventListener('input', filterClientes);
-        document.getElementById('filterStatus').addEventListener('change', filterClientes);
-        document.getElementById('filterDebt').addEventListener('change', filterClientes);
-
-        function filterClientes() {
-            const search = document.getElementById('searchClientes').value.toLowerCase();
-            const status = document.getElementById('filterStatus').value;
-            const debt = document.getElementById('filterDebt').value;
-            
-            const cards = document.querySelectorAll('.cliente-card');
-            
-            cards.forEach(card => {
-                const nome = card.dataset.nome;
-                const cpf = card.dataset.cpf;
-                const telefone = card.dataset.telefone;
-                const clienteStatus = card.dataset.status;
-                const debito = card.dataset.debito;
-                const limite = card.dataset.limite;
-                
-                let show = true;
-                
-                // Search filter
-                if (search && !nome.includes(search) && !cpf.includes(search) && !telefone.includes(search)) {
-                    show = false;
-                }
-                
-                // Status filter
-                if (status && clienteStatus !== status) {
-                    show = false;
-                }
-                
-                // Debt filter
-                if (debt) {
-                    if (debt === 'com_debito' && debito !== 'com_debito') show = false;
-                    if (debt === 'sem_debito' && debito !== 'sem_debito') show = false;
-                    if (debt === 'limite_esgotado' && limite !== 'limite_esgotado') show = false;
-                }
-                
-                card.style.display = show ? 'block' : 'none';
-            });
-        }
-
-        // Form submission
-        document.getElementById('formNovoCliente').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(this);
-            formData.append('action', 'criar_cliente_fiado');
-            
-            fetch('index.php?action=ajax_clientes_fiado', {
+        function updateCobranca(clienteId, cobrancaAtiva, frequencia) {
+            fetch('api/update_fiado_config.php', {
                 method: 'POST',
-                body: formData
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    usuario_global_id: clienteId,
+                    cobranca_automatica: cobrancaAtiva,
+                    cobranca_frequencia: frequencia
+                })
             })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    Swal.fire('Sucesso!', 'Cliente cadastrado com sucesso!', 'success');
-                    location.reload();
-                } else {
-                    Swal.fire('Erro!', data.message, 'error');
-                }
-            })
-            .catch(error => {
-                Swal.fire('Erro!', 'Erro ao cadastrar cliente', 'error');
-            });
-        });
-
-        // Action functions
-        function editarCliente(id) {
-            // TODO: Implementar edição de cliente
-            Swal.fire('Em desenvolvimento', 'Funcionalidade de edição será implementada em breve', 'info');
-        }
-
-        function verHistorico(id) {
-            // TODO: Implementar histórico de vendas
-            Swal.fire('Em desenvolvimento', 'Funcionalidade de histórico será implementada em breve', 'info');
-        }
-
-        function novaVendaFiada(id) {
-            // TODO: Implementar nova venda fiada
-            Swal.fire('Em desenvolvimento', 'Funcionalidade de venda fiada será implementada em breve', 'info');
-        }
-
-        function receberPagamento(id) {
-            // TODO: Implementar recebimento de pagamento
-            Swal.fire('Em desenvolvimento', 'Funcionalidade de pagamento será implementada em breve', 'info');
-        }
-
-        // Funções para IA e Cobrança
-        function toggleCobranca(id, status) {
-            const select = document.getElementById(`freq_${id}`);
-            select.disabled = !status;
-            
-            const formData = new FormData();
-            formData.append('action', 'configurar_cobranca_ia');
-            formData.append('cliente_id', id);
-            formData.append('cobranca_automatica', status ? '1' : '0');
-            formData.append('cobranca_frequencia', select.value);
-            
-            fetch('index.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
+            .then(res => res.json())
             .then(data => {
                 if(data.success) {
-                    Swal.fire({
+                    const Toast = Swal.mixin({
                         toast: true,
                         position: 'top-end',
-                        icon: 'success',
-                        title: status ? 'Cobrança ativada' : 'Cobrança desativada',
                         showConfirmButton: false,
-                        timer: 1500
+                        timer: 3000
+                    });
+                    Toast.fire({
+                        icon: 'success',
+                        title: 'Configurações de cobrança atualizadas!'
                     });
                 } else {
-                    Swal.fire('Erro', data.message || 'Falha ao atualizar cobrança', 'error');
+                    Swal.fire('Erro', 'Não foi possível atualizar: ' + data.error, 'error');
                 }
             })
-            .catch(() => Swal.fire('Erro', 'Erro na requisição', 'error'));
-        }
-
-        function mudarFrequencia(id, frequencia) {
-            const formData = new FormData();
-            formData.append('action', 'configurar_cobranca_ia');
-            formData.append('cliente_id', id);
-            formData.append('cobranca_frequencia', frequencia);
-            
-            fetch('index.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if(data.success) {
-                    Swal.fire({
-                        toast: true,
-                        position: 'top-end',
-                        icon: 'success',
-                        title: 'Frequência atualizada',
-                        showConfirmButton: false,
-                        timer: 1500
-                    });
-                }
-            });
+            .catch(err => console.error(err));
         }
     </script>
 </body>

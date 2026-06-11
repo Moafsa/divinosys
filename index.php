@@ -98,9 +98,6 @@ try {
     $config = \System\Config::getInstance();
     $router = \System\Router::getInstance();
     
-    // RUN MIGRATIONS
-    require_once __DIR__ . '/migrate_ai.php';
-
     error_log('INDEX: Sistema inicializado');
     
     // Processar lembretes de pagamento agendados (com throttling usando arquivo de lock)
