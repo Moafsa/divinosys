@@ -264,7 +264,7 @@ if ($tenant && $filial) {
 
                     <!-- Clients Table -->
                     <div class="card shadow-sm border-0">
-                        <div class="card-body p-0">
+                        <div class="card-body p-3">
                             <div class="table-responsive">
                                 <table id="clientesTabela" class="table table-hover table-striped align-middle mb-0">
                                     <thead class="table-light">

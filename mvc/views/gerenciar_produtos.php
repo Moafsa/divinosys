@@ -348,8 +348,23 @@ if ($tenant && $filial) {
                 <div class="tab-content" id="managementTabsContent">
                     <!-- Produtos Tab -->
                     <div class="tab-pane fade show active" id="produtos" role="tabpanel">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div class="input-group w-50">
+                                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                <input type="text" id="pesquisaProduto" class="form-control" placeholder="Buscar produtos por nome ou ID...">
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <span class="me-2 text-muted small">Itens por página:</span>
+                                <select id="itensPorPaginaProduto" class="form-select form-select-sm w-auto">
+                                    <option value="12">12</option>
+                                    <option value="24">24</option>
+                                    <option value="48">48</option>
+                                    <option value="all">Todos</option>
+                                </select>
+                            </div>
+                        </div>
                         <div class="produtos-grid">
-                    <div class="row">
+                            <div class="row" id="produtosGrid">
                         <?php 
                         error_log("Renderizando " . count($produtos) . " produtos no HTML");
                         foreach ($produtos as $index => $produto): 
@@ -389,7 +404,16 @@ if ($tenant && $filial) {
                                 </div>
                             </div>
                         <?php endforeach; ?>
-                    </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Controles de Paginação -->
+                        <div class="d-flex justify-content-between align-items-center mt-3" id="produtosPaginationContainer">
+                            <span class="text-muted small" id="produtosPaginationInfo">Mostrando 0 a 0 de 0 produtos</span>
+                            <nav aria-label="Navegação de produtos">
+                                <ul class="pagination pagination-sm mb-0" id="produtosPagination">
+                                </ul>
+                            </nav>
                         </div>
                     </div>
                     
@@ -1545,6 +1569,142 @@ if ($tenant && $filial) {
             document.getElementById('produtoNcm').value = codigo.replace(/\./g, '');
             Swal.close();
         }
+
+        // Lógica de Paginação e Pesquisa de Produtos
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('pesquisaProduto');
+            const limitSelect = document.getElementById('itensPorPaginaProduto');
+            const grid = document.getElementById('produtosGrid');
+            const items = grid ? Array.from(grid.querySelectorAll('[data-produto-id]')) : [];
+            const paginationUl = document.getElementById('produtosPagination');
+            const paginationInfo = document.getElementById('produtosPaginationInfo');
+            
+            let currentPage = 1;
+            let currentLimit = limitSelect ? parseInt(limitSelect.value) : 12;
+            let filteredItems = [...items];
+
+            function updateGrid() {
+                if (!grid) return;
+                
+                // Esconde tudo primeiro
+                items.forEach(item => {
+                    item.classList.remove('d-block');
+                    item.style.display = 'none';
+                });
+                
+                const total = filteredItems.length;
+                let start = 0;
+                let end = total;
+                
+                if (currentLimit !== 'all' && typeof currentLimit === 'number') {
+                    const totalPages = Math.ceil(total / currentLimit) || 1;
+                    if (currentPage > totalPages) currentPage = totalPages;
+                    if (currentPage < 1) currentPage = 1;
+                    
+                    start = (currentPage - 1) * currentLimit;
+                    end = Math.min(start + currentLimit, total);
+                    
+                    renderPagination(totalPages);
+                } else {
+                    renderPagination(1);
+                }
+                
+                // Mostra apenas os itens da página atual
+                for (let i = start; i < end; i++) {
+                    if(filteredItems[i]) {
+                        filteredItems[i].style.display = 'block'; // reset to default block
+                    }
+                }
+                
+                if (paginationInfo) {
+                    paginationInfo.textContent = total > 0 ? `Mostrando ${start + 1} a ${end} de ${total} produtos` : `Nenhum produto encontrado`;
+                }
+            }
+            
+            function renderPagination(totalPages) {
+                if (!paginationUl) return;
+                paginationUl.innerHTML = '';
+                
+                if (totalPages <= 1) return;
+                
+                // Prev button
+                const prevLi = document.createElement('li');
+                prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+                prevLi.innerHTML = `<a class="page-link" href="#" aria-label="Anterior"><span aria-hidden="true">&laquo;</span></a>`;
+                prevLi.onclick = (e) => { e.preventDefault(); if(currentPage > 1) { currentPage--; updateGrid(); } };
+                paginationUl.appendChild(prevLi);
+                
+                // Limits and ellipses logic
+                let startPage = Math.max(1, currentPage - 2);
+                let endPage = Math.min(totalPages, currentPage + 2);
+                
+                if (startPage > 1) {
+                    const firstLi = document.createElement('li');
+                    firstLi.className = 'page-item';
+                    firstLi.innerHTML = `<a class="page-link" href="#">1</a>`;
+                    firstLi.onclick = (e) => { e.preventDefault(); currentPage = 1; updateGrid(); };
+                    paginationUl.appendChild(firstLi);
+                    if (startPage > 2) {
+                        const ell = document.createElement('li');
+                        ell.className = 'page-item disabled';
+                        ell.innerHTML = `<span class="page-link">...</span>`;
+                        paginationUl.appendChild(ell);
+                    }
+                }
+                
+                for (let i = startPage; i <= endPage; i++) {
+                    const li = document.createElement('li');
+                    li.className = `page-item ${currentPage === i ? 'active' : ''}`;
+                    li.innerHTML = `<a class="page-link" href="#">${i}</a>`;
+                    li.onclick = (e) => { e.preventDefault(); currentPage = i; updateGrid(); };
+                    paginationUl.appendChild(li);
+                }
+                
+                if (endPage < totalPages) {
+                    if (endPage < totalPages - 1) {
+                        const ell = document.createElement('li');
+                        ell.className = 'page-item disabled';
+                        ell.innerHTML = `<span class="page-link">...</span>`;
+                        paginationUl.appendChild(ell);
+                    }
+                    const lastLi = document.createElement('li');
+                    lastLi.className = 'page-item';
+                    lastLi.innerHTML = `<a class="page-link" href="#">${totalPages}</a>`;
+                    lastLi.onclick = (e) => { e.preventDefault(); currentPage = totalPages; updateGrid(); };
+                    paginationUl.appendChild(lastLi);
+                }
+                
+                // Next button
+                const nextLi = document.createElement('li');
+                nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
+                nextLi.innerHTML = `<a class="page-link" href="#" aria-label="Próximo"><span aria-hidden="true">&raquo;</span></a>`;
+                nextLi.onclick = (e) => { e.preventDefault(); if(currentPage < totalPages) { currentPage++; updateGrid(); } };
+                paginationUl.appendChild(nextLi);
+            }
+            
+            if (searchInput) {
+                searchInput.addEventListener('input', function(e) {
+                    const term = e.target.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "");
+                    filteredItems = items.filter(item => {
+                        const name = item.querySelector('.produto-nome').textContent.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "");
+                        return name.includes(term);
+                    });
+                    currentPage = 1;
+                    updateGrid();
+                });
+            }
+            
+            if (limitSelect) {
+                limitSelect.addEventListener('change', function(e) {
+                    currentLimit = e.target.value === 'all' ? 'all' : parseInt(e.target.value);
+                    currentPage = 1;
+                    updateGrid();
+                });
+            }
+            
+            // Inicia
+            updateGrid();
+        });
     </script>
 </body>
 </html>

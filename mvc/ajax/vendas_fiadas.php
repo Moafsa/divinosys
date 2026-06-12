@@ -1,7 +1,8 @@
 <?php
 session_start();
-require_once '../../system/Database.php';
-require_once '../../system/Utils.php';
+require_once __DIR__ . '/../../system/Config.php';
+require_once __DIR__ . '/../../system/Database.php';
+require_once __DIR__ . '/../../system/Utils.php';
 
 // Configurar headers para JSON
 header('Content-Type: application/json');
