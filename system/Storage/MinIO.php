@@ -170,7 +170,8 @@ class MinIO
         $isImage = strpos($contentType, 'image/') === 0;
         $webpTmpName = null;
 
-        if ($isImage && !in_array($extension, ['webp', 'svg', 'gif'])) {
+        // SVG é vetor e não deve ser convertido pelo GD
+        if ($isImage && $extension !== 'svg') {
             $webpTmpName = $tmpName . '_converted.webp';
             if ($this->convertToWebP($tmpName, $webpTmpName, 85)) {
                 $tmpName = $webpTmpName;
@@ -209,26 +210,17 @@ class MinIO
         $info = @getimagesize($sourcePath);
         if (!$info) return false;
         
-        $mime = $info['mime'];
-        $image = null;
+        $content = @file_get_contents($sourcePath);
+        if (!$content) return false;
         
-        switch ($mime) {
-            case 'image/jpeg':
-                $image = @imagecreatefromjpeg($sourcePath);
-                break;
-            case 'image/png':
-                $image = @imagecreatefrompng($sourcePath);
-                if ($image !== false) {
-                    imagepalettetotruecolor($image);
-                    imagealphablending($image, true);
-                    imagesavealpha($image, true);
-                }
-                break;
-            default:
-                return false; // Não suportado ou já é webp
-        }
-        
+        // Usa imagecreatefromstring para suportar qualquer formato de imagem que o GD reconheça (GIF, BMP, WEBP, AVIF, etc)
+        $image = @imagecreatefromstring($content);
         if (!$image) return false;
+        
+        // Preservar transparência (para PNG, GIF, WEBP)
+        imagepalettetotruecolor($image);
+        imagealphablending($image, true);
+        imagesavealpha($image, true);
         
         // Salvar imagem convertida em webp
         $success = @imagewebp($image, $destPath, $quality);
