@@ -162,13 +162,79 @@ class MinIO
             throw new Exception('File upload error: ' . $fileArray['error']);
         }
 
-        $extension = pathinfo($fileArray['name'], PATHINFO_EXTENSION);
+        $extension = strtolower(pathinfo($fileArray['name'], PATHINFO_EXTENSION));
+        $contentType = $fileArray['type'] ?? mime_content_type($fileArray['tmp_name']);
+        $tmpName = $fileArray['tmp_name'];
+
+        // Otimizar imagens: converter para WebP se for imagem
+        $isImage = strpos($contentType, 'image/') === 0;
+        $webpTmpName = null;
+
+        if ($isImage && !in_array($extension, ['webp', 'svg', 'gif'])) {
+            $webpTmpName = $tmpName . '_converted.webp';
+            if ($this->convertToWebP($tmpName, $webpTmpName, 85)) {
+                $tmpName = $webpTmpName;
+                $extension = 'webp';
+                $contentType = 'image/webp';
+            }
+        }
+
         $fileName = uniqid() . '_' . time() . '.' . $extension;
         $objectKey = $prefix . '/' . $fileName;
 
-        $contentType = $fileArray['type'] ?? mime_content_type($fileArray['tmp_name']);
+        $result = $this->upload($tmpName, $objectKey, $contentType, false);
 
-        return $this->upload($fileArray['tmp_name'], $objectKey, $contentType, false);
+        // Limpar o arquivo temporário convertido, se existir
+        if ($webpTmpName && file_exists($webpTmpName)) {
+            @unlink($webpTmpName);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Converter imagem para WebP
+     * 
+     * @param string $sourcePath Caminho original
+     * @param string $destPath Caminho de destino
+     * @param int $quality Qualidade da conversão (0-100)
+     * @return bool Sucesso na conversão
+     */
+    private function convertToWebP($sourcePath, $destPath, $quality = 85)
+    {
+        if (!function_exists('imagewebp')) {
+            return false;
+        }
+
+        $info = @getimagesize($sourcePath);
+        if (!$info) return false;
+        
+        $mime = $info['mime'];
+        $image = null;
+        
+        switch ($mime) {
+            case 'image/jpeg':
+                $image = @imagecreatefromjpeg($sourcePath);
+                break;
+            case 'image/png':
+                $image = @imagecreatefrompng($sourcePath);
+                if ($image !== false) {
+                    imagepalettetotruecolor($image);
+                    imagealphablending($image, true);
+                    imagesavealpha($image, true);
+                }
+                break;
+            default:
+                return false; // Não suportado ou já é webp
+        }
+        
+        if (!$image) return false;
+        
+        // Salvar imagem convertida em webp
+        $success = @imagewebp($image, $destPath, $quality);
+        imagedestroy($image);
+        
+        return $success;
     }
 
     /**
