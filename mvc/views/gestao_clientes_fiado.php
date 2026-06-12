@@ -119,6 +119,8 @@ if ($tenant && $filial) {
     <title>Gestão de Fiados - <?php echo $config->get('app.name'); ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- DataTables CSS -->
+    <link href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css" rel="stylesheet">
     <link href="assets/css/sidebar.css" rel="stylesheet">
     <link href="assets/css/responsive-fix.css" rel="stylesheet">
     <style>
@@ -264,7 +266,7 @@ if ($tenant && $filial) {
                     <div class="card shadow-sm border-0">
                         <div class="card-body p-0">
                             <div class="table-responsive">
-                                <table class="table table-hover table-striped align-middle mb-0">
+                                <table id="clientesTabela" class="table table-hover table-striped align-middle mb-0">
                                     <thead class="table-light">
                                         <tr>
                                             <th>Cliente</th>
@@ -311,9 +313,6 @@ if ($tenant && $filial) {
                                                 </td>
                                                 <td class="text-end">
                                                     <div class="btn-group">
-                                                        <button type="button" class="btn btn-sm btn-outline-success" onclick="abrirModalVincular(<?= $cliente['id'] ?>, '<?= htmlspecialchars(addslashes($cliente['nome'])) ?>')" title="Vincular Pedido">
-                                                            <i class="fas fa-link"></i>
-                                                        </button>
                                                         <button type="button" class="btn btn-sm btn-primary" onclick="abrirModalPedidosPagamento(<?= $cliente['id'] ?>, '<?= htmlspecialchars(addslashes($cliente['nome'])) ?>', <?= $cliente['saldo_devedor'] ?>)" title="Ver Pedidos e Receber">
                                                             <i class="fas fa-list"></i> Receber
                                                         </button>
@@ -340,30 +339,7 @@ if ($tenant && $filial) {
         </div>
     </div>
 
-    <!-- Modal Vincular Pedido -->
-    <div class="modal fade" id="modalVincularPedido" tabindex="-1" aria-labelledby="modalVincularLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header border-0 pb-0">
-                    <h5 class="modal-title" id="modalVincularLabel"><i class="fas fa-link text-success"></i> Vincular Pedido a <span id="vinculoClienteNome" class="fw-bold"></span></h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <p class="text-muted small">Insira o ID do pedido ou o número da comanda em aberto para transferir o débito para a conta deste cliente.</p>
-                    <input type="hidden" id="vinculoClienteId">
-                    
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">ID do Pedido / Comanda</label>
-                        <input type="number" class="form-control form-control-lg text-center" id="vinculoPedidoId" placeholder="Ex: 1045" autofocus>
-                    </div>
-                </div>
-                <div class="modal-footer border-0 pt-0">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-success px-4" onclick="confirmarVinculoPedido()">Confirmar Vínculo</button>
-                </div>
-            </div>
-        </div>
-    </div>
+
 
     <!-- Modal Pedidos e Pagamento Lote -->
     <div class="modal fade" id="modalPedidosCliente" tabindex="-1" aria-labelledby="modalPedidosLabel" aria-hidden="true">
@@ -425,73 +401,30 @@ if ($tenant && $filial) {
         </div>
     </div>
 
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- DataTables JS -->
+    <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="assets/js/sidebar.js"></script>
     <script>
-        let modalVincular = null;
-        
         document.addEventListener('DOMContentLoaded', function() {
-            modalVincular = new bootstrap.Modal(document.getElementById('modalVincularPedido'));
-        });
-
-        function abrirModalVincular(clienteId, clienteNome) {
-            document.getElementById('vinculoClienteId').value = clienteId;
-            document.getElementById('vinculoClienteNome').innerText = clienteNome;
-            document.getElementById('vinculoPedidoId').value = '';
-            modalVincular.show();
-        }
-
-        function confirmarVinculoPedido() {
-            const clienteId = document.getElementById('vinculoClienteId').value;
-            const pedidoId = document.getElementById('vinculoPedidoId').value;
-            
-            if (!pedidoId) {
-                Swal.fire('Atenção', 'Digite o ID do pedido ou comanda', 'warning');
-                return;
+            // Inicializar DataTables se não houver inicializado
+            if (typeof jQuery !== 'undefined' && $.fn.DataTable) {
+                $('#clientesTabela').DataTable({
+                    language: {
+                        url: '//cdn.datatables.net/plug-ins/1.13.7/i18n/pt-BR.json',
+                    },
+                    pageLength: 20,
+                    lengthMenu: [10, 20, 50, 100],
+                    order: [[2, 'desc']], // Ordena por saldo devedor por padrão
+                    columnDefs: [
+                        { orderable: false, targets: 5 } // Desabilita ordenação na coluna de ações
+                    ]
+                });
             }
-
-            const btn = document.querySelector('#modalVincularPedido .btn-success');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
-            btn.disabled = true;
-
-            const formData = new FormData();
-            formData.append('action', 'vincular_fiado');
-            formData.append('cliente_id', clienteId);
-            formData.append('pedido_id', pedidoId);
-
-            fetch('index.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-                
-                if (data.success) {
-                    modalVincular.hide();
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Pedido Vinculado!',
-                        text: 'O valor foi adicionado à dívida do cliente com sucesso.',
-                        timer: 2000,
-                        showConfirmButton: false
-                    }).then(() => {
-                        location.reload();
-                    });
-                } else {
-                    Swal.fire('Erro', data.message || 'Falha ao vincular pedido.', 'error');
-                }
-            })
-            .catch(err => {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-                console.error(err);
-                Swal.fire('Erro', 'Erro de comunicação com o servidor', 'error');
-            });
-        }
+        });
 
         let modalPagamentoLote = null;
 

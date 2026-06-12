@@ -17,7 +17,7 @@ $filialId = $_SESSION['filial_id'] ?? 1;
 $acao = $_POST['acao'] ?? '';
 
 try {
-    $db = new Database();
+    $db = \System\Database::getInstance();
     $pdo = $db->getConnection();
     
     switch ($acao) {
