@@ -1102,17 +1102,39 @@ try {
             
             $mensagem .= "✅ Acesse o sistema para mais detalhes.";
             
-            // Enviar mensagem para o número do admin (phone_number da instância)
-            $resultado = $wuzapiManager->sendMessage(
-                $instancia['id'],
-                $instancia['phone_number'],
-                $mensagem
-            );
+            // Buscar os números dos administradores para enviar notificação
+            $adminPhones = [];
+            try {
+                $admins = $db->fetchAll(
+                    "SELECT telefone FROM whatsapp_admins WHERE tenant_id = ? AND ativo = true",
+                    [$tenantId]
+                );
+                foreach ($admins as $admin) {
+                    if (!empty($admin['telefone'])) {
+                        $adminPhones[] = $admin['telefone'];
+                    }
+                }
+            } catch (Exception $e) {
+                // Ignore if table doesn't exist
+            }
             
-            if ($resultado['success']) {
-                error_log("PEDIDOS_ONLINE - Notificação WhatsApp enviada com sucesso para admin ({$instancia['phone_number']})");
-            } else {
-                error_log("PEDIDOS_ONLINE - Erro ao enviar notificação WhatsApp para admin: " . ($resultado['message'] ?? 'Erro desconhecido'));
+            // Fallback se não encontrou administradores
+            if (empty($adminPhones)) {
+                $adminPhones[] = $instancia['phone_number'];
+            }
+            
+            foreach ($adminPhones as $adminPhone) {
+                $resultado = $wuzapiManager->sendMessage(
+                    $instancia['id'],
+                    $adminPhone,
+                    $mensagem
+                );
+                
+                if ($resultado['success']) {
+                    error_log("PEDIDOS_ONLINE - Notificação WhatsApp enviada com sucesso para admin ({$adminPhone})");
+                } else {
+                    error_log("PEDIDOS_ONLINE - Erro ao enviar notificação WhatsApp para admin ({$adminPhone}): " . ($resultado['message'] ?? 'Erro desconhecido'));
+                }
             }
             
             // Enviar mensagem de confirmação para o cliente

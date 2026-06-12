@@ -111,22 +111,46 @@ class OpenAIService
             $isAdmin = $context['is_admin'] ?? false;
             $customerName = $context['customer_name'] ?? 'Cliente';
             
-            $systemPrompt = "Você é o assistente virtual do restaurante. O nome da pessoa falando é $customerName. ";
+            // Temporarily set session IDs so getSystemContext works
+            $originalTenant = $this->tenantId;
+            $originalFilial = $this->filialId;
+            $this->tenantId = $tenantId;
+            $this->filialId = $filialId;
+            
+            $systemContext = $this->getSystemContext();
+            
+            // Restore originals
+            $this->tenantId = $originalTenant;
+            $this->filialId = $originalFilial;
+            
+            $systemPrompt = "Você é o assistente virtual do restaurante (IAm). O nome da pessoa falando é $customerName. ";
             if ($isAdmin) {
-                $systemPrompt .= "ATENÇÃO: Este usuário é um ADMINISTRADOR do sistema. Você tem permissão para realizar ações sensíveis. Se ele pedir para quitar fatura, cobrar alguém ou consultar devedores, você deve responder no formato JSON: {\"type\":\"function\",\"function\":\"quitar_fatura\",\"params\":{\"cliente\":\"nome do cliente\"}} ou {\"type\":\"function\",\"function\":\"listar_devedores\"}. Senão, responda normalmente com texto limpo.";
+                $systemPrompt .= "ATENÇÃO: Este usuário é um ADMINISTRADOR do sistema. Você tem permissão para realizar ações gerenciais. " .
+                    "Você pode: criar_produto, listar_produtos, criar_ingrediente, listar_ingredientes, criar_categoria, listar_categorias, listar_pedidos, listar_pendencias_fiado, configurar_cobranca_fiado, gerar_fatura_fiado, baixar_pagamento_fiado. " .
+                    "Para ações de fiado, os nomes das ações são: \n" .
+                    "- listar_pendencias_fiado (Sem parâmetros)\n" .
+                    "- configurar_cobranca_fiado (data: {\"cliente_id\": ID, \"frequencia\": \"diaria\"|\"semanal\"|\"mensal\", \"ativo\": true|false})\n" .
+                    "- gerar_fatura_fiado (data: {\"cliente_id\": ID})\n" .
+                    "- baixar_pagamento_fiado (data: {\"cliente_id\": ID, \"valor_pago\": 50.00})\n" .
+                    "Para executar UMA DESSAS AÇÕES, responda EXATAMENTE neste formato JSON: {\"type\":\"action\",\"action\":\"nome_da_acao\",\"data\":{...}}. " .
+                    "Se você não for executar ação nenhuma, apenas responda à pergunta do administrador. ";
             } else {
-                $systemPrompt .= "Você é apenas um atendente. Responda as dúvidas sobre cardápio de forma simpática. Seu formato de resposta deve ser apenas texto limpo para o WhatsApp.";
+                $systemPrompt .= "ATENÇÃO: Este é um CLIENTE. Responda as dúvidas sobre cardápio de forma simpática. " .
+                    "Você pode receber pedidos do cliente. Para lançar um pedido, responda EXATAMENTE neste formato JSON: {\"type\":\"action\",\"action\":\"create_order\",\"data\":{...}}. " .
+                    "Caso contrário, o formato da sua resposta deve ser apenas texto limpo para o WhatsApp.";
             }
+            
+            $systemPrompt .= "\n\nCONTEXTO ATUAL DO RESTAURANTE:\n" . $systemContext;
 
             $messages = [
                 ['role' => 'system', 'content' => $systemPrompt],
                 ['role' => 'user', 'content' => $message]
             ];
 
-            // Setup curl for OpenAI chat completions
+            // Use gpt-4o-mini for better JSON/action extraction
             $ch = curl_init('https://api.openai.com/v1/chat/completions');
             $data = [
-                'model' => 'gpt-3.5-turbo',
+                'model' => 'gpt-4o-mini',
                 'messages' => $messages,
                 'temperature' => 0.7
             ];
@@ -145,34 +169,151 @@ class OpenAIService
             $result = json_decode($response, true);
             $aiText = $result['choices'][0]['message']['content'] ?? 'Desculpe, não entendi.';
             
-            // Check if AI returned a JSON function call
-            if ($isAdmin && strpos(trim($aiText), '{') === 0) {
-                $action = json_decode($aiText, true);
-                if ($action && isset($action['type']) && $action['type'] === 'function') {
-                    if ($action['function'] === 'quitar_fatura') {
-                        $nomeCliente = $action['params']['cliente'] ?? '';
-                        // Buscar cliente fiado
-                        $cliente = $this->db->fetch("SELECT * FROM clientes_fiado WHERE tenant_id = ? AND nome ILIKE ?", [$tenantId, "%$nomeCliente%"]);
-                        if ($cliente) {
-                            $this->db->update('clientes_fiado', ['saldo_devedor' => 0], 'id = ?', [$cliente['id']]);
-                            return ['success' => true, 'response' => ['message' => "Pronto! A fatura de {$cliente['nome']} foi quitada."]];
-                        } else {
-                            return ['success' => true, 'response' => ['message' => "Não encontrei o cliente fiado $nomeCliente."]];
-                        }
-                    } elseif ($action['function'] === 'listar_devedores') {
-                        $devedores = $this->db->fetchAll("SELECT * FROM clientes_fiado WHERE tenant_id = ? AND saldo_devedor > 0", [$tenantId]);
-                        if (empty($devedores)) {
-                            return ['success' => true, 'response' => ['message' => "Nenhum cliente está devendo no momento."]];
-                        }
-                        $msg = "Clientes com dívida:\n";
-                        foreach ($devedores as $d) {
-                            $msg .= "- {$d['nome']}: R$ " . number_format($d['saldo_devedor'], 2, ',', '.') . "\n";
-                        }
-                        return ['success' => true, 'response' => ['message' => $msg]];
-                    }
+            // Parse response to check for actions
+            $parsedAction = null;
+            if (strpos(trim($aiText), '{') === 0) {
+                $jsonData = json_decode($aiText, true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($jsonData)) {
+                    $parsedAction = $jsonData;
                 }
             }
+            
+            // Extra logic for actions missing in executeOperation natively
+            if ($parsedAction && isset($parsedAction['type']) && $parsedAction['type'] === 'action') {
+                if ($isAdmin && $parsedAction['action'] === 'listar_pendencias_fiado') {
+                    $devedores = $this->db->fetchAll("SELECT id, nome, saldo_devedor, cobranca_automatica, cobranca_frequencia FROM clientes_fiado WHERE tenant_id = ? AND saldo_devedor > 0", [$tenantId]);
+                    if (empty($devedores)) {
+                        return ['success' => true, 'response' => ['message' => "Nenhum cliente está devendo no momento."]];
+                    }
+                    $msg = "*Clientes com pendências (Fiado):*\n\n";
+                    foreach ($devedores as $d) {
+                        $cob = $d['cobranca_automatica'] ? "Ativa ({$d['cobranca_frequencia']})" : "Inativa";
+                        $msg .= "👤 *{$d['nome']}* (ID: {$d['id']})\n";
+                        $msg .= "💰 Dívida: R$ " . number_format($d['saldo_devedor'], 2, ',', '.') . "\n";
+                        $msg .= "🤖 Cobrança IA: {$cob}\n\n";
+                    }
+                    $msg .= "Você pode me pedir para configurar a cobrança, gerar fatura ou baixar um pagamento informando o ID do cliente.";
+                    return ['success' => true, 'response' => ['message' => $msg]];
 
+                } elseif ($isAdmin && $parsedAction['action'] === 'configurar_cobranca_fiado') {
+                    $cId = $parsedAction['data']['cliente_id'] ?? null;
+                    $freq = $parsedAction['data']['frequencia'] ?? 'semanal';
+                    $ativo = isset($parsedAction['data']['ativo']) ? (bool)$parsedAction['data']['ativo'] : true;
+                    
+                    if (!$cId) return ['success' => true, 'response' => ['message' => "Por favor, informe o ID do cliente."]];
+                    
+                    $this->db->update('clientes_fiado', [
+                        'cobranca_automatica' => $ativo ? 'true' : 'false',
+                        'cobranca_frequencia' => $freq
+                    ], 'id = ? AND tenant_id = ?', [$cId, $tenantId]);
+                    
+                    $status = $ativo ? "ativada" : "desativada";
+                    return ['success' => true, 'response' => ['message' => "Cobrança automática {$status} para o cliente ID {$cId} com frequência {$freq}."]];
+
+                } elseif ($isAdmin && $parsedAction['action'] === 'gerar_fatura_fiado') {
+                    $cId = $parsedAction['data']['cliente_id'] ?? null;
+                    if (!$cId) return ['success' => true, 'response' => ['message' => "Informe o ID do cliente."]];
+                    
+                    $cliente = $this->db->fetch("SELECT * FROM clientes_fiado WHERE id = ? AND tenant_id = ?", [$cId, $tenantId]);
+                    if (!$cliente) return ['success' => true, 'response' => ['message' => "Cliente não encontrado."]];
+                    
+                    $pedidos = $this->db->fetchAll("SELECT * FROM vendas_fiadas WHERE cliente_id = ? AND status IN ('pendente', 'vencido') ORDER BY data_vencimento ASC", [$cId]);
+                    
+                    $msg = "📄 *Fatura de {$cliente['nome']}*\n";
+                    $msg .= "Total em aberto: R$ " . number_format($cliente['saldo_devedor'], 2, ',', '.') . "\n\n";
+                    $msg .= "*Detalhamento:*\n";
+                    
+                    foreach ($pedidos as $p) {
+                        $pendente = $p['valor_total'] - $p['valor_pago'];
+                        $msg .= "- Pedido #{$p['pedido_id']} (" . date('d/m/Y', strtotime($p['created_at'])) . "): R$ " . number_format($pendente, 2, ',', '.') . "\n";
+                    }
+                    
+                    return ['success' => true, 'response' => ['message' => $msg]];
+
+                } elseif ($isAdmin && $parsedAction['action'] === 'baixar_pagamento_fiado') {
+                    $cId = $parsedAction['data']['cliente_id'] ?? null;
+                    $valorPago = (float)($parsedAction['data']['valor_pago'] ?? 0);
+                    
+                    if (!$cId || $valorPago <= 0) return ['success' => true, 'response' => ['message' => "Informe o ID do cliente e o valor pago válido."]];
+                    
+                    $cliente = $this->db->fetch("SELECT * FROM clientes_fiado WHERE id = ? AND tenant_id = ?", [$cId, $tenantId]);
+                    if (!$cliente) return ['success' => true, 'response' => ['message' => "Cliente não encontrado."]];
+                    
+                    $pedidos = $this->db->fetchAll("SELECT * FROM vendas_fiadas WHERE cliente_id = ? AND status IN ('pendente', 'vencido') ORDER BY data_vencimento ASC", [$cId]);
+                    
+                    $valorRestante = $valorPago;
+                    $this->db->beginTransaction();
+                    try {
+                        foreach ($pedidos as $p) {
+                            if ($valorRestante <= 0) break;
+                            
+                            $valorPendentePedido = (float)$p['valor_total'] - (float)$p['valor_pago'];
+                            if ($valorRestante >= $valorPendentePedido) {
+                                // Quita esse pedido
+                                $this->db->update('vendas_fiadas', [
+                                    'valor_pago' => $p['valor_total'],
+                                    'status' => 'pago'
+                                ], 'id = ?', [$p['id']]);
+                                $valorRestante -= $valorPendentePedido;
+                            } else {
+                                // Abate parcialmente
+                                $this->db->update('vendas_fiadas', [
+                                    'valor_pago' => (float)$p['valor_pago'] + $valorRestante
+                                ], 'id = ?', [$p['id']]);
+                                $valorRestante = 0;
+                            }
+                        }
+                        
+                        // Atualiza saldo do cliente
+                        // O trigger "atualizar_saldo_cliente" atualiza na base do valor_total da venda, não do valor_pago.
+                        // COMO O TRIGGER EXISTE e soma/subtrai baseado no valor_total (que não mudou), o saldo_devedor FICARÁ ERRADO!
+                        // Para corrigir, precisamos ajustar a tabela clientes_fiado manualmente (ou desativar a dependência do trigger no futuro).
+                        // Por hora, calculamos o novo saldo abatendo o que foi pago
+                        $novoSaldo = max(0, (float)$cliente['saldo_devedor'] - $valorPago);
+                        $this->db->update('clientes_fiado', ['saldo_devedor' => $novoSaldo], 'id = ?', [$cId]);
+                        
+                        // Insere em pagamentos_fiado (que nao tem trigger)
+                        // Descobre um venda_fiada_id aleatório ou do primeiro pedido pendente (pois a tabela exige)
+                        $vendaId = count($pedidos) > 0 ? $pedidos[0]['id'] : null;
+                        if ($vendaId) {
+                            $this->db->insert('pagamentos_fiado', [
+                                'venda_fiada_id' => $vendaId,
+                                'valor_pago' => $valorPago,
+                                'forma_pagamento' => 'dinheiro/pix (whatsapp)',
+                                'tenant_id' => $tenantId,
+                                'filial_id' => $filialId
+                            ]);
+                        }
+                        
+                        $this->db->commit();
+                        return ['success' => true, 'response' => ['message' => "Pagamento de R$ " . number_format($valorPago, 2, ',', '.') . " registrado com sucesso! Novo saldo: R$ " . number_format($novoSaldo, 2, ',', '.')]];
+                    } catch (\Exception $e) {
+                        $this->db->rollBack();
+                        return ['success' => true, 'response' => ['message' => "Erro ao registrar pagamento: " . $e->getMessage()]];
+                    }
+
+                } else {
+                    // Try to execute general operation
+                    $this->tenantId = $tenantId;
+                    $this->filialId = $filialId;
+                    
+                    // executeOperation expects $operation['type'] to be the action name
+                    $opToExecute = [
+                        'type' => $parsedAction['action'] ?? $parsedAction['type'],
+                        'data' => $parsedAction['data'] ?? []
+                    ];
+                    
+                    $execResult = $this->executeOperation($opToExecute);
+                    
+                    if (isset($execResult['success']) && $execResult['success'] === false) {
+                        return ['success' => true, 'response' => ['message' => "Houve um erro ao realizar a ação: " . $execResult['message']]];
+                    }
+                    return ['success' => true, 'response' => ['message' => $execResult['message'] ?? "Ação concluída com sucesso!"]];
+                }
+            } elseif ($parsedAction && isset($parsedAction['type']) && $parsedAction['type'] === 'response') {
+                $aiText = $parsedAction['message'] ?? $aiText;
+            }
+            
             return ['success' => true, 'response' => ['message' => $aiText]];
 
         } catch (\Exception $e) {

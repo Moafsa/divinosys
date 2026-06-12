@@ -6,9 +6,10 @@ try {
     $db = \System\Database::getInstance();
     $pdo = $db->getConnection();
 
-    // 1. Add columns to clientes_fiado
+    // 1. Add columns to clientes_fiado and vendas_fiadas
     $pdo->exec("ALTER TABLE clientes_fiado ADD COLUMN IF NOT EXISTS cobranca_automatica BOOLEAN DEFAULT false");
     $pdo->exec("ALTER TABLE clientes_fiado ADD COLUMN IF NOT EXISTS cobranca_frequencia VARCHAR(20) DEFAULT 'mensal'");
+    $pdo->exec("ALTER TABLE vendas_fiadas ADD COLUMN IF NOT EXISTS valor_pago DECIMAL(10,2) DEFAULT 0.00");
 
     // 2. Create whatsapp_admins table
     $pdo->exec("

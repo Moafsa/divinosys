@@ -208,6 +208,7 @@ try {
         'remover_whatsapp_admin' => 'ai_automations_ajax.php',
         'salvar_ai_automations' => 'ai_automations_ajax.php',
         'configurar_cobranca_ia' => 'configurar_cobranca_ia.php',
+        'vincular_fiado' => 'vincular_fiado.php',
         
         // SuperAdmin actions
         'getDashboardStats' => 'superadmin.php',

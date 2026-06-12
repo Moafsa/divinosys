@@ -12,10 +12,9 @@ echo "Iniciando execucao do Cron de Automacoes IA...\n";
 
 // 1. Cobranças de Fiados
 $fiadosParaCobrar = $db->fetchAll(
-    "SELECT cf.*, c.telefone as wpp 
-     FROM clientes_fiado cf
-     JOIN clientes c ON c.id = cf.cliente_id
-     WHERE cf.cobranca_automatica = true AND cf.saldo_devedor > 0"
+    "SELECT *, telefone as wpp 
+     FROM clientes_fiado
+     WHERE cobranca_automatica = true AND saldo_devedor > 0"
 );
 
 foreach ($fiadosParaCobrar as $fiado) {

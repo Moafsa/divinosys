@@ -13,7 +13,7 @@ require_once __DIR__ . '/../../system/Config.php';
 require_once __DIR__ . '/../../system/Database.php';
 require_once __DIR__ . '/../../system/Session.php';
 require_once __DIR__ . '/../../system/OpenAIService.php';
-require_once __DIR__ . '/../../system/WuzapiService.php';
+require_once __DIR__ . '/../../system/WhatsApp/WuzAPIManager.php';
 
 header('Content-Type: application/json');
 
@@ -29,11 +29,42 @@ try {
     }
     
     // Extract data from Wuzapi webhook
-    $from = $data['from'] ?? '';
-    $message = $data['message'] ?? $data['text'] ?? '';
-    $instanceId = $data['instanceId'] ?? $data['instance_id'] ?? '';
-    $messageType = $data['type'] ?? 'text';
-    $isGroup = $data['isGroup'] ?? false;
+    $from = '';
+    $message = '';
+    $isGroup = false;
+    $instanceId = '';
+    $messageType = 'text';
+
+    if (isset($data['event']) && isset($data['data']['Info'])) {
+        // WuzAPI format
+        $from = $data['data']['Info']['MessageSource']['Sender'] ?? '';
+        $isGroup = $data['data']['Info']['MessageSource']['IsGroup'] ?? false;
+        
+        if (isset($data['data']['Message']['conversation'])) {
+            $message = $data['data']['Message']['conversation'];
+        } elseif (isset($data['data']['Message']['extendedTextMessage']['text'])) {
+            $message = $data['data']['Message']['extendedTextMessage']['text'];
+        } else {
+            $messageType = 'other'; // non-text
+        }
+        
+        $instanceId = $data['instanceId'] ?? '';
+        
+        // Ignore messages sent by the bot itself
+        if (!empty($data['data']['Info']['MessageSource']['IsFromMe'])) {
+            error_log("Wuzapi Webhook - Ignoring message from me");
+            http_response_code(200);
+            echo json_encode(['success' => true, 'message' => 'Self messages ignored']);
+            exit;
+        }
+    } else {
+        // Old/Fallback format
+        $from = $data['from'] ?? '';
+        $message = $data['message'] ?? $data['text'] ?? '';
+        $instanceId = $data['instanceId'] ?? $data['instance_id'] ?? '';
+        $messageType = $data['type'] ?? 'text';
+        $isGroup = $data['isGroup'] ?? false;
+    }
     
     error_log("Wuzapi Webhook - From: $from, Instance: $instanceId, Type: $messageType, IsGroup: " . ($isGroup ? 'yes' : 'no'));
     
@@ -140,11 +171,12 @@ try {
     error_log("Wuzapi Webhook - AI Response: " . substr($responseMessage, 0, 100) . "...");
     
     // Send response back via WhatsApp
-    $wuzapi = new \System\WuzapiService();
-    $sendResult = $wuzapi->sendMessage($from, $responseMessage);
+    $wuzapi = new \System\WhatsApp\WuzAPIManager();
+    // Using $instance['id'] as it expects the DB instance ID to fetch the token
+    $sendResult = $wuzapi->sendMessage($instance['id'], $phoneNumber, $responseMessage);
     
     if (!$sendResult['success']) {
-        error_log("Wuzapi Webhook - Failed to send response: " . $sendResult['error']);
+        error_log("Wuzapi Webhook - Failed to send response: " . ($sendResult['message'] ?? 'Unknown error'));
     }
     
     // Log interaction
