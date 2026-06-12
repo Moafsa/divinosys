@@ -55,8 +55,8 @@ class Router
             'configuracoes' => 'configuracoes.php',
             'salvar_configuracoes' => 'salvar_configuracoes.php',
             'dashboard_ajax' => 'dashboard.php',
-            'gestao_clientes_fiado' => 'gestao_clientes_fiado.php',
-        'vendas_fiadas' => 'vendas_fiadas.php',
+        'gestao_clientes_fiado' => 'gestao_clientes_fiado.php',
+        'vendas_fiadas' => 'gestao_clientes_fiado.php', // Redireciona antiga tela para a nova de gestão
         'descontos_cortesias' => 'descontos_cortesias.php',
         'automacoes_ia' => 'automacoes_ia.php',
         'integracao_pagamentos' => 'integracao_pagamentos.php',

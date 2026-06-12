@@ -49,6 +49,14 @@ try {
             registrarPagamento($pdo, $tenantId);
             break;
             
+        case 'listar_vendas_pendentes_cliente':
+            listarVendasPendentesCliente($pdo, $tenantId, $filialId);
+            break;
+            
+        case 'pagamento_lote_cliente':
+            pagamentoLoteCliente($pdo, $tenantId, $filialId);
+            break;
+            
         default:
             echo json_encode(['success' => false, 'message' => 'Ação não reconhecida']);
     }
@@ -549,5 +557,114 @@ function gerarHtmlDetalhesVenda($venda, $itens, $pagamentos) {
     }
     
     return $html;
+}
+
+function listarVendasPendentesCliente($pdo, $tenantId, $filialId) {
+    $clienteId = $_POST['cliente_id'] ?? '';
+    if (empty($clienteId)) {
+        echo json_encode(['success' => false, 'message' => 'Cliente não informado']);
+        return;
+    }
+
+    $sql = "
+        SELECT 
+            id, data_venda, valor_total, valor_pago, saldo_devedor, status 
+        FROM vendas_fiadas 
+        WHERE cliente_id = ? AND tenant_id = ? AND status IN ('pendente', 'parcial', 'vencido') 
+        ORDER BY data_venda ASC
+    ";
+    
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([$clienteId, $tenantId]);
+    $vendas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    echo json_encode(['success' => true, 'vendas' => $vendas]);
+}
+
+function pagamentoLoteCliente($pdo, $tenantId, $filialId) {
+    $clienteId = $_POST['cliente_id'] ?? '';
+    $valorPagamento = floatval($_POST['valor_pagamento'] ?? 0);
+    $formaPagamento = $_POST['forma_pagamento'] ?? '';
+    
+    if (empty($clienteId) || $valorPagamento <= 0 || empty($formaPagamento)) {
+        echo json_encode(['success' => false, 'message' => 'Dados obrigatórios não preenchidos (Valor, Forma de Pagamento)']);
+        return;
+    }
+    
+    $pdo->beginTransaction();
+    
+    try {
+        // Obter vendas não pagas do cliente, do mais antigo para o mais novo
+        $sqlVendas = "
+            SELECT id, saldo_devedor, valor_pago 
+            FROM vendas_fiadas 
+            WHERE cliente_id = ? AND tenant_id = ? AND status IN ('pendente', 'parcial', 'vencido') 
+            ORDER BY data_venda ASC FOR UPDATE
+        ";
+        $stmt = $pdo->prepare($sqlVendas);
+        $stmt->execute([$clienteId, $tenantId]);
+        $vendas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        $valorRestante = $valorPagamento;
+        
+        foreach ($vendas as $venda) {
+            if ($valorRestante <= 0) break;
+            
+            $valorPagarNestaVenda = min($valorRestante, floatval($venda['saldo_devedor']));
+            
+            // Inserir pagamento
+            $sqlPagamento = "
+                INSERT INTO pagamentos_fiado (
+                    venda_id, valor_pagamento, forma_pagamento, data_pagamento,
+                    observacoes, created_at
+                ) VALUES (?, ?, ?, NOW(), 'Pagamento em Lote', NOW())
+            ";
+            $stmtPagamento = $pdo->prepare($sqlPagamento);
+            $stmtPagamento->execute([$venda['id'], $valorPagarNestaVenda, $formaPagamento]);
+            
+            // Atualizar venda
+            $novoValorPago = $venda['valor_pago'] + $valorPagarNestaVenda;
+            $novoSaldoDevedor = $venda['saldo_devedor'] - $valorPagarNestaVenda;
+            $novoStatus = $novoSaldoDevedor <= 0.01 ? 'pago' : 'parcial';
+            
+            $sqlUpdateVenda = "
+                UPDATE vendas_fiadas 
+                SET valor_pago = ?, saldo_devedor = ?, status = ?, updated_at = NOW()
+                WHERE id = ?
+            ";
+            $stmtUpdateVenda = $pdo->prepare($sqlUpdateVenda);
+            $stmtUpdateVenda->execute([$novoValorPago, $novoSaldoDevedor, $novoStatus, $venda['id']]);
+            
+            // Registrar movimentação financeira
+            $sqlMovimentacao = "
+                INSERT INTO movimentacoes_financeiras (
+                    tenant_id, filial_id, tipo, categoria_id, descricao,
+                    valor, data_movimentacao, referencia_id, created_at
+                ) VALUES (?, ?, 'entrada', 2, ?, ?, NOW(), ?, NOW())
+            ";
+            $descricao = "Pagamento fiado lote - Venda ID: {$venda['id']} - $formaPagamento";
+            $stmtMov = $pdo->prepare($sqlMovimentacao);
+            $stmtMov->execute([$tenantId, $filialId, $descricao, $valorPagarNestaVenda, $venda['id']]);
+            
+            $valorRestante -= $valorPagarNestaVenda;
+        }
+        
+        // Atualizar saldo total do cliente fiado
+        $sqlUpdateCliente = "
+            UPDATE clientes_fiado 
+            SET saldo_devedor = GREATEST(0, saldo_devedor - ?) 
+            WHERE id = ? AND tenant_id = ?
+        ";
+        $stmtUpdateCliente = $pdo->prepare($sqlUpdateCliente);
+        $stmtUpdateCliente->execute([$valorPagamento, $clienteId, $tenantId]);
+        
+        $pdo->commit();
+        echo json_encode(['success' => true, 'message' => 'Pagamento registrado com sucesso e abatido dos pedidos em aberto.']);
+        
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        error_log("Erro em pagamentoLoteCliente: " . $e->getMessage());
+        echo json_encode(['success' => false, 'message' => 'Erro ao processar pagamento.']);
+    }
 }
 ?>

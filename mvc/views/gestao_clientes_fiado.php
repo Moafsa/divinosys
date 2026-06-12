@@ -260,69 +260,80 @@ if ($tenant && $filial) {
                         </div>
                     </div>
 
-                    <!-- Clients Grid -->
-                    <div class="row" id="clientesGrid">
-                        <?php foreach ($clientes as $cliente): ?>
-                            <div class="col-md-6 col-lg-4 mb-4 cliente-card">
-                                <div class="card client-card h-100">
-                                    <div class="card-header d-flex justify-content-between align-items-center">
-                                        <h6 class="mb-0"><?= htmlspecialchars($cliente['nome']) ?></h6>
-                                        <span class="badge bg-<?= $cliente['saldo_devedor'] > 0 ? 'danger' : 'success' ?>">
-                                            <?= $cliente['saldo_devedor'] > 0 ? 'Inadimplente' : 'Ok' ?>
-                                        </span>
-                                    </div>
-                                    <div class="card-body">
-                                        <div class="mb-2">
-                                            <small class="text-muted">Telefone:</small><br>
-                                            <a href="https://wa.me/<?= preg_replace('/[^0-9]/', '', $cliente['wpp']) ?>" target="_blank" class="text-decoration-none">
-                                                <i class="fab fa-whatsapp text-success"></i> <?= $cliente['wpp'] ?: 'Não informado' ?>
-                                            </a>
-                                        </div>
-                                        <hr>
-                                        <div class="d-flex justify-content-between mb-2">
-                                            <span class="text-muted">Dívida Atual:</span>
-                                            <span class="debt-amount text-danger">R$ <?= number_format($cliente['saldo_devedor'], 2, ',', '.') ?></span>
-                                        </div>
-                                        <div class="d-flex justify-content-between mb-2">
-                                            <span class="text-muted">Pedidos Fiado:</span>
-                                            <span><?= $cliente['qtd_pedidos_fiado'] ?></span>
-                                        </div>
+                    <!-- Clients Table -->
+                    <div class="card shadow-sm border-0">
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover table-striped align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Cliente</th>
+                                            <th>Telefone</th>
+                                            <th>Saldo Devedor</th>
+                                            <th>Pedidos Fiados</th>
+                                            <th>Cobrança IA (WhatsApp)</th>
+                                            <th class="text-end">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($clientes as $cliente): ?>
+                                            <tr>
+                                                <td>
+                                                    <span class="fw-bold"><?= htmlspecialchars($cliente['nome']) ?></span>
+                                                    <?php if($cliente['saldo_devedor'] > 0): ?>
+                                                        <span class="badge bg-danger ms-2" style="font-size:0.7em">Inadimplente</span>
+                                                    <?php else: ?>
+                                                        <span class="badge bg-success ms-2" style="font-size:0.7em">Ok</span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td>
+                                                    <a href="https://wa.me/<?= preg_replace('/[^0-9]/', '', $cliente['wpp']) ?>" target="_blank" class="text-decoration-none text-dark">
+                                                        <i class="fab fa-whatsapp text-success"></i> <?= $cliente['wpp'] ?: '-' ?>
+                                                    </a>
+                                                </td>
+                                                <td>
+                                                    <strong class="text-danger">R$ <?= number_format($cliente['saldo_devedor'], 2, ',', '.') ?></strong>
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-secondary rounded-pill"><?= $cliente['qtd_pedidos_fiado'] ?></span>
+                                                </td>
+                                                <td>
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        <div class="form-check form-switch mb-0">
+                                                            <input class="form-check-input" type="checkbox" id="cob-<?= $cliente['id'] ?>" <?= $cliente['cobranca_automatica'] ? 'checked' : '' ?> onchange="updateCobranca(<?= $cliente['id'] ?>, this.checked, document.getElementById('freq-<?= $cliente['id'] ?>').value)">
+                                                        </div>
+                                                        <select id="freq-<?= $cliente['id'] ?>" class="form-select form-select-sm" style="width: auto;" onchange="updateCobranca(<?= $cliente['id'] ?>, document.getElementById('cob-<?= $cliente['id'] ?>').checked, this.value)">
+                                                            <option value="diaria" <?= $cliente['cobranca_frequencia'] == 'diaria' ? 'selected' : '' ?>>Diária</option>
+                                                            <option value="semanal" <?= $cliente['cobranca_frequencia'] == 'semanal' ? 'selected' : '' ?>>Semanal</option>
+                                                            <option value="mensal" <?= $cliente['cobranca_frequencia'] == 'mensal' ? 'selected' : '' ?>>Mensal</option>
+                                                        </select>
+                                                    </div>
+                                                </td>
+                                                <td class="text-end">
+                                                    <div class="btn-group">
+                                                        <button type="button" class="btn btn-sm btn-outline-success" onclick="abrirModalVincular(<?= $cliente['id'] ?>, '<?= htmlspecialchars(addslashes($cliente['nome'])) ?>')" title="Vincular Pedido">
+                                                            <i class="fas fa-link"></i>
+                                                        </button>
+                                                        <button type="button" class="btn btn-sm btn-primary" onclick="abrirModalPedidosPagamento(<?= $cliente['id'] ?>, '<?= htmlspecialchars(addslashes($cliente['nome'])) ?>', <?= $cliente['saldo_devedor'] ?>)" title="Ver Pedidos e Receber">
+                                                            <i class="fas fa-list"></i> Receber
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
                                         
-                                        <!-- AI settings -->
-                                        <div class="mt-3 p-2 border rounded bg-light">
-                                            <small class="fw-bold d-block mb-1"><i class="fas fa-robot text-primary"></i> Assistente de Cobrança</small>
-                                            <div class="form-check form-switch mb-1">
-                                                <input class="form-check-input" type="checkbox" id="cob-<?= $cliente['id'] ?>" <?= $cliente['cobranca_automatica'] ? 'checked' : '' ?> onchange="updateCobranca(<?= $cliente['id'] ?>, this.checked, document.getElementById('freq-<?= $cliente['id'] ?>').value)">
-                                                <label class="form-check-label" style="font-size: 0.85em;" for="cob-<?= $cliente['id'] ?>">Cobrar via WhatsApp</label>
-                                            </div>
-                                            <select id="freq-<?= $cliente['id'] ?>" class="form-select form-select-sm" onchange="updateCobranca(<?= $cliente['id'] ?>, document.getElementById('cob-<?= $cliente['id'] ?>').checked, this.value)">
-                                                <option value="diaria" <?= $cliente['cobranca_frequencia'] == 'diaria' ? 'selected' : '' ?>>Diária</option>
-                                                <option value="semanal" <?= $cliente['cobranca_frequencia'] == 'semanal' ? 'selected' : '' ?>>Semanal</option>
-                                                <option value="mensal" <?= $cliente['cobranca_frequencia'] == 'mensal' ? 'selected' : '' ?>>Mensal</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="card-footer bg-transparent">
-                                        <div class="d-flex gap-2">
-                                            <a href="index.php?view=vendas_fiadas" class="btn btn-sm btn-outline-primary flex-fill">
-                                                <i class="fas fa-list"></i> Ver Histórico
-                                            </a>
-                                            <button type="button" class="btn btn-sm btn-outline-success flex-fill" onclick="abrirModalVincular(<?= $cliente['id'] ?>, '<?= htmlspecialchars(addslashes($cliente['nome'])) ?>')">
-                                                <i class="fas fa-link"></i> Vincular Pedido
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
+                                        <?php if (empty($clientes)): ?>
+                                            <tr>
+                                                <td colspan="6" class="text-center py-5">
+                                                    <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
+                                                    <br>Nenhum cliente com fiado no momento.
+                                                </td>
+                                            </tr>
+                                        <?php endif; ?>
+                                    </tbody>
+                                </table>
                             </div>
-                        <?php endforeach; ?>
-                        
-                        <?php if (empty($clientes)): ?>
-                            <div class="col-12 text-center py-5">
-                                <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
-                                <h4>Nenhum cliente com fiado</h4>
-                                <p class="text-muted">Não há pedidos com status de fiado no momento.</p>
-                            </div>
-                        <?php endif; ?>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -349,6 +360,66 @@ if ($tenant && $filial) {
                 <div class="modal-footer border-0 pt-0">
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
                     <button type="button" class="btn btn-success px-4" onclick="confirmarVinculoPedido()">Confirmar Vínculo</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Pedidos e Pagamento Lote -->
+    <div class="modal fade" id="modalPedidosCliente" tabindex="-1" aria-labelledby="modalPedidosLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title" id="modalPedidosLabel"><i class="fas fa-list text-primary"></i> Pedidos de <span id="pagamentoClienteNome" class="fw-bold"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="pagamentoClienteId">
+                    
+                    <div class="table-responsive mb-4" style="max-height: 250px; overflow-y: auto;">
+                        <table class="table table-sm table-striped">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>ID Pedido</th>
+                                    <th>Data</th>
+                                    <th>Valor Total</th>
+                                    <th>Saldo Restante</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbodyPedidosPendente">
+                                <!-- Preenchido via AJAX -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="bg-light p-3 rounded border">
+                        <div class="d-flex justify-content-between mb-3 align-items-center">
+                            <h6 class="mb-0 fw-bold">Registrar Pagamento</h6>
+                            <span class="badge bg-danger fs-6">Dívida Total: <span id="pagamentoSaldoDevedor"></span></span>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Valor a Pagar (R$)</label>
+                                <input type="number" class="form-control" id="valor_pagamento_lote" step="0.01" min="0.01" placeholder="0.00">
+                                <small class="text-muted">Abaterá automaticamente os pedidos mais antigos.</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Forma de Pagamento</label>
+                                <select id="forma_pagamento_lote" class="form-select">
+                                    <option value="dinheiro">Dinheiro</option>
+                                    <option value="pix">PIX</option>
+                                    <option value="cartao_debito">Cartão Débito</option>
+                                    <option value="cartao_credito">Cartão Crédito</option>
+                                    <option value="transferencia">Transferência</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0 mt-3">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Fechar</button>
+                    <button type="button" class="btn btn-success px-4" onclick="confirmarPagamentoLote()"><i class="fas fa-check"></i> Processar Pagamento</button>
                 </div>
             </div>
         </div>
@@ -419,6 +490,112 @@ if ($tenant && $filial) {
                 btn.disabled = false;
                 console.error(err);
                 Swal.fire('Erro', 'Erro de comunicação com o servidor', 'error');
+            });
+        }
+
+        let modalPagamentoLote = null;
+
+        function abrirModalPedidosPagamento(clienteId, clienteNome, saldoDevedor) {
+            document.getElementById('pagamentoClienteId').value = clienteId;
+            document.getElementById('pagamentoClienteNome').innerText = clienteNome;
+            document.getElementById('pagamentoSaldoDevedor').innerText = saldoDevedor.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+            document.getElementById('valor_pagamento_lote').value = '';
+            document.getElementById('valor_pagamento_lote').max = saldoDevedor;
+
+            if (!modalPagamentoLote) {
+                modalPagamentoLote = new bootstrap.Modal(document.getElementById('modalPedidosCliente'));
+            }
+
+            // Fetch pending orders
+            const tbody = document.getElementById('tbodyPedidosPendente');
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center"><i class="fas fa-spinner fa-spin"></i> Carregando pedidos...</td></tr>';
+            
+            const formData = new FormData();
+            formData.append('acao', 'listar_vendas_pendentes_cliente');
+            formData.append('cliente_id', clienteId);
+
+            fetch('mvc/ajax/vendas_fiadas.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                tbody.innerHTML = '';
+                if (data.success && data.vendas && data.vendas.length > 0) {
+                    data.vendas.forEach(v => {
+                        let statusBadge = v.status === 'pendente' ? '<span class="badge bg-warning">Pendente</span>' : '<span class="badge bg-info">Parcial</span>';
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>${v.id}</td>
+                                <td>${new Date(v.data_venda).toLocaleDateString('pt-BR')}</td>
+                                <td>R$ ${parseFloat(v.valor_total).toFixed(2).replace('.', ',')}</td>
+                                <td>R$ ${parseFloat(v.saldo_devedor).toFixed(2).replace('.', ',')}</td>
+                                <td>${statusBadge}</td>
+                            </tr>
+                        `;
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhum pedido pendente encontrado (possível erro de sincronização).</td></tr>';
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Erro ao carregar pedidos.</td></tr>';
+            });
+
+            modalPagamentoLote.show();
+        }
+
+        function confirmarPagamentoLote() {
+            const clienteId = document.getElementById('pagamentoClienteId').value;
+            const valor = document.getElementById('valor_pagamento_lote').value;
+            const forma = document.getElementById('forma_pagamento_lote').value;
+
+            if (!valor || valor <= 0 || !forma) {
+                Swal.fire('Atenção', 'Preencha o valor e a forma de pagamento.', 'warning');
+                return;
+            }
+
+            const btn = document.querySelector('#modalPedidosCliente .btn-success');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+            btn.disabled = true;
+
+            const formData = new FormData();
+            formData.append('acao', 'pagamento_lote_cliente');
+            formData.append('cliente_id', clienteId);
+            formData.append('valor_pagamento', valor);
+            formData.append('forma_pagamento', forma);
+
+            fetch('mvc/ajax/vendas_fiadas.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                
+                if (data.success) {
+                    modalPagamentoLote.hide();
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Pagamento Registrado!',
+                        text: 'O valor foi abatido dos pedidos mais antigos.',
+                        timer: 2500,
+                        showConfirmButton: false
+                    }).then(() => {
+                        location.reload();
+                    });
+                } else {
+                    Swal.fire('Erro', data.message || 'Falha ao registrar.', 'error');
+                }
+            })
+            .catch(err => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                console.error(err);
+                Swal.fire('Erro', 'Falha na comunicação com o servidor.', 'error');
             });
         }
 
