@@ -327,7 +327,7 @@ function obterDetalhesCompletos($pdo, $tenantId) {
     $sqlPagamentos = "
         SELECT *
         FROM pagamentos_fiado
-        WHERE venda_id = ?
+        WHERE venda_fiada_id = ?
         ORDER BY data_pagamento DESC
     ";
     
@@ -373,13 +373,13 @@ function registrarPagamento($pdo, $tenantId) {
         // Inserir pagamento
         $sqlPagamento = "
             INSERT INTO pagamentos_fiado (
-                venda_id, valor_pagamento, forma_pagamento, data_pagamento,
-                observacoes, created_at
-            ) VALUES (?, ?, ?, NOW(), ?, NOW())
+                venda_fiada_id, valor_pago, forma_pagamento, data_pagamento,
+                observacoes, tenant_id, filial_id, created_at
+            ) VALUES (?, ?, ?, NOW(), ?, ?, ?, NOW())
         ";
         
         $stmt = $pdo->prepare($sqlPagamento);
-        $stmt->execute([$vendaId, $valorPagamento, $formaPagamento, $observacoes]);
+        $stmt->execute([$vendaId, $valorPagamento, $formaPagamento, $observacoes, $tenantId, $filialId]);
         
         // Atualizar venda
         $novoValorPago = $venda['valor_pago'] + $valorPagamento;
@@ -531,7 +531,7 @@ function gerarHtmlDetalhesVenda($venda, $itens, $pagamentos) {
             $html .= "
                 <tr>
                     <td>" . date('d/m/Y H:i', strtotime($pagamento['data_pagamento'])) . "</td>
-                    <td>R$ " . number_format($pagamento['valor_pagamento'], 2, ',', '.') . "</td>
+                    <td>R$ " . number_format($pagamento['valor_pago'], 2, ',', '.') . "</td>
                     <td>{$pagamento['forma_pagamento']}</td>
                     <td>{$pagamento['observacoes']}</td>
                 </tr>
@@ -616,12 +616,12 @@ function pagamentoLoteCliente($pdo, $tenantId, $filialId) {
             // Inserir pagamento
             $sqlPagamento = "
                 INSERT INTO pagamentos_fiado (
-                    venda_id, valor_pagamento, forma_pagamento, data_pagamento,
-                    observacoes, created_at
-                ) VALUES (?, ?, ?, NOW(), 'Pagamento em Lote', NOW())
+                    venda_fiada_id, valor_pago, forma_pagamento, data_pagamento,
+                    observacoes, tenant_id, filial_id, created_at
+                ) VALUES (?, ?, ?, NOW(), 'Pagamento em Lote', ?, ?, NOW())
             ";
             $stmtPagamento = $pdo->prepare($sqlPagamento);
-            $stmtPagamento->execute([$venda['id'], $valorPagarNestaVenda, $formaPagamento]);
+            $stmtPagamento->execute([$venda['id'], $valorPagarNestaVenda, $formaPagamento, $tenantId, $filialId]);
             
             // Atualizar venda
             $novoValorPago = $venda['valor_pago'] + $valorPagarNestaVenda;
