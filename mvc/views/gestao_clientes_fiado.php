@@ -18,12 +18,84 @@ if (!$tenant || !$filial) {
 // Get clients with fiado orders or AI settings enabled
 $clientes = [];
 if ($tenant && $filial) {
+    // ---- SINCRONIZAÇÃO AUTOMÁTICA DE FIADOS LEGADOS ----
+    try {
+        // 1. Sincroniza pagamentos com forma_pagamento = 'FIADO'
+        $legacyFiados = $db->fetchAll("
+            SELECT 
+                pp.id as pagamento_id, pp.pedido_id, pp.valor_pago, 
+                COALESCE(pp.nome_cliente, ug.nome, p.cliente) as nome_cliente, 
+                COALESCE(pp.telefone_cliente, ug.telefone, p.telefone_cliente) as telefone_cliente, 
+                pp.created_at
+            FROM pagamentos_pedido pp
+            LEFT JOIN pedido p ON p.idpedido = pp.pedido_id
+            LEFT JOIN usuarios_globais ug ON ug.id = p.usuario_global_id
+            LEFT JOIN vendas_fiadas vf ON vf.pedido_id = pp.pedido_id AND vf.valor_total = pp.valor_pago
+            WHERE pp.forma_pagamento = 'FIADO' AND pp.tenant_id = ? AND vf.id IS NULL
+        ", [$tenant['id']]);
+
+        // 2. Sincroniza pedidos com status = 'fiado' que não tenham pagamentos_pedido = FIADO
+        $legacyPedidosFiado = $db->fetchAll("
+            SELECT 
+                p.idpedido as pedido_id, p.valor_total as valor_pago, 
+                COALESCE(ug.nome, p.cliente) as nome_cliente, 
+                COALESCE(ug.telefone, p.telefone_cliente) as telefone_cliente, 
+                p.created_at
+            FROM pedido p
+            LEFT JOIN usuarios_globais ug ON ug.id = p.usuario_global_id
+            LEFT JOIN vendas_fiadas vf ON vf.pedido_id = p.idpedido
+            LEFT JOIN pagamentos_pedido pp ON pp.pedido_id = p.idpedido AND pp.forma_pagamento = 'FIADO'
+            WHERE p.status = 'fiado' AND p.tenant_id = ? AND vf.id IS NULL AND pp.id IS NULL
+        ", [$tenant['id']]);
+
+        $todosLegados = array_merge($legacyFiados, $legacyPedidosFiado);
+
+        foreach ($todosLegados as $lf) {
+            $telefone = preg_replace('/[^0-9]/', '', $lf['telefone_cliente'] ?? '');
+            if (empty($telefone)) continue;
+            
+            $nome = $lf['nome_cliente'] ?: 'Cliente Não Identificado';
+            
+            // Verifica ou cria o cliente_fiado
+            $cf = $db->fetch("SELECT id FROM clientes_fiado WHERE telefone = ? AND tenant_id = ?", [$telefone, $tenant['id']]);
+            if (!$cf) {
+                $cfId = $db->insert('clientes_fiado', [
+                    'nome' => $nome,
+                    'telefone' => $telefone,
+                    'tenant_id' => $tenant['id'],
+                    'filial_id' => $filial['id'],
+                    'saldo_devedor' => 0
+                ]);
+            } else {
+                $cfId = $cf['id'];
+            }
+            
+            // Insere a venda fiada pendente
+            $db->insert('vendas_fiadas', [
+                'cliente_id' => $cfId,
+                'pedido_id' => $lf['pedido_id'],
+                'valor_total' => $lf['valor_pago'],
+                'status' => 'pendente',
+                'tenant_id' => $tenant['id'],
+                'filial_id' => $filial['id'],
+                'data_vencimento' => date('Y-m-d', strtotime(($lf['created_at'] ?? date('Y-m-d H:i:s')) . ' + 30 days'))
+            ]);
+            
+            // Atualiza saldo devedor
+            $db->query("UPDATE clientes_fiado SET saldo_devedor = saldo_devedor + ? WHERE id = ?", [$lf['valor_pago'], $cfId]);
+        }
+    } catch (\Exception $e) {
+        error_log("Erro na sincronizacao de fiados: " . $e->getMessage());
+    }
+    // ----------------------------------------------------
+
     // Busca direto da tabela clientes_fiado onde há saldo devedor ou a cobrança automática está ativa
     $clientesData = $db->fetchAll("
         SELECT 
             cf.id, cf.nome, cf.telefone as wpp, cf.cpf_cnpj as cpf,
             cf.limite_credito, cf.status, cf.cobranca_automatica, cf.cobranca_frequencia,
-            cf.saldo_devedor, cf.qtd_pedidos_fiado
+            cf.saldo_devedor,
+            (SELECT COUNT(*) FROM vendas_fiadas vf WHERE vf.cliente_id = cf.id AND vf.status = 'pendente') as qtd_pedidos_fiado
         FROM clientes_fiado cf
         WHERE cf.tenant_id = ? AND (cf.saldo_devedor > 0 OR cf.cobranca_automatica = true)
         ORDER BY cf.nome ASC
