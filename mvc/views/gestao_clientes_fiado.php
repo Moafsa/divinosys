@@ -15,45 +15,27 @@ if (!$tenant || !$filial) {
     exit;
 }
 
-// Get clients with fiado orders
+// Get clients with fiado orders or AI settings enabled
 $clientes = [];
 if ($tenant && $filial) {
-    // 1. Get all customers that have orders with status 'fiado' OR they have a record in clientes_fiado for AI settings
+    // Busca direto da tabela clientes_fiado onde há saldo devedor ou a cobrança automática está ativa
     $clientesData = $db->fetchAll("
         SELECT 
-            ug.id, ug.nome, ug.telefone as wpp, ug.cpf,
-            COUNT(DISTINCT CASE WHEN p.status = 'fiado' THEN p.idpedido END) as qtd_pedidos_fiado,
-            COALESCE(SUM(CASE WHEN p.status = 'fiado' THEN p.valor_total ELSE 0 END), 0) as total_fiado,
-            (
-                SELECT COALESCE(SUM(pp.valor_pago), 0) 
-                FROM pagamentos_pedido pp 
-                JOIN pedido p2 ON pp.pedido_id = p2.idpedido 
-                WHERE p2.usuario_global_id = ug.id AND p2.tenant_id = ? AND p2.status = 'fiado'
-            ) as total_pago_fiado,
-            cf.limite_credito,
-            cf.status,
-            cf.cobranca_automatica,
-            cf.cobranca_frequencia
-        FROM usuarios_globais ug
-        LEFT JOIN pedido p ON p.usuario_global_id = ug.id AND p.tenant_id = ? AND p.filial_id = ? AND p.status = 'fiado'
-        LEFT JOIN clientes_fiado cf ON cf.usuario_global_id = ug.id AND cf.tenant_id = ?
-        WHERE p.idpedido IS NOT NULL OR cf.id IS NOT NULL
-        GROUP BY ug.id, ug.nome, ug.telefone, ug.cpf, cf.limite_credito, cf.status, cf.cobranca_automatica, cf.cobranca_frequencia
-        ORDER BY ug.nome ASC
-    ", [$tenant['id'], $tenant['id'], $filial['id'], $tenant['id']]);
+            cf.id, cf.nome, cf.telefone as wpp, cf.cpf_cnpj as cpf,
+            cf.limite_credito, cf.status, cf.cobranca_automatica, cf.cobranca_frequencia,
+            cf.saldo_devedor, cf.qtd_pedidos_fiado
+        FROM clientes_fiado cf
+        WHERE cf.tenant_id = ? AND (cf.saldo_devedor > 0 OR cf.cobranca_automatica = true)
+        ORDER BY cf.nome ASC
+    ", [$tenant['id']]);
     
-    // Calculate saldo devedor
     foreach ($clientesData as $cliente) {
-        $saldo = $cliente['total_fiado'] - $cliente['total_pago_fiado'];
-        if ($saldo > 0 || !empty($cliente['cobranca_automatica'])) {
-            $cliente['saldo_devedor'] = $saldo;
-            // set defaults if missing from clientes_fiado
-            $cliente['status'] = $cliente['status'] ?? 'ativo';
-            $cliente['limite_credito'] = $cliente['limite_credito'] ?? 0;
-            $cliente['cobranca_automatica'] = $cliente['cobranca_automatica'] ?? false;
-            $cliente['cobranca_frequencia'] = $cliente['cobranca_frequencia'] ?? 'semanal';
-            $clientes[] = $cliente;
-        }
+        $cliente['status'] = $cliente['status'] ?? 'ativo';
+        $cliente['limite_credito'] = $cliente['limite_credito'] ?? 0;
+        $cliente['cobranca_automatica'] = $cliente['cobranca_automatica'] ?? false;
+        $cliente['cobranca_frequencia'] = $cliente['cobranca_frequencia'] ?? 'semanal';
+        
+        $clientes[] = $cliente;
     }
 }
 ?>
@@ -250,8 +232,8 @@ if ($tenant && $filial) {
                                     </div>
                                     <div class="card-footer bg-transparent">
                                         <div class="d-flex gap-2">
-                                            <a href="index.php?view=clientes&editar=<?= $cliente['id'] ?>" class="btn btn-sm btn-outline-primary flex-fill">
-                                                <i class="fas fa-user-edit"></i> Ver
+                                            <a href="index.php?view=vendas_fiadas" class="btn btn-sm btn-outline-primary flex-fill">
+                                                <i class="fas fa-list"></i> Ver Histórico
                                             </a>
                                             <button type="button" class="btn btn-sm btn-outline-success flex-fill" onclick="abrirModalVincular(<?= $cliente['id'] ?>, '<?= htmlspecialchars(addslashes($cliente['nome'])) ?>')">
                                                 <i class="fas fa-link"></i> Vincular Pedido
