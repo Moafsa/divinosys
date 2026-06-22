@@ -551,6 +551,9 @@ try {
             $descricao = $_POST['descricao'] ?? null;
             $dadosCliente = json_decode($_POST['dados_cliente'] ?? '{}', true);
 
+            $valorDesconto = (float)($_POST['valor_desconto'] ?? 0);
+            $tipoDesconto = $_POST['tipo_desconto'] ?? 'fixo'; // 'fixo' ou 'percentual'
+
             if (!$mesaId || !$formaPagamento || $valorPago === null) {
                 throw new \Exception('Dados incompletos para registrar pagamento da mesa.');
             }
@@ -598,9 +601,21 @@ try {
                 $totalSaldoDevedorMesa += (float)($p['saldo_devedor'] ?? 0);
             }
 
-            if ($valorRestanteAPagar > $totalSaldoDevedorMesa + 0.01) { // Tolerância
+            // Calcular desconto total da mesa
+            $totalDescontoAplicado = 0;
+            if ($valorDesconto > 0) {
+                if ($tipoDesconto === 'percentual') {
+                    $totalDescontoAplicado = $totalSaldoDevedorMesa * ($valorDesconto / 100);
+                } else {
+                    $totalDescontoAplicado = $valorDesconto;
+                }
+            }
+
+            $saldoDevedorMesaAposDesconto = $totalSaldoDevedorMesa - $totalDescontoAplicado;
+
+            if ($valorRestanteAPagar > $saldoDevedorMesaAposDesconto + 0.01) { // Tolerância
                 $db->rollBack();
-                throw new \Exception('Valor pago não pode ser maior que o saldo devedor total da mesa.');
+                throw new \Exception('Valor pago não pode ser maior que o saldo devedor total da mesa após descontos.');
             }
 
             foreach ($pedidosMesa as $pedido) {
@@ -609,11 +624,38 @@ try {
                 // Usar saldo_devedor do banco de dados (que já está correto)
                 $saldoDevedorPedido = (float)($pedido['saldo_devedor'] ?? 0);
 
-                if ($valorRestanteAPagar <= 0) {
-                    break; // Não há mais valor para pagar
+                // Calcular desconto proporcional para este pedido
+                $descontoPedido = 0;
+                if ($totalDescontoAplicado > 0 && $totalSaldoDevedorMesa > 0) {
+                    $descontoPedido = ($saldoDevedorPedido / $totalSaldoDevedorMesa) * $totalDescontoAplicado;
                 }
 
-                $valorAPagarNestePedido = min($valorRestanteAPagar, $saldoDevedorPedido);
+                if ($descontoPedido > 0) {
+                    // Descobrir tipo_desconto_id (manual ou promocional)
+                    $tipoDescontoManual = $db->fetch(
+                        "SELECT id FROM tipos_desconto WHERE tenant_id = ? AND (filial_id = ? OR filial_id IS NULL) AND ativo = true ORDER BY CASE WHEN nome ILIKE '%especial%' THEN 0 ELSE 1 END, id LIMIT 1",
+                        [$tenantId, $filialId]
+                    );
+
+                    $db->insert('descontos_aplicados', [
+                        'pedido_id' => $pedidoId,
+                        'tipo_desconto_id' => $tipoDescontoManual ? $tipoDescontoManual['id'] : null,
+                        'valor_desconto' => $descontoPedido,
+                        'motivo' => 'Desconto aplicado no fechamento da mesa',
+                        'autorizado_por' => $session->get('user_id'),
+                        'tenant_id' => $tenantId,
+                        'filial_id' => $filialId
+                    ]);
+
+                    // Atualizar saldo do pedido para refletir desconto
+                    $saldoDevedorPedido -= $descontoPedido;
+                }
+
+                if ($valorRestanteAPagar <= 0) {
+                    continue; // Pular pagamento, mas os descontos foram aplicados
+                }
+
+                $valorAPagarNestePedido = min($valorRestanteAPagar, max(0, $saldoDevedorPedido));
 
                 // Registrar o pagamento na tabela pagamentos_pedido
                 $db->insert('pagamentos_pedido', [
@@ -662,18 +704,21 @@ try {
                 // Log para debug
                 error_log("Pagamento mesa - Pedido #$pedidoId: valorTotal=$valorTotalPedido, descontos=$totalDescontos, valorTotalLiquido=$valorTotalLiquido, totalPagoPedido=$totalPagoPedido, novoSaldoDevedor=$novoSaldoDevedor");
 
-                // Determinar novo status de pagamento
+                // Determinar novo status de pagamento e status do pedido
                 $novoStatusPagamento = 'pendente';
+                $novoStatusPedido = $pedido['status']; // Mantém o status atual por padrão
+
                 if ($novoSaldoDevedor <= 0.01) {
                     $novoStatusPagamento = 'quitado';
+                    $novoStatusPedido = 'Finalizado'; // Finaliza o pedido
                 } elseif ($totalPagoPedido > 0) {
                     $novoStatusPagamento = 'parcial';
                 }
 
                 // Atualizar o pedido com os novos valores
                 $db->query(
-                    "UPDATE pedido SET valor_pago = ?, saldo_devedor = ?, status_pagamento = ?, updated_at = NOW() WHERE idpedido = ? AND tenant_id = ? AND filial_id = ?",
-                    [$totalPagoPedido, $novoSaldoDevedor, $novoStatusPagamento, $pedidoId, $tenantId, $filialId]
+                    "UPDATE pedido SET valor_pago = ?, saldo_devedor = ?, status_pagamento = ?, status = ?, updated_at = NOW() WHERE idpedido = ? AND tenant_id = ? AND filial_id = ?",
+                    [$totalPagoPedido, $novoSaldoDevedor, $novoStatusPagamento, $novoStatusPedido, $pedidoId, $tenantId, $filialId]
                 );
 
                 $valorRestanteAPagar -= $valorAPagarNestePedido;

@@ -141,11 +141,13 @@ try {
             
         // Buscar todos os pedidos da mesa com dados do estabelecimento (excluindo quitados e entregues quitados)
         $pedidos = $db->fetchAll(
-            "SELECT p.*, t.nome as tenant_nome, f.nome as filial_nome, u.login as usuario_nome
+            "SELECT p.*, t.nome as tenant_nome, f.nome as filial_nome, u.login as usuario_nome,
+             ug.nome as cliente_nome_ug, ug.telefone as cliente_telefone_ug, ug.cpf as cliente_cpf_ug
              FROM pedido p 
              LEFT JOIN tenants t ON p.tenant_id = t.id 
              LEFT JOIN filiais f ON p.filial_id = f.id 
              LEFT JOIN usuarios u ON p.usuario_id = u.id AND u.tenant_id = p.tenant_id
+             LEFT JOIN usuarios_globais ug ON p.usuario_global_id = ug.id
              WHERE p.idmesa::varchar = ? AND p.tenant_id = ? AND p.filial_id = ? 
              AND p.status IN ('Pendente', 'Preparando', 'Pronto', 'Entregue') 
              AND p.status_pagamento != 'quitado' 
@@ -153,6 +155,19 @@ try {
              ORDER BY p.created_at ASC",
             [$mesa['id_mesa'], $tenantId, $filialId]
         );
+        
+        // Populate missing client details in pedidos array
+        foreach ($pedidos as &$pedido) {
+            if (empty($pedido['cliente_nome']) && !empty($pedido['cliente_nome_ug'])) {
+                $pedido['cliente_nome'] = $pedido['cliente_nome_ug'];
+            }
+            if (empty($pedido['cliente_telefone']) && !empty($pedido['cliente_telefone_ug'])) {
+                $pedido['cliente_telefone'] = $pedido['cliente_telefone_ug'];
+            }
+            if (empty($pedido['cliente_cpf']) && !empty($pedido['cliente_cpf_ug'])) {
+                $pedido['cliente_cpf'] = $pedido['cliente_cpf_ug'];
+            }
+        }
             
             // Calcular saldo devedor total da mesa
             $saldoDevedorTotal = 0;

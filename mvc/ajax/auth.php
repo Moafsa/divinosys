@@ -217,15 +217,32 @@ try {
             
         case 'buscar_cliente':
             $telefone = $_POST['telefone'] ?? '';
+            $cpf = $_POST['cpf'] ?? '';
             
-            if (empty($telefone)) {
-                throw new Exception('Telefone é obrigatório');
+            if (empty($telefone) && empty($cpf)) {
+                throw new Exception('Telefone ou CPF é obrigatório');
             }
             
-            // Limpar telefone
-            $telefone = preg_replace('/[^0-9]/', '', $telefone);
+            $cliente = null;
             
-            $cliente = Auth::findUserByPhone($telefone);
+            if (!empty($cpf)) {
+                // Limpar CPF
+                $cpfLimpo = preg_replace('/[^0-9]/', '', $cpf);
+                if (!empty($cpfLimpo)) {
+                    $cliente = Database::getInstance()->fetch(
+                        "SELECT * FROM usuarios_globais WHERE cpf = ? AND ativo = true",
+                        [$cpfLimpo]
+                    );
+                }
+            }
+            
+            if (!$cliente && !empty($telefone)) {
+                // Limpar telefone
+                $telefoneLimpo = preg_replace('/[^0-9]/', '', $telefone);
+                if (!empty($telefoneLimpo)) {
+                    $cliente = Auth::findUserByPhone($telefoneLimpo);
+                }
+            }
             
             if ($cliente) {
                 // Buscar histórico de pedidos

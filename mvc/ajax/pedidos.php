@@ -324,13 +324,30 @@ try {
                                 WHEN m.nome IS NOT NULL THEN m.nome
                                 ELSE 'Mesa ' || p.idmesa
                             END as mesa_nome,
-                            u.login as usuario_nome 
+                            u.login as usuario_nome,
+                            ug.nome as cliente_nome_global,
+                            ug.telefone as cliente_telefone_global,
+                            ug.cpf as cliente_cpf_global
                      FROM pedido p 
                      LEFT JOIN mesas m ON p.idmesa::varchar = m.id_mesa AND m.tenant_id = p.tenant_id AND m.filial_id = p.filial_id
                      LEFT JOIN usuarios u ON p.usuario_id = u.id AND u.tenant_id = p.tenant_id
+                     LEFT JOIN usuarios_globais ug ON p.usuario_global_id = ug.id
                      WHERE p.idpedido = ? AND p.tenant_id = ? AND p.filial_id = ?",
                     [$pedidoId, $tenantId, $filialId]
                 );
+                
+                // Sobrescrever os dados do cliente com os dados reais se for "Cliente Cadastrado"
+                if ($pedido && !empty($pedido['usuario_global_id'])) {
+                    if (!empty($pedido['cliente_nome_global'])) {
+                        $pedido['cliente'] = $pedido['cliente_nome_global'];
+                    }
+                    if (!empty($pedido['cliente_telefone_global']) && empty($pedido['telefone_cliente'])) {
+                        $pedido['telefone_cliente'] = $pedido['cliente_telefone_global'];
+                    }
+                    if (!empty($pedido['cliente_cpf_global']) && empty($pedido['cliente_cpf'])) {
+                        $pedido['cliente_cpf'] = $pedido['cliente_cpf_global'];
+                    }
+                }
                 
                 // Debug log
                 error_log("Pedido encontrado: " . json_encode($pedido));

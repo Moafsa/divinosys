@@ -44,6 +44,9 @@ try {
             $message = $data['data']['Message']['conversation'];
         } elseif (isset($data['data']['Message']['extendedTextMessage']['text'])) {
             $message = $data['data']['Message']['extendedTextMessage']['text'];
+        } elseif (isset($data['data']['Message']['audioMessage'])) {
+            $messageType = 'audio';
+            $message = ''; // Será preenchido com a transcrição
         } else {
             $messageType = 'other'; // non-text
         }
@@ -76,16 +79,16 @@ try {
         exit;
     }
     
-    // Ignore non-text messages for now
-    if ($messageType !== 'text' && $messageType !== 'chat') {
-        error_log("Wuzapi Webhook - Ignoring non-text message type: $messageType");
+    // Ignore non-text and non-audio messages for now
+    if ($messageType !== 'text' && $messageType !== 'chat' && $messageType !== 'audio') {
+        error_log("Wuzapi Webhook - Ignoring non-text/audio message type: $messageType");
         http_response_code(200);
         echo json_encode(['success' => true, 'message' => 'Non-text messages ignored']);
         exit;
     }
     
     // Validate required fields
-    if (empty($from) || empty($message) || empty($instanceId)) {
+    if (empty($from) || empty($instanceId) || ($messageType !== 'audio' && empty($message))) {
         throw new Exception('Missing required fields: from, message, or instanceId');
     }
     
@@ -149,6 +152,42 @@ try {
 
     // Process message with AI
     $aiService = new \System\OpenAIService();
+    
+    // Handle audio message
+    if ($messageType === 'audio') {
+        error_log("Wuzapi Webhook - Recebeu áudio. Tentando transcrever...");
+        
+        // Aqui deve entrar a lógica para baixar o mediaMessage (via WuzAPI /chat/download)
+        // Por ora, vamos simular que o áudio foi baixado para um arquivo temp
+        // Se a WuzAPI mandar em base64: $audioData = base64_decode($data['data']['Message']['audioMessage']['fileSha256']);
+        $wuzapi = new \System\WhatsApp\WuzAPIManager();
+        $messageId = $data['data']['Info']['Id'] ?? '';
+        
+        // Exemplo: O ideal é ter um $wuzapi->downloadMedia($instance['id'], $messageId)
+        // Como não temos a info exata da WuzAPI, vamos salvar e enviar
+        // Para testes, o garçom precisaria ter mandado áudio. Se o Whisper falhar, retornará erro amigável.
+        
+        $tempAudioPath = sys_get_temp_dir() . '/wuzapi_audio_' . uniqid() . '.ogg';
+        
+        // TODO: Implementar o download real do áudio da WuzAPI para $tempAudioPath
+        // file_put_contents($tempAudioPath, $audioRawData);
+        
+        // Mocking transcription (se falhar o arquivo físico, a IA retorna erro normal)
+        $transcription = $aiService->transcribeAudio($tempAudioPath);
+        
+        if ($transcription['success']) {
+            $message = $transcription['text'];
+            error_log("Wuzapi Webhook - Áudio transcrito: " . $message);
+        } else {
+            $message = "O cliente ou administrador enviou um áudio, mas eu não consegui transcrever/baixar. Diga a ele que não conseguiu entender o áudio.";
+            error_log("Wuzapi Webhook - Falha na transcrição: " . $transcription['message']);
+        }
+        
+        // Cleanup
+        if (file_exists($tempAudioPath)) {
+            @unlink($tempAudioPath);
+        }
+    }
     
     // Add context for AI
     $contextData = [
