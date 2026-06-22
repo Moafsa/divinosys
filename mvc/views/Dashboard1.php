@@ -3316,7 +3316,7 @@ if ($tenant && $filial) {
                     formData.append('action', 'desvincular_comanda');
                     formData.append('mesa_id', mesaId);
 
-                    fetch('index.php?action=mesa_multiplos_pedidos', {
+                    fetch('mvc/ajax/mesa_multiplos_pedidos.php', {
                         method: 'POST',
                         body: formData
                     })
