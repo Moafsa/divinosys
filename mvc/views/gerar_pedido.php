@@ -1995,7 +1995,7 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                 if (data.success) {
                     Swal.fire('Sucesso!', data.message, 'success').then(() => {
                         bootstrap.Modal.getInstance(document.getElementById('modalVincularComanda')).hide();
-                        window.location.href = '?view=gerar_pedido&mesa=' + comandaId;
+                        window.location.href = '?view=gerar_pedido&mesa=' + (data.comanda_id || comandaId);
                     });
                 } else {
                     Swal.fire('Erro!', data.message, 'error');
@@ -2054,8 +2054,27 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                         fetch(`mvc/ajax/buscar_cliente.php?telefone=${telefone}`)
                             .then(response => response.json())
                             .then(data => {
-                                if (data.success && data.cliente && data.cliente.nome) {
-                                    document.getElementById('vincular_cliente_nome').value = data.cliente.nome;
+                                if (data.success && data.cliente) {
+                                    if (data.cliente.nome) document.getElementById('vincular_cliente_nome').value = data.cliente.nome;
+                                    if (data.cliente.cpf && document.getElementById('vincular_cliente_cpf')) document.getElementById('vincular_cliente_cpf').value = data.cliente.cpf;
+                                }
+                            })
+                            .catch(console.error);
+                    }
+                });
+            }
+
+            const cpfInput = document.getElementById('vincular_cliente_cpf');
+            if (cpfInput) {
+                cpfInput.addEventListener('blur', function() {
+                    const cpf = this.value.replace(/\D/g, '');
+                    if (cpf.length === 11 || cpf.length === 14) {
+                        fetch(`mvc/ajax/buscar_cliente.php?cpf=${cpf}`)
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.success && data.cliente) {
+                                    if (data.cliente.nome) document.getElementById('vincular_cliente_nome').value = data.cliente.nome;
+                                    if (data.cliente.telefone && document.getElementById('vincular_cliente_telefone')) document.getElementById('vincular_cliente_telefone').value = data.cliente.telefone;
                                 }
                             })
                             .catch(console.error);

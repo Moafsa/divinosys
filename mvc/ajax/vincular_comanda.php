@@ -40,6 +40,15 @@ try {
             throw new \Exception('Número da comanda é obrigatório');
         }
         
+        // Formata a comanda para C-000 se for apenas números
+        if (preg_match('/^\d+$/', $comandaId)) {
+            $comandaId = 'C-' . str_pad($comandaId, 3, '0', STR_PAD_LEFT);
+        } else if (preg_match('/^[cC]-?\d+$/', $comandaId)) {
+            // Se já tiver C ou C-, apenas formata o número
+            $num = preg_replace('/[^0-9]/', '', $comandaId);
+            $comandaId = 'C-' . str_pad($num, 3, '0', STR_PAD_LEFT);
+        }
+        
         // Garante que as colunas cliente_nome, cliente_telefone e cliente_cpf existem na tabela mesas
         try {
             $db->query("ALTER TABLE mesas ADD COLUMN IF NOT EXISTS cliente_nome VARCHAR(255)");
@@ -73,7 +82,7 @@ try {
                 'cliente_cpf' => $clienteCpf
             ]);
             
-            echo json_encode(['success' => true, 'message' => 'Comanda criada e vinculada com sucesso!']);
+            echo json_encode(['success' => true, 'comanda_id' => $comandaId, 'message' => 'Comanda criada e vinculada com sucesso!']);
             exit;
         }
         
@@ -94,7 +103,7 @@ try {
             'status' => 'ocupada'
         ], 'id_mesa = ? AND tenant_id = ? AND filial_id = ?', [$comandaId, $tenantId, $filialId]);
         
-        echo json_encode(['success' => true, 'message' => "Comanda $comandaId vinculada a $clienteNome com sucesso!"]);
+        echo json_encode(['success' => true, 'comanda_id' => $comandaId, 'message' => "Comanda $comandaId vinculada a $clienteNome com sucesso!"]);
         exit;
     }
     

@@ -1080,6 +1080,11 @@ if ($tenant && $filial) {
                                         <?php endif; ?>
                                     </div>
                                 <?php endif; ?>
+                                <?php if (!empty($mesa['cliente_nome']) && ($modoOperacao === 'comandas' || $modoOperacao === 'ambos') && $labelName === 'Comanda'): ?>
+                                    <button type="button" class="btn btn-outline-danger btn-sm mt-2 w-100 position-relative z-3" onclick="event.stopPropagation(); desvincularComanda('<?php echo $mesa['id_mesa']; ?>')">
+                                        <i class="fas fa-unlink"></i> Desvincular
+                                    </button>
+                                <?php endif; ?>
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -1372,11 +1377,38 @@ if ($tenant && $filial) {
         document.getElementById('vincular_cliente_telefone').addEventListener('blur', function() {
             const telefone = this.value.trim();
             if (telefone) {
-                fetch(`mvc/ajax/clientes.php?action=buscar_por_telefone&telefone=${encodeURIComponent(telefone)}`)
+                fetch(`mvc/ajax/buscar_cliente.php?telefone=${encodeURIComponent(telefone)}`)
                     .then(response => response.json())
                     .then(data => {
                         if (data.success && data.cliente) {
                             document.getElementById('vincular_cliente_nome').value = data.cliente.nome || '';
+                            if (data.cliente.cpf) document.getElementById('vincular_cliente_cpf').value = data.cliente.cpf;
+                            const Toast = Swal.mixin({
+                                toast: true,
+                                position: 'top-end',
+                                showConfirmButton: false,
+                                timer: 3000,
+                                timerProgressBar: true
+                            });
+                            Toast.fire({
+                                icon: 'success',
+                                title: `Cliente encontrado: ${data.cliente.nome}`
+                            });
+                        }
+                    })
+                    .catch(error => console.error('Erro ao buscar cliente:', error));
+            }
+        });
+
+        document.getElementById('vincular_cliente_cpf').addEventListener('blur', function() {
+            const cpf = this.value.trim();
+            if (cpf) {
+                fetch(`mvc/ajax/buscar_cliente.php?cpf=${encodeURIComponent(cpf)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success && data.cliente) {
+                            document.getElementById('vincular_cliente_nome').value = data.cliente.nome || '';
+                            if (data.cliente.telefone) document.getElementById('vincular_cliente_telefone').value = data.cliente.telefone;
                             const Toast = Swal.mixin({
                                 toast: true,
                                 position: 'top-end',
@@ -1421,7 +1453,7 @@ if ($tenant && $filial) {
                 if (data.success) {
                     Swal.fire('Sucesso!', data.message, 'success').then(() => {
                         bootstrap.Modal.getInstance(document.getElementById('modalVincularComanda')).hide();
-                        window.location.href = '?view=gerar_pedido&mesa=' + comandaId;
+                        window.location.href = '?view=gerar_pedido&mesa=' + (data.comanda_id || comandaId);
                     });
                 } else {
                     Swal.fire('Erro!', data.message, 'error');

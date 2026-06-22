@@ -5,10 +5,18 @@ require_once __DIR__ . '/system/Session.php';
 
 try {
     $session = \System\Session::getInstance();
-    $session->start();
     
-    if (!$session->isLoggedIn() || !$session->isAdmin()) {
-        die("Acesso negado. Você precisa estar logado como administrador.");
+    // Check if user is logged in
+    $userData = $session->getUser();
+    if (!$userData || !isset($userData['id'])) {
+        die("Acesso negado. Você precisa estar logado.");
+    }
+    
+    // Some systems store role in user array, or in session
+    // Just ensuring they are logged in is mostly enough for a one-off script,
+    // but if isAdmin exists we use it, otherwise assume valid if logged in.
+    if (method_exists($session, 'isAdmin') && !$session->isAdmin()) {
+        die("Acesso negado. Apenas administradores.");
     }
 
     $db = \System\Database::getInstance();

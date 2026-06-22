@@ -11,17 +11,28 @@ try {
     $telefone = $_GET['telefone'] ?? '';
     $telefoneLimpo = preg_replace('/[^0-9]/', '', $telefone);
     
-    if (empty($telefoneLimpo)) {
-        throw new \Exception('Telefone inválido');
+    $cpf = $_GET['cpf'] ?? '';
+    $cpfLimpo = preg_replace('/[^0-9]/', '', $cpf);
+    
+    if (empty($telefoneLimpo) && empty($cpfLimpo)) {
+        throw new \Exception('Telefone ou CPF inválido');
     }
     
     $db = \System\Database::getInstance();
     
     // Busca na tabela usuarios_globais (que é usada no Divinosys para clientes)
-    $cliente = $db->fetch(
-        "SELECT id, nome, telefone FROM usuarios_globais WHERE REGEXP_REPLACE(telefone, '[^0-9]', '', 'g') LIKE ?", 
-        ['%' . $telefoneLimpo . '%']
-    );
+    $cliente = null;
+    if (!empty($cpfLimpo)) {
+        $cliente = $db->fetch(
+            "SELECT id, nome, telefone, cpf FROM usuarios_globais WHERE REGEXP_REPLACE(cpf, '[^0-9]', '', 'g') LIKE ?", 
+            ['%' . $cpfLimpo . '%']
+        );
+    } else if (!empty($telefoneLimpo)) {
+        $cliente = $db->fetch(
+            "SELECT id, nome, telefone, cpf FROM usuarios_globais WHERE REGEXP_REPLACE(telefone, '[^0-9]', '', 'g') LIKE ?", 
+            ['%' . $telefoneLimpo . '%']
+        );
+    }
     
     if ($cliente) {
         echo json_encode([
@@ -29,7 +40,8 @@ try {
             'cliente' => [
                 'id' => $cliente['id'],
                 'nome' => $cliente['nome'],
-                'telefone' => $cliente['telefone']
+                'telefone' => $cliente['telefone'],
+                'cpf' => $cliente['cpf']
             ]
         ]);
         exit;
