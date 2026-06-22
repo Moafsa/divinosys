@@ -1310,6 +1310,190 @@ if ($tenant && $filial) {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
+        function avancarStatusPedido(pedidoId, novoStatus) {
+            console.log('Avançando status do pedido:', pedidoId, 'para:', novoStatus);
+            
+            const formData = new URLSearchParams();
+            formData.append('action', 'atualizar_status');
+            formData.append('pedido_id', pedidoId);
+            formData.append('status', novoStatus);
+            
+            fetch('index.php?action=pedidos', {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire({
+                        title: 'Sucesso!',
+                        text: 'Status atualizado com sucesso!',
+                        icon: 'success',
+                        timer: 1500,
+                        showConfirmButton: false
+                    }).then(() => {
+                        location.reload();
+                    });
+                } else {
+                    Swal.fire('Erro', data.message || 'Erro ao atualizar status', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro na requisição:', error);
+                Swal.fire('Erro', 'Erro ao atualizar status do pedido', 'error');
+            });
+        }
+
+        function imprimirPedidoMesa(pedidoId) {
+            console.log('Imprimindo pedido:', pedidoId);
+            
+            Swal.fire({
+                title: 'Preparando impressão...',
+                text: 'Aguarde enquanto carregamos os dados do pedido',
+                icon: 'info',
+                allowOutsideClick: false,
+                showConfirmButton: false,
+                timer: 2000
+            });
+            
+            const printWindow = window.open('', '_blank', 'width=800,height=600');
+            
+            fetch('index.php?action=pedidos', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: `action=buscar_pedido&pedido_id=${pedidoId}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const pedido = data.pedido;
+                    const itens = data.itens || [];
+                    
+                    let printHtml = `
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <meta charset="UTF-8">
+                            <title>Cupom Fiscal - Pedido #${pedido.idpedido}</title>
+                            <style>
+                                body { font-family: 'Courier New', monospace; font-size: 11px; margin: 0; padding: 8px; }
+                                .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
+                                .empresa { font-weight: bold; font-size: 13px; }
+                                .endereco { font-size: 9px; }
+                                .pedido-info { margin: 8px 0; font-size: 10px; }
+                                .item { margin: 3px 0; }
+                                .item-nome { font-weight: bold; font-size: 11px; }
+                                .item-detalhes { font-size: 10px; margin-left: 8px; }
+                                .modificacoes { margin-left: 15px; font-size: 10px; }
+                                .adicionado { color: green; }
+                                .removido { color: red; }
+                                .total { border-top: 1px dashed #000; padding-top: 8px; margin-top: 8px; font-weight: bold; font-size: 12px; }
+                                .footer { text-align: center; margin-top: 15px; font-size: 9px; }
+                                @media print { body { margin: 0; padding: 5px; font-size: 10px; } }
+                            </style>
+                        </head>
+                        <body>
+                            <div class="header">
+                                <div class="empresa">DIVINO LANCHES</div>
+                                <div class="endereco">Rua das Flores, 123 - Centro</div>
+                                <div class="endereco">Tel: (11) 99999-9999</div>
+                            </div>
+                            
+                            <div class="pedido-info">
+                                <strong>PEDIDO #${pedido.idpedido}</strong><br>
+                                Data/Hora: ${pedido.data} ${pedido.hora_pedido}<br>
+                                ${pedido.idmesa && pedido.idmesa !== '999' ? `Mesa: ${pedido.idmesa}` : 'DELIVERY'}<br>
+                                ${pedido.cliente ? `Cliente: ${pedido.cliente}` : ''}
+                                ${pedido.telefone_cliente ? `<br>Telefone: ${pedido.telefone_cliente}` : ''}
+                                ${pedido.usuario_nome ? `<br>Atendente: ${pedido.usuario_nome}` : ''}
+                            </div>
+                            
+                            <div class="itens">
+                                <strong>ITENS DO PEDIDO:</strong><br>`;
+                    
+                    itens.forEach(item => {
+                        printHtml += `
+                            <div class="item">
+                                <div class="item-nome">${item.quantidade}x ${item.nome_produto || 'Produto'}</div>
+                                <div class="item-detalhes">R$ ${parseFloat(item.valor_unitario).toFixed(2).replace('.', ',')}</div>`;
+                        
+                        if (item.ingredientes_com && item.ingredientes_com.length > 0) {
+                            printHtml += `<div class="modificacoes">`;
+                            item.ingredientes_com.forEach(ing => {
+                                printHtml += `<div class="adicionado">+ ${ing}</div>`;
+                            });
+                            printHtml += `</div>`;
+                        }
+                        
+                        if (item.ingredientes_sem && item.ingredientes_sem.length > 0) {
+                            printHtml += `<div class="modificacoes">`;
+                            item.ingredientes_sem.forEach(ing => {
+                                printHtml += `<div class="removido">- ${ing}</div>`;
+                            });
+                            printHtml += `</div>`;
+                        }
+                        
+                        if (item.observacao) {
+                            printHtml += `<div class="item-detalhes">Obs: ${item.observacao}</div>`;
+                        }
+                        
+                        printHtml += `</div>`;
+                    });
+                    
+                    printHtml += `
+                            </div>
+                            
+                            <div class="total">
+                                <strong>TOTAL: R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</strong>
+                            </div>
+                            
+                            ${pedido.observacao ? `<div class="pedido-info"><strong>Observação:</strong> ${pedido.observacao}</div>` : ''}
+                            
+                            <div class="footer">
+                                Obrigado pela preferência!<br>
+                                Volte sempre!<br>
+                                Impresso em: ${new Date().toLocaleString('pt-BR')}
+                            </div>
+                        </body>
+                        </html>`;
+                    
+                    printWindow.document.write(printHtml);
+                    printWindow.document.close();
+                    
+                    printWindow.onload = function() {
+                        setTimeout(() => {
+                            printWindow.print();
+                            setTimeout(() => {
+                                printWindow.close();
+                            }, 1000);
+                        }, 500);
+                    };
+                    
+                    Swal.fire({
+                        title: 'Sucesso!',
+                        text: 'Pedido enviado para impressão',
+                        icon: 'success',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                    
+                } else {
+                    Swal.fire('Erro', 'Erro ao carregar dados do pedido para impressão', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao imprimir pedido:', error);
+                Swal.fire('Erro', 'Erro ao imprimir pedido: ' + error.message, 'error');
+            });
+        }
+
         function verMesa(mesaId, mesaNumero) {
             document.getElementById('mesaNumero').textContent = mesaNumero;
             
