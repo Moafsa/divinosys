@@ -2,6 +2,7 @@
 session_start();
 require_once '../../system/Database.php';
 require_once '../../system/Utils.php';
+require_once '../../system/Storage/MinIO.php';
 
 // Configurar headers para JSON
 header('Content-Type: application/json');
@@ -223,19 +224,14 @@ function salvarPix($pdo, $tenantId, $filialId) {
     
     // Processar upload de QR Code se fornecido
     if (isset($_FILES['pix_qr_code']) && $_FILES['pix_qr_code']['error'] === UPLOAD_ERR_OK) {
-        $uploadDir = '../../uploads/pix/';
-        if (!is_dir($uploadDir)) {
-            mkdir($uploadDir, 0755, true);
-        }
-        
-        $fileName = 'pix_qr_' . $tenantId . '_' . time() . '.png';
-        $uploadPath = $uploadDir . $fileName;
-        
-        if (move_uploaded_file($_FILES['pix_qr_code']['tmp_name'], $uploadPath)) {
-            // Atualizar caminho do QR Code no banco
+        try {
+            $minio = \System\Storage\MinIO::getInstance();
+            $qrCodeUrl = $minio->uploadFile($_FILES['pix_qr_code'], 'pix');
             $sqlQr = "UPDATE configuracao_pix SET qr_code = ? WHERE tenant_id = ?";
             $stmt = $pdo->prepare($sqlQr);
-            $stmt->execute(['uploads/pix/' . $fileName, $tenantId]);
+            $stmt->execute([$qrCodeUrl, $tenantId]);
+        } catch (Exception $e) {
+            error_log('Erro ao fazer upload do QR Code PIX para MinIO: ' . $e->getMessage());
         }
     }
     

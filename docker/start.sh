@@ -4,7 +4,7 @@ echo "=== DIVINO LANCHES STARTUP SCRIPT ==="
 
 # Wait for PostgreSQL to be ready
 echo "Waiting for PostgreSQL to be ready..."
-until pg_isready -h postgres -p 5432 -U postgres; do
+until pg_isready -h ${DB_HOST:-postgres} -p ${DB_PORT:-5432} -U ${DB_USER:-divino_user}; do
   echo "PostgreSQL is unavailable - sleeping"
   sleep 2
 done
@@ -13,7 +13,7 @@ echo "PostgreSQL is ready!"
 
 # Wait for Redis to be ready
 echo "Waiting for Redis to be ready..."
-until redis-cli -h redis -p 6379 ping; do
+until redis-cli -h ${REDIS_HOST:-redis} -p ${REDIS_PORT:-6379} ping; do
   echo "Redis is unavailable - sleeping"
   sleep 2
 done

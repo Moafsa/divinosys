@@ -695,7 +695,7 @@ try {
 
             if ($pedidosPendentesAposPagamento == 0) {
                 $db->query(
-                    "UPDATE mesas SET status = '1', cliente_nome = NULL, cliente_telefone = NULL WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?",
+                    "UPDATE mesas SET status = 'livre', cliente_nome = NULL, cliente_telefone = NULL WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?",
                     [$mesaId, $tenantId, $filialId]
                 );
                 $mesaLiberada = true;

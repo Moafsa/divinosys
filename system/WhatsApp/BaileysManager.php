@@ -194,7 +194,7 @@ class BaileysManager {
             
             return [
                 'success' => false,
-                'message' => 'Erro ao gerar QR code via WuzAPI',
+                'message' => $qrData['message'] ?? 'Erro ao gerar QR code via WuzAPI',
                 'instance_id' => $instanceId
             ];
             

@@ -48,36 +48,63 @@ class Cliente
     /**
      * Find client by phone number
      */
-    public function findByTelefone($telefone)
+    public function findByTelefone($telefone, $tenantId = null)
     {
         try {
-            // Normalize phone number (remove non-numeric characters)
             $telefoneNormalizado = preg_replace('/[^0-9]/', '', $telefone);
-            
-            error_log("Cliente::findByTelefone - Buscando cliente com telefone: $telefone (normalizado: $telefoneNormalizado)");
-            
-            // Try exact match first
-            $cliente = $this->db->fetch(
-                "SELECT * FROM usuarios_globais 
-                 WHERE telefone = ? AND ativo = true 
-                 LIMIT 1",
-                [$telefoneNormalizado]
-            );
-            
-            // If not found, try with LIKE
-            if (!$cliente) {
-                $cliente = $this->db->fetch(
-                    "SELECT * FROM usuarios_globais 
-                     WHERE (telefone LIKE ? OR telefone LIKE ?) 
-                     AND ativo = true 
-                     LIMIT 1",
-                    ['%' . $telefoneNormalizado . '%', $telefoneNormalizado . '%']
-                );
+            if (empty($telefoneNormalizado)) {
+                return null;
             }
-            
-            error_log("Cliente::findByTelefone - Resultado: " . ($cliente ? json_encode($cliente) : 'null'));
-            return $cliente;
-        } catch (Exception $e) {
+
+            $variacoes = [$telefoneNormalizado];
+            if (strlen($telefoneNormalizado) > 11 && str_starts_with($telefoneNormalizado, '55')) {
+                $variacoes[] = substr($telefoneNormalizado, 2);
+            } elseif (strlen($telefoneNormalizado) <= 11 && strlen($telefoneNormalizado) >= 10) {
+                $variacoes[] = '55' . $telefoneNormalizado;
+            }
+            $variacoes = array_values(array_unique(array_filter($variacoes)));
+
+            $placeholders = implode(',', array_fill(0, count($variacoes), '?'));
+            $params = array_merge($variacoes, $variacoes);
+
+            $cliente = $this->db->fetch(
+                "SELECT * FROM usuarios_globais
+                 WHERE ativo = true
+                   AND (tipo_usuario = 'cliente' OR tipo_usuario IS NULL OR tipo_usuario = '')
+                   AND (
+                        REGEXP_REPLACE(COALESCE(telefone, ''), '[^0-9]', '', 'g') IN ($placeholders)
+                        OR telefone IN ($placeholders)
+                   )
+                 LIMIT 1",
+                $params
+            );
+
+            if ($tenantId) {
+                $fiadoParams = array_merge([$tenantId], $variacoes, $variacoes);
+                $fiado = $this->db->fetch(
+                    "SELECT id, nome, telefone, NULL as email, cpf_cnpj as cpf
+                     FROM clientes_fiado
+                     WHERE tenant_id = ?
+                       AND (
+                            REGEXP_REPLACE(COALESCE(telefone, ''), '[^0-9]', '', 'g') IN ($placeholders)
+                            OR telefone IN ($placeholders)
+                       )
+                     ORDER BY CASE WHEN nome ILIKE 'Cliente Mesa%' THEN 1 ELSE 0 END, id
+                     LIMIT 1",
+                    $fiadoParams
+                );
+
+                if ($fiado) {
+                    return $fiado;
+                }
+            }
+
+            if ($cliente) {
+                return $cliente;
+            }
+
+            return null;
+        } catch (\Exception $e) {
             error_log("Cliente::findByTelefone - Erro: " . $e->getMessage());
             return null;
         }
@@ -177,14 +204,34 @@ class Cliente
                 $params[] = $searchTerm;
             }
 
-            // Removed tenant_id filter - clients are global across all tenants
-            // if (!empty($filters['tenant_id'])) {
-            //     $where[] = "EXISTS (SELECT 1 FROM cliente_estabelecimentos ce WHERE ce.usuario_global_id = ug.id AND ce.tenant_id = ?)";
-            //     $params[] = $filters['tenant_id'];
-            // }
+            if (!empty($filters['tenant_id'])) {
+                $tenantId = (int) $filters['tenant_id'];
+                $where[] = "(
+                    EXISTS (SELECT 1 FROM pedido p_t WHERE p_t.usuario_global_id = ug.id AND p_t.tenant_id = ?)
+                    OR EXISTS (SELECT 1 FROM cliente_estabelecimentos ce WHERE ce.usuario_global_id = ug.id AND ce.tenant_id = ?)
+                    OR EXISTS (
+                        SELECT 1 FROM pagamentos_pedido pag_t
+                        JOIN pedido p_pay ON p_pay.idpedido = pag_t.pedido_id
+                        WHERE pag_t.usuario_global_id = ug.id AND p_pay.tenant_id = ?
+                    )
+                )";
+                $params[] = $tenantId;
+                $params[] = $tenantId;
+                $params[] = $tenantId;
+                $tenantJoin = $tenantId;
+            } else {
+                $tenantJoin = null;
+            }
 
             $whereClause = implode(' AND ', $where);
             
+            $pedidoJoin = $tenantJoin
+                ? "LEFT JOIN pedido p ON ug.id = p.usuario_global_id AND p.tenant_id = $tenantJoin"
+                : "LEFT JOIN pedido p ON ug.id = p.usuario_global_id";
+            $pagamentoJoin = $tenantJoin
+                ? "LEFT JOIN pagamentos_pedido pag ON ug.id = pag.usuario_global_id AND pag.tenant_id = $tenantJoin"
+                : "LEFT JOIN pagamentos_pedido pag ON ug.id = pag.usuario_global_id";
+
             $sql = "SELECT ug.*, 
                         COUNT(DISTINCT p.idpedido) as total_pedidos,
                         COALESCE(SUM(p.valor_total), 0) as total_gasto,
@@ -192,20 +239,32 @@ class Cliente
                         COUNT(DISTINCT pag.pedido_id) as pedidos_pagos,
                         COALESCE(SUM(pag.valor_pago), 0) as total_pago
                  FROM usuarios_globais ug
-                 LEFT JOIN pedido p ON ug.id = p.usuario_global_id
-                 LEFT JOIN pagamentos_pedido pag ON ug.id = pag.usuario_global_id
+                 $pedidoJoin
+                 $pagamentoJoin
                  WHERE $whereClause
                  GROUP BY ug.id
-                 ORDER BY ug.nome
-                 LIMIT ? OFFSET ?";
+                 ORDER BY ug.nome";
             
             error_log("Cliente::getAll - SQL: $sql");
-            error_log("Cliente::getAll - Params: " . json_encode(array_merge($params, [$limit, $offset])));
-
-            $clientes = $this->db->fetchAll(
-                $sql,
-                array_merge($params, [$limit, $offset])
-            );
+            
+            if (!empty($filters['tenant_id'])) {
+                error_log("Cliente::getAll - Params: " . json_encode($params));
+                $clientes = $this->db->fetchAll($sql, $params);
+                $clientes = $this->mesclarClientesFiado(
+                    $clientes,
+                    (int) $filters['tenant_id'],
+                    $filters['filial_id'] ?? null,
+                    $filters['search'] ?? ''
+                );
+                $clientes = array_slice($clientes, $offset, $limit);
+            } else {
+                $sqlPaginated = $sql . " LIMIT ? OFFSET ?";
+                error_log("Cliente::getAll - Params: " . json_encode(array_merge($params, [$limit, $offset])));
+                $clientes = $this->db->fetchAll(
+                    $sqlPaginated,
+                    array_merge($params, [$limit, $offset])
+                );
+            }
             
             error_log("Cliente::getAll - Found " . count($clientes) . " clients");
 
@@ -215,6 +274,100 @@ class Cliente
             error_log("Cliente::getAll - Stack trace: " . $e->getTraceAsString());
             return [];
         }
+    }
+
+    /**
+     * Inclui clientes cadastrados só em clientes_fiado e corrige nomes genéricos (ex: Cliente Mesa).
+     */
+    private function mesclarClientesFiado(array $clientesUg, int $tenantId, $filialId = null, string $search = ''): array
+    {
+        $filialSql = $filialId ? ' AND (cf.filial_id = ? OR cf.filial_id IS NULL)' : '';
+        $fiadoParams = [$tenantId];
+        if ($filialId) {
+            $fiadoParams[] = (int) $filialId;
+        }
+
+        $searchSql = '';
+        if ($search !== '') {
+            $searchSql = ' AND (cf.nome ILIKE ? OR cf.telefone ILIKE ?)';
+            $fiadoParams[] = '%' . $search . '%';
+            $fiadoParams[] = '%' . $search . '%';
+        }
+
+        $fiados = $this->db->fetchAll(
+            "SELECT cf.id, cf.nome, cf.telefone, cf.cpf_cnpj as cpf, cf.saldo_devedor,
+                    (SELECT COUNT(*)::int FROM vendas_fiadas vf WHERE vf.cliente_id = cf.id) as total_pedidos
+             FROM clientes_fiado cf
+             WHERE cf.tenant_id = ? $filialSql $searchSql
+             ORDER BY cf.nome",
+            $fiadoParams
+        );
+
+        $normalizarTelefone = static function ($telefone) {
+            return preg_replace('/[^0-9]/', '', (string) $telefone);
+        };
+
+        $nomeGenerico = static function ($nome) {
+            $nome = trim((string) $nome);
+            return $nome === ''
+                || stripos($nome, 'Cliente Mesa') === 0
+                || stripos($nome, 'Cliente Não Identificado') === 0;
+        };
+
+        $porTelefone = [];
+        foreach ($fiados as $fiado) {
+            $tel = $normalizarTelefone($fiado['telefone'] ?? '');
+            if ($tel !== '') {
+                $porTelefone[$tel] = $fiado;
+            }
+        }
+
+        $telefonesNaLista = [];
+        foreach ($clientesUg as &$cliente) {
+            $tel = $normalizarTelefone($cliente['telefone'] ?? '');
+            if ($tel !== '') {
+                $telefonesNaLista[$tel] = true;
+                if (isset($porTelefone[$tel]) && $nomeGenerico($cliente['nome'] ?? '')) {
+                    $cliente['nome'] = $porTelefone[$tel]['nome'];
+                    $cliente['origem'] = 'clientes_fiado_vinculado';
+                }
+            }
+        }
+        unset($cliente);
+
+        foreach ($fiados as $fiado) {
+            $tel = $normalizarTelefone($fiado['telefone'] ?? '');
+            if ($tel !== '' && isset($telefonesNaLista[$tel])) {
+                continue;
+            }
+
+            $clientesUg[] = [
+                'id' => 'f-' . $fiado['id'],
+                'nome' => $fiado['nome'],
+                'telefone' => $fiado['telefone'],
+                'email' => null,
+                'cpf' => $fiado['cpf'] ?? null,
+                'ativo' => true,
+                'total_pedidos' => (int) ($fiado['total_pedidos'] ?? 0),
+                'total_gasto' => (float) ($fiado['saldo_devedor'] ?? 0),
+                'ultimo_pedido' => null,
+                'pedidos_pagos' => 0,
+                'total_pago' => 0,
+                'origem' => 'clientes_fiado',
+                'fiado_only' => true,
+            ];
+        }
+
+        usort($clientesUg, static function ($a, $b) {
+            return strcasecmp($a['nome'] ?? '', $b['nome'] ?? '');
+        });
+
+        return $clientesUg;
+    }
+
+    public function countAll($filters = [])
+    {
+        return count($this->getAll($filters, 10000, 0));
     }
 
     /**

@@ -28,6 +28,7 @@ RUN docker-php-ext-install mbstring
 RUN docker-php-ext-install zip
 RUN docker-php-ext-install exif
 RUN docker-php-ext-install pcntl
+RUN docker-php-ext-configure gd --enable-gd --with-freetype --with-jpeg --with-webp
 RUN docker-php-ext-install gd
 RUN docker-php-ext-install bcmath
 RUN docker-php-ext-install curl
@@ -36,8 +37,13 @@ RUN docker-php-ext-install soap
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
+# Install MinIO server and client
+RUN curl -fsSL https://dl.min.io/server/minio/release/linux-amd64/minio -o /usr/local/bin/minio \
+    && curl -fsSL https://dl.min.io/client/mc/release/linux-amd64/mc -o /usr/local/bin/mc \
+    && chmod +x /usr/local/bin/minio /usr/local/bin/mc
+
 # Enable Apache modules
-RUN a2enmod rewrite && a2enmod headers
+RUN a2enmod rewrite && a2enmod headers && a2enmod proxy && a2enmod proxy_http
 
 # Set working directory
 WORKDIR /var/www/html
@@ -50,16 +56,17 @@ RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html \
     && mkdir -p /var/www/html/uploads \
     && mkdir -p /var/www/html/logs \
+    && mkdir -p /var/www/html/storage/minio \
     && chown -R www-data:www-data /var/www/html/uploads \
-    && chown -R www-data:www-data /var/www/html/logs
+    && chown -R www-data:www-data /var/www/html/logs \
+    && chown -R www-data:www-data /var/www/html/storage
 
 # Configure Apache
 COPY docker/apache/000-default.conf /etc/apache2/sites-available/000-default.conf
 
-# Install PHP dependencies
-# First update composer.lock if needed, then install
-RUN composer update --no-interaction --no-scripts --no-autoloader || composer install --no-dev --optimize-autoloader --no-scripts || true && \
-    composer install --no-dev --optimize-autoloader
+# Install PHP dependencies (vendor committed; refresh autoloader only)
+RUN composer install --no-dev --optimize-autoloader --no-scripts --ignore-platform-reqs || \
+    composer dump-autoload --optimize --no-dev
 
 # Create .env file from template if it doesn't exist
 RUN if [ ! -f .env ]; then cp env.example .env; fi
@@ -67,12 +74,20 @@ RUN if [ ! -f .env ]; then cp env.example .env; fi
 # Copy and make startup scripts executable
 COPY docker/start.sh /usr/local/bin/start.sh
 COPY docker/start-production.sh /usr/local/bin/start-production.sh
+COPY docker/minio-start.sh /usr/local/bin/minio-start.sh
+COPY docker/minio-setup.sh /usr/local/bin/minio-setup.sh
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/start.sh && \
     chmod +x /usr/local/bin/start-production.sh && \
+    chmod +x /usr/local/bin/minio-start.sh && \
+    chmod +x /usr/local/bin/minio-setup.sh && \
+    chmod +x /usr/local/bin/entrypoint.sh && \
     sed -i 's/\r$//' /usr/local/bin/start.sh && \
-    sed -i 's/\r$//' /usr/local/bin/start-production.sh
+    sed -i 's/\r$//' /usr/local/bin/start-production.sh && \
+    sed -i 's/\r$//' /usr/local/bin/minio-start.sh && \
+    sed -i 's/\r$//' /usr/local/bin/minio-setup.sh && \
+    sed -i 's/\r$//' /usr/local/bin/entrypoint.sh
 
 EXPOSE 80
 
-# Use bash to execute the script
-CMD ["/bin/bash", "/usr/local/bin/start.sh"]
+CMD ["/bin/bash", "/usr/local/bin/entrypoint.sh"]

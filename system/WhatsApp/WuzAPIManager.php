@@ -123,6 +123,105 @@ class WuzAPIManager
         return strtoupper(substr(md5(uniqid()), 0, 8));
     }
     
+    private function getConnectPayload(): string
+    {
+        return json_encode([
+            'Subscribe' => ['Message', 'ReadReceipt', 'ChatPresence'],
+            'Immediate' => true,
+        ]);
+    }
+
+    private function parseSessionData(?array $data): array
+    {
+        if (!$data) {
+            return ['connected' => false, 'websocket' => false, 'logged_in' => false, 'qr_code' => null];
+        }
+
+        $loggedIn = (bool) ($data['LoggedIn'] ?? $data['loggedIn'] ?? false);
+        $websocket = (bool) ($data['Connected'] ?? $data['connected'] ?? false);
+
+        return [
+            'connected' => $loggedIn || $websocket,
+            'websocket' => $websocket,
+            'logged_in' => $loggedIn,
+            'qr_code' => $data['QRCode'] ?? $data['qrcode'] ?? $data['Qrcode'] ?? null,
+        ];
+    }
+
+    private function isTransientSessionError(string $message): bool
+    {
+        $needles = ['already connected', 'not connected', 'no session'];
+        foreach ($needles as $needle) {
+            if (stripos($message, $needle) !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function extractQrFromResponses(?array $statusResponse, ?array $qrResponse = null): ?string
+    {
+        $fromStatus = $this->parseSessionData($statusResponse['data'] ?? null);
+        if (!empty($fromStatus['qr_code'])) {
+            return $fromStatus['qr_code'];
+        }
+
+        if ($qrResponse) {
+            return $qrResponse['data']['QRCode'] ?? $qrResponse['data']['qrcode'] ?? null;
+        }
+
+        return null;
+    }
+
+    private function safeConnect(string $token): void
+    {
+        try {
+            $this->makeApiCall('POST', '/session/connect', $this->getConnectPayload(), $token);
+        } catch (Exception $e) {
+            if (stripos($e->getMessage(), 'already connected') === false) {
+                throw $e;
+            }
+            error_log('WuzAPIManager::safeConnect - Sessão já conectada, continuando para obter QR');
+        }
+    }
+
+    /**
+     * Reseta sessão zumbi (connected=1 no banco mas websocket desconectado)
+     */
+    private function resetZombieSession($wuzapiInstanceId, $token, $jid = null)
+    {
+        $db = \System\Database::getInstance();
+
+        if ($jid) {
+            $db->query("DELETE FROM whatsmeow_device WHERE jid = ?", [$jid]);
+        }
+
+        $db->query(
+            "UPDATE users SET connected = 0, jid = '', qrcode = '' WHERE token = ?",
+            [$token]
+        );
+
+        $db->query(
+            "UPDATE whatsapp_instances SET status = 'disconnected' WHERE wuzapi_instance_id = ? OR wuzapi_token = ?",
+            [$wuzapiInstanceId, $token]
+        );
+
+        error_log("WuzAPIManager::resetZombieSession - Sessão resetada para WuzAPI ID: $wuzapiInstanceId");
+    }
+
+    private function isZombieSession($connectResponse, $statusResponse): bool
+    {
+        $session = $this->parseSessionData($statusResponse['data'] ?? null);
+        $details = $connectResponse['data']['details'] ?? '';
+        $jid = $connectResponse['data']['jid'] ?? '';
+
+        return !$session['logged_in'] && !$session['connected'] && (
+            $details === 'Already Connected' ||
+            (!empty($jid) && $details !== 'Connected!')
+        );
+    }
+
     /**
      * Gerar QR code para sessão
      */
@@ -131,12 +230,10 @@ class WuzAPIManager
         try {
             error_log("WuzAPIManager::generateQRCode - Gerando QR para instância: $instanceId");
             
-            // Buscar dados da instância no banco local usando Database class
             $db = \System\Database::getInstance();
             $instance = $db->query("SELECT wuzapi_instance_id, wuzapi_token FROM whatsapp_instances WHERE id = ?", [$instanceId])->fetch();
             
             if (!$instance || !$instance['wuzapi_instance_id']) {
-                error_log("WuzAPIManager::generateQRCode - Instância não encontrada ou sem WuzAPI ID");
                 return [
                     'success' => false,
                     'message' => 'Instância não encontrada na WuzAPI'
@@ -145,58 +242,120 @@ class WuzAPIManager
             
             $wuzapiInstanceId = $instance['wuzapi_instance_id'];
             $token = $instance['wuzapi_token'];
-            
-            error_log("WuzAPIManager::generateQRCode - Usando WuzAPI ID: $wuzapiInstanceId, Token: $token");
-            
-            // Primeiro, tentar conectar a sessão se ela não estiver ativa
-            try {
-                $connectResponse = $this->makeApiCall('POST', "/session/connect", '{}', $token);
-                if ($connectResponse && $connectResponse['success']) {
-                    error_log("WuzAPIManager::generateQRCode - Sessão conectada com sucesso");
-                }
-            } catch (Exception $e) {
-                error_log("WuzAPIManager::generateQRCode - Erro ao conectar sessão: " . $e->getMessage());
-            }
-            
-            // Verificar status da sessão específica
-            $statusResponse = $this->makeApiCall('GET', "/session/status", null, $token);
-            
-            if ($statusResponse && isset($statusResponse['data'])) {
-                $connected = $statusResponse['data']['Connected'] ?? false;
-                $loggedIn = $statusResponse['data']['LoggedIn'] ?? false;
-                
-                if ($loggedIn) {
-                    return [
-                        'success' => true,
-                        'qr_code' => null,
-                        'status' => 'connected',
-                        'message' => 'WhatsApp já está conectado'
-                    ];
-                }
-            }
-            
-            // Gerar QR code para a instância específica
-            $response = $this->makeApiCall('GET', "/session/qr", null, $token);
-            
-            if ($response && isset($response['data']['QRCode'])) {
+
+            $statusResponse = $this->makeApiCall('GET', '/session/status', null, $token);
+            $session = $this->parseSessionData($statusResponse['data'] ?? null);
+
+            if ($session['logged_in']) {
+                $db->query("UPDATE whatsapp_instances SET status = 'connected' WHERE id = ?", [$instanceId]);
                 return [
                     'success' => true,
-                    'qr_code' => $response['data']['QRCode'],
+                    'qr_code' => null,
+                    'status' => 'connected',
+                    'message' => 'WhatsApp já está conectado'
+                ];
+            }
+
+            if (!empty($session['qr_code'])) {
+                $db->query("UPDATE whatsapp_instances SET status = 'connecting' WHERE id = ?", [$instanceId]);
+                return [
+                    'success' => true,
+                    'qr_code' => $session['qr_code'],
                     'status' => 'connecting',
                     'message' => 'QR code gerado com sucesso. Escaneie com seu WhatsApp.'
                 ];
             }
+
+            $justConnected = false;
+            if (!$session['websocket']) {
+                try {
+                    $connectResponse = $this->makeApiCall('POST', '/session/connect', $this->getConnectPayload(), $token);
+                    $justConnected = true;
+                    if ($this->isZombieSession($connectResponse, $statusResponse)) {
+                        $jid = $connectResponse['data']['jid'] ?? null;
+                        $this->resetZombieSession($wuzapiInstanceId, $token, $jid);
+                        $this->makeApiCall('POST', '/session/connect', $this->getConnectPayload(), $token);
+                    }
+                } catch (Exception $e) {
+                    if (!$this->isTransientSessionError($e->getMessage())) {
+                        throw $e;
+                    }
+                }
+            } else {
+                $this->safeConnect($token);
+            }
+
+            if ($justConnected) {
+                sleep(2);
+            }
+
+            for ($attempt = 1; $attempt <= 15; $attempt++) {
+                $statusResponse = $this->makeApiCall('GET', '/session/status', null, $token);
+                $session = $this->parseSessionData($statusResponse['data'] ?? null);
+
+                if ($session['logged_in']) {
+                    $db->query("UPDATE whatsapp_instances SET status = 'connected' WHERE id = ?", [$instanceId]);
+                    return [
+                        'success' => true,
+                        'qr_code' => null,
+                        'status' => 'connected',
+                        'message' => 'WhatsApp conectado com sucesso'
+                    ];
+                }
+
+                if (!empty($session['qr_code'])) {
+                    $db->query("UPDATE whatsapp_instances SET status = 'connecting' WHERE id = ?", [$instanceId]);
+                    return [
+                        'success' => true,
+                        'qr_code' => $session['qr_code'],
+                        'status' => 'connecting',
+                        'message' => 'QR code gerado com sucesso. Escaneie com seu WhatsApp.'
+                    ];
+                }
+
+                $qrResponse = null;
+                try {
+                    $qrResponse = $this->makeApiCall('GET', '/session/qr', null, $token);
+                } catch (Exception $e) {
+                    if (stripos($e->getMessage(), 'client outdated') !== false) {
+                        return [
+                            'success' => false,
+                            'message' => 'WuzAPI desatualizada. Atualize o serviço WuzAPI/whatsmeow no servidor.'
+                        ];
+                    }
+                    if (!$this->isTransientSessionError($e->getMessage())) {
+                        throw $e;
+                    }
+                }
+
+                $qrCode = $this->extractQrFromResponses($statusResponse, $qrResponse);
+                if (!empty($qrCode)) {
+                    $db->query("UPDATE whatsapp_instances SET status = 'connecting' WHERE id = ?", [$instanceId]);
+                    return [
+                        'success' => true,
+                        'qr_code' => $qrCode,
+                        'status' => 'connecting',
+                        'message' => 'QR code gerado com sucesso. Escaneie com seu WhatsApp.'
+                    ];
+                }
+
+                sleep(2);
+            }
             
             return [
                 'success' => false,
-                'message' => 'Falha ao gerar QR code: ' . ($response['error'] ?? 'Erro desconhecido')
+                'message' => 'Não foi possível gerar o QR code. A sessão não conectou ao WhatsApp. Tente novamente ou verifique os logs da WuzAPI.'
             ];
             
         } catch (Exception $e) {
             error_log("WuzAPIManager::generateQRCode - Error: " . $e->getMessage());
+            $message = $e->getMessage();
+            if (stripos($message, 'Not connected') !== false) {
+                $message = 'Sessão WhatsApp não conectou. Tente clicar em Conectar novamente.';
+            }
             return [
                 'success' => false,
-                'message' => 'Erro ao gerar QR code: ' . $e->getMessage()
+                'message' => 'Erro ao gerar QR code: ' . $message
             ];
         }
     }
@@ -221,21 +380,20 @@ class WuzAPIManager
             $response = $this->makeApiCall('GET', "/session/status", null, $instance['wuzapi_token']);
             
             if ($response && isset($response['data'])) {
-                $connected = $response['data']['Connected'] ?? false;
-                $loggedIn = $response['data']['LoggedIn'] ?? false;
-                
+                $session = $this->parseSessionData($response['data']);
+
                 $status = 'disconnected';
-                if ($loggedIn) {
+                if ($session['logged_in']) {
                     $status = 'connected';
-                } elseif ($connected) {
+                } elseif ($session['connected'] || !empty($session['qr_code'])) {
                     $status = 'connecting';
                 }
-                
+
                 return [
                     'success' => true,
                     'status' => $status,
-                    'connected' => $connected,
-                    'logged_in' => $loggedIn,
+                    'connected' => $session['connected'],
+                    'logged_in' => $session['logged_in'],
                     'message' => $response['data']['details'] ?? ''
                 ];
             }

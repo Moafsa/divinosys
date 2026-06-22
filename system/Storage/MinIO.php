@@ -19,11 +19,16 @@ class MinIO
         $accessKey = $_ENV['MINIO_ACCESS_KEY'] ?? getenv('MINIO_ACCESS_KEY') ?? '';
         $secretKey = $_ENV['MINIO_SECRET_KEY'] ?? getenv('MINIO_SECRET_KEY') ?? '';
         $this->bucket = $_ENV['MINIO_BUCKET'] ?? getenv('MINIO_BUCKET') ?? 'divinosys';
-        // Se MINIO_PUBLIC_URL não estiver definido ou for o console, usar o endpoint
         $publicUrl = $_ENV['MINIO_PUBLIC_URL'] ?? getenv('MINIO_PUBLIC_URL') ?? '';
-        // Se a URL pública for o console (winio.conext.click), usar o endpoint (ws3.conext.click)
-        if (empty($publicUrl) || strpos($publicUrl, 'winio.conext.click') !== false) {
-            $this->publicUrl = $endpoint; // Usar o endpoint diretamente
+
+        // MinIO embutido no container: endpoint local + URL pública via proxy Apache
+        $isLocalEndpoint = preg_match('#^https?://(127\.0\.0\.1|localhost)(:\d+)?#', $endpoint) === 1;
+        if (empty($publicUrl)) {
+            $this->publicUrl = $isLocalEndpoint
+                ? rtrim($_ENV['APP_URL'] ?? getenv('APP_URL') ?? '', '/') . '/storage/' . $this->bucket
+                : $endpoint;
+        } elseif (strpos($publicUrl, 'winio.conext.click') !== false) {
+            $this->publicUrl = $endpoint;
         } else {
             $this->publicUrl = $publicUrl;
         }
@@ -105,26 +110,7 @@ class MinIO
                 $params['ContentType'] = $contentType;
             }
 
-            // Tentar tornar o arquivo público (pode não funcionar se o bucket não tiver política)
-            try {
-                $params['ACL'] = 'public-read';
-            } catch (\Exception $e) {
-                // ACL pode não estar disponível, continuar sem ele
-            }
-
             $result = $this->s3Client->putObject($params);
-            
-            // Se o ACL não funcionou, tentar definir política após o upload
-            try {
-                $this->s3Client->putObjectAcl([
-                    'Bucket' => $this->bucket,
-                    'Key' => $objectKey,
-                    'ACL' => 'public-read'
-                ]);
-            } catch (\Exception $e) {
-                // Ignorar erro de ACL - o arquivo pode já ser público por política do bucket
-                error_log('MinIO ACL warning: ' . $e->getMessage());
-            }
 
             // Se não fechou o resource, fechar
             if (!$isContent && is_resource($params['Body'])) {
@@ -167,7 +153,8 @@ class MinIO
         $tmpName = $fileArray['tmp_name'];
 
         // Otimizar imagens: converter para WebP se for imagem
-        $isImage = strpos($contentType, 'image/') === 0;
+        $imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'avif'];
+        $isImage = strpos($contentType, 'image/') === 0 || in_array($extension, $imageExtensions);
         $webpTmpName = null;
 
         // SVG é vetor e não deve ser convertido pelo GD
@@ -219,7 +206,7 @@ class MinIO
         
         // Preservar transparência (para PNG, GIF, WEBP)
         imagepalettetotruecolor($image);
-        imagealphablending($image, true);
+        imagealphablending($image, false);
         imagesavealpha($image, true);
         
         // Salvar imagem convertida em webp

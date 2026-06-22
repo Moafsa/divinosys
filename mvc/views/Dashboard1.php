@@ -1346,10 +1346,22 @@ if ($tenant && $filial) {
 
         function abrirModalVincularComanda() {
             document.getElementById('formVincularComanda').reset();
+            
+            // Buscar o próximo número de comanda disponível
+            fetch('mvc/ajax/vincular_comanda.php?action=get_next_comanda')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.next_comanda) {
+                        document.getElementById('vincular_comanda_id').value = data.next_comanda;
+                    }
+                })
+                .catch(error => console.error('Erro ao buscar próximo número:', error));
+                
             const modal = new bootstrap.Modal(document.getElementById('modalVincularComanda'));
             modal.show();
             setTimeout(() => {
                 document.getElementById('vincular_comanda_id').focus();
+                document.getElementById('vincular_comanda_id').select(); // Select content for easy overwrite
             }, 500);
         }
 

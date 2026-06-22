@@ -373,7 +373,10 @@ if ($tenant && $filial) {
                             <div class="col-lg-3 col-md-4 col-sm-6 mb-3" data-produto-id="<?php echo $produto['id']; ?>">
                                 <div class="produto-card">
                                     <?php if ($produto['imagem']): ?>
-                                        <img src="<?php echo htmlspecialchars($produto['imagem']); ?>" class="produto-imagem" alt="<?php echo htmlspecialchars($produto['nome']); ?>" onerror="this.onerror=null; this.src=''; this.parentElement.innerHTML='<div class=\'produto-imagem d-flex align-items-center justify-content-center bg-light\'><i class=\'fas fa-image text-muted\'></i></div>';">
+                                        <img src="<?php echo htmlspecialchars($produto['imagem']); ?>" class="produto-imagem" alt="<?php echo htmlspecialchars($produto['nome']); ?>" onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                        <div class="produto-imagem d-flex align-items-center justify-content-center bg-light" style="display:none;">
+                                            <i class="fas fa-image text-muted"></i>
+                                        </div>
                                     <?php else: ?>
                                         <div class="produto-imagem d-flex align-items-center justify-content-center bg-light">
                                             <i class="fas fa-image text-muted"></i>

@@ -71,18 +71,20 @@ class ClienteController
         try {
             $filters = [
                 'search' => $_GET['search'] ?? '',
-                'tenant_id' => $this->session->getTenant()['id'] ?? null
+                'tenant_id' => $this->session->getTenant()['id'] ?? null,
+                'filial_id' => $this->session->getFilial()['id'] ?? null,
             ];
 
             $limit = (int)($_GET['limit'] ?? 50);
             $offset = (int)($_GET['offset'] ?? 0);
 
             $clientes = $this->clienteModel->getAll($filters, $limit, $offset);
+            $total = $this->clienteModel->countAll($filters);
 
             return $this->jsonResponse([
                 'success' => true,
                 'data' => $clientes,
-                'total' => count($clientes)
+                'total' => $total
             ]);
         } catch (Exception $e) {
             return $this->jsonResponse(['success' => false, 'message' => $e->getMessage()]);
@@ -192,7 +194,8 @@ class ClienteController
                 return $this->jsonResponse(['success' => false, 'message' => 'Telefone não informado']);
             }
 
-            $cliente = $this->clienteModel->findByTelefone($telefone);
+            $tenantId = $this->session->getTenant()['id'] ?? null;
+            $cliente = $this->clienteModel->findByTelefone($telefone, $tenantId);
             error_log("ClienteController::buscarPorTelefone - Cliente encontrado: " . ($cliente ? 'sim' : 'não'));
             
             if ($cliente) {

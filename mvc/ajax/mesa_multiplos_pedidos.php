@@ -9,6 +9,19 @@ require_once __DIR__ . '/../../system/Config.php';
 require_once __DIR__ . '/../../system/Database.php';
 require_once __DIR__ . '/../../system/Session.php';
 
+function resolverTipoDescontoManual($db, $tenantId, $filialId)
+{
+    $row = $db->fetch(
+        "SELECT id FROM tipos_desconto
+         WHERE tenant_id = ? AND (filial_id = ? OR filial_id IS NULL) AND ativo = true
+         ORDER BY CASE WHEN nome ILIKE '%especial%' THEN 0 ELSE 1 END, id
+         LIMIT 1",
+        [$tenantId, $filialId]
+    );
+
+    return $row['id'] ?? null;
+}
+
 // Função para capturar erros fatais
 register_shutdown_function(function() {
     $error = error_get_last();
@@ -398,7 +411,7 @@ try {
                 if ($descontoPedido > 0) {
                     $db->insert('descontos_aplicados', [
                         'pedido_id' => $pedido['idpedido'],
-                        'tipo_desconto_id' => 1, // Tipo genérico para desconto manual
+                        'tipo_desconto_id' => resolverTipoDescontoManual($db, $tenant['id'], $filial['id']),
                         'valor_desconto' => $descontoPedido,
                         'motivo' => 'Desconto aplicado no fechamento da mesa',
                         'autorizado_por' => $user['id'],

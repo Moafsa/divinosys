@@ -2,7 +2,6 @@
 session_start();
 require_once __DIR__ . '/../../system/Config.php';
 require_once __DIR__ . '/../../system/Database.php';
-require_once __DIR__ . '/../../system/Utils.php';
 
 // Configurar headers para JSON
 header('Content-Type: application/json');
@@ -562,21 +561,50 @@ function gerarHtmlDetalhesVenda($venda, $itens, $pagamentos) {
 
 function listarVendasPendentesCliente($pdo, $tenantId, $filialId) {
     $clienteId = $_POST['cliente_id'] ?? '';
+    $origem = $_POST['origem'] ?? 'clientes_fiado';
     if (empty($clienteId)) {
         echo json_encode(['success' => false, 'message' => 'Cliente não informado']);
         return;
     }
 
-    $sql = "
-        SELECT 
-            id, data_venda, valor_total, valor_pago, saldo_devedor, status 
-        FROM vendas_fiadas 
-        WHERE cliente_id = ? AND tenant_id = ? AND status IN ('pendente', 'parcial', 'vencido') 
-        ORDER BY data_venda ASC
-    ";
-    
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([$clienteId, $tenantId]);
+    if ($origem === 'pedido') {
+        $sql = "
+            SELECT 
+                p.idpedido as id,
+                COALESCE(p.created_at, p.data::timestamp) as data_venda,
+                p.valor_total,
+                COALESCE(p.valor_pago, 0) as valor_pago,
+                p.saldo_devedor,
+                CASE WHEN p.saldo_devedor >= p.valor_total THEN 'pendente' ELSE 'parcial' END as status
+            FROM pedido p
+            WHERE p.usuario_global_id = ?
+              AND p.tenant_id = ?
+              AND p.filial_id = ?
+              AND p.saldo_devedor > 0
+            ORDER BY p.created_at ASC
+        ";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$clienteId, $tenantId, $filialId]);
+    } else {
+        $sql = "
+            SELECT 
+                id,
+                created_at as data_venda,
+                valor_total,
+                COALESCE(valor_pago, 0) as valor_pago,
+                (valor_total - COALESCE(valor_pago, 0)) as saldo_devedor,
+                status
+            FROM vendas_fiadas 
+            WHERE cliente_id = ?
+              AND tenant_id = ?
+              AND status IN ('pendente', 'vencido')
+              AND (valor_total - COALESCE(valor_pago, 0)) > 0.01
+            ORDER BY created_at ASC
+        ";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$clienteId, $tenantId]);
+    }
+
     $vendas = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
     echo json_encode(['success' => true, 'vendas' => $vendas]);
@@ -586,6 +614,7 @@ function pagamentoLoteCliente($pdo, $tenantId, $filialId) {
     $clienteId = $_POST['cliente_id'] ?? '';
     $valorPagamento = floatval($_POST['valor_pagamento'] ?? 0);
     $formaPagamento = $_POST['forma_pagamento'] ?? '';
+    $origem = $_POST['origem'] ?? 'clientes_fiado';
     
     if (empty($clienteId) || $valorPagamento <= 0 || empty($formaPagamento)) {
         echo json_encode(['success' => false, 'message' => 'Dados obrigatórios não preenchidos (Valor, Forma de Pagamento)']);
@@ -595,15 +624,36 @@ function pagamentoLoteCliente($pdo, $tenantId, $filialId) {
     $pdo->beginTransaction();
     
     try {
-        // Obter vendas não pagas do cliente, do mais antigo para o mais novo
-        $sqlVendas = "
-            SELECT id, saldo_devedor, valor_pago 
-            FROM vendas_fiadas 
-            WHERE cliente_id = ? AND tenant_id = ? AND status IN ('pendente', 'parcial', 'vencido') 
-            ORDER BY data_venda ASC FOR UPDATE
-        ";
-        $stmt = $pdo->prepare($sqlVendas);
-        $stmt->execute([$clienteId, $tenantId]);
+        if ($origem === 'pedido') {
+            $sqlVendas = "
+                SELECT 
+                    idpedido as id,
+                    valor_total,
+                    COALESCE(valor_pago, 0) as valor_pago,
+                    saldo_devedor
+                FROM pedido 
+                WHERE usuario_global_id = ? AND tenant_id = ? AND filial_id = ?
+                  AND saldo_devedor > 0.01
+                ORDER BY created_at ASC FOR UPDATE
+            ";
+            $stmt = $pdo->prepare($sqlVendas);
+            $stmt->execute([$clienteId, $tenantId, $filialId]);
+        } else {
+            // Obter vendas não pagas do cliente_fiado
+            $sqlVendas = "
+                SELECT 
+                    id,
+                    valor_total,
+                    COALESCE(valor_pago, 0) as valor_pago,
+                    (valor_total - COALESCE(valor_pago, 0)) as saldo_devedor
+                FROM vendas_fiadas 
+                WHERE cliente_id = ? AND tenant_id = ? AND status IN ('pendente', 'vencido')
+                  AND (valor_total - COALESCE(valor_pago, 0)) > 0.01
+                ORDER BY created_at ASC FOR UPDATE
+            ";
+            $stmt = $pdo->prepare($sqlVendas);
+            $stmt->execute([$clienteId, $tenantId]);
+        }
         $vendas = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
         $valorRestante = $valorPagamento;
@@ -611,30 +661,54 @@ function pagamentoLoteCliente($pdo, $tenantId, $filialId) {
         foreach ($vendas as $venda) {
             if ($valorRestante <= 0) break;
             
-            $valorPagarNestaVenda = min($valorRestante, floatval($venda['saldo_devedor']));
+            $saldoAtual = floatval($venda['saldo_devedor']);
+            $valorPagarNestaVenda = min($valorRestante, $saldoAtual);
             
-            // Inserir pagamento
-            $sqlPagamento = "
-                INSERT INTO pagamentos_fiado (
-                    venda_fiada_id, valor_pago, forma_pagamento, data_pagamento,
-                    observacoes, tenant_id, filial_id, created_at
-                ) VALUES (?, ?, ?, NOW(), 'Pagamento em Lote', ?, ?, NOW())
-            ";
-            $stmtPagamento = $pdo->prepare($sqlPagamento);
-            $stmtPagamento->execute([$venda['id'], $valorPagarNestaVenda, $formaPagamento, $tenantId, $filialId]);
-            
-            // Atualizar venda
-            $novoValorPago = $venda['valor_pago'] + $valorPagarNestaVenda;
-            $novoSaldoDevedor = $venda['saldo_devedor'] - $valorPagarNestaVenda;
-            $novoStatus = $novoSaldoDevedor <= 0.01 ? 'pago' : 'parcial';
-            
-            $sqlUpdateVenda = "
-                UPDATE vendas_fiadas 
-                SET valor_pago = ?, saldo_devedor = ?, status = ?, updated_at = NOW()
-                WHERE id = ?
-            ";
-            $stmtUpdateVenda = $pdo->prepare($sqlUpdateVenda);
-            $stmtUpdateVenda->execute([$novoValorPago, $novoSaldoDevedor, $novoStatus, $venda['id']]);
+            if ($origem === 'pedido') {
+                $sqlPagamento = "
+                    INSERT INTO pagamentos_pedido (
+                        pedido_id, valor_pago, forma_pagamento, data_pagamento,
+                        observacoes, tenant_id, filial_id, created_at
+                    ) VALUES (?, ?, ?, NOW(), 'Pagamento Fiado em Lote', ?, ?, NOW())
+                ";
+                $stmtPagamento = $pdo->prepare($sqlPagamento);
+                $stmtPagamento->execute([$venda['id'], $valorPagarNestaVenda, $formaPagamento, $tenantId, $filialId]);
+
+                $novoValorPago = floatval($venda['valor_pago']) + $valorPagarNestaVenda;
+                $novoSaldoDevedor = floatval($venda['saldo_devedor']) - $valorPagarNestaVenda;
+                $novoStatus = $novoSaldoDevedor <= 0.01 ? 'concluido' : 'parcial';
+
+                $sqlUpdateVenda = "
+                    UPDATE pedido 
+                    SET valor_pago = ?, saldo_devedor = ?, status_pagamento = ?, updated_at = NOW()
+                    WHERE idpedido = ?
+                ";
+                $stmtUpdateVenda = $pdo->prepare($sqlUpdateVenda);
+                $stmtUpdateVenda->execute([$novoValorPago, $novoSaldoDevedor, $novoStatus, $venda['id']]);
+            } else {
+                // Inserir pagamento fiado
+                $sqlPagamento = "
+                    INSERT INTO pagamentos_fiado (
+                        venda_fiada_id, valor_pago, forma_pagamento, data_pagamento,
+                        observacoes, tenant_id, filial_id, created_at
+                    ) VALUES (?, ?, ?, NOW(), 'Pagamento em Lote', ?, ?, NOW())
+                ";
+                $stmtPagamento = $pdo->prepare($sqlPagamento);
+                $stmtPagamento->execute([$venda['id'], $valorPagarNestaVenda, $formaPagamento, $tenantId, $filialId]);
+                
+                // Atualizar venda fiada
+                $novoValorPago = floatval($venda['valor_pago']) + $valorPagarNestaVenda;
+                $novoSaldoDevedor = floatval($venda['valor_total']) - $novoValorPago;
+                $novoStatus = $novoSaldoDevedor <= 0.01 ? 'pago' : 'pendente';
+                
+                $sqlUpdateVenda = "
+                    UPDATE vendas_fiadas 
+                    SET valor_pago = ?, status = ?, updated_at = NOW()
+                    WHERE id = ?
+                ";
+                $stmtUpdateVenda = $pdo->prepare($sqlUpdateVenda);
+                $stmtUpdateVenda->execute([$novoValorPago, $novoStatus, $venda['id']]);
+            }
             
             // Registrar movimentação financeira
             $sqlMovimentacao = "

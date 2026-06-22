@@ -15,12 +15,11 @@ if (!$tenant || !$filial) {
     exit;
 }
 
-// Get clients with fiado orders or AI settings enabled
+// Get clients with fiado balance or automatic billing enabled
 $clientes = [];
 if ($tenant && $filial) {
     // ---- SINCRONIZAÇÃO AUTOMÁTICA DE FIADOS LEGADOS ----
     try {
-        // 1. Sincroniza pagamentos com forma_pagamento = 'FIADO'
         $legacyFiados = $db->fetchAll("
             SELECT 
                 pp.id as pagamento_id, pp.pedido_id, pp.valor_pago, 
@@ -34,7 +33,6 @@ if ($tenant && $filial) {
             WHERE pp.forma_pagamento = 'FIADO' AND pp.tenant_id = ? AND vf.id IS NULL
         ", [$tenant['id']]);
 
-        // 2. Sincroniza pedidos com status = 'fiado' que não tenham pagamentos_pedido = FIADO
         $legacyPedidosFiado = $db->fetchAll("
             SELECT 
                 p.idpedido as pedido_id, p.valor_total as valor_pago, 
@@ -48,16 +46,15 @@ if ($tenant && $filial) {
             WHERE p.status = 'fiado' AND p.tenant_id = ? AND vf.id IS NULL AND pp.id IS NULL
         ", [$tenant['id']]);
 
-        $todosLegados = array_merge($legacyFiados, $legacyPedidosFiado);
-
-        foreach ($todosLegados as $lf) {
+        foreach (array_merge($legacyFiados, $legacyPedidosFiado) as $lf) {
             $telefone = preg_replace('/[^0-9]/', '', $lf['telefone_cliente'] ?? '');
-            if (empty($telefone)) continue;
-            
+            if (empty($telefone)) {
+                continue;
+            }
+
             $nome = $lf['nome_cliente'] ?: 'Cliente Não Identificado';
-            
-            // Verifica ou cria o cliente_fiado
             $cf = $db->fetch("SELECT id FROM clientes_fiado WHERE telefone = ? AND tenant_id = ?", [$telefone, $tenant['id']]);
+
             if (!$cf) {
                 $cfId = $db->insert('clientes_fiado', [
                     'nome' => $nome,
@@ -69,8 +66,7 @@ if ($tenant && $filial) {
             } else {
                 $cfId = $cf['id'];
             }
-            
-            // Insere a venda fiada pendente
+
             $db->insert('vendas_fiadas', [
                 'cliente_id' => $cfId,
                 'pedido_id' => $lf['pedido_id'],
@@ -80,35 +76,81 @@ if ($tenant && $filial) {
                 'filial_id' => $filial['id'],
                 'data_vencimento' => date('Y-m-d', strtotime(($lf['created_at'] ?? date('Y-m-d H:i:s')) . ' + 30 days'))
             ]);
-            
-            // Atualiza saldo devedor
+
             $db->query("UPDATE clientes_fiado SET saldo_devedor = saldo_devedor + ? WHERE id = ?", [$lf['valor_pago'], $cfId]);
         }
     } catch (\Exception $e) {
         error_log("Erro na sincronizacao de fiados: " . $e->getMessage());
     }
-    // ----------------------------------------------------
 
-    // Busca direto da tabela clientes_fiado onde há saldo devedor ou a cobrança automática está ativa
-    $clientesData = $db->fetchAll("
-        SELECT 
-            cf.id, cf.nome, cf.telefone as wpp, cf.cpf_cnpj as cpf,
-            cf.limite_credito, cf.status, cf.cobranca_automatica, cf.cobranca_frequencia,
+    $clientesMap = [];
+
+    $clientesFiado = $db->fetchAll("
+        SELECT
+            cf.id,
+            cf.nome,
+            cf.telefone as wpp,
+            cf.cpf_cnpj as cpf,
+            COALESCE((
+                SELECT COUNT(*)::int FROM vendas_fiadas vf
+                WHERE vf.cliente_id = cf.id AND vf.status IN ('pendente', 'vencido')
+            ), 0) as qtd_pedidos_fiado,
             cf.saldo_devedor,
-            (SELECT COUNT(*) FROM vendas_fiadas vf WHERE vf.cliente_id = cf.id AND vf.status = 'pendente') as qtd_pedidos_fiado
+            cf.limite_credito,
+            cf.status,
+            cf.cobranca_automatica,
+            cf.cobranca_frequencia,
+            'clientes_fiado' as origem
         FROM clientes_fiado cf
-        WHERE cf.tenant_id = ? AND (cf.saldo_devedor > 0 OR cf.cobranca_automatica = true)
+        WHERE cf.tenant_id = ?
+          AND (cf.filial_id = ? OR cf.filial_id IS NULL)
+          AND (cf.saldo_devedor > 0 OR cf.cobranca_automatica = true)
         ORDER BY cf.nome ASC
-    ", [$tenant['id']]);
-    
-    foreach ($clientesData as $cliente) {
+    ", [$tenant['id'], $filial['id']]);
+
+    foreach ($clientesFiado as $cliente) {
         $cliente['status'] = $cliente['status'] ?? 'ativo';
         $cliente['limite_credito'] = $cliente['limite_credito'] ?? 0;
         $cliente['cobranca_automatica'] = $cliente['cobranca_automatica'] ?? false;
         $cliente['cobranca_frequencia'] = $cliente['cobranca_frequencia'] ?? 'semanal';
-        
-        $clientes[] = $cliente;
+        $clientesMap['cf_' . $cliente['id']] = $cliente;
     }
+
+    $pedidosFiado = $db->fetchAll("
+        SELECT
+            ug.id,
+            ug.nome,
+            ug.telefone as wpp,
+            ug.cpf,
+            COUNT(DISTINCT p.idpedido) as qtd_pedidos_fiado,
+            COALESCE(SUM(p.saldo_devedor), 0) as saldo_devedor,
+            0 as limite_credito,
+            'ativo' as status,
+            false as cobranca_automatica,
+            'semanal' as cobranca_frequencia,
+            'pedido' as origem
+        FROM usuarios_globais ug
+        JOIN pedido p ON p.usuario_global_id = ug.id
+            AND p.tenant_id = ?
+            AND p.filial_id = ?
+            AND p.saldo_devedor > 0
+        GROUP BY ug.id, ug.nome, ug.telefone, ug.cpf
+        ORDER BY ug.nome ASC
+    ", [$tenant['id'], $filial['id']]);
+
+    foreach ($pedidosFiado as $cliente) {
+        $key = 'ug_' . $cliente['id'];
+        if (!isset($clientesMap[$key])) {
+            $clientesMap[$key] = $cliente;
+            continue;
+        }
+
+        $clientesMap[$key]['qtd_pedidos_fiado'] += (int) $cliente['qtd_pedidos_fiado'];
+        $clientesMap[$key]['saldo_devedor'] += (float) $cliente['saldo_devedor'];
+    }
+
+    $clientes = array_values($clientesMap);
+    usort($clientes, fn($a, $b) => strcasecmp($a['nome'], $b['nome']));
 }
 ?>
 <!DOCTYPE html>
@@ -133,9 +175,27 @@ if ($tenant && $filial) {
             background-color: #f8f9fa;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
-        
-        .main-content {
-            padding: 2rem;
+        /* DataTables bootstrap5: evitar corte de texto nos controles e na 1ª coluna */
+        #clientesTabela_wrapper {
+            padding: 0 1rem 0.5rem;
+            overflow: visible;
+        }
+        #clientesTabela_wrapper > .row {
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+        }
+        #clientesTabela_wrapper .dataTables_length label,
+        #clientesTabela_wrapper .dataTables_filter label {
+            margin-bottom: 0;
+        }
+        #clientesTabela td:first-child,
+        #clientesTabela th:first-child {
+            min-width: 220px;
+            padding-left: 0.75rem !important;
+            white-space: normal;
+        }
+        .card-fiados-tabela .card-body {
+            overflow: visible;
         }
         
         .header {
@@ -263,7 +323,7 @@ if ($tenant && $filial) {
                     </div>
 
                     <!-- Clients Table -->
-                    <div class="card shadow-sm border-0">
+                    <div class="card shadow-sm border-0 card-fiados-tabela">
                         <div class="card-body p-3">
                             <div class="table-responsive">
                                 <table id="clientesTabela" class="table table-hover table-striped align-middle mb-0">
@@ -313,7 +373,7 @@ if ($tenant && $filial) {
                                                 </td>
                                                 <td class="text-end">
                                                     <div class="btn-group">
-                                                        <button type="button" class="btn btn-sm btn-primary" onclick="abrirModalPedidosPagamento(<?= $cliente['id'] ?>, '<?= htmlspecialchars(addslashes($cliente['nome'])) ?>', <?= $cliente['saldo_devedor'] ?>)" title="Ver Pedidos e Receber">
+                                                        <button type="button" class="btn btn-sm btn-primary" onclick="abrirModalPedidosPagamento(<?= $cliente['id'] ?>, '<?= htmlspecialchars(addslashes($cliente['nome'])) ?>', <?= $cliente['saldo_devedor'] ?>, '<?= $cliente['origem'] ?? 'clientes_fiado' ?>')" title="Ver Pedidos e Receber">
                                                             <i class="fas fa-list"></i> Receber
                                                         </button>
                                                     </div>
@@ -351,6 +411,7 @@ if ($tenant && $filial) {
                 </div>
                 <div class="modal-body">
                     <input type="hidden" id="pagamentoClienteId">
+                    <input type="hidden" id="pagamentoClienteOrigem" value="clientes_fiado">
                     
                     <div class="table-responsive mb-4" style="max-height: 250px; overflow-y: auto;">
                         <table class="table table-sm table-striped">
@@ -428,8 +489,9 @@ if ($tenant && $filial) {
 
         let modalPagamentoLote = null;
 
-        function abrirModalPedidosPagamento(clienteId, clienteNome, saldoDevedor) {
+        function abrirModalPedidosPagamento(clienteId, clienteNome, saldoDevedor, origem = 'clientes_fiado') {
             document.getElementById('pagamentoClienteId').value = clienteId;
+            document.getElementById('pagamentoClienteOrigem').value = origem;
             document.getElementById('pagamentoClienteNome').innerText = clienteNome;
             document.getElementById('pagamentoSaldoDevedor').innerText = saldoDevedor.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
             document.getElementById('valor_pagamento_lote').value = '';
@@ -446,6 +508,7 @@ if ($tenant && $filial) {
             const formData = new FormData();
             formData.append('acao', 'listar_vendas_pendentes_cliente');
             formData.append('cliente_id', clienteId);
+            formData.append('origem', origem);
 
             fetch('mvc/ajax/vendas_fiadas.php', {
                 method: 'POST',
@@ -454,7 +517,11 @@ if ($tenant && $filial) {
             .then(res => res.json())
             .then(data => {
                 tbody.innerHTML = '';
-                if (data.success && data.vendas && data.vendas.length > 0) {
+                if (!data.success) {
+                    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">${data.message || 'Erro ao carregar pedidos.'}</td></tr>`;
+                    return;
+                }
+                if (data.vendas && data.vendas.length > 0) {
                     data.vendas.forEach(v => {
                         let statusBadge = v.status === 'pendente' ? '<span class="badge bg-warning">Pendente</span>' : '<span class="badge bg-info">Parcial</span>';
                         tbody.innerHTML += `
@@ -494,9 +561,12 @@ if ($tenant && $filial) {
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
             btn.disabled = true;
 
+            const origem = document.getElementById('pagamentoClienteOrigem').value;
+
             const formData = new FormData();
             formData.append('acao', 'pagamento_lote_cliente');
             formData.append('cliente_id', clienteId);
+            formData.append('origem', origem);
             formData.append('valor_pagamento', valor);
             formData.append('forma_pagamento', forma);
 
@@ -533,32 +603,24 @@ if ($tenant && $filial) {
         }
 
         function updateCobranca(clienteId, cobrancaAtiva, frequencia) {
-            fetch('api/update_fiado_config.php', {
+            const formData = new FormData();
+            formData.append('cliente_id', clienteId);
+            formData.append('cobranca_automatica', cobrancaAtiva ? '1' : '0');
+            formData.append('cobranca_frequencia', frequencia);
+
+            fetch('mvc/ajax/configurar_cobranca_ia.php', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    usuario_global_id: clienteId,
-                    cobranca_automatica: cobrancaAtiva,
-                    cobranca_frequencia: frequencia
-                })
+                body: formData
             })
             .then(res => res.json())
             .then(data => {
-                if(data.success) {
-                    const Toast = Swal.mixin({
-                        toast: true,
-                        position: 'top-end',
-                        showConfirmButton: false,
-                        timer: 3000
-                    });
-                    Toast.fire({
+                if (data.success) {
+                    Swal.fire({
                         icon: 'success',
                         title: 'Configurações de cobrança atualizadas!'
                     });
                 } else {
-                    Swal.fire('Erro', 'Não foi possível atualizar: ' + data.error, 'error');
+                    Swal.fire('Erro', 'Não foi possível atualizar: ' + (data.message || data.error || 'Erro desconhecido'), 'error');
                 }
             })
             .catch(err => console.error(err));

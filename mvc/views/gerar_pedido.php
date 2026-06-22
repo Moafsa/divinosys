@@ -180,9 +180,9 @@ if ($tenant && $filial) {
     try {
         $todosIngredientes = $db->fetchAll(
             "SELECT * FROM ingredientes 
-             WHERE tenant_id = ? AND (filial_id = ? OR (? IS NULL AND filial_id IS NULL)) AND COALESCE(disponivel, true) = true
+             WHERE tenant_id = ? AND filial_id = ? AND COALESCE(disponivel, true) = true
              ORDER BY nome",
-            [$tenant['id'], $filial['id'], $filial['id']]
+            [$tenant['id'], $filial['id']]
         );
     } catch (Exception $e) {
         $todosIngredientes = [];
@@ -1810,7 +1810,7 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
             
             // Carregar observação do pedido
             if (document.getElementById('observacaoPedido')) {
-                document.getElementById('observacaoPedido').value = '<?php echo addslashes($editarPedido['observacao'] ?? ''); ?>';
+                document.getElementById('observacaoPedido').value = <?php echo json_encode($editarPedido['observacao'] ?? ''); ?>;
             }
             
             // Carregar dados do cliente do pedido
@@ -1821,13 +1821,13 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
             
             <?php if (!empty($nomeCliente)): ?>
             if (document.getElementById('clienteNome')) {
-                document.getElementById('clienteNome').value = '<?php echo addslashes($nomeCliente); ?>';
+                document.getElementById('clienteNome').value = <?php echo json_encode($nomeCliente); ?>;
             }
             <?php endif; ?>
             
             <?php if (!empty($telefoneCliente)): ?>
             if (document.getElementById('clienteTelefone')) {
-                document.getElementById('clienteTelefone').value = '<?php echo addslashes($telefoneCliente); ?>';
+                document.getElementById('clienteTelefone').value = <?php echo json_encode($telefoneCliente); ?>;
             }
             <?php endif; ?>
 

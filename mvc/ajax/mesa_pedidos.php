@@ -27,6 +27,19 @@ require_once __DIR__ . '/../../system/Config.php';
 require_once __DIR__ . '/../../system/Database.php';
 require_once __DIR__ . '/../../system/Session.php';
 
+function resolverTipoDescontoManual($db, $tenantId, $filialId)
+{
+    $row = $db->fetch(
+        "SELECT id FROM tipos_desconto
+         WHERE tenant_id = ? AND (filial_id = ? OR filial_id IS NULL) AND ativo = true
+         ORDER BY CASE WHEN nome ILIKE '%especial%' THEN 0 ELSE 1 END, id
+         LIMIT 1",
+        [$tenantId, $filialId]
+    );
+
+    return $row['id'] ?? null;
+}
+
 try {
     $action = $_POST['action'] ?? $_GET['action'] ?? '';
     $buscarMesa = $_GET['buscar_mesa'] ?? $_POST['buscar_mesa'] ?? '';
@@ -191,7 +204,7 @@ try {
                     // Registrar desconto aplicado
                     $descontoId = $db->insert('descontos_aplicados', [
                         'pedido_id' => $pedidoId,
-                        'tipo_desconto_id' => 1, // Tipo genérico para desconto manual (assumindo que existe)
+                        'tipo_desconto_id' => resolverTipoDescontoManual($db, $tenant['id'], $filial['id']),
                         'valor_desconto' => $valorDescontoAplicado,
                         'motivo' => 'Desconto aplicado no fechamento',
                         'autorizado_por' => $user['id'],
@@ -338,7 +351,7 @@ try {
                     if ($descontoPedido > 0) {
                         $db->insert('descontos_aplicados', [
                             'pedido_id' => $pedido['idpedido'],
-                            'tipo_desconto_id' => 1, // Tipo genérico para desconto manual
+                            'tipo_desconto_id' => resolverTipoDescontoManual($db, $tenant['id'], $filial['id']),
                             'valor_desconto' => $descontoPedido,
                             'motivo' => 'Desconto aplicado no fechamento da mesa',
                             'autorizado_por' => $user['id'],
@@ -528,7 +541,7 @@ try {
                     // Registrar desconto aplicado
                     $db->insert('descontos_aplicados', [
                         'pedido_id' => $pedido['idpedido'],
-                        'tipo_desconto_id' => 1,
+                        'tipo_desconto_id' => resolverTipoDescontoManual($db, $tenant['id'], $filial['id']),
                         'valor_desconto' => $descontoPedido,
                         'motivo' => $descricao,
                         'autorizado_por' => $user['id'],
@@ -672,7 +685,7 @@ try {
                 // Registrar desconto aplicado
                 $db->insert('descontos_aplicados', [
                     'pedido_id' => $pedidoId,
-                    'tipo_desconto_id' => 1,
+                    'tipo_desconto_id' => resolverTipoDescontoManual($db, $tenant['id'], $filial['id']),
                     'valor_desconto' => $valorDesconto,
                     'motivo' => $descricao,
                     'autorizado_por' => $user['id'],

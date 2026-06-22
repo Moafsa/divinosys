@@ -13,7 +13,22 @@ try {
     $tenantId = $session->getTenantId() ?? 1;
     $filialId = $session->getFilialId() ?? 1;
     
-    $action = $_POST['action'] ?? '';
+    $action = $_POST['action'] ?? ($_GET['action'] ?? '');
+    
+    if ($action === 'get_next_comanda') {
+        // Encontrar o maior número de comanda (usado nas mesas tipo comanda)
+        $result = $db->fetch(
+            "SELECT MAX(NULLIF(regexp_replace(id_mesa, '\D', '', 'g'), '')::integer) as max_num 
+             FROM mesas 
+             WHERE tenant_id = ? AND filial_id = ? AND (tipo_atendimento = 'comanda' OR id_mesa LIKE 'comanda_%' OR id_mesa ~ '^\d+$')",
+            [$tenantId, $filialId]
+        );
+        
+        $nextNum = ($result && $result['max_num']) ? intval($result['max_num']) + 1 : 1;
+        
+        echo json_encode(['success' => true, 'next_comanda' => $nextNum]);
+        exit;
+    }
     
     if ($action === 'vincular') {
         $comandaId = trim($_POST['comanda_id'] ?? '');

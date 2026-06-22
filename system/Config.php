@@ -35,7 +35,15 @@ class Config
             }
         }
         
-        // Then load from system environment variables (for production/Coolify)
+        // Docker/production env vars override .env (image ships env.example as .env)
+        foreach (array_keys($this->env) as $key) {
+            $value = getenv($key);
+            if ($value !== false) {
+                $this->env[$key] = $value;
+            }
+        }
+
+        // Also load vars that may exist only in the container environment
         $envVars = [
             'DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD',
             'APP_NAME', 'APP_VERSION', 'APP_ENV', 'APP_DEBUG', 'APP_URL', 'APP_KEY',
@@ -47,10 +55,15 @@ class Config
             'ENABLE_MULTI_TENANT', 'DEFAULT_TENANT_ID',
             'DELIVERY_MAPS_WEBHOOK_URL',
             'MINIO_ENDPOINT', 'MINIO_ACCESS_KEY', 'MINIO_SECRET_KEY', 'MINIO_BUCKET', 'MINIO_PUBLIC_URL',
+            'MINIO_ROOT_USER', 'MINIO_ROOT_PASSWORD', 'MINIO_DATA_DIR',
             'OPENAI_API_KEY',
-            'WUZAPI_URL', 'WUZAPI_TOKEN', 'WUZAPI_INSTANCE_ID'
+            'USE_N8N_AI', 'AI_N8N_WEBHOOK_URL', 'AI_N8N_TIMEOUT',
+            'MCP_API_KEY', 'MCP_SERVER_URL',
+            'WUZAPI_URL', 'WUZAPI_API_KEY', 'WUZAPI_TOKEN', 'WUZAPI_INSTANCE_ID', 'WUZAPI_TIMEOUT',
+            'ASAAS_API_KEY', 'ASAAS_API_URL',
+            'WHATSAPP_ENABLED', 'CHATWOOT_URL', 'CHATWOOT_API_KEY', 'CHATWOOT_ACCOUNT_ID',
         ];
-        
+
         foreach ($envVars as $var) {
             $value = getenv($var);
             if ($value !== false) {

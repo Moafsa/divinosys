@@ -5,11 +5,11 @@ ini_set('log_errors', 1);
 
 ob_start();
 
-require_once '../../system/Config.php';
-require_once '../../system/Database.php';
-require_once '../../system/Session.php';
-require_once '../../mvc/model/Cliente.php';
-require_once '../../mvc/controller/ClienteController.php';
+require_once __DIR__ . '/../../system/Config.php';
+require_once __DIR__ . '/../../system/Database.php';
+require_once __DIR__ . '/../../system/Session.php';
+require_once __DIR__ . '/../model/Cliente.php';
+require_once __DIR__ . '/../controller/ClienteController.php';
 
 ob_clean();
 
