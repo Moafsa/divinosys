@@ -98,7 +98,7 @@ try {
             }
             
             // Unlink comanda
-            $db->execute(
+            $db->query(
                 "UPDATE mesas SET status = 'livre', cliente_nome = NULL, cliente_telefone = NULL WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?",
                 [$mesaId, $tenantId, $filialId]
             );
@@ -532,7 +532,7 @@ try {
             }
             
             // Atualizar status do pedido para 'Finalizado'
-            $db->execute(
+            $db->query(
                 'UPDATE pedido SET status = ?, forma_pagamento = ?, valor_pago = ?, nome_cliente = ?, telefone_cliente = ?, observacoes = ?, usuario_global_id = ? WHERE idpedido = ? AND tenant_id = ? AND filial_id = ?',
                 ['Finalizado', $formaPagamento, $valorPago, $nomeCliente, $telefoneCliente, $observacoes, $usuarioGlobalId, $pedidoId, $tenantId, $filialId]
             );
@@ -545,7 +545,7 @@ try {
             
             if ($pedidosAtivosNaMesa['total'] == 0) {
                 // Liberar a mesa se não houver mais pedidos ativos
-                $db->execute(
+                $db->query(
                     'UPDATE mesas SET status = ?, cliente_nome = NULL, cliente_telefone = NULL WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?',
                     ['livre', $pedido['idmesa'], $tenantId, $filialId]
                 );
@@ -591,14 +591,14 @@ try {
                 $valorPago = $dadosFechamento['valorPago'] ?? $valorTotal;
                 
                 foreach ($pedidos as $pedido) {
-                    $db->execute(
+                    $db->query(
                         'UPDATE pedido SET status = ?, forma_pagamento = ?, valor_pago = ?, observacoes = ? WHERE idpedido = ? AND tenant_id = ? AND filial_id = ?',
                         ['Finalizado', $formaPagamento, $pedido['valor_total'], $observacao, $pedido['idpedido'], $tenantId, $filialId]
                     );
                 }
                 
                 // Liberar a mesa
-                $db->execute(
+                $db->query(
                     'UPDATE mesas SET status = ?, cliente_nome = NULL, cliente_telefone = NULL WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?',
                     ['livre', $mesaId, $tenantId, $filialId]
                 );
@@ -623,14 +623,14 @@ try {
                 $valorPorPessoa = $valorTotalComDesconto / $numeroPessoas;
                 
                 foreach ($pedidos as $pedido) {
-                    $db->execute(
+                    $db->query(
                         'UPDATE pedido SET status = ?, forma_pagamento = ?, valor_pago = ?, observacoes = ? WHERE idpedido = ? AND tenant_id = ? AND filial_id = ?',
                         ['Finalizado', $formaPagamento, $pedido['valor_total'], $observacao, $pedido['idpedido'], $tenantId, $filialId]
                     );
                 }
                 
                 // Liberar a mesa
-                $db->execute(
+                $db->query(
                     'UPDATE mesas SET status = ?, cliente_nome = NULL, cliente_telefone = NULL WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?',
                     ['Livre', $mesaId, $tenantId, $filialId]
                 );
@@ -664,14 +664,14 @@ try {
                 $formaPagamentoCompleta = implode(' + ', $formasPagamento);
                 
                 foreach ($pedidos as $pedido) {
-                    $db->execute(
+                    $db->query(
                         'UPDATE pedido SET status = ?, forma_pagamento = ?, valor_pago = ?, observacoes = ? WHERE idpedido = ? AND tenant_id = ? AND filial_id = ?',
                         ['Finalizado', $formaPagamentoCompleta, $pedido['valor_total'], $observacao, $pedido['idpedido'], $tenantId, $filialId]
                     );
                 }
                 
                 // Liberar a mesa
-                $db->execute(
+                $db->query(
                     'UPDATE mesas SET status = ?, cliente_nome = NULL, cliente_telefone = NULL WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?',
                     ['livre', $mesaId, $tenantId, $filialId]
                 );
