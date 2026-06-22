@@ -30,7 +30,7 @@ $editarPedido = null;
 $pedidoId = $_GET['editar'] ?? '';
 if ($pedidoId) {
     $editarPedido = $db->fetch(
-        "SELECT p.*, c.nome as cliente_nome, c.telefone as cliente_telefone, c.id as cliente_id,
+        "SELECT p.*, c.nome as cliente_nome, c.telefone as cliente_telefone, c.id as cliente_id, c.email as cliente_email, c.cpf as cliente_cpf,
                 CASE 
                     WHEN p.delivery = true OR p.tipo_entrega = 'delivery' OR p.idmesa = '999' THEN '999'
                     ELSE p.idmesa
@@ -1817,6 +1817,8 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
             <?php 
             $nomeCliente = !empty($editarPedido['cliente_nome']) ? $editarPedido['cliente_nome'] : (!empty($editarPedido['cliente']) ? $editarPedido['cliente'] : '');
             $telefoneCliente = !empty($editarPedido['cliente_telefone']) ? $editarPedido['cliente_telefone'] : (!empty($editarPedido['telefone_cliente']) ? $editarPedido['telefone_cliente'] : '');
+            $emailCliente = !empty($editarPedido['cliente_email']) ? $editarPedido['cliente_email'] : '';
+            $cpfCliente = !empty($editarPedido['cliente_cpf']) ? $editarPedido['cliente_cpf'] : '';
             ?>
             
             <?php if (!empty($nomeCliente)): ?>
@@ -1828,6 +1830,18 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
             <?php if (!empty($telefoneCliente)): ?>
             if (document.getElementById('clienteTelefone')) {
                 document.getElementById('clienteTelefone').value = <?php echo json_encode($telefoneCliente); ?>;
+            }
+            <?php endif; ?>
+            
+            <?php if (!empty($emailCliente)): ?>
+            if (document.getElementById('clienteEmail')) {
+                document.getElementById('clienteEmail').value = <?php echo json_encode($emailCliente); ?>;
+            }
+            <?php endif; ?>
+            
+            <?php if (!empty($cpfCliente)): ?>
+            if (document.getElementById('clienteCpf')) {
+                document.getElementById('clienteCpf').value = <?php echo json_encode($cpfCliente); ?>;
             }
             <?php endif; ?>
 
