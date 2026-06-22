@@ -20,13 +20,14 @@ try {
         $result = $db->fetch(
             "SELECT MAX(NULLIF(regexp_replace(id_mesa, '\D', '', 'g'), '')::integer) as max_num 
              FROM mesas 
-             WHERE tenant_id = ? AND filial_id = ? AND (tipo_atendimento = 'comanda' OR id_mesa LIKE 'comanda_%' OR id_mesa ~ '^\d+$')",
+             WHERE tenant_id = ? AND filial_id = ? AND (tipo_atendimento = 'comanda' OR id_mesa LIKE 'comanda_%' OR id_mesa ~ '^\d+$' OR id_mesa LIKE 'C-%' OR id_mesa LIKE 'c-%')",
             [$tenantId, $filialId]
         );
         
         $nextNum = ($result && $result['max_num']) ? intval($result['max_num']) + 1 : 1;
+        $nextComanda = 'C-' . str_pad($nextNum, 3, '0', STR_PAD_LEFT);
         
-        echo json_encode(['success' => true, 'next_comanda' => $nextNum]);
+        echo json_encode(['success' => true, 'next_comanda' => $nextComanda]);
         exit;
     }
     

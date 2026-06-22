@@ -1958,12 +1958,25 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
     </div>
     <script>
         function abrirModalVincular() {
+            document.getElementById('formVincularComanda').reset();
+            
+            // Buscar o próximo número de comanda disponível
+            fetch('mvc/ajax/vincular_comanda.php?action=get_next_comanda')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.next_comanda) {
+                        document.getElementById('vincular_comanda_id').value = data.next_comanda;
+                    }
+                })
+                .catch(error => console.error('Erro ao buscar próximo número:', error));
+
             var myModal = new bootstrap.Modal(document.getElementById('modalVincularComanda'));
             myModal.show();
             setTimeout(() => {
                 const comandaInput = document.getElementById('vincular_comanda_id');
                 if (comandaInput) {
                     comandaInput.focus();
+                    comandaInput.select();
                 }
             }, 500);
         }
