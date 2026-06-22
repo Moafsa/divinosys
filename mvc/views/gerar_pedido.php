@@ -520,6 +520,7 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                                                  data-mesa-numero="<?php echo $mesa['id_mesa']; ?>" 
                                                  data-cliente-nome="<?php echo htmlspecialchars($mesa['cliente_nome'] ?? ''); ?>"
                                                  data-cliente-telefone="<?php echo htmlspecialchars($mesa['cliente_telefone'] ?? ''); ?>"
+                                                 data-cliente-cpf="<?php echo htmlspecialchars($mesa['cliente_cpf'] ?? ''); ?>"
                                                  onclick="selecionarMesa(this)">
                                                 <div class="mesa-numero">
                                                     <i class="fas fa-table me-2"></i>
@@ -888,6 +889,12 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                 document.getElementById('clienteTelefone').value = element.dataset.clienteTelefone;
             } else {
                 document.getElementById('clienteTelefone').value = '';
+            }
+            
+            if (element.dataset.clienteCpf && document.getElementById('clienteCpf')) {
+                document.getElementById('clienteCpf').value = element.dataset.clienteCpf;
+            } else if (document.getElementById('clienteCpf')) {
+                document.getElementById('clienteCpf').value = '';
             }
             
             console.log('Mesa selecionada:', mesaSelecionada);
@@ -1936,6 +1943,10 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                             <label class="form-label">Telefone (Opcional)</label>
                             <input type="tel" class="form-control" id="vincular_cliente_telefone" placeholder="(11) 99999-9999">
                         </div>
+                        <div class="mb-3">
+                            <label class="form-label">CPF (Opcional)</label>
+                            <input type="text" class="form-control" id="vincular_cliente_cpf" placeholder="000.000.000-00">
+                        </div>
                     </form>
                 </div>
                 <div class="modal-footer">
@@ -1961,6 +1972,7 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
             const comandaId = document.getElementById('vincular_comanda_id').value;
             const clienteNome = document.getElementById('vincular_cliente_nome').value;
             const clienteTelefone = document.getElementById('vincular_cliente_telefone').value;
+            const clienteCpf = document.getElementById('vincular_cliente_cpf').value;
 
             if (!comandaId) {
                 Swal.fire('Atenção', 'O número da comanda é obrigatório', 'warning');
@@ -1972,6 +1984,7 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
             formData.append('comanda_id', comandaId);
             formData.append('cliente_nome', clienteNome);
             formData.append('cliente_telefone', clienteTelefone);
+            formData.append('cliente_cpf', clienteCpf);
 
             fetch('mvc/ajax/vincular_comanda.php', {
                 method: 'POST',

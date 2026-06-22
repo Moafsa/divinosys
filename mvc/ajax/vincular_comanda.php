@@ -34,15 +34,17 @@ try {
         $comandaId = trim($_POST['comanda_id'] ?? '');
         $clienteNome = trim($_POST['cliente_nome'] ?? '');
         $clienteTelefone = trim($_POST['cliente_telefone'] ?? '');
+        $clienteCpf = trim($_POST['cliente_cpf'] ?? '');
         
         if (empty($comandaId)) {
             throw new \Exception('Número da comanda é obrigatório');
         }
         
-        // Garante que as colunas cliente_nome e cliente_telefone existem na tabela mesas
+        // Garante que as colunas cliente_nome, cliente_telefone e cliente_cpf existem na tabela mesas
         try {
             $db->query("ALTER TABLE mesas ADD COLUMN IF NOT EXISTS cliente_nome VARCHAR(255)");
             $db->query("ALTER TABLE mesas ADD COLUMN IF NOT EXISTS cliente_telefone VARCHAR(20)");
+            $db->query("ALTER TABLE mesas ADD COLUMN IF NOT EXISTS cliente_cpf VARCHAR(20)");
             $db->query("ALTER TABLE mesas ADD COLUMN IF NOT EXISTS tipo_atendimento VARCHAR(20) DEFAULT 'ambos'");
         } catch (\Exception $e) {
             // Ignora se não puder alterar
@@ -67,7 +69,8 @@ try {
                 'filial_id' => $filialId,
                 'tipo_atendimento' => 'comanda',
                 'cliente_nome' => $clienteNome,
-                'cliente_telefone' => $clienteTelefone
+                'cliente_telefone' => $clienteTelefone,
+                'cliente_cpf' => $clienteCpf
             ]);
             
             echo json_encode(['success' => true, 'message' => 'Comanda criada e vinculada com sucesso!']);
@@ -87,6 +90,7 @@ try {
         $db->update('mesas', [
             'cliente_nome' => $clienteNome,
             'cliente_telefone' => $clienteTelefone,
+            'cliente_cpf' => $clienteCpf,
             'status' => 'ocupada'
         ], 'id_mesa = ? AND tenant_id = ? AND filial_id = ?', [$comandaId, $tenantId, $filialId]);
         

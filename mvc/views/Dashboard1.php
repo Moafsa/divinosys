@@ -1270,6 +1270,10 @@ if ($tenant && $filial) {
                             <label class="form-label">Telefone (Opcional)</label>
                             <input type="tel" class="form-control" id="vincular_cliente_telefone" placeholder="(11) 99999-9999">
                         </div>
+                        <div class="mb-3">
+                            <label class="form-label">CPF (Opcional)</label>
+                            <input type="text" class="form-control" id="vincular_cliente_cpf" placeholder="000.000.000-00">
+                        </div>
                     </form>
                 </div>
                 <div class="modal-footer">
@@ -1394,6 +1398,7 @@ if ($tenant && $filial) {
             const comandaId = document.getElementById('vincular_comanda_id').value;
             const clienteNome = document.getElementById('vincular_cliente_nome').value;
             const clienteTelefone = document.getElementById('vincular_cliente_telefone').value;
+            const clienteCpf = document.getElementById('vincular_cliente_cpf').value;
 
             if (!comandaId) {
                 Swal.fire('Atenção', 'O número da comanda é obrigatório', 'warning');
@@ -1405,6 +1410,7 @@ if ($tenant && $filial) {
             formData.append('comanda_id', comandaId);
             formData.append('cliente_nome', clienteNome);
             formData.append('cliente_telefone', clienteTelefone);
+            formData.append('cliente_cpf', clienteCpf);
 
             fetch('mvc/ajax/vincular_comanda.php', {
                 method: 'POST',
