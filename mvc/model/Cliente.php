@@ -295,23 +295,22 @@ class Cliente
             $whereClause = implode(' AND ', $where);
             
             $pedidoJoin = $tenantJoin
-                ? "LEFT JOIN pedido p ON ug.id = p.usuario_global_id AND p.tenant_id = $tenantJoin"
-                : "LEFT JOIN pedido p ON ug.id = p.usuario_global_id";
+                ? "LEFT JOIN (SELECT usuario_global_id, COUNT(idpedido) as total_pedidos, SUM(valor_total) as total_gasto, MAX(created_at) as ultimo_pedido FROM pedido WHERE tenant_id = $tenantJoin GROUP BY usuario_global_id) p ON ug.id = p.usuario_global_id"
+                : "LEFT JOIN (SELECT usuario_global_id, COUNT(idpedido) as total_pedidos, SUM(valor_total) as total_gasto, MAX(created_at) as ultimo_pedido FROM pedido GROUP BY usuario_global_id) p ON ug.id = p.usuario_global_id";
             $pagamentoJoin = $tenantJoin
-                ? "LEFT JOIN pagamentos_pedido pag ON ug.id = pag.usuario_global_id AND pag.tenant_id = $tenantJoin"
-                : "LEFT JOIN pagamentos_pedido pag ON ug.id = pag.usuario_global_id";
+                ? "LEFT JOIN (SELECT usuario_global_id, COUNT(DISTINCT pedido_id) as pedidos_pagos, SUM(valor_pago) as total_pago FROM pagamentos_pedido WHERE tenant_id = $tenantJoin GROUP BY usuario_global_id) pag ON ug.id = pag.usuario_global_id"
+                : "LEFT JOIN (SELECT usuario_global_id, COUNT(DISTINCT pedido_id) as pedidos_pagos, SUM(valor_pago) as total_pago FROM pagamentos_pedido GROUP BY usuario_global_id) pag ON ug.id = pag.usuario_global_id";
 
             $sql = "SELECT ug.*, 
-                        COUNT(DISTINCT p.idpedido) as total_pedidos,
-                        COALESCE(SUM(p.valor_total), 0) as total_gasto,
-                        MAX(p.created_at) as ultimo_pedido,
-                        COUNT(DISTINCT pag.pedido_id) as pedidos_pagos,
-                        COALESCE(SUM(pag.valor_pago), 0) as total_pago
+                        COALESCE(p.total_pedidos, 0) as total_pedidos,
+                        COALESCE(p.total_gasto, 0) as total_gasto,
+                        p.ultimo_pedido,
+                        COALESCE(pag.pedidos_pagos, 0) as pedidos_pagos,
+                        COALESCE(pag.total_pago, 0) as total_pago
                  FROM usuarios_globais ug
                  $pedidoJoin
                  $pagamentoJoin
                  WHERE $whereClause
-                 GROUP BY ug.id
                  ORDER BY ug.nome";
             
             error_log("Cliente::getAll - SQL: $sql");
