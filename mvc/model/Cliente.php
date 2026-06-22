@@ -47,6 +47,7 @@ class Cliente
 
     /**
      * Find client by phone number
+     */
     private function getVariacoesTelefone($telefone)
     {
         $telNormalizado = preg_replace('/[^0-9]/', '', (string)$telefone);
