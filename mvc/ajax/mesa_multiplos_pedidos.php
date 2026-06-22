@@ -91,6 +91,21 @@ try {
             ]);
             break;
             
+        case 'desvincular_comanda':
+            $mesaId = $_POST['mesa_id'] ?? '';
+            if (empty($mesaId)) {
+                throw new \Exception('ID da comanda é obrigatório');
+            }
+            
+            // Unlink comanda
+            $db->execute(
+                "UPDATE mesas SET status = 'livre', cliente_nome = NULL, cliente_telefone = NULL WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?",
+                [$mesaId, $tenantId, $filialId]
+            );
+            
+            echo json_encode(['success' => true, 'message' => 'Comanda desvinculada com sucesso!']);
+            break;
+            
         case 'ver_mesa_multiplos_pedidos':
             $mesaId = $_GET['mesa_id'] ?? '';
             
@@ -158,6 +173,17 @@ try {
                         <a href="index.php?view=gerar_pedido&mesa=' . $mesa['id_mesa'] . '" class="btn btn-success">
                             <i class="fas fa-plus"></i> Criar Pedido
                         </a>
+                ';
+                
+                if (($mesa['tipo_atendimento'] ?? '') === 'comanda' && !empty($mesa['cliente_nome'])) {
+                    $html .= '
+                        <button onclick="desvincularComanda(\'' . $mesa['id_mesa'] . '\')" class="btn btn-outline-danger mt-2 ms-2">
+                            <i class="fas fa-unlink"></i> Desvincular Comanda
+                        </button>
+                    ';
+                }
+                
+                $html .= '
                     </div>
                 ';
             } else {

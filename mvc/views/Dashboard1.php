@@ -80,13 +80,13 @@ if ($tenant) {
     if ($filial) {
         // Matriz user - get mesas for specific filial
         $mesas = $db->fetchAll(
-            "SELECT * FROM mesas WHERE tenant_id = ? AND filial_id = ? {$statusCondition} ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE NULLIF(regexp_replace(id_mesa, '\D', '', 'g'), '')::integer END",
+            "SELECT * FROM mesas WHERE tenant_id = ? AND filial_id = ? {$statusCondition} AND (tipo_atendimento != 'comanda' OR tipo_atendimento IS NULL OR (tipo_atendimento = 'comanda' AND cliente_nome IS NOT NULL)) ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE NULLIF(regexp_replace(id_mesa, '\D', '', 'g'), '')::integer END",
             [$tenant['id'], $filial['id']]
         );
     } else {
         // Fallback se não tiver filial especificada (admin geral)
         $mesas = $db->fetchAll(
-            "SELECT * FROM mesas WHERE tenant_id = ? AND (filial_id = ? OR filial_id IS NULL) {$statusCondition} ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE NULLIF(regexp_replace(id_mesa, '\D', '', 'g'), '')::integer END",
+            "SELECT * FROM mesas WHERE tenant_id = ? AND (filial_id = ? OR filial_id IS NULL) {$statusCondition} AND (tipo_atendimento != 'comanda' OR tipo_atendimento IS NULL OR (tipo_atendimento = 'comanda' AND cliente_nome IS NOT NULL)) ORDER BY CASE WHEN numero IS NOT NULL THEN numero ELSE NULLIF(regexp_replace(id_mesa, '\D', '', 'g'), '')::integer END",
             [$tenant['id'], null]
         );
     }
@@ -3076,6 +3076,44 @@ if ($tenant && $filial) {
                     title: 'Erro',
                     text: 'Erro ao atribuir mesa'
                 });
+            });
+        }
+        function desvincularComanda(mesaId) {
+            Swal.fire({
+                title: 'Desvincular Comanda?',
+                text: "Deseja realmente liberar e desvincular esta comanda?",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Sim, desvincular!',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const formData = new FormData();
+                    formData.append('action', 'desvincular_comanda');
+                    formData.append('mesa_id', mesaId);
+
+                    fetch('index.php?action=mesa_multiplos_pedidos', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Sucesso!', data.message, 'success').then(() => {
+                                bootstrap.Modal.getInstance(document.getElementById('modalMesa')).hide();
+                                setTimeout(() => location.reload(), 500);
+                            });
+                        } else {
+                            Swal.fire('Erro!', data.message || 'Falha ao desvincular comanda', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        Swal.fire('Erro!', 'Erro ao desvincular comanda', 'error');
+                    });
+                }
             });
         }
     </script>
