@@ -631,7 +631,7 @@ try {
                 
                 // Liberar a mesa
                 $db->execute(
-                    'UPDATE mesas SET status = ? WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?',
+                    'UPDATE mesas SET status = ?, cliente_nome = NULL, cliente_telefone = NULL WHERE id_mesa = ? AND tenant_id = ? AND filial_id = ?',
                     ['Livre', $mesaId, $tenantId, $filialId]
                 );
                 

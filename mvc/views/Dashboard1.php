@@ -1415,7 +1415,7 @@ if ($tenant && $filial) {
                 if (data.success) {
                     Swal.fire('Sucesso!', data.message, 'success').then(() => {
                         bootstrap.Modal.getInstance(document.getElementById('modalVincularComanda')).hide();
-                        location.reload();
+                        window.location.href = '?view=gerar_pedido&mesa=' + comandaId;
                     });
                 } else {
                     Swal.fire('Erro!', data.message, 'error');

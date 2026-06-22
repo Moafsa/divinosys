@@ -494,10 +494,17 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                     <!-- Mesa Selector -->
                     <div class="col-12">
                         <div class="mesa-selector">
-                            <h5 class="mb-3">
-                                <i class="fas fa-table me-2"></i>
-                                Selecionar <?php echo ($modoOperacao === 'comandas') ? 'Comanda' : (($modoOperacao === 'ambos') ? 'Mesa / Comanda' : 'Mesa'); ?>
-                            </h5>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-table me-2"></i>
+                                    Selecionar <?php echo ($modoOperacao === 'comandas') ? 'Comanda' : (($modoOperacao === 'ambos') ? 'Mesa / Comanda' : 'Mesa'); ?>
+                                </h5>
+                                <?php if ($modoOperacao === 'comandas' || $modoOperacao === 'ambos'): ?>
+                                    <button class="btn btn-sm btn-primary" type="button" onclick="abrirModalVincular()">
+                                        <i class="fas fa-plus-circle me-1"></i> Vincular Comanda
+                                    </button>
+                                <?php endif; ?>
+                            </div>
                             <div class="row" id="mesasGrid">
                                 <?php if (count($mesas) > 0): ?>
                                     <?php foreach ($mesas as $mesa): ?>
@@ -522,6 +529,11 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                                                     <i class="fas fa-circle me-1"></i>
                                                     <?php echo $mesaStatus; ?>
                                                 </div>
+                                                <?php if (!empty($mesa['cliente_nome']) && ($modoOperacao === 'comandas' || $modoOperacao === 'ambos')): ?>
+                                                <button type="button" class="btn btn-outline-danger btn-sm mt-2 w-100" onclick="event.stopPropagation(); desvincularComanda('<?php echo $mesa['id_mesa']; ?>')">
+                                                    <i class="fas fa-unlink"></i> Desvincular
+                                                </button>
+                                                <?php endif; ?>
                                             </div>
                                         </div>
                                     <?php endforeach; ?>
@@ -1894,6 +1906,151 @@ $mesaSelecionada = $_GET['mesa'] ?? null;
                 </div>
             </div>
         </div>
+    </div>
+    
+    <!-- Modal Vincular Comanda -->
+    <div class="modal fade" id="modalVincularComanda" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-id-card me-2"></i>
+                        Vincular Comanda ao Cliente
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="formVincularComanda">
+                        <div class="mb-3">
+                            <label class="form-label">Número da Comanda</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-qrcode"></i></span>
+                                <input type="text" class="form-control" id="vincular_comanda_id" required autofocus placeholder="Leia o código de barras ou digite">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Nome do Cliente (Opcional)</label>
+                            <input type="text" class="form-control" id="vincular_cliente_nome" placeholder="Ex: João Silva">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Telefone (Opcional)</label>
+                            <input type="tel" class="form-control" id="vincular_cliente_telefone" placeholder="(11) 99999-9999">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="vincularComandaSubmit()">Vincular</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        function abrirModalVincular() {
+            var myModal = new bootstrap.Modal(document.getElementById('modalVincularComanda'));
+            myModal.show();
+            setTimeout(() => {
+                const comandaInput = document.getElementById('vincular_comanda_id');
+                if (comandaInput) {
+                    comandaInput.focus();
+                }
+            }, 500);
+        }
+
+        function vincularComandaSubmit() {
+            const comandaId = document.getElementById('vincular_comanda_id').value;
+            const clienteNome = document.getElementById('vincular_cliente_nome').value;
+            const clienteTelefone = document.getElementById('vincular_cliente_telefone').value;
+
+            if (!comandaId) {
+                Swal.fire('Atenção', 'O número da comanda é obrigatório', 'warning');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('action', 'vincular');
+            formData.append('comanda_id', comandaId);
+            formData.append('cliente_nome', clienteNome);
+            formData.append('cliente_telefone', clienteTelefone);
+
+            fetch('mvc/ajax/vincular_comanda.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire('Sucesso!', data.message, 'success').then(() => {
+                        bootstrap.Modal.getInstance(document.getElementById('modalVincularComanda')).hide();
+                        window.location.href = '?view=gerar_pedido&mesa=' + comandaId;
+                    });
+                } else {
+                    Swal.fire('Erro!', data.message, 'error');
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                Swal.fire('Erro!', 'Não foi possível vincular a comanda', 'error');
+            });
+        }
+
+        function desvincularComanda(mesaId) {
+            Swal.fire({
+                title: 'Desvincular Comanda?',
+                text: "Deseja realmente liberar e desvincular esta comanda?",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Sim, desvincular!',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const formData = new FormData();
+                    formData.append('action', 'desvincular_comanda');
+                    formData.append('mesa_id', mesaId);
+
+                    fetch('mvc/ajax/mesa_multiplos_pedidos.php', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Sucesso!', data.message, 'success').then(() => {
+                                location.href = '?view=gerar_pedido';
+                            });
+                        } else {
+                            Swal.fire('Erro!', data.message || 'Falha ao desvincular comanda', 'error');
+                        }
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        Swal.fire('Erro!', 'Não foi possível comunicar com o servidor', 'error');
+                    });
+                }
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const telefoneInput = document.getElementById('vincular_cliente_telefone');
+            if (telefoneInput) {
+                telefoneInput.addEventListener('blur', function() {
+                    const telefone = this.value.replace(/\D/g, '');
+                    if (telefone.length >= 10) {
+                        fetch(`mvc/ajax/buscar_cliente.php?telefone=${telefone}`)
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.success && data.cliente && data.cliente.nome) {
+                                    document.getElementById('vincular_cliente_nome').value = data.cliente.nome;
+                                }
+                            })
+                            .catch(console.error);
+                    }
+                });
+            }
+        });
+    </script>
     </div>
 </body>
 </html>
