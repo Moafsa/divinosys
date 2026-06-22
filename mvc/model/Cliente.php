@@ -47,22 +47,46 @@ class Cliente
 
     /**
      * Find client by phone number
+    private function getVariacoesTelefone($telefone)
+    {
+        $telNormalizado = preg_replace('/[^0-9]/', '', (string)$telefone);
+        if (empty($telNormalizado)) {
+            return [];
+        }
+
+        $base = $telNormalizado;
+        if (str_starts_with($base, '55') && strlen($base) >= 12) {
+            $base = substr($base, 2);
+        }
+
+        $variacoes = [$base, '55' . $base];
+
+        // Se tem 11 dígitos e o 3º é 9 (ex: 54981150243), a versão sem 9 é DDD + 8 digitos
+        if (strlen($base) === 11 && $base[2] === '9') {
+            $semNove = substr($base, 0, 2) . substr($base, 3);
+            $variacoes[] = $semNove;
+            $variacoes[] = '55' . $semNove;
+        } 
+        // Se tem 10 dígitos (ex: 5481150243), a versão com 9 é DDD + 9 + 8 digitos
+        elseif (strlen($base) === 10) {
+            $comNove = substr($base, 0, 2) . '9' . substr($base, 2);
+            $variacoes[] = $comNove;
+            $variacoes[] = '55' . $comNove;
+        }
+
+        return array_values(array_unique(array_filter($variacoes)));
+    }
+
+    /**
+     * Find client by phone
      */
     public function findByTelefone($telefone, $tenantId = null)
     {
         try {
-            $telefoneNormalizado = preg_replace('/[^0-9]/', '', $telefone);
-            if (empty($telefoneNormalizado)) {
+            $variacoes = $this->getVariacoesTelefone($telefone);
+            if (empty($variacoes)) {
                 return null;
             }
-
-            $variacoes = [$telefoneNormalizado];
-            if (strlen($telefoneNormalizado) > 11 && str_starts_with($telefoneNormalizado, '55')) {
-                $variacoes[] = substr($telefoneNormalizado, 2);
-            } elseif (strlen($telefoneNormalizado) <= 11 && strlen($telefoneNormalizado) >= 10) {
-                $variacoes[] = '55' . $telefoneNormalizado;
-            }
-            $variacoes = array_values(array_unique(array_filter($variacoes)));
 
             $placeholders = implode(',', array_fill(0, count($variacoes), '?'));
             $params = array_merge($variacoes, $variacoes);
@@ -78,6 +102,10 @@ class Cliente
                  LIMIT 1",
                 $params
             );
+
+            if ($cliente) {
+                return $cliente;
+            }
 
             if ($tenantId) {
                 $fiadoParams = array_merge([$tenantId], $variacoes, $variacoes);
@@ -95,12 +123,10 @@ class Cliente
                 );
 
                 if ($fiado) {
+                    $fiado['id'] = 'f-' . $fiado['id'];
+                    $fiado['is_fiado'] = true;
                     return $fiado;
                 }
-            }
-
-            if ($cliente) {
-                return $cliente;
             }
 
             return null;
@@ -149,6 +175,48 @@ class Cliente
     {
         try {
             $this->db->beginTransaction();
+
+            // Lidar com clientes fiado (prefixo f-)
+            if (is_string($id) && str_starts_with($id, 'f-')) {
+                $fiadoId = substr($id, 2);
+                $fiado = $this->db->fetch("SELECT * FROM clientes_fiado WHERE id = ?", [$fiadoId]);
+                if (!$fiado) {
+                    throw new Exception('Cliente fiado não encontrado');
+                }
+
+                // Se estamos adicionando email ou CPF, ou alterando dados mais complexos,
+                // vamos criar um usuário global para ele
+                if (!empty($data['email']) || !empty($data['cpf']) || !empty($data['data_nascimento'])) {
+                    $createData = [
+                        'nome' => $data['nome'] ?? $fiado['nome'],
+                        'telefone' => $data['telefone'] ?? $fiado['telefone'],
+                        'email' => $data['email'] ?? null,
+                        'cpf' => $data['cpf'] ?? $fiado['cpf_cnpj'] ?? null,
+                        'data_nascimento' => $data['data_nascimento'] ?? null,
+                        'observacoes' => $data['observacoes'] ?? null
+                    ];
+                    $novoUg = $this->create($createData);
+                    
+                    if (!$novoUg['success']) {
+                        throw new Exception("Falha ao atualizar e criar usuário global");
+                    }
+                    
+                    // O cliente foi promovido, sucesso!
+                    $this->db->commit();
+                    return ['success' => true, 'message' => 'Cliente atualizado e convertido com sucesso', 'id' => $novoUg['id']];
+                } else {
+                    // Só atualiza os dados básicos no clientes_fiado
+                    $updateFiado = [];
+                    if (isset($data['nome'])) $updateFiado['nome'] = $data['nome'];
+                    if (isset($data['telefone'])) $updateFiado['telefone'] = $data['telefone'];
+                    
+                    if (!empty($updateFiado)) {
+                        $this->db->update('clientes_fiado', $updateFiado, 'id = ?', [$fiadoId]);
+                    }
+                    $this->db->commit();
+                    return ['success' => true, 'message' => 'Cliente fiado atualizado com sucesso'];
+                }
+            }
 
             // Get current data for history
             $clienteAtual = $this->getById($id);
@@ -316,16 +384,16 @@ class Cliente
 
         $porTelefone = [];
         foreach ($fiados as $fiado) {
-            $tel = $normalizarTelefone($fiado['telefone'] ?? '');
-            if ($tel !== '') {
+            $variacoes = $this->getVariacoesTelefone($fiado['telefone'] ?? '');
+            foreach ($variacoes as $tel) {
                 $porTelefone[$tel] = $fiado;
             }
         }
 
         $telefonesNaLista = [];
         foreach ($clientesUg as &$cliente) {
-            $tel = $normalizarTelefone($cliente['telefone'] ?? '');
-            if ($tel !== '') {
+            $variacoes = $this->getVariacoesTelefone($cliente['telefone'] ?? '');
+            foreach ($variacoes as $tel) {
                 $telefonesNaLista[$tel] = true;
                 if (isset($porTelefone[$tel]) && $nomeGenerico($cliente['nome'] ?? '')) {
                     $cliente['nome'] = $porTelefone[$tel]['nome'];
@@ -336,8 +404,15 @@ class Cliente
         unset($cliente);
 
         foreach ($fiados as $fiado) {
-            $tel = $normalizarTelefone($fiado['telefone'] ?? '');
-            if ($tel !== '' && isset($telefonesNaLista[$tel])) {
+            $variacoes = $this->getVariacoesTelefone($fiado['telefone'] ?? '');
+            $jaListado = false;
+            foreach ($variacoes as $tel) {
+                if (isset($telefonesNaLista[$tel])) {
+                    $jaListado = true;
+                    break;
+                }
+            }
+            if ($jaListado) {
                 continue;
             }
 

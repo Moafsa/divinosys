@@ -549,17 +549,33 @@ class ClienteController
                 $cliente = $this->clienteModel->findByTelefone($dados['telefone']);
                 if ($cliente) {
                     error_log("✅ Cliente encontrado por telefone: " . json_encode($cliente));
-                    // Update client data if provided
-                    if (!empty($dados['nome']) || !empty($dados['email'])) {
-                        $updateData = [];
-                        if (!empty($dados['nome'])) $updateData['nome'] = $dados['nome'];
-                        if (!empty($dados['email'])) $updateData['email'] = $dados['email'];
-                        if (!empty($dados['cpf'])) $updateData['cpf'] = $dados['cpf'];
-                        
-                        if (!empty($updateData)) {
-                            $updateData['tenant_id'] = $this->session->getTenant()['id'] ?? null;
-                            $updateData['filial_id'] = $this->session->getFilial()['id'] ?? null;
-                            $this->clienteModel->update($cliente['id'], $updateData);
+                    
+                    // Se for cliente fiado e recebemos novos dados, criamos um usuário global
+                    if (isset($cliente['is_fiado']) && $cliente['is_fiado']) {
+                        if (!empty($dados['email']) || !empty($dados['cpf']) || (!empty($dados['nome']) && $dados['nome'] !== $cliente['nome'])) {
+                            error_log("Convertendo cliente fiado para usuário global com novos dados");
+                            $createData = [
+                                'nome' => !empty($dados['nome']) ? $dados['nome'] : $cliente['nome'],
+                                'telefone' => $dados['telefone'],
+                                'email' => $dados['email'] ?? null,
+                                'cpf' => $dados['cpf'] ?? $cliente['cpf'] ?? null
+                            ];
+                            $result = $this->clienteModel->create($createData);
+                            if ($result['success']) {
+                                return ['success' => true, 'cliente' => $this->clienteModel->getById($result['id'])];
+                            }
+                        }
+                    } else {
+                        // Update existing global client data if provided
+                        if (!empty($dados['nome']) || !empty($dados['email']) || !empty($dados['cpf'])) {
+                            $updateData = [];
+                            if (!empty($dados['nome'])) $updateData['nome'] = $dados['nome'];
+                            if (!empty($dados['email'])) $updateData['email'] = $dados['email'];
+                            if (!empty($dados['cpf'])) $updateData['cpf'] = $dados['cpf'];
+                            
+                            if (!empty($updateData)) {
+                                $this->clienteModel->update($cliente['id'], $updateData);
+                            }
                         }
                     }
                     return ['success' => true, 'cliente' => $cliente];
