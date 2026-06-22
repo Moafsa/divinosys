@@ -29,7 +29,7 @@ class OpenAIService
     /**
      * Process user message and determine action
      */
-    public function processMessage($message, $attachments = [])
+    public function processMessage($message, $attachments = [], $tenantId = null, $filialId = null, $context = [])
     {
         try {
             // Process attachments if any
@@ -38,11 +38,38 @@ class OpenAIService
                 $attachmentData = $this->processAttachments($attachments);
             }
             
+            $this->tenantId = $tenantId ?? $this->session->getTenantId() ?? 1;
+            $this->filialId = $filialId ?? $this->session->getFilialId() ?? 1;
+            
+            // Build the same prompt as admin in WhatsApp
+            $systemPrompt = "Você é o assistente virtual do restaurante (IAm). O nome do usuário logado é Admin. ";
+            $systemPrompt .= "ATENÇÃO: Este usuário é um ADMINISTRADOR/GARÇOM do sistema. Você tem permissão para realizar ações gerenciais e atuar como um *Garçom Online*. " .
+                "Você pode: criar_produto, listar_produtos, listar_pedidos, listar_pendencias_fiado, configurar_cobranca_fiado, gerar_fatura_fiado, baixar_pagamento_fiado. " .
+                "Como *Garçom Online*, você pode lançar pedidos nas mesas ou comandas. Ações disponíveis:\n" .
+                "- create_order (data: {\"mesa_id\": \"5\", \"cliente\": \"Nome\", \"itens\": [{\"id\": 1, \"quantidade\": 2, \"preco\": 10.0, \"observacao\": \"\", \"tamanho\": \"normal\"}]})\n" .
+                "- add_item_to_order (data: {\"pedido_id\": 10, \"itens\": [{\"id\": 2, \"quantidade\": 1, \"preco\": 15.0}]})\n" .
+                "- remove_item_from_order (data: {\"pedido_item_id\": 25})\n\n" .
+                "Para ações de fiado, as ações são: \n" .
+                "- listar_pendencias_fiado (Sem parâmetros)\n" .
+                "- configurar_cobranca_fiado (data: {\"cliente_id\": ID, \"frequencia\": \"diaria\"|\"semanal\"|\"mensal\", \"ativo\": true|false})\n" .
+                "- gerar_fatura_fiado (data: {\"cliente_id\": ID})\n" .
+                "- baixar_pagamento_fiado (data: {\"cliente_id\": ID, \"valor_pago\": 50.00})\n" .
+                "Para executar UMA DESSAS AÇÕES, responda EXATAMENTE neste formato JSON: {\"type\":\"action\",\"action\":\"nome_da_acao\",\"data\":{...}}. " .
+                "Se for criar um pedido e o usuário não der os preços, busque no CONTEXTO e inclua os IDs e precos corretos. ";
+            
+            // Generate context safely
+            try {
+                $systemContext = $this->getSystemContext();
+                $systemPrompt .= "\n\nCONTEXTO ATUAL DO RESTAURANTE:\n" . $systemContext;
+            } catch (\Exception $ctxErr) {
+                error_log("Failed to load context: " . $ctxErr->getMessage());
+            }
+
             // Prepare messages for OpenAI
             $messages = [
                 [
                     'role' => 'system',
-                    'content' => $this->getSystemPrompt()
+                    'content' => $systemPrompt
                 ],
                 [
                     'role' => 'user',
@@ -60,6 +87,32 @@ class OpenAIService
             
             // Parse response and determine action
             $action = $this->parseAIResponse($response, $attachmentData);
+            
+            // If it's an action, we should execute it right away to mimic WhatsApp behavior
+            if (isset($action['type']) && $action['type'] === 'action') {
+                if (in_array($action['action'], [
+                    'listar_pendencias_fiado', 'configurar_cobranca_fiado', 
+                    'gerar_fatura_fiado', 'baixar_pagamento_fiado', 
+                    'create_order', 'add_item_to_order', 'remove_item_from_order',
+                    'solicitar_fatura_fiado'
+                ])) {
+                    $opResult = $this->executeOperation($action);
+                    return [
+                        'type' => 'response',
+                        'message' => $opResult['message'] ?? 'Ação executada com sucesso.'
+                    ];
+                } else {
+                    $opToExecute = [
+                        'type' => $action['action'] ?? $action['type'],
+                        'data' => $action['data'] ?? []
+                    ];
+                    $execResult = $this->executeOperation($opToExecute);
+                    return [
+                        'type' => 'response',
+                        'message' => $execResult['message'] ?? "Ação concluída com sucesso!"
+                    ];
+                }
+            }
             
             return $action;
             
@@ -611,7 +664,7 @@ class OpenAIService
         return $this->db->fetchAll(
             "SELECT id_mesa, status FROM mesas 
              WHERE tenant_id = ? AND filial_id = ? 
-             ORDER BY id_mesa::integer",
+             ORDER BY id_mesa",
             [$tenantId, $filialId]
         );
     }
