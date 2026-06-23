@@ -1306,7 +1306,7 @@ class OpenAIService
                     
                     $novoValorPago = (float)$p['valor_pago'] + $valorPagarNestaVenda;
                     $novoSaldoDevedor = (float)$p['saldo_devedor'] - $valorPagarNestaVenda;
-                    $novoStatus = $novoSaldoDevedor <= 0.01 ? 'concluido' : 'parcial';
+                    $novoStatus = $novoSaldoDevedor <= 0.01 ? 'quitado' : 'parcial';
                     
                     $this->db->update('pedido', [
                         'valor_pago' => $novoValorPago,
