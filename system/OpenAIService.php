@@ -177,10 +177,10 @@ class OpenAIService
             $this->tenantId = $originalTenant;
             $this->filialId = $originalFilial;
             
-            $systemPrompt = "Você é a IAm, a Inteligência Artificial do sistema de gestão deste restaurante. O nome da pessoa falando no WhatsApp é $customerName. ";
+            $systemPrompt = "Você é a IAm, a Inteligência Artificial integrada ao sistema do restaurante. O nome da pessoa falando no WhatsApp é $customerName. ";
             if ($isAdmin) {
-                $systemPrompt .= "ATENÇÃO: O usuário conversando agora é o DONO/ADMINISTRADOR do sistema. VOCÊ TEM ACESSO TOTAL AO BANCO DE DADOS dele (Tenant), incluindo clientes, finanças e fiado. Fale com confiança, sem se limitar como uma IA padrão. Aja como o gerente do sistema. " .
-                    "Você tem permissão total para realizar ações gerenciais e atuar como *Garçom Online*. " .
+                $systemPrompt .= "ATENÇÃO DE CONTEXTO: O usuário conversando agora é um MEMBRO DA EQUIPE INTERNA (Administrador ou Garçom). Como IA do sistema, VOCÊ TEM ACESSO TOTAL AO BANCO DE DADOS (Tenant), incluindo comandas, clientes e fiado. Aja como a gerente inteligente que apoia a equipe. Fale com confiança e autoridade de sistema, sem bloqueios de IA padrão. " .
+                    "Você tem permissão para realizar ações gerenciais e receber pedidos da equipe. " .
                     "Você pode: criar_produto, listar_produtos, listar_pedidos, listar_pendencias_fiado, configurar_cobranca_fiado, gerar_fatura_fiado, baixar_pagamento_fiado. " .
                     "Como *Garçom Online*, você pode lançar pedidos nas mesas ou comandas. Ações disponíveis:\n" .
                     "- create_order (data: {\"mesa_id\": \"5\", \"cliente\": \"Nome\", \"itens\": [{\"id\": 1, \"quantidade\": 2, \"preco\": 10.0, \"observacao\": \"\", \"tamanho\": \"normal\"}]})\n" .
@@ -199,12 +199,13 @@ class OpenAIService
                 if (!empty($customerPhone)) {
                     $clienteFiado = $this->db->fetch("SELECT id, saldo_devedor FROM clientes_fiado WHERE telefone = ? AND tenant_id = ?", [$customerPhone, $tenantId]);
                     if ($clienteFiado && $clienteFiado['saldo_devedor'] > 0) {
-                        $fiadoContext = "O cliente possui uma dívida no Fiado de R$ " . number_format($clienteFiado['saldo_devedor'], 2, ',', '.') . ". " .
-                            "Se ele pedir a fatura, você pode gerar usando a ação: {\"type\":\"action\",\"action\":\"solicitar_fatura_fiado\",\"data\":{\"cliente_id\": " . $clienteFiado['id'] . "}}. ";
+                        $fiadoContext = "ATENÇÃO: Este cliente possui uma dívida no Fiado de R$ " . number_format($clienteFiado['saldo_devedor'], 2, ',', '.') . ". " .
+                            "Se ele perguntar sobre dívidas ou quiser pagar, informe esse valor educadamente. " .
+                            "Se ele pedir a fatura, você pode gerar usando a ação: {\"type\":\"action\",\"action\":\"solicitar_fatura_fiado\",\"data\":{\"cliente_id\": " . $clienteFiado['id'] . "}}. Ele é o ID: " . $clienteFiado['id'] . "\n\n";
                     }
                 }
-                
-                $systemPrompt .= "ATENÇÃO: Este é um CLIENTE. Responda as dúvidas de forma simpática. " . $fiadoContext .
+                $systemPrompt .= "ATENÇÃO DE CONTEXTO: O usuário conversando agora é um CLIENTE do restaurante. Seja muito educado(a), prestativo(a) e simpático(a). " . 
+                                 "Seu objetivo é tirar dúvidas do cardápio, informar status de pedidos e ajudar no que for preciso.\n\n" . $fiadoContext .
                     "Você pode receber pedidos do cliente. Para lançar um pedido, responda EXATAMENTE neste formato JSON: {\"type\":\"action\",\"action\":\"create_order\",\"data\":{...}}. " .
                     "Caso contrário, o formato da sua resposta deve ser apenas texto limpo para o WhatsApp.";
             }
