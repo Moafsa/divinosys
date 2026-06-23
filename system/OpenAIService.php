@@ -171,7 +171,7 @@ class OpenAIService
      */
     private function getSystemPrompt()
     {
-        return "Assistente IA para restaurante (IAm). Operações disponíveis: criar_produto, listar_produtos, criar_ingrediente, listar_ingredientes, criar_categoria, listar_categorias, listar_pedidos, listar_pendencias_fiado, configurar_cobranca_fiado, gerar_fatura_fiado, baixar_pagamento_fiado, create_order, add_item_to_order, remove_item_from_order. Responda em português. Para confirmação: {\"type\":\"confirmation\",\"message\":\"...\",\"action\":\"acao\",\"confirm\":true}. Para respostas com ações: {\"type\":\"action\",\"action\":\"nome\",\"data\":{...}}.";
+        return "Assistente IA para restaurante (IAm). Operações disponíveis: criar_produto, listar_produtos, criar_ingrediente, listar_ingredientes, criar_categoria, listar_categorias, listar_pedidos, listar_pendencias_fiado, configurar_cobranca_fiado, gerar_fatura_fiado, baixar_pagamento_fiado, create_order, add_item_to_order, remove_item_from_order, ver_estoque, atualizar_estoque. Responda em português. Para confirmação: {\"type\":\"confirmation\",\"message\":\"...\",\"action\":\"acao\",\"confirm\":true}. Para respostas com ações: {\"type\":\"action\",\"action\":\"nome\",\"data\":{...}}.";
     }
 
     /**
@@ -212,7 +212,7 @@ class OpenAIService
                     "- listar_compras_cliente (data: {\"nome_cliente\": \"nome do cliente para ver a lista de pedidos, consumos, pagamentos e descontos do fiado\"})\n" .
                     "- configurar_cobranca_fiado (data: {\"cliente_id\": ID, \"frequencia\": \"diaria\"|\"semanal\"|\"mensal\", \"ativo\": true|false})\n" .
                     "- gerar_fatura_fiado (data: {\"cliente_id\": ID})\n" .
-                    "- baixar_pagamento_fiado (data: {\"cliente_id\": ID, \"valor_pago\": 50.00})\n" .
+                    "- baixar_pagamento_fiado (data: {\"cliente_id\": ID, \"pagamentos\": [{\"valor\": 10.0, \"forma_pagamento\": \"dinheiro\"}], \"desconto_valor\": 2.50, \"destino\": \"ambos\"}). O destino pode ser 'fiado', 'pedido' ou 'ambos'. Se o usuário não informar as formas de pagamento para baixar um saldo, VOCÊ DEVE OBRIGATORIAMENTE PERGUNTAR antes de executar a ação. Se ele pedir um desconto % ou R$, calcule o valor final absoluto e mande em desconto_valor. \n" .
                     "Para executar UMA DESSAS AÇÕES, responda EXATAMENTE neste formato JSON: {\"type\":\"action\",\"action\":\"nome_da_acao\",\"data\":{...}}. " .
                     "Sempre que perguntarem sobre o que o cliente consumiu, como pagou, se teve desconto, ou o número do pedido fiado, VOCÊ DEVE OBRIGATORIAMENTE executar a ação `listar_compras_cliente` antes de responder para não inventar dados. " .
                     "Atenção: Os IDs que você acessa no fiado são 'IDs do Fiado', que podem ser diferentes dos IDs globais do cliente. Se for citar o ID, chame de 'ID Fiado'. " .
@@ -1174,96 +1174,144 @@ class OpenAIService
         $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
         $filialId = $this->filialId ?? $this->session->getFilialId() ?? 1;
         $cId = $data['cliente_id'] ?? null;
-        $valorPago = (float)($data['valor_pago'] ?? 0);
         
-        if (!$cId || $valorPago <= 0) return ['success' => false, 'message' => "Informe o ID do cliente e o valor pago válido."];
+        $pagamentos = $data['pagamentos'] ?? [];
+        if (empty($pagamentos) && isset($data['valor_pago'])) {
+            $pagamentos = [['valor' => (float)$data['valor_pago'], 'forma_pagamento' => 'dinheiro/pix (whatsapp)']];
+        }
+        
+        $descontoValor = (float)($data['desconto_valor'] ?? 0);
+        $destino = $data['destino'] ?? 'ambos'; // 'fiado', 'pedido' ou 'ambos'
+        
+        $valorTotalPago = 0;
+        foreach ($pagamentos as $pag) {
+            $valorTotalPago += (float)($pag['valor'] ?? 0);
+        }
+        
+        if (!$cId || ($valorTotalPago <= 0 && $descontoValor <= 0)) {
+            return ['success' => false, 'message' => "Informe o ID do cliente e os valores pagos ou desconto."];
+        }
         
         $cliente = $this->db->fetch("SELECT * FROM clientes_fiado WHERE id = ? AND tenant_id = ?", [$cId, $tenantId]);
         if (!$cliente) return ['success' => false, 'message' => "Cliente não encontrado."];
         
         $usuarioGlobalId = $cliente['usuario_global_id'] ?? $cId;
         
-        $sqlPendentes = "
-            (SELECT id, valor_total, valor_pago, (valor_total - valor_pago) as saldo_devedor, data_vencimento as data_ordenacao, 'fiado' as origem 
-             FROM vendas_fiadas 
-             WHERE cliente_id = ? AND tenant_id = ? AND status IN ('pendente', 'vencido'))
-            UNION ALL
-            (SELECT idpedido as id, valor_total, valor_pago, saldo_devedor, created_at as data_ordenacao, 'pedido' as origem
-             FROM pedido 
-             WHERE usuario_global_id = ? AND tenant_id = ? AND status_pagamento IN ('pendente', 'parcial') AND status NOT IN ('Cancelado'))
-            ORDER BY data_ordenacao ASC
-        ";
+        // Constrói a query com base no destino escolhido
+        $queryFiado = "SELECT id, valor_total, valor_pago, (valor_total - valor_pago) as saldo_devedor, data_vencimento as data_ordenacao, 'fiado' as origem FROM vendas_fiadas WHERE cliente_id = ? AND tenant_id = ? AND status IN ('pendente', 'vencido')";
+        $queryPedido = "SELECT idpedido as id, valor_total, valor_pago, saldo_devedor, created_at as data_ordenacao, 'pedido' as origem FROM pedido WHERE usuario_global_id = ? AND tenant_id = ? AND status_pagamento IN ('pendente', 'parcial') AND status NOT IN ('Cancelado')";
         
-        $pedidos = $this->db->fetchAll($sqlPendentes, [$cId, $tenantId, $usuarioGlobalId, $tenantId]);
+        $sqlPendentes = "";
+        $queryParams = [];
         
-        $valorRestante = $valorPago;
+        if ($destino === 'fiado') {
+            $sqlPendentes = $queryFiado . " ORDER BY data_ordenacao ASC";
+            $queryParams = [$cId, $tenantId];
+        } elseif ($destino === 'pedido') {
+            $sqlPendentes = $queryPedido . " ORDER BY data_ordenacao ASC";
+            $queryParams = [$usuarioGlobalId, $tenantId];
+        } else {
+            $sqlPendentes = "($queryFiado) UNION ALL ($queryPedido) ORDER BY data_ordenacao ASC";
+            $queryParams = [$cId, $tenantId, $usuarioGlobalId, $tenantId];
+        }
+        
+        $pedidos = $this->db->fetchAll($sqlPendentes, $queryParams);
+        
+        // Adiciona o desconto como um pagamento virtual
+        $listaAmortizacao = [];
+        if ($descontoValor > 0) {
+            $listaAmortizacao[] = ['valor' => $descontoValor, 'forma_pagamento' => 'desconto', 'is_desconto' => true];
+        }
+        foreach ($pagamentos as $pag) {
+            if ((float)$pag['valor'] > 0) {
+                $listaAmortizacao[] = ['valor' => (float)$pag['valor'], 'forma_pagamento' => $pag['forma_pagamento'], 'is_desconto' => false];
+            }
+        }
+        
         $this->db->beginTransaction();
         try {
-            foreach ($pedidos as $p) {
-                if ($valorRestante <= 0) break;
+            foreach ($listaAmortizacao as $pgto) {
+                $valorRestante = $pgto['valor'];
                 
-                $saldoAtual = (float)$p['saldo_devedor'];
-                $valorPagarNestaVenda = min($valorRestante, $saldoAtual);
-                
-                if ($p['origem'] === 'pedido') {
-                    $this->db->insert('pagamentos_pedido', [
-                        'pedido_id' => $p['id'],
-                        'valor_pago' => $valorPagarNestaVenda,
-                        'forma_pagamento' => 'dinheiro/pix (whatsapp)',
-                        'descricao' => 'Pagamento Fiado em Lote (IA)',
-                        'usuario_id' => $this->session->getUserId() ?? 1,
-                        'usuario_global_id' => $usuarioGlobalId,
-                        'tenant_id' => $tenantId,
-                        'filial_id' => $filialId
-                    ]);
+                foreach ($pedidos as &$p) { // Passa por referência para atualizar o saldo_devedor em tempo real na memória
+                    if ($valorRestante <= 0) break;
+                    if ((float)$p['saldo_devedor'] <= 0) continue;
                     
-                    $novoValorPago = (float)$p['valor_pago'] + $valorPagarNestaVenda;
-                    $novoSaldoDevedor = (float)$p['saldo_devedor'] - $valorPagarNestaVenda;
-                    $novoStatus = $novoSaldoDevedor <= 0.01 ? 'concluido' : 'parcial';
+                    $saldoAtual = (float)$p['saldo_devedor'];
+                    $valorPagarNestaVenda = min($valorRestante, $saldoAtual);
                     
-                    $this->db->update('pedido', [
-                        'valor_pago' => $novoValorPago,
-                        'saldo_devedor' => $novoSaldoDevedor,
-                        'status_pagamento' => $novoStatus
-                    ], 'idpedido = ?', [$p['id']]);
-                } else {
-                    $this->db->insert('pagamentos_fiado', [
-                        'venda_fiada_id' => $p['id'],
-                        'valor_pago' => $valorPagarNestaVenda,
-                        'forma_pagamento' => 'dinheiro/pix (whatsapp)',
-                        'observacoes' => 'Pagamento em Lote (IA)',
-                        'tenant_id' => $tenantId,
-                        'filial_id' => $filialId
-                    ]);
+                    if ($p['origem'] === 'pedido') {
+                        $this->db->insert('pagamentos_pedido', [
+                            'pedido_id' => $p['id'],
+                            'valor_pago' => $valorPagarNestaVenda,
+                            'forma_pagamento' => $pgto['forma_pagamento'],
+                            'descricao' => $pgto['is_desconto'] ? 'Desconto (IA)' : 'Pagamento Fiado/Comanda (IA)',
+                            'usuario_id' => $this->session->getUserId() ?? 1,
+                            'usuario_global_id' => $usuarioGlobalId,
+                            'tenant_id' => $tenantId,
+                            'filial_id' => $filialId
+                        ]);
+                        
+                        $novoValorPago = (float)$p['valor_pago'] + $valorPagarNestaVenda;
+                        $novoSaldoDevedor = (float)$p['saldo_devedor'] - $valorPagarNestaVenda;
+                        $novoStatus = $novoSaldoDevedor <= 0.01 ? 'concluido' : 'parcial';
+                        
+                        $this->db->update('pedido', [
+                            'valor_pago' => $novoValorPago,
+                            'saldo_devedor' => $novoSaldoDevedor,
+                            'status_pagamento' => $novoStatus
+                        ], 'idpedido = ?', [$p['id']]);
+                        
+                        $p['valor_pago'] = $novoValorPago;
+                        $p['saldo_devedor'] = $novoSaldoDevedor;
+                    } else {
+                        $this->db->insert('pagamentos_fiado', [
+                            'venda_fiada_id' => $p['id'],
+                            'valor_pago' => $valorPagarNestaVenda,
+                            'forma_pagamento' => $pgto['forma_pagamento'],
+                            'observacoes' => $pgto['is_desconto'] ? 'Desconto (IA)' : 'Pagamento Fiado (IA)',
+                            'tenant_id' => $tenantId,
+                            'filial_id' => $filialId
+                        ]);
+                        
+                        $novoValorPago = (float)$p['valor_pago'] + $valorPagarNestaVenda;
+                        $novoSaldoDevedor = (float)$p['valor_total'] - $novoValorPago;
+                        $novoStatus = $novoSaldoDevedor <= 0.01 ? 'pago' : 'pendente';
+                        
+                        $this->db->update('vendas_fiadas', [
+                            'valor_pago' => $novoValorPago,
+                            'status' => $novoStatus
+                        ], 'id = ?', [$p['id']]);
+                        
+                        $p['valor_pago'] = $novoValorPago;
+                        $p['saldo_devedor'] = $novoSaldoDevedor;
+                    }
                     
-                    $novoValorPago = (float)$p['valor_pago'] + $valorPagarNestaVenda;
-                    $novoSaldoDevedor = (float)$p['valor_total'] - $novoValorPago;
-                    $novoStatus = $novoSaldoDevedor <= 0.01 ? 'pago' : 'pendente';
+                    if (!$pgto['is_desconto']) {
+                        $this->db->insert('movimentacoes_financeiras', [
+                            'tenant_id' => $tenantId,
+                            'filial_id' => $filialId,
+                            'tipo' => 'entrada',
+                            'categoria_id' => 2,
+                            'descricao' => "Pagamento fiado lote (IA) - Venda ID: {$p['id']} - {$pgto['forma_pagamento']}",
+                            'valor' => $valorPagarNestaVenda,
+                            'referencia_id' => $p['id']
+                        ]);
+                    }
                     
-                    $this->db->update('vendas_fiadas', [
-                        'valor_pago' => $novoValorPago,
-                        'status' => $novoStatus
-                    ], 'id = ?', [$p['id']]);
+                    $valorRestante -= $valorPagarNestaVenda;
                 }
-                
-                $this->db->insert('movimentacoes_financeiras', [
-                    'tenant_id' => $tenantId,
-                    'filial_id' => $filialId,
-                    'tipo' => 'entrada',
-                    'categoria_id' => 2,
-                    'descricao' => "Pagamento fiado lote (IA) - Venda ID: {$p['id']} - dinheiro/pix",
-                    'valor' => $valorPagarNestaVenda,
-                    'referencia_id' => $p['id']
-                ]);
-                
-                $valorRestante -= $valorPagarNestaVenda;
             }
             
-            $novoSaldo = max(0, (float)$cliente['saldo_devedor'] - $valorPago);
+            // Só subtraímos do clientes_fiado o que foi pago ou descontado DENTRO das vendas_fiadas?
+            // O saldo_devedor na tabela clientes_fiado deve refletir o total atualizado das vendas_fiadas
+            // O jeito mais seguro é recalcular o saldo_devedor.
+            $saldoFiadoAtualizado = $this->db->fetch("SELECT SUM(valor_total - valor_pago) as total FROM vendas_fiadas WHERE cliente_id = ? AND tenant_id = ? AND status IN ('pendente', 'vencido')", [$cId, $tenantId]);
+            $novoSaldo = max(0, (float)($saldoFiadoAtualizado['total'] ?? 0));
             $this->db->update('clientes_fiado', ['saldo_devedor' => $novoSaldo], 'id = ?', [$cId]);
             
             $this->db->commit();
-            return ['success' => true, 'message' => "Pagamento de R$ " . number_format($valorPago, 2, ',', '.') . " registrado com sucesso! Novo saldo: R$ " . number_format($novoSaldo, 2, ',', '.')];
+            return ['success' => true, 'message' => "Transação de R$ " . number_format($valorTotalPago, 2, ',', '.') . " registrada com sucesso. Desconto aplicado: R$ " . number_format($descontoValor, 2, ',', '.') . ". Novo saldo do fiado (não inclui comandas soltas): R$ " . number_format($novoSaldo, 2, ',', '.')];
         } catch (\Exception $e) {
             $this->db->rollBack();
             return ['success' => false, 'message' => "Erro ao registrar pagamento: " . $e->getMessage()];
