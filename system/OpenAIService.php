@@ -213,6 +213,7 @@ class OpenAIService
                     "- configurar_cobranca_fiado (data: {\"cliente_id\": ID, \"frequencia\": \"diaria\"|\"semanal\"|\"mensal\", \"ativo\": true|false})\n" .
                     "- gerar_fatura_fiado (data: {\"cliente_id\": ID})\n" .
                     "- baixar_pagamento_fiado (data: {\"cliente_id\": ID, \"pagamentos\": [{\"valor\": 10.0, \"forma_pagamento\": \"dinheiro\"}], \"desconto_valor\": 2.50, \"destino\": \"ambos\"}). O destino pode ser 'fiado', 'pedido' ou 'ambos'. Se o usuário não informar as formas de pagamento para baixar um saldo, VOCÊ DEVE OBRIGATORIAMENTE PERGUNTAR antes de executar a ação. Se ele pedir um desconto % ou R$, calcule o valor final absoluto e mande em desconto_valor. \n" .
+                    "Sempre que o usuário relatar um pagamento (ex: 'o cliente pagou X'), você deve agir para BAIXAR O PAGAMENTO usando a ação baixar_pagamento_fiado. Se precisar do ID do cliente, chame listar_pendencias_fiado primeiro e, COM O RESULTADO EM MÃOS, decida o próximo passo. \n" .
                     "Para executar UMA DESSAS AÇÕES, responda EXATAMENTE neste formato JSON: {\"type\":\"action\",\"action\":\"nome_da_acao\",\"data\":{...}}. " .
                     "Sempre que perguntarem sobre o que o cliente consumiu, como pagou, se teve desconto, ou o número do pedido fiado, VOCÊ DEVE OBRIGATORIAMENTE executar a ação `listar_compras_cliente` antes de responder para não inventar dados. " .
                     "Atenção: Os IDs que você acessa no fiado são 'IDs do Fiado', que podem ser diferentes dos IDs globais do cliente. Se for citar o ID, chame de 'ID Fiado'. " .
@@ -242,94 +243,68 @@ class OpenAIService
                 ['role' => 'user', 'content' => $message]
             ];
 
-            // Use gpt-4o-mini for better JSON/action extraction
-            $ch = curl_init('https://api.openai.com/v1/chat/completions');
-            $data = [
-                'model' => 'gpt-4o-mini',
-                'messages' => $messages,
-                'temperature' => 0.7
-            ];
-            
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Content-Type: application/json',
-                'Authorization: Bearer ' . $this->apiKey
-            ]);
-            
-            $response = curl_exec($ch);
-            curl_close($ch);
-            
-            $result = json_decode($response, true);
-            $aiText = $result['choices'][0]['message']['content'] ?? 'Desculpe, não entendi.';
-            
-            // Parse response to check for actions
-            $parsedAction = null;
-            $jsonData = json_decode($aiText, true);
-            if (json_last_error() === JSON_ERROR_NONE && is_array($jsonData)) {
-                $parsedAction = $jsonData;
-            } else {
-                $jsonStart = strpos($aiText, '{');
-                $jsonEnd = strrpos($aiText, '}');
-                if ($jsonStart !== false && $jsonEnd !== false && $jsonEnd > $jsonStart) {
-                    $jsonString = substr($aiText, $jsonStart, $jsonEnd - $jsonStart + 1);
-                    $extractedJson = json_decode($jsonString, true);
-                    if (json_last_error() === JSON_ERROR_NONE && is_array($extractedJson)) {
-                        $parsedAction = $extractedJson;
-                    }
-                }
+            $maxIterations = 4;
+            $iteration = 0;
+            $finalResponseText = 'Desculpe, não entendi.';
+
+            while ($iteration < $maxIterations) {
+                $iteration++;
+
+                // Use gpt-4o-mini for better JSON/action extraction
+                $ch = curl_init('https://api.openai.com/v1/chat/completions');
+                $data = [
+                    'model' => 'gpt-4o-mini',
+                    'messages' => $messages,
+                    'temperature' => 0.7
+                ];
                 
-                if (!$parsedAction && preg_match('/```(?:json)?\s*(\{.*?\})\s*```/s', $aiText, $matches)) {
-                    $extractedJson = json_decode($matches[1], true);
-                    if (json_last_error() === JSON_ERROR_NONE && is_array($extractedJson)) {
-                        $parsedAction = $extractedJson;
-                    }
-                }
-            }
-            
-            // Extra logic for actions missing in executeOperation natively
-            if ($parsedAction && isset($parsedAction['type']) && $parsedAction['type'] === 'action') {
-                $this->tenantId = $tenantId;
-                $this->filialId = $filialId;
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_POST, true);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                    'Content-Type: application/json',
+                    'Authorization: Bearer ' . $this->apiKey
+                ]);
                 
-                if (in_array($parsedAction['action'], [
-                    'listar_pendencias_fiado', 'configurar_cobranca_fiado', 
-                    'gerar_fatura_fiado', 'baixar_pagamento_fiado', 
-                    'create_order', 'add_item_to_order', 'remove_item_from_order',
-                    'solicitar_fatura_fiado', 'listar_compras_cliente', 'ver_estoque', 'atualizar_estoque'
-                ])) {
-                    $opResult = $this->executeOperation($parsedAction);
-                    
-                    if (in_array($parsedAction['action'], ['listar_pendencias_fiado', 'listar_compras_cliente'])) {
-                        $messages[] = ['role' => 'assistant', 'content' => $aiText];
-                        $messages[] = ['role' => 'user', 'content' => "Resultado retornado do sistema: " . json_encode($opResult) . ". Baseado nesses dados, responda o usuário de forma conversacional e amigável. Você deve gerar apenas o texto puro da mensagem, sem JSON na resposta final."];
-                        
-                        $data['messages'] = $messages;
-                        $ch = curl_init('https://api.openai.com/v1/chat/completions');
-                        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                        curl_setopt($ch, CURLOPT_POST, true);
-                        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-                        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                            'Content-Type: application/json',
-                            'Authorization: Bearer ' . $this->apiKey
-                        ]);
-                        $response2 = curl_exec($ch);
-                        curl_close($ch);
-                        
-                        $result2 = json_decode($response2, true);
-                        $finalAiText = $result2['choices'][0]['message']['content'] ?? $opResult['message'];
-                        
-                        return ['success' => true, 'response' => ['message' => $finalAiText]];
-                    }
-                    
-                    return ['success' => true, 'response' => ['message' => $opResult['message'] ?? 'Ação executada com sucesso.']];
+                $response = curl_exec($ch);
+                curl_close($ch);
+                
+                $result = json_decode($response, true);
+                $aiText = $result['choices'][0]['message']['content'] ?? '';
+                if (empty($aiText)) break;
+                
+                // Parse response to check for actions
+                $parsedAction = null;
+                $jsonData = json_decode($aiText, true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($jsonData)) {
+                    $parsedAction = $jsonData;
                 } else {
-                    // Try to execute general operation
+                    $jsonStart = strpos($aiText, '{');
+                    $jsonEnd = strrpos($aiText, '}');
+                    if ($jsonStart !== false && $jsonEnd !== false && $jsonEnd > $jsonStart) {
+                        $jsonString = substr($aiText, $jsonStart, $jsonEnd - $jsonStart + 1);
+                        $extractedJson = json_decode($jsonString, true);
+                        if (json_last_error() === JSON_ERROR_NONE && is_array($extractedJson)) {
+                            $parsedAction = $extractedJson;
+                        }
+                    }
+                    
+                    if (!$parsedAction && preg_match('/```(?:json)?\s*(\{.*?\})\s*```/s', $aiText, $matches)) {
+                        $extractedJson = json_decode($matches[1], true);
+                        if (json_last_error() === JSON_ERROR_NONE && is_array($extractedJson)) {
+                            $parsedAction = $extractedJson;
+                        }
+                    }
+                }
+                
+                if ($parsedAction && isset($parsedAction['type']) && $parsedAction['type'] === 'action') {
                     $this->tenantId = $tenantId;
                     $this->filialId = $filialId;
                     
-                    // executeOperation expects $operation['type'] to be the action name
+                    // Registra a ação tomada pela IA
+                    $messages[] = ['role' => 'assistant', 'content' => $aiText];
+                    
+                    // Formata a ação para o executeOperation
                     $opToExecute = [
                         'type' => $parsedAction['action'] ?? $parsedAction['type'],
                         'data' => $parsedAction['data'] ?? []
@@ -337,16 +312,25 @@ class OpenAIService
                     
                     $execResult = $this->executeOperation($opToExecute);
                     
-                    if (isset($execResult['success']) && $execResult['success'] === false) {
-                        return ['success' => true, 'response' => ['message' => "Houve um erro ao realizar a ação: " . $execResult['message']]];
+                    // Retorna o resultado para a IA poder pensar no próximo passo
+                    $resultStr = json_encode($execResult);
+                    $messages[] = [
+                        'role' => 'user', 
+                        'content' => "O sistema executou a ação e retornou:\n{$resultStr}\n\nAnalise o resultado. Se a tarefa foi totalmente concluída e o objetivo alcançado, responda ao usuário final apenas com TEXTO natural comunicando o sucesso/conclusão. Se você ainda precisar de dados do usuário (ex: forma de pagamento), responda perguntando em TEXTO. Se precisar de outra ação do sistema, gere outro JSON de ação."
+                    ];
+                    
+                    continue; // Loop again para nova decisão
+                } else {
+                    // Não é uma ação, é uma resposta final para o usuário
+                    $finalResponseText = $aiText;
+                    if ($parsedAction && isset($parsedAction['type']) && $parsedAction['type'] === 'response') {
+                        $finalResponseText = $parsedAction['message'] ?? $aiText;
                     }
-                    return ['success' => true, 'response' => ['message' => $execResult['message'] ?? "Ação concluída com sucesso!"]];
+                    break;
                 }
-            } elseif ($parsedAction && isset($parsedAction['type']) && $parsedAction['type'] === 'response') {
-                $aiText = $parsedAction['message'] ?? $aiText;
             }
             
-            return ['success' => true, 'response' => ['message' => $aiText]];
+            return ['success' => true, 'response' => ['message' => $finalResponseText]];
 
         } catch (\Exception $e) {
             return ['success' => false, 'error' => $e->getMessage()];
