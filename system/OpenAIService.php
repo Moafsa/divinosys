@@ -292,6 +292,24 @@ class OpenAIService
                     $this->tenantId = $tenantId;
                     $this->filialId = $filialId;
                     
+                    // SEGURANÇA: Validar se cliente está tentando executar ação de administrador
+                    $adminActions = [
+                        'create_product', 'update_product', 'delete_product', 
+                        'create_category', 'create_ingredient', 'listar_pendencias_fiado', 
+                        'configurar_cobranca_fiado', 'baixar_pagamento_fiado',
+                        'ver_estoque', 'atualizar_estoque'
+                    ];
+                    
+                    $requestedAction = $parsedAction['action'] ?? $parsedAction['type'];
+                    
+                    if (!$isAdmin && in_array($requestedAction, $adminActions)) {
+                        $messages[] = [
+                            'role' => 'user', 
+                            'content' => "Erro de Segurança: Você tentou executar uma ação restrita ({$requestedAction}) em uma conversa com um CLIENTE. Clientes não podem gerenciar o sistema. Responda educadamente dizendo que você não pode fazer isso."
+                        ];
+                        continue;
+                    }
+
                     // Registra a ação tomada pela IA
                     $messages[] = ['role' => 'assistant', 'content' => $aiText];
                     
