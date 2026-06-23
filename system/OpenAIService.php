@@ -254,10 +254,25 @@ class OpenAIService
             
             // Parse response to check for actions
             $parsedAction = null;
-            if (strpos(trim($aiText), '{') === 0) {
-                $jsonData = json_decode($aiText, true);
-                if (json_last_error() === JSON_ERROR_NONE && is_array($jsonData)) {
-                    $parsedAction = $jsonData;
+            $jsonData = json_decode($aiText, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($jsonData)) {
+                $parsedAction = $jsonData;
+            } else {
+                $jsonStart = strpos($aiText, '{');
+                $jsonEnd = strrpos($aiText, '}');
+                if ($jsonStart !== false && $jsonEnd !== false && $jsonEnd > $jsonStart) {
+                    $jsonString = substr($aiText, $jsonStart, $jsonEnd - $jsonStart + 1);
+                    $extractedJson = json_decode($jsonString, true);
+                    if (json_last_error() === JSON_ERROR_NONE && is_array($extractedJson)) {
+                        $parsedAction = $extractedJson;
+                    }
+                }
+                
+                if (!$parsedAction && preg_match('/```(?:json)?\s*(\{.*?\})\s*```/s', $aiText, $matches)) {
+                    $extractedJson = json_decode($matches[1], true);
+                    if (json_last_error() === JSON_ERROR_NONE && is_array($extractedJson)) {
+                        $parsedAction = $extractedJson;
+                    }
                 }
             }
             
@@ -587,9 +602,29 @@ class OpenAIService
         
         // Try to parse as JSON first
         $jsonData = json_decode($content, true);
-        
         if (json_last_error() === JSON_ERROR_NONE && is_array($jsonData)) {
             return $jsonData;
+        }
+        
+        // Try to extract JSON from text (e.g. if wrapped in markdown or conversational text)
+        $jsonStart = strpos($content, '{');
+        $jsonEnd = strrpos($content, '}');
+        if ($jsonStart !== false && $jsonEnd !== false && $jsonEnd > $jsonStart) {
+            $jsonString = substr($content, $jsonStart, $jsonEnd - $jsonStart + 1);
+            $jsonData = json_decode($jsonString, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($jsonData)) {
+                if (isset($jsonData['type']) && $jsonData['type'] === 'action') {
+                    return $jsonData;
+                }
+            }
+        }
+        
+        // Se ainda não achou JSON válido com type=action, procura blocos markdown ```json
+        if (preg_match('/```(?:json)?\s*(\{.*?\})\s*```/s', $content, $matches)) {
+            $jsonData = json_decode($matches[1], true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($jsonData)) {
+                return $jsonData;
+            }
         }
         
         // If not JSON, try to extract action from text
@@ -1035,10 +1070,11 @@ class OpenAIService
         $cId = $cliente['id'];
         
         $itens = $this->db->fetchAll("
-            SELECT p.data, pi.produto_nome, pi.quantidade, pi.valor_total
+            SELECT p.data, pr.nome as produto_nome, pi.quantidade, pi.valor_total
             FROM vendas_fiadas v
             JOIN pedido p ON v.pedido_id = p.idpedido
             JOIN pedido_itens pi ON p.idpedido = pi.pedido_id
+            JOIN produtos pr ON pi.produto_id = pr.id
             WHERE v.cliente_id = ? AND v.status IN ('pendente', 'vencido')
             ORDER BY p.data DESC
         ", [$cId]);
