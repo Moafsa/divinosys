@@ -343,13 +343,14 @@ class OpenAIService
                     
                     $execResult = $this->executeOperation($opToExecute);
                     
+                    if (isset($execResult['success']) && !$execResult['success']) {
+                        // Bypass AI and return error directly to user to avoid "polite" AI masking the error
+                        return ['success' => true, 'response' => ['message' => "❌ Erro Técnico do Sistema:\n" . ($execResult['message'] ?? 'Desconhecido')]];
+                    }
+                    
                     $resultStr = json_encode($execResult);
                     $promptAfterAction = "O sistema executou a ação e retornou:\n{$resultStr}\n\nAnalise o resultado. ";
-                    if (isset($execResult['success']) && !$execResult['success']) {
-                        $promptAfterAction .= "MUITO IMPORTANTE: A ação FALHOU. Você DEVE responder ao usuário EXATAMENTE com este texto: 'Erro técnico ao processar: " . ($execResult['message'] ?? 'Desconhecido') . "'. Não invente desculpas, mostre o erro real para podermos consertar.";
-                    } else {
-                        $promptAfterAction .= "Se a tarefa foi totalmente concluída e o objetivo alcançado, responda ao usuário final apenas com TEXTO natural comunicando o sucesso/conclusão. Se você ainda precisar de dados do usuário (ex: forma de pagamento), responda perguntando em TEXTO. Se precisar de outra ação do sistema, gere outro JSON de ação.";
-                    }
+                    $promptAfterAction .= "Se a tarefa foi totalmente concluída e o objetivo alcançado, responda ao usuário final apenas com TEXTO natural comunicando o sucesso/conclusão. Se você ainda precisar de dados do usuário (ex: forma de pagamento), responda perguntando em TEXTO. Se precisar de outra ação do sistema, gere outro JSON de ação.";
 
                     $messages[] = [
                         'role' => 'user', 
