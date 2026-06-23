@@ -285,7 +285,7 @@ class OpenAIService
                     'listar_pendencias_fiado', 'configurar_cobranca_fiado', 
                     'gerar_fatura_fiado', 'baixar_pagamento_fiado', 
                     'create_order', 'add_item_to_order', 'remove_item_from_order',
-                    'solicitar_fatura_fiado'
+                    'solicitar_fatura_fiado', 'listar_compras_cliente'
                 ])) {
                     $opResult = $this->executeOperation($parsedAction);
                     
