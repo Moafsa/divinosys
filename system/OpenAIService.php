@@ -79,16 +79,31 @@ class OpenAIService
                 [
                     'role' => 'system',
                     'content' => $systemPrompt
-                ],
-                [
-                    'role' => 'user',
-                    'content' => $message
                 ]
+            ];
+            
+            // Add chat history if available
+            if (isset($context['chat_history']) && is_array($context['chat_history'])) {
+                foreach ($context['chat_history'] as $msg) {
+                    if (isset($msg['text']) && trim($msg['text']) !== '') {
+                        $messages[] = [
+                            'role' => ($msg['sender'] === 'user') ? 'user' : 'assistant',
+                            'content' => $msg['text']
+                        ];
+                    }
+                }
+            }
+            
+            // Add current message
+            $messages[] = [
+                'role' => 'user',
+                'content' => $message
             ];
             
             // Add attachment data if available
             if (!empty($attachmentData)) {
-                $messages[1]['content'] .= "\n\nDados dos anexos:\n" . json_encode($attachmentData, JSON_PRETTY_PRINT);
+                $lastIndex = count($messages) - 1;
+                $messages[$lastIndex]['content'] .= "\n\nDados dos anexos:\n" . json_encode($attachmentData, JSON_PRETTY_PRINT);
             }
             
             // Use loop para MCP (Agentic Loop)
