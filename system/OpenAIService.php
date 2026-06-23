@@ -59,6 +59,7 @@ class OpenAIService
                 "Para executar UMA DESSAS AÇÕES, responda EXATAMENTE neste formato JSON: {\"type\":\"action\",\"action\":\"nome_da_acao\",\"data\":{...}}. " .
                 "Sempre que o usuário perguntar sobre o que o cliente consumiu, como pagou, se teve desconto, ou o número do pedido fiado, VOCÊ DEVE OBRIGATORIAMENTE executar a ação `listar_compras_cliente` antes de responder para não inventar dados. " .
                 "Atenção: Os IDs que você acessa no fiado são 'IDs do Fiado', que podem ser diferentes dos IDs globais do cliente. Se for citar o ID, chame de 'ID Fiado'. " .
+                "MUITO IMPORTANTE: Sempre que você falar sobre qualquer pedido (seja atual ou compras passadas), informe o número do pedido na sua resposta. " .
                 "Se for criar um pedido e o usuário não der os preços, busque no CONTEXTO e inclua os IDs e precos corretos. ";
             
             // Generate context safely
@@ -209,6 +210,7 @@ class OpenAIService
                     "Para executar UMA DESSAS AÇÕES, responda EXATAMENTE neste formato JSON: {\"type\":\"action\",\"action\":\"nome_da_acao\",\"data\":{...}}. " .
                     "Sempre que perguntarem sobre o que o cliente consumiu, como pagou, se teve desconto, ou o número do pedido fiado, VOCÊ DEVE OBRIGATORIAMENTE executar a ação `listar_compras_cliente` antes de responder para não inventar dados. " .
                     "Atenção: Os IDs que você acessa no fiado são 'IDs do Fiado', que podem ser diferentes dos IDs globais do cliente. Se for citar o ID, chame de 'ID Fiado'. " .
+                    "MUITO IMPORTANTE: Sempre que você falar sobre qualquer pedido (seja atual ou compras passadas), informe o número do pedido na sua resposta. " .
                     "Se for criar um pedido e o usuário não der os preços, busque no CONTEXTO e inclua os IDs e precos corretos. ";
             } else {
                 $customerPhone = $context['customer_phone'] ?? '';
