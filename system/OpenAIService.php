@@ -343,11 +343,17 @@ class OpenAIService
                     
                     $execResult = $this->executeOperation($opToExecute);
                     
-                    // Retorna o resultado para a IA poder pensar no próximo passo
                     $resultStr = json_encode($execResult);
+                    $promptAfterAction = "O sistema executou a ação e retornou:\n{$resultStr}\n\nAnalise o resultado. ";
+                    if (isset($execResult['success']) && !$execResult['success']) {
+                        $promptAfterAction .= "MUITO IMPORTANTE: A ação FALHOU. Você DEVE responder ao usuário EXATAMENTE com este texto: 'Erro técnico ao processar: " . ($execResult['message'] ?? 'Desconhecido') . "'. Não invente desculpas, mostre o erro real para podermos consertar.";
+                    } else {
+                        $promptAfterAction .= "Se a tarefa foi totalmente concluída e o objetivo alcançado, responda ao usuário final apenas com TEXTO natural comunicando o sucesso/conclusão. Se você ainda precisar de dados do usuário (ex: forma de pagamento), responda perguntando em TEXTO. Se precisar de outra ação do sistema, gere outro JSON de ação.";
+                    }
+
                     $messages[] = [
                         'role' => 'user', 
-                        'content' => "O sistema executou a ação e retornou:\n{$resultStr}\n\nAnalise o resultado. Se a tarefa foi totalmente concluída e o objetivo alcançado, responda ao usuário final apenas com TEXTO natural comunicando o sucesso/conclusão. Se você ainda precisar de dados do usuário (ex: forma de pagamento), responda perguntando em TEXTO. Se precisar de outra ação do sistema, gere outro JSON de ação."
+                        'content' => $promptAfterAction
                     ];
                     
                     continue; // Loop again para nova decisão
