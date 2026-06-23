@@ -184,7 +184,7 @@ class OpenAIService
      */
     private function getSystemPrompt()
     {
-        return "Assistente IA para restaurante (IAm). Operações disponíveis: criar_produto, listar_produtos, criar_ingrediente, listar_ingredientes, criar_categoria, listar_categorias, listar_pedidos, listar_pendencias_fiado, listar_clientes_geral, configurar_cobranca_fiado, gerar_fatura_fiado, baixar_pagamento_fiado, create_order, add_item_to_order, remove_item_from_order, ver_estoque, atualizar_estoque. Responda em português. Para confirmação: {\"type\":\"confirmation\",\"message\":\"...\",\"action\":\"acao\",\"confirm\":true}. Para respostas com ações: {\"type\":\"action\",\"action\":\"nome\",\"data\":{...}}.";
+        return "Assistente IA para restaurante (IAm). Operações disponíveis: create_product, update_product, delete_product, listar_produtos, create_ingredient, listar_ingredientes, create_category, listar_categorias, listar_pedidos, listar_pendencias_fiado, listar_clientes_geral, configurar_cobranca_fiado, gerar_fatura_fiado, baixar_pagamento_fiado, create_order, add_item_to_order, remove_item_from_order, ver_estoque, atualizar_estoque. Responda em português. Para confirmação: {\"type\":\"confirmation\",\"message\":\"...\",\"action\":\"acao\",\"confirm\":true}. Para respostas com ações: {\"type\":\"action\",\"action\":\"nome\",\"data\":{...}}.";
     }
 
     /**
@@ -212,7 +212,7 @@ class OpenAIService
             if ($isAdmin) {
                 $systemPrompt .= "O usuário conversando com você é um Administrador (MEMBRO DA EQUIPE INTERNA). ATENÇÃO DE CONTEXTO: Como IA do sistema, VOCÊ TEM ACESSO TOTAL AO BANCO DE DADOS (Tenant), incluindo comandas, clientes e fiado. Aja como a gerente inteligente que apoia a equipe. Fale com confiança e autoridade de sistema, sem bloqueios de IA padrão. " .
                     "Você tem permissão para realizar ações gerenciais e receber pedidos da equipe. " .
-                    "Você pode: criar_produto, listar_produtos, listar_pedidos, listar_pendencias_fiado, listar_clientes_geral, configurar_cobranca_fiado, gerar_fatura_fiado, baixar_pagamento_fiado. " .
+                    "Você pode: create_product, update_product, delete_product, listar_produtos, create_category, listar_categorias, create_ingredient, listar_ingredientes, listar_pedidos, listar_pendencias_fiado, listar_clientes_geral, configurar_cobranca_fiado, gerar_fatura_fiado, baixar_pagamento_fiado. " .
                     "Como *Garçom Online*, você pode lançar pedidos nas mesas ou comandas. Ações disponíveis:\n" .
                     "- create_order (data: {\"mesa_id\": \"5\", \"cliente\": \"Nome\", \"itens\": [{\"id\": 1, \"quantidade\": 2, \"preco\": 10.0, \"observacao\": \"\", \"tamanho\": \"normal\"}]})\n" .
                     "- add_item_to_order (data: {\"pedido_id\": 10, \"itens\": [{\"id\": 2, \"quantidade\": 1, \"preco\": 15.0}]})\n" .
@@ -797,6 +797,16 @@ class OpenAIService
                     return $this->addItemToOrder($operation['data']);
                 case 'remove_item_from_order':
                     return $this->removeItemFromOrder($operation['data']);
+                case 'listar_produtos':
+                    return $this->listarProdutos($operation['data'] ?? []);
+                case 'listar_categorias':
+                    return $this->listarCategorias($operation['data'] ?? []);
+                case 'listar_ingredientes':
+                    return $this->listarIngredientes($operation['data'] ?? []);
+                case 'listar_pedidos':
+                    return $this->listarPedidos($operation['data'] ?? []);
+                case 'registrar_despesa':
+                    return $this->registrarDespesa($operation['data']);
                 case 'listar_pendencias_fiado':
                     return $this->listarPendenciasFiado($operation['data'] ?? []);
                 case 'listar_clientes_geral':
@@ -1319,9 +1329,13 @@ class OpenAIService
                             'filial_id' => $filialId,
                             'tipo' => 'entrada',
                             'categoria_id' => 2,
+                            'conta_id' => 1,
+                            'data_movimentacao' => date('Y-m-d'),
+                            'status' => 'pago',
+                            'forma_pagamento' => $pgto['forma_pagamento'],
                             'descricao' => "Pagamento fiado lote (IA) - Venda ID: {$p['id']} - {$pgto['forma_pagamento']}",
                             'valor' => $valorPagarNestaVenda,
-                            'referencia_id' => $p['id']
+                            'observacoes' => "Venda ID: {$p['id']}"
                         ]);
                     }
                     
@@ -1429,5 +1443,98 @@ class OpenAIService
         $this->db->update('produtos', ['estoque_atual' => $novoEstoque], 'id = ? AND tenant_id = ? AND filial_id = ?', [$p['id'], $tenantId, $filialId]);
         
         return ['success' => true, 'message' => "O estoque de *{$p['nome']}* foi atualizado com sucesso! Novo saldo em estoque: {$novoEstoque} unidades."];
+    }
+
+    private function listarProdutos($data)
+    {
+        $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
+        $filialId = $this->filialId ?? $this->session->getFilialId() ?? 1;
+        $produtos = $this->db->fetchAll("SELECT id, nome, preco_normal, estoque_atual FROM produtos WHERE tenant_id = ? AND filial_id = ? ORDER BY nome ASC", [$tenantId, $filialId]);
+        
+        if (empty($produtos)) return ['success' => true, 'message' => "Nenhum produto cadastrado."];
+        
+        $msg = "*Lista de Produtos:*\n";
+        foreach ($produtos as $p) {
+            $msg .= "- ID: {$p['id']} | {$p['nome']} | Preço: R$ " . number_format($p['preco_normal'], 2, ',', '.') . " | Estoque: " . ($p['estoque_atual'] ?? 0) . "\n";
+        }
+        return ['success' => true, 'message' => $msg];
+    }
+
+    private function listarCategorias($data)
+    {
+        $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
+        $filialId = $this->filialId ?? $this->session->getFilialId() ?? 1;
+        $categorias = $this->db->fetchAll("SELECT id, nome FROM categorias WHERE tenant_id = ? AND filial_id = ? ORDER BY nome ASC", [$tenantId, $filialId]);
+        
+        if (empty($categorias)) return ['success' => true, 'message' => "Nenhuma categoria cadastrada."];
+        
+        $msg = "*Lista de Categorias:*\n";
+        foreach ($categorias as $c) {
+            $msg .= "- ID: {$c['id']} | {$c['nome']}\n";
+        }
+        return ['success' => true, 'message' => $msg];
+    }
+
+    private function listarIngredientes($data)
+    {
+        $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
+        $filialId = $this->filialId ?? $this->session->getFilialId() ?? 1;
+        $ingredientes = $this->db->fetchAll("SELECT id, nome, valor FROM ingredientes WHERE tenant_id = ? AND filial_id = ? ORDER BY nome ASC", [$tenantId, $filialId]);
+        
+        if (empty($ingredientes)) return ['success' => true, 'message' => "Nenhum ingrediente cadastrado."];
+        
+        $msg = "*Lista de Ingredientes:*\n";
+        foreach ($ingredientes as $i) {
+            $msg .= "- ID: {$i['id']} | {$i['nome']} | Valor: R$ " . number_format($i['valor'], 2, ',', '.') . "\n";
+        }
+        return ['success' => true, 'message' => $msg];
+    }
+
+    private function listarPedidos($data)
+    {
+        $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
+        $filialId = $this->filialId ?? $this->session->getFilialId() ?? 1;
+        $pedidos = $this->db->fetchAll("SELECT idpedido, mesa_id, valor_total, status, data FROM pedido WHERE tenant_id = ? AND filial_id = ? AND data::date = CURRENT_DATE ORDER BY data DESC LIMIT 20", [$tenantId, $filialId]);
+        
+        if (empty($pedidos)) return ['success' => true, 'message' => "Nenhum pedido registrado hoje."];
+        
+        $msg = "*Pedidos de Hoje (Até 20):*\n";
+        foreach ($pedidos as $p) {
+            $msg .= "- Pedido #{$p['idpedido']} | Mesa: {$p['mesa_id']} | Total: R$ " . number_format($p['valor_total'], 2, ',', '.') . " | Status: {$p['status']}\n";
+        }
+        return ['success' => true, 'message' => $msg];
+    }
+
+    private function registrarDespesa($data)
+    {
+        $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
+        $filialId = $this->filialId ?? $this->session->getFilialId() ?? 1;
+        
+        $valor = (float)($data['valor'] ?? 0);
+        $descricao = $data['descricao'] ?? '';
+        $categoriaId = $data['categoria_id'] ?? 1; // Padrão
+        $formaPagamento = $data['forma_pagamento'] ?? 'dinheiro';
+        
+        if ($valor <= 0 || empty($descricao)) return ['success' => false, 'message' => 'Informe o valor e a descrição da despesa.'];
+        
+        try {
+            $this->db->insert('movimentacoes_financeiras', [
+                'tenant_id' => $tenantId,
+                'filial_id' => $filialId,
+                'tipo' => 'despesa',
+                'categoria_id' => $categoriaId,
+                'conta_id' => 1,
+                'data_movimentacao' => date('Y-m-d'),
+                'status' => 'pago',
+                'forma_pagamento' => $formaPagamento,
+                'descricao' => "Despesa/Pagamento lançada via IA: {$descricao}",
+                'valor' => $valor,
+                'observacoes' => "Lançamento manual por IA"
+            ]);
+            
+            return ['success' => true, 'message' => "Despesa de R$ " . number_format($valor, 2, ',', '.') . " ('{$descricao}') registrada com sucesso no financeiro!"];
+        } catch (\Exception $e) {
+            return ['success' => false, 'message' => "Erro ao registrar despesa: " . $e->getMessage()];
+        }
     }
 }
