@@ -60,7 +60,10 @@ class OpenAIService
                 "- gerar_fatura_fiado (data: {\"cliente_id\": ID})\n" .
                 "- baixar_pagamento_fiado (data: {\"cliente_id\": ID, \"pagamentos\": [{\"valor\": 10.0, \"forma_pagamento\": \"dinheiro\"}], \"desconto_valor\": 2.50, \"destino\": \"ambos\"}). O destino pode ser 'fiado', 'pedido' ou 'ambos'. O 'cliente_id' é OBRIGATÓRIO. Se você não tiver certeza absoluta do ID (ex: só tem o nome), você DEVE executar listar_pendencias_fiado PRIMEIRO. Se o usuário não informar a forma de pagamento, PERGUNTE antes de executar.\n" .
                 "Sempre que o usuário relatar um pagamento (ex: 'o cliente pagou X'), você deve agir para BAIXAR O PAGAMENTO usando a ação baixar_pagamento_fiado. Se precisar do ID do cliente, chame listar_pendencias_fiado primeiro e, COM O RESULTADO EM MÃOS, decida o próximo passo. \n" .
-                "MUITO IMPORTANTE: Para executar UMA DESSAS AÇÕES, responda APENAS E EXATAMENTE neste formato JSON: {\"type\":\"action\",\"action\":\"nome_da_acao\",\"data\":{...}}. NÃO escreva NENHUM texto de explicação. NÃO diga 'Vou fazer isso' ou 'Vou listar'. APENAS RETORNE O JSON DA AÇÃO E NADA MAIS. " .
+                "MUITO IMPORTANTE: Para interagir com o sistema, você deve retornar um JSON. \n" .
+                "1. Se precisar EXECUTAR UMA AÇÃO (ex: pagar, listar), retorne APENAS E EXATAMENTE neste formato JSON: {\"type\":\"action\",\"action\":\"nome_da_acao\",\"data\":{...}}.\n" .
+                "2. Se a tarefa foi concluída com sucesso ou se precisar falar/perguntar algo ao usuário, retorne APENAS E EXATAMENTE neste formato JSON: {\"type\":\"response\",\"message\":\"sua mensagem aqui\"}.\n" .
+                "NÃO escreva texto fora do JSON. NÃO diga 'Vou fazer isso'. APENAS O JSON.\n\n" .
                 "IMPORTANTE: Se o usuário pedir o EXTRATO ou HISTÓRICO do fiado (ex: 'o que o Moacir consumiu?', 'quais são os pedidos pendentes dele?'), use a ação `listar_compras_cliente`. NÃO use essa ação se a intenção do usuário for pagar/baixar uma dívida. " .
                 "Atenção: Os IDs que você acessa no fiado são 'IDs do Fiado', que podem ser diferentes dos IDs globais do cliente. Se for citar o ID, chame de 'ID Fiado'. " .
                 "MUITO IMPORTANTE: Sempre que você falar sobre qualquer pedido (seja atual ou compras passadas), informe o número do pedido na sua resposta. " .
@@ -223,8 +226,10 @@ class OpenAIService
                     "- configurar_cobranca_fiado (data: {\"cliente_id\": ID, \"frequencia\": \"diaria\"|\"semanal\"|\"mensal\", \"ativo\": true|false})\n" .
                     "- gerar_fatura_fiado (data: {\"cliente_id\": ID})\n" .
                     "- baixar_pagamento_fiado (data: {\"cliente_id\": ID, \"pagamentos\": [{\"valor\": 10.0, \"forma_pagamento\": \"dinheiro\"}], \"desconto_valor\": 2.50, \"destino\": \"ambos\"}). O destino pode ser 'fiado', 'pedido' ou 'ambos'. O 'cliente_id' é OBRIGATÓRIO. Se você não tiver certeza absoluta do ID (ex: só tem o nome), você DEVE executar listar_pendencias_fiado PRIMEIRO. Se o usuário não informar a forma de pagamento, PERGUNTE antes de executar.\n" .
-                    "Sempre que o usuário relatar um pagamento (ex: 'o cliente pagou X'), você deve agir para BAIXAR O PAGAMENTO usando a ação baixar_pagamento_fiado. Se precisar do ID do cliente, chame listar_pendencias_fiado primeiro e, COM O RESULTADO EM MÃOS, decida o próximo passo. \n" .
-                    "MUITO IMPORTANTE: Para executar UMA DESSAS AÇÕES, responda APENAS E EXATAMENTE neste formato JSON: {\"type\":\"action\",\"action\":\"nome_da_acao\",\"data\":{...}}. NÃO escreva NENHUM texto de explicação. NÃO diga 'Vou fazer isso' ou 'Vou listar'. APENAS RETORNE O JSON DA AÇÃO E NADA MAIS. " .
+                    "MUITO IMPORTANTE: Para interagir com o sistema, você deve retornar um JSON. \n" .
+                    "1. Se precisar EXECUTAR UMA AÇÃO (ex: pagar, listar), retorne APENAS E EXATAMENTE neste formato JSON: {\"type\":\"action\",\"action\":\"nome_da_acao\",\"data\":{...}}.\n" .
+                    "2. Se a tarefa foi concluída com sucesso ou se precisar falar/perguntar algo ao usuário, retorne APENAS E EXATAMENTE neste formato JSON: {\"type\":\"response\",\"message\":\"sua mensagem aqui\"}.\n" .
+                    "NÃO escreva texto fora do JSON. NÃO diga 'Vou fazer isso'. APENAS O JSON.\n\n" .
                     "IMPORTANTE: Se o usuário pedir o EXTRATO ou HISTÓRICO do fiado (ex: 'o que o Moacir consumiu?', 'quais são os pedidos pendentes dele?'), use a ação `listar_compras_cliente`. NÃO use essa ação se a intenção do usuário for pagar/baixar uma dívida. " .
                     "Atenção: Os IDs que você acessa no fiado são 'IDs do Fiado', que podem ser diferentes dos IDs globais do cliente. Se for citar o ID, chame de 'ID Fiado'. " .
                     "MUITO IMPORTANTE: Sempre que você falar sobre qualquer pedido (seja atual ou compras passadas), informe o número do pedido na sua resposta. " .
@@ -1209,25 +1214,12 @@ class OpenAIService
         
         $usuarioGlobalId = $cliente['usuario_global_id'] ?? $cId;
         
-        // Constrói a query com base no destino escolhido
-        $queryFiado = "SELECT id, valor_total, valor_pago, (valor_total - valor_pago) as saldo_devedor, data_vencimento as data_ordenacao, 'fiado' as origem FROM vendas_fiadas WHERE cliente_id = ? AND tenant_id = ? AND status IN ('pendente', 'vencido')";
-        $queryPedido = "SELECT idpedido as id, valor_total, valor_pago, saldo_devedor, created_at as data_ordenacao, 'pedido' as origem FROM pedido WHERE usuario_global_id = ? AND tenant_id = ? AND status_pagamento IN ('pendente', 'parcial') AND status NOT IN ('Cancelado')";
+        // Constrói as queries
+        $queryFiado = "SELECT id, valor_total, valor_pago, (valor_total - valor_pago) as saldo_devedor, data_vencimento as data_ordenacao FROM vendas_fiadas WHERE cliente_id = ? AND tenant_id = ? AND status IN ('pendente', 'vencido') ORDER BY data_ordenacao ASC";
+        $queryPedido = "SELECT idpedido as id, valor_total, valor_pago, saldo_devedor, created_at as data_ordenacao FROM pedido WHERE usuario_global_id = ? AND tenant_id = ? AND status_pagamento IN ('pendente', 'parcial') AND status NOT IN ('Cancelado') ORDER BY data_ordenacao ASC";
         
-        $sqlPendentes = "";
-        $queryParams = [];
-        
-        if ($destino === 'fiado') {
-            $sqlPendentes = $queryFiado . " ORDER BY data_ordenacao ASC";
-            $queryParams = [$cId, $tenantId];
-        } elseif ($destino === 'pedido') {
-            $sqlPendentes = $queryPedido . " ORDER BY data_ordenacao ASC";
-            $queryParams = [$usuarioGlobalId, $tenantId];
-        } else {
-            $sqlPendentes = "($queryFiado) UNION ALL ($queryPedido) ORDER BY data_ordenacao ASC";
-            $queryParams = [$cId, $tenantId, $usuarioGlobalId, $tenantId];
-        }
-        
-        $pedidos = $this->db->fetchAll($sqlPendentes, $queryParams);
+        $pedidosFiado = ($destino === 'fiado' || $destino === 'ambos') ? $this->db->fetchAll($queryFiado, [$cId, $tenantId]) : [];
+        $pedidosComanda = ($destino === 'pedido' || $destino === 'ambos') ? $this->db->fetchAll($queryPedido, [$usuarioGlobalId, $tenantId]) : [];
         
         // Adiciona o desconto como um pagamento virtual
         $listaAmortizacao = [];
@@ -1243,62 +1235,40 @@ class OpenAIService
         $this->db->beginTransaction();
         try {
             foreach ($listaAmortizacao as $pgto) {
-                $valorRestante = $pgto['valor'];
+                // Pagamos as tabelas paralelamente, já que representam a mesma dívida
+                $valorRestanteFiado = $pgto['valor'];
+                $valorRestantePedido = $pgto['valor'];
                 
-                foreach ($pedidos as &$p) { // Passa por referência para atualizar o saldo_devedor em tempo real na memória
-                    if ($valorRestante <= 0) break;
+                // 1. Amortiza na tabela vendas_fiadas
+                foreach ($pedidosFiado as &$p) {
+                    if ($valorRestanteFiado <= 0) break;
                     if ((float)$p['saldo_devedor'] <= 0) continue;
                     
                     $saldoAtual = (float)$p['saldo_devedor'];
-                    $valorPagarNestaVenda = min($valorRestante, $saldoAtual);
+                    $valorPagarNestaVenda = min($valorRestanteFiado, $saldoAtual);
                     
-                    if ($p['origem'] === 'pedido') {
-                        $this->db->insert('pagamentos_pedido', [
-                            'pedido_id' => $p['id'],
-                            'valor_pago' => $valorPagarNestaVenda,
-                            'forma_pagamento' => $pgto['forma_pagamento'],
-                            'descricao' => $pgto['is_desconto'] ? 'Desconto (IA)' : 'Pagamento Fiado/Comanda (IA)',
-                            'usuario_id' => $this->session->getUserId() ?? 1,
-                            'usuario_global_id' => $usuarioGlobalId,
-                            'tenant_id' => $tenantId,
-                            'filial_id' => $filialId
-                        ]);
-                        
-                        $novoValorPago = (float)$p['valor_pago'] + $valorPagarNestaVenda;
-                        $novoSaldoDevedor = (float)$p['saldo_devedor'] - $valorPagarNestaVenda;
-                        $novoStatus = $novoSaldoDevedor <= 0.01 ? 'concluido' : 'parcial';
-                        
-                        $this->db->update('pedido', [
-                            'valor_pago' => $novoValorPago,
-                            'saldo_devedor' => $novoSaldoDevedor,
-                            'status_pagamento' => $novoStatus
-                        ], 'idpedido = ?', [$p['id']]);
-                        
-                        $p['valor_pago'] = $novoValorPago;
-                        $p['saldo_devedor'] = $novoSaldoDevedor;
-                    } else {
-                        $this->db->insert('pagamentos_fiado', [
-                            'venda_fiada_id' => $p['id'],
-                            'valor_pago' => $valorPagarNestaVenda,
-                            'forma_pagamento' => $pgto['forma_pagamento'],
-                            'observacoes' => $pgto['is_desconto'] ? 'Desconto (IA)' : 'Pagamento Fiado (IA)',
-                            'tenant_id' => $tenantId,
-                            'filial_id' => $filialId
-                        ]);
-                        
-                        $novoValorPago = (float)$p['valor_pago'] + $valorPagarNestaVenda;
-                        $novoSaldoDevedor = (float)$p['valor_total'] - $novoValorPago;
-                        $novoStatus = $novoSaldoDevedor <= 0.01 ? 'pago' : 'pendente';
-                        
-                        $this->db->update('vendas_fiadas', [
-                            'valor_pago' => $novoValorPago,
-                            'status' => $novoStatus
-                        ], 'id = ?', [$p['id']]);
-                        
-                        $p['valor_pago'] = $novoValorPago;
-                        $p['saldo_devedor'] = $novoSaldoDevedor;
-                    }
+                    $this->db->insert('pagamentos_fiado', [
+                        'venda_fiada_id' => $p['id'],
+                        'valor_pago' => $valorPagarNestaVenda,
+                        'forma_pagamento' => $pgto['forma_pagamento'],
+                        'observacoes' => $pgto['is_desconto'] ? 'Desconto (IA)' : 'Pagamento Fiado (IA)',
+                        'tenant_id' => $tenantId,
+                        'filial_id' => $filialId
+                    ]);
                     
+                    $novoValorPago = (float)$p['valor_pago'] + $valorPagarNestaVenda;
+                    $novoSaldoDevedor = (float)$p['valor_total'] - $novoValorPago;
+                    $novoStatus = $novoSaldoDevedor <= 0.01 ? 'pago' : 'pendente';
+                    
+                    $this->db->update('vendas_fiadas', [
+                        'valor_pago' => $novoValorPago,
+                        'status' => $novoStatus
+                    ], 'id = ?', [$p['id']]);
+                    
+                    $p['valor_pago'] = $novoValorPago;
+                    $p['saldo_devedor'] = $novoSaldoDevedor;
+                    
+                    // Lança no caixa (movimentacoes_financeiras) a partir da baixa fiado
                     if (!$pgto['is_desconto']) {
                         $this->db->insert('movimentacoes_financeiras', [
                             'tenant_id' => $tenantId,
@@ -1311,7 +1281,42 @@ class OpenAIService
                         ]);
                     }
                     
-                    $valorRestante -= $valorPagarNestaVenda;
+                    $valorRestanteFiado -= $valorPagarNestaVenda;
+                }
+                
+                // 2. Amortiza na tabela pedido (apenas baixa de sistema, não lança no caixa de novo)
+                foreach ($pedidosComanda as &$p) {
+                    if ($valorRestantePedido <= 0) break;
+                    if ((float)$p['saldo_devedor'] <= 0) continue;
+                    
+                    $saldoAtual = (float)$p['saldo_devedor'];
+                    $valorPagarNestaVenda = min($valorRestantePedido, $saldoAtual);
+                    
+                    $this->db->insert('pagamentos_pedido', [
+                        'pedido_id' => $p['id'],
+                        'valor_pago' => $valorPagarNestaVenda,
+                        'forma_pagamento' => $pgto['forma_pagamento'],
+                        'descricao' => $pgto['is_desconto'] ? 'Desconto (IA)' : 'Pagamento Fiado/Comanda (IA)',
+                        'usuario_id' => $this->session->getUserId() ?? 1,
+                        'usuario_global_id' => $usuarioGlobalId,
+                        'tenant_id' => $tenantId,
+                        'filial_id' => $filialId
+                    ]);
+                    
+                    $novoValorPago = (float)$p['valor_pago'] + $valorPagarNestaVenda;
+                    $novoSaldoDevedor = (float)$p['saldo_devedor'] - $valorPagarNestaVenda;
+                    $novoStatus = $novoSaldoDevedor <= 0.01 ? 'concluido' : 'parcial';
+                    
+                    $this->db->update('pedido', [
+                        'valor_pago' => $novoValorPago,
+                        'saldo_devedor' => $novoSaldoDevedor,
+                        'status_pagamento' => $novoStatus
+                    ], 'idpedido = ?', [$p['id']]);
+                    
+                    $p['valor_pago'] = $novoValorPago;
+                    $p['saldo_devedor'] = $novoSaldoDevedor;
+                    
+                    $valorRestantePedido -= $valorPagarNestaVenda;
                 }
             }
             
