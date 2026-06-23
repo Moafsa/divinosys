@@ -1424,13 +1424,10 @@ class OpenAIService
                             'filial_id' => $filialId,
                             'tipo' => 'entrada',
                             'categoria_id' => 2,
-                            'conta_id' => 1,
                             'data_movimentacao' => date('Y-m-d'),
-                            'status' => 'pago',
-                            'forma_pagamento' => $pgto['forma_pagamento'],
                             'descricao' => "Pagamento fiado lote (IA) - Venda ID: {$p['id']} - {$pgto['forma_pagamento']}",
                             'valor' => $valorPagarNestaVenda,
-                            'observacoes' => "Venda ID: {$p['id']}"
+                            'referencia_id' => $p['id']
                         ]);
                     }
                     
