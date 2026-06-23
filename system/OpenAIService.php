@@ -1051,7 +1051,7 @@ class OpenAIService
             $devedores = $this->db->fetchAll(
                 "SELECT id, nome, saldo_devedor, cobranca_automatica, cobranca_frequencia 
                  FROM clientes_fiado 
-                 WHERE tenant_id = ? AND saldo_devedor > 0 AND nome ILIKE ? 
+                 WHERE tenant_id = ? AND saldo_devedor >= 0.01 AND nome ILIKE ? 
                  ORDER BY nome ASC LIMIT 50", 
                 [$tenantId, "%{$nomeCliente}%"]
             );
@@ -1059,7 +1059,7 @@ class OpenAIService
             $devedores = $this->db->fetchAll(
                 "SELECT id, nome, saldo_devedor, cobranca_automatica, cobranca_frequencia 
                  FROM clientes_fiado 
-                 WHERE tenant_id = ? AND saldo_devedor > 0 
+                 WHERE tenant_id = ? AND saldo_devedor >= 0.01 
                  ORDER BY nome ASC LIMIT 50", 
                 [$tenantId]
             );
