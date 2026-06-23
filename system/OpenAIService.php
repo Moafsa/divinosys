@@ -110,7 +110,7 @@ class OpenAIService
             // Use loop para MCP (Agentic Loop)
             $maxIterations = 4;
             $iteration = 0;
-            $finalAction = ['type' => 'response', 'message' => 'Desculpe, não entendi.'];
+            $finalAction = ['type' => 'response', 'message' => 'Desculpe, não entendi. Limite de iterações atingido.'];
             
             while ($iteration < $maxIterations) {
                 $iteration++;
@@ -140,6 +140,9 @@ class OpenAIService
                 }
             }
             
+            if ($iteration >= $maxIterations) {
+                return ['type' => 'error', 'message' => 'Loop infinito detectado. Histórico: ' . json_encode($messages)];
+            }
             return $finalAction;
             
         } catch (Exception $e) {
