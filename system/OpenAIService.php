@@ -1203,7 +1203,7 @@ class OpenAIService
         
         if ($nomeCliente) {
             $clientes = $this->db->fetchAll(
-                "SELECT id, nome, telefone, saldo_devedor 
+                "SELECT id, nome, telefone, saldo_devedor, cobranca_automatica, cobranca_frequencia 
                  FROM clientes_fiado 
                  WHERE tenant_id = ? AND nome ILIKE ? 
                  ORDER BY nome ASC LIMIT 50", 
@@ -1211,7 +1211,7 @@ class OpenAIService
             );
         } else {
             $clientes = $this->db->fetchAll(
-                "SELECT id, nome, telefone, saldo_devedor 
+                "SELECT id, nome, telefone, saldo_devedor, cobranca_automatica, cobranca_frequencia 
                  FROM clientes_fiado 
                  WHERE tenant_id = ? 
                  ORDER BY nome ASC LIMIT 50", 
@@ -1228,10 +1228,14 @@ class OpenAIService
         
         $msg = "*Lista Geral de Clientes (Até 50):*\n\n";
         foreach ($clientes as $c) {
+            $cob = $c['cobranca_automatica'] ? "Ativa ({$c['cobranca_frequencia']})" : "Inativa";
             $msg .= "👤 *{$c['nome']}* (ID Fiado: {$c['id']})\n";
             if (!empty($c['telefone'])) $msg .= "📱 Telefone: {$c['telefone']}\n";
-            $msg .= "💰 Saldo Devedor Atual: R$ " . number_format($c['saldo_devedor'], 2, ',', '.') . "\n\n";
+            $msg .= "💰 Saldo Devedor Atual: R$ " . number_format($c['saldo_devedor'], 2, ',', '.') . "\n";
+            $msg .= "🤖 Cobrança IA: {$cob}\n\n";
         }
+        
+        $msg .= "[IMPORTANTE PARA A IA]: Se o usuário perguntou sobre quantidade de clientes, ou procurou um nome, CITE TODOS OS CLIENTES DESTA LISTA, sem omitir nenhum, mesmo que o saldo devedor seja zero. Não confunda pessoas com nomes parecidos.";
         
         return ['success' => true, 'message' => $msg];
     }
