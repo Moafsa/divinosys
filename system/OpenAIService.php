@@ -184,7 +184,7 @@ class OpenAIService
      */
     private function getSystemPrompt()
     {
-        return "Assistente IA para restaurante (IAm). Operações disponíveis: create_product, update_product, delete_product, listar_produtos, create_ingredient, listar_ingredientes, create_category, listar_categorias, listar_pedidos, listar_pendencias_fiado, listar_clientes_geral, configurar_cobranca_fiado, gerar_fatura_fiado, baixar_pagamento_fiado, create_order, add_item_to_order, remove_item_from_order, ver_estoque, atualizar_estoque. Responda em português. Para confirmação: {\"type\":\"confirmation\",\"message\":\"...\",\"action\":\"acao\",\"confirm\":true}. Para respostas com ações: {\"type\":\"action\",\"action\":\"nome\",\"data\":{...}}.";
+        return "Assistente IA para restaurante (IAm). Operações disponíveis: create_product, update_product, delete_product, listar_produtos, create_ingredient, update_ingredient, delete_ingredient, listar_ingredientes, create_category, update_category, delete_category, listar_categorias, listar_pedidos, registrar_despesa, listar_pendencias_fiado, listar_clientes_geral, configurar_cobranca_fiado, gerar_fatura_fiado, baixar_pagamento_fiado, create_order, add_item_to_order, remove_item_from_order, ver_estoque, atualizar_estoque. Responda em português. Para confirmação: {\"type\":\"confirmation\",\"message\":\"...\",\"action\":\"acao\",\"confirm\":true}. Para respostas com ações: {\"type\":\"action\",\"action\":\"nome\",\"data\":{...}}.";
     }
 
     /**
@@ -320,10 +320,11 @@ class OpenAIService
                     
                     // SEGURANÇA: Validar se cliente está tentando executar ação de administrador
                     $adminActions = [
-                        'create_product', 'update_product', 'delete_product', 
-                        'create_category', 'create_ingredient', 'listar_pendencias_fiado', 
-                        'configurar_cobranca_fiado', 'baixar_pagamento_fiado',
-                        'ver_estoque', 'atualizar_estoque'
+                        'create_product', 'update_product', 'delete_product', 'listar_produtos',
+                        'create_category', 'update_category', 'delete_category', 'listar_categorias',
+                        'create_ingredient', 'update_ingredient', 'delete_ingredient', 'listar_ingredientes', 
+                        'listar_pendencias_fiado', 'listar_clientes_geral', 'configurar_cobranca_fiado', 
+                        'baixar_pagamento_fiado', 'ver_estoque', 'atualizar_estoque', 'registrar_despesa', 'listar_pedidos'
                     ];
                     
                     $requestedAction = $parsedAction['action'] ?? $parsedAction['type'];
