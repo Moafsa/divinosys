@@ -51,12 +51,14 @@ class OpenAIService
                 "- add_item_to_order (data: {\"pedido_id\": 10, \"itens\": [{\"id\": 2, \"quantidade\": 1, \"preco\": 15.0}]})\n" .
                 "- remove_item_from_order (data: {\"pedido_item_id\": 25})\n\n" .
                 "Para ações de fiado, as ações são: \n" .
-                "- listar_pendencias_fiado (data: {\"nome_cliente\": \"opcional, nome do cliente para buscar especifico\"})\n" .
-                "- listar_compras_cliente (data: {\"nome_cliente\": \"nome do cliente para ver detalhes do que consumiu\"})\n" .
+                "- listar_pendencias_fiado (data: {\"nome_cliente\": \"opcional, nome do cliente para buscar saldo devedor\"})\n" .
+                "- listar_compras_cliente (data: {\"nome_cliente\": \"nome do cliente para ver a lista de pedidos, consumos, pagamentos e descontos do fiado\"})\n" .
                 "- configurar_cobranca_fiado (data: {\"cliente_id\": ID, \"frequencia\": \"diaria\"|\"semanal\"|\"mensal\", \"ativo\": true|false})\n" .
                 "- gerar_fatura_fiado (data: {\"cliente_id\": ID})\n" .
                 "- baixar_pagamento_fiado (data: {\"cliente_id\": ID, \"valor_pago\": 50.00})\n" .
                 "Para executar UMA DESSAS AÇÕES, responda EXATAMENTE neste formato JSON: {\"type\":\"action\",\"action\":\"nome_da_acao\",\"data\":{...}}. " .
+                "Sempre que o usuário perguntar sobre o que o cliente consumiu, como pagou, se teve desconto, ou o número do pedido fiado, VOCÊ DEVE OBRIGATORIAMENTE executar a ação `listar_compras_cliente` antes de responder para não inventar dados. " .
+                "Atenção: Os IDs que você acessa no fiado são 'IDs do Fiado', que podem ser diferentes dos IDs globais do cliente. Se for citar o ID, chame de 'ID Fiado'. " .
                 "Se for criar um pedido e o usuário não der os preços, busque no CONTEXTO e inclua os IDs e precos corretos. ";
             
             // Generate context safely
@@ -199,12 +201,14 @@ class OpenAIService
                     "- add_item_to_order (data: {\"pedido_id\": 10, \"itens\": [{\"id\": 2, \"quantidade\": 1, \"preco\": 15.0}]})\n" .
                     "- remove_item_from_order (data: {\"pedido_item_id\": 25})\n\n" .
                     "Para ações de fiado, as ações são: \n" .
-                    "- listar_pendencias_fiado (data: {\"nome_cliente\": \"opcional, nome do cliente\"})\n" .
-                    "- listar_compras_cliente (data: {\"nome_cliente\": \"nome do cliente para ver o que ele consumiu\"})\n" .
+                    "- listar_pendencias_fiado (data: {\"nome_cliente\": \"opcional, nome do cliente para buscar saldo devedor\"})\n" .
+                    "- listar_compras_cliente (data: {\"nome_cliente\": \"nome do cliente para ver a lista de pedidos, consumos, pagamentos e descontos do fiado\"})\n" .
                     "- configurar_cobranca_fiado (data: {\"cliente_id\": ID, \"frequencia\": \"diaria\"|\"semanal\"|\"mensal\", \"ativo\": true|false})\n" .
                     "- gerar_fatura_fiado (data: {\"cliente_id\": ID})\n" .
                     "- baixar_pagamento_fiado (data: {\"cliente_id\": ID, \"valor_pago\": 50.00})\n" .
                     "Para executar UMA DESSAS AÇÕES, responda EXATAMENTE neste formato JSON: {\"type\":\"action\",\"action\":\"nome_da_acao\",\"data\":{...}}. " .
+                    "Sempre que perguntarem sobre o que o cliente consumiu, como pagou, se teve desconto, ou o número do pedido fiado, VOCÊ DEVE OBRIGATORIAMENTE executar a ação `listar_compras_cliente` antes de responder para não inventar dados. " .
+                    "Atenção: Os IDs que você acessa no fiado são 'IDs do Fiado', que podem ser diferentes dos IDs globais do cliente. Se for citar o ID, chame de 'ID Fiado'. " .
                     "Se for criar um pedido e o usuário não der os preços, busque no CONTEXTO e inclua os IDs e precos corretos. ";
             } else {
                 $customerPhone = $context['customer_phone'] ?? '';
