@@ -149,7 +149,7 @@ try {
              LEFT JOIN usuarios u ON p.usuario_id = u.id AND u.tenant_id = p.tenant_id
              LEFT JOIN usuarios_globais ug ON p.usuario_global_id = ug.id
              WHERE p.idmesa::varchar = ? AND p.tenant_id = ? AND p.filial_id = ? 
-             AND p.status IN ('Pendente', 'Preparando', 'Pronto', 'Entregue') 
+             AND p.status IN ('Pendente', 'Preparando', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega') 
              AND p.status_pagamento != 'quitado' 
              AND NOT (p.status = 'Entregue' AND p.status_pagamento = 'quitado') 
              ORDER BY p.created_at ASC",

@@ -50,6 +50,9 @@ class OpenAIService
                 "- create_order (data: {\"mesa_id\": \"5\", \"cliente\": \"Nome\", \"itens\": [{\"id\": 1, \"quantidade\": 2, \"preco\": 10.0, \"observacao\": \"\", \"tamanho\": \"normal\"}]})\n" .
                 "- add_item_to_order (data: {\"pedido_id\": 10, \"itens\": [{\"id\": 2, \"quantidade\": 1, \"preco\": 15.0}]})\n" .
                 "- remove_item_from_order (data: {\"pedido_item_id\": 25})\n\n" .
+                "Para consultar e alterar estoque de produtos:\n" .
+                "- ver_estoque (data: {\"produto_nome\": \"nome do produto\"})\n" .
+                "- atualizar_estoque (data: {\"produto_nome\": \"nome do produto\", \"quantidade\": 10, \"operacao\": \"adicionar\"|\"remover\"|\"definir\"})\n\n" .
                 "Para ações de fiado, as ações são: \n" .
                 "- listar_pendencias_fiado (data: {\"nome_cliente\": \"opcional, nome do cliente para buscar saldo devedor\"})\n" .
                 "- listar_compras_cliente (data: {\"nome_cliente\": \"nome do cliente para ver a lista de pedidos, consumos, pagamentos e descontos do fiado\"})\n" .
@@ -99,7 +102,7 @@ class OpenAIService
                     'listar_pendencias_fiado', 'configurar_cobranca_fiado', 
                     'gerar_fatura_fiado', 'baixar_pagamento_fiado', 
                     'create_order', 'add_item_to_order', 'remove_item_from_order',
-                    'solicitar_fatura_fiado'
+                    'solicitar_fatura_fiado', 'ver_estoque', 'atualizar_estoque'
                 ])) {
                     $opResult = $this->executeOperation($action);
                     
@@ -201,6 +204,9 @@ class OpenAIService
                     "- create_order (data: {\"mesa_id\": \"5\", \"cliente\": \"Nome\", \"itens\": [{\"id\": 1, \"quantidade\": 2, \"preco\": 10.0, \"observacao\": \"\", \"tamanho\": \"normal\"}]})\n" .
                     "- add_item_to_order (data: {\"pedido_id\": 10, \"itens\": [{\"id\": 2, \"quantidade\": 1, \"preco\": 15.0}]})\n" .
                     "- remove_item_from_order (data: {\"pedido_item_id\": 25})\n\n" .
+                    "Para consultar e alterar estoque de produtos:\n" .
+                    "- ver_estoque (data: {\"produto_nome\": \"nome do produto\"})\n" .
+                    "- atualizar_estoque (data: {\"produto_nome\": \"nome do produto\", \"quantidade\": 10, \"operacao\": \"adicionar\"|\"remover\"|\"definir\"})\n\n" .
                     "Para ações de fiado, as ações são: \n" .
                     "- listar_pendencias_fiado (data: {\"nome_cliente\": \"opcional, nome do cliente para buscar saldo devedor\"})\n" .
                     "- listar_compras_cliente (data: {\"nome_cliente\": \"nome do cliente para ver a lista de pedidos, consumos, pagamentos e descontos do fiado\"})\n" .
@@ -291,7 +297,7 @@ class OpenAIService
                     'listar_pendencias_fiado', 'configurar_cobranca_fiado', 
                     'gerar_fatura_fiado', 'baixar_pagamento_fiado', 
                     'create_order', 'add_item_to_order', 'remove_item_from_order',
-                    'solicitar_fatura_fiado', 'listar_compras_cliente'
+                    'solicitar_fatura_fiado', 'listar_compras_cliente', 'ver_estoque', 'atualizar_estoque'
                 ])) {
                     $opResult = $this->executeOperation($parsedAction);
                     
@@ -783,6 +789,10 @@ class OpenAIService
                     return $this->gerarFaturaFiado($operation['data']);
                 case 'baixar_pagamento_fiado':
                     return $this->baixarPagamentoFiado($operation['data']);
+                case 'ver_estoque':
+                    return $this->verEstoque($operation['data']);
+                case 'atualizar_estoque':
+                    return $this->atualizarEstoque($operation['data']);
                 default:
                     throw new Exception('Operação não suportada: ' . $operation['type']);
             }
@@ -1162,6 +1172,7 @@ class OpenAIService
     private function baixarPagamentoFiado($data)
     {
         $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
+        $filialId = $this->filialId ?? $this->session->getFilialId() ?? 1;
         $cId = $data['cliente_id'] ?? null;
         $valorPago = (float)($data['valor_pago'] ?? 0);
         
@@ -1170,7 +1181,20 @@ class OpenAIService
         $cliente = $this->db->fetch("SELECT * FROM clientes_fiado WHERE id = ? AND tenant_id = ?", [$cId, $tenantId]);
         if (!$cliente) return ['success' => false, 'message' => "Cliente não encontrado."];
         
-        $pedidos = $this->db->fetchAll("SELECT * FROM vendas_fiadas WHERE cliente_id = ? AND status IN ('pendente', 'vencido') ORDER BY data_vencimento ASC", [$cId]);
+        $usuarioGlobalId = $cliente['usuario_global_id'] ?? $cId;
+        
+        $sqlPendentes = "
+            (SELECT id, valor_total, valor_pago, (valor_total - valor_pago) as saldo_devedor, data_vencimento as data_ordenacao, 'fiado' as origem 
+             FROM vendas_fiadas 
+             WHERE cliente_id = ? AND tenant_id = ? AND status IN ('pendente', 'vencido'))
+            UNION ALL
+            (SELECT idpedido as id, valor_total, valor_pago, saldo_devedor, created_at as data_ordenacao, 'pedido' as origem
+             FROM pedido 
+             WHERE usuario_global_id = ? AND tenant_id = ? AND status_pagamento IN ('pendente', 'parcial') AND status NOT IN ('Cancelado'))
+            ORDER BY data_ordenacao ASC
+        ";
+        
+        $pedidos = $this->db->fetchAll($sqlPendentes, [$cId, $tenantId, $usuarioGlobalId, $tenantId]);
         
         $valorRestante = $valorPago;
         $this->db->beginTransaction();
@@ -1178,34 +1202,65 @@ class OpenAIService
             foreach ($pedidos as $p) {
                 if ($valorRestante <= 0) break;
                 
-                $valorPendentePedido = (float)$p['valor_total'] - (float)$p['valor_pago'];
-                if ($valorRestante >= $valorPendentePedido) {
-                    $this->db->update('vendas_fiadas', [
-                        'valor_pago' => $p['valor_total'],
-                        'status' => 'pago'
-                    ], 'id = ?', [$p['id']]);
-                    $valorRestante -= $valorPendentePedido;
+                $saldoAtual = (float)$p['saldo_devedor'];
+                $valorPagarNestaVenda = min($valorRestante, $saldoAtual);
+                
+                if ($p['origem'] === 'pedido') {
+                    $this->db->insert('pagamentos_pedido', [
+                        'pedido_id' => $p['id'],
+                        'valor_pago' => $valorPagarNestaVenda,
+                        'forma_pagamento' => 'dinheiro/pix (whatsapp)',
+                        'descricao' => 'Pagamento Fiado em Lote (IA)',
+                        'usuario_id' => $this->session->getUserId() ?? 1,
+                        'usuario_global_id' => $usuarioGlobalId,
+                        'tenant_id' => $tenantId,
+                        'filial_id' => $filialId
+                    ]);
+                    
+                    $novoValorPago = (float)$p['valor_pago'] + $valorPagarNestaVenda;
+                    $novoSaldoDevedor = (float)$p['saldo_devedor'] - $valorPagarNestaVenda;
+                    $novoStatus = $novoSaldoDevedor <= 0.01 ? 'concluido' : 'parcial';
+                    
+                    $this->db->update('pedido', [
+                        'valor_pago' => $novoValorPago,
+                        'saldo_devedor' => $novoSaldoDevedor,
+                        'status_pagamento' => $novoStatus
+                    ], 'idpedido = ?', [$p['id']]);
                 } else {
+                    $this->db->insert('pagamentos_fiado', [
+                        'venda_fiada_id' => $p['id'],
+                        'valor_pago' => $valorPagarNestaVenda,
+                        'forma_pagamento' => 'dinheiro/pix (whatsapp)',
+                        'observacoes' => 'Pagamento em Lote (IA)',
+                        'tenant_id' => $tenantId,
+                        'filial_id' => $filialId
+                    ]);
+                    
+                    $novoValorPago = (float)$p['valor_pago'] + $valorPagarNestaVenda;
+                    $novoSaldoDevedor = (float)$p['valor_total'] - $novoValorPago;
+                    $novoStatus = $novoSaldoDevedor <= 0.01 ? 'pago' : 'pendente';
+                    
                     $this->db->update('vendas_fiadas', [
-                        'valor_pago' => (float)$p['valor_pago'] + $valorRestante
+                        'valor_pago' => $novoValorPago,
+                        'status' => $novoStatus
                     ], 'id = ?', [$p['id']]);
-                    $valorRestante = 0;
                 }
+                
+                $this->db->insert('movimentacoes_financeiras', [
+                    'tenant_id' => $tenantId,
+                    'filial_id' => $filialId,
+                    'tipo' => 'entrada',
+                    'categoria_id' => 2,
+                    'descricao' => "Pagamento fiado lote (IA) - Venda ID: {$p['id']} - dinheiro/pix",
+                    'valor' => $valorPagarNestaVenda,
+                    'referencia_id' => $p['id']
+                ]);
+                
+                $valorRestante -= $valorPagarNestaVenda;
             }
             
             $novoSaldo = max(0, (float)$cliente['saldo_devedor'] - $valorPago);
             $this->db->update('clientes_fiado', ['saldo_devedor' => $novoSaldo], 'id = ?', [$cId]);
-            
-            $vendaId = count($pedidos) > 0 ? $pedidos[0]['id'] : null;
-            if ($vendaId) {
-                $this->db->insert('pagamentos_fiado', [
-                    'venda_fiada_id' => $vendaId,
-                    'valor_pago' => $valorPago,
-                    'forma_pagamento' => 'dinheiro/pix (whatsapp)',
-                    'tenant_id' => $tenantId,
-                    'filial_id' => $this->filialId ?? 1
-                ]);
-            }
             
             $this->db->commit();
             return ['success' => true, 'message' => "Pagamento de R$ " . number_format($valorPago, 2, ',', '.') . " registrado com sucesso! Novo saldo: R$ " . number_format($novoSaldo, 2, ',', '.')];
@@ -1213,5 +1268,57 @@ class OpenAIService
             $this->db->rollBack();
             return ['success' => false, 'message' => "Erro ao registrar pagamento: " . $e->getMessage()];
         }
+    }
+
+    private function verEstoque($data)
+    {
+        $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
+        $filialId = $this->filialId ?? $this->session->getFilialId() ?? 1;
+        $nome = $data['produto_nome'] ?? '';
+        
+        if (empty($nome)) return ['success' => false, 'message' => 'Informe o nome do produto.'];
+        
+        $produtos = $this->db->fetchAll("SELECT id, nome, estoque_atual FROM produtos WHERE tenant_id = ? AND filial_id = ? AND nome ILIKE ? LIMIT 10", [$tenantId, $filialId, "%{$nome}%"]);
+        
+        if (empty($produtos)) return ['success' => true, 'message' => "Nenhum produto encontrado com o nome '{$nome}'."];
+        
+        $msg = "*Estoque atual:*\n";
+        foreach ($produtos as $p) {
+            $estoque = $p['estoque_atual'] ?? 0;
+            $msg .= "- {$p['nome']}: {$estoque} unidades\n";
+        }
+        
+        return ['success' => true, 'message' => $msg];
+    }
+
+    private function atualizarEstoque($data)
+    {
+        $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
+        $filialId = $this->filialId ?? $this->session->getFilialId() ?? 1;
+        $nome = $data['produto_nome'] ?? '';
+        $quantidade = $data['quantidade'] ?? null;
+        $operacao = $data['operacao'] ?? 'adicionar';
+        
+        if (empty($nome) || $quantidade === null) return ['success' => false, 'message' => 'Informe o nome do produto e a quantidade.'];
+        
+        $produtos = $this->db->fetchAll("SELECT id, nome, estoque_atual FROM produtos WHERE tenant_id = ? AND filial_id = ? AND nome ILIKE ? ORDER BY length(nome) ASC LIMIT 1", [$tenantId, $filialId, "%{$nome}%"]);
+        
+        if (empty($produtos)) return ['success' => false, 'message' => "Produto '{$nome}' não encontrado no sistema."];
+        
+        $p = $produtos[0];
+        $estoqueAtual = floatval($p['estoque_atual'] ?? 0);
+        $quantidade = floatval($quantidade);
+        
+        if ($operacao === 'adicionar') {
+            $novoEstoque = $estoqueAtual + $quantidade;
+        } elseif ($operacao === 'remover') {
+            $novoEstoque = $estoqueAtual - $quantidade;
+        } else {
+            $novoEstoque = $quantidade;
+        }
+        
+        $this->db->update('produtos', ['estoque_atual' => $novoEstoque], 'id = ? AND tenant_id = ? AND filial_id = ?', [$p['id'], $tenantId, $filialId]);
+        
+        return ['success' => true, 'message' => "O estoque de *{$p['nome']}* foi atualizado com sucesso! Novo saldo em estoque: {$novoEstoque} unidades."];
     }
 }
