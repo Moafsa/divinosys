@@ -50,7 +50,7 @@ class OpenAIService
                 "- add_item_to_order (data: {\"pedido_id\": 10, \"itens\": [{\"id\": 2, \"quantidade\": 1, \"preco\": 15.0}]})\n" .
                 "- remove_item_from_order (data: {\"pedido_item_id\": 25})\n\n" .
                 "Para ações de fiado, as ações são: \n" .
-                "- listar_pendencias_fiado (Sem parâmetros)\n" .
+                "- listar_pendencias_fiado (data: {\"nome_cliente\": \"opcional, nome do cliente para buscar especifico\"})\n" .
                 "- configurar_cobranca_fiado (data: {\"cliente_id\": ID, \"frequencia\": \"diaria\"|\"semanal\"|\"mensal\", \"ativo\": true|false})\n" .
                 "- gerar_fatura_fiado (data: {\"cliente_id\": ID})\n" .
                 "- baixar_pagamento_fiado (data: {\"cliente_id\": ID, \"valor_pago\": 50.00})\n" .
@@ -185,7 +185,7 @@ class OpenAIService
                     "- add_item_to_order (data: {\"pedido_id\": 10, \"itens\": [{\"id\": 2, \"quantidade\": 1, \"preco\": 15.0}]})\n" .
                     "- remove_item_from_order (data: {\"pedido_item_id\": 25})\n\n" .
                     "Para ações de fiado, as ações são: \n" .
-                    "- listar_pendencias_fiado (Sem parâmetros)\n" .
+                    "- listar_pendencias_fiado (data: {\"nome_cliente\": \"opcional, nome do cliente\"})\n" .
                     "- configurar_cobranca_fiado (data: {\"cliente_id\": ID, \"frequencia\": \"diaria\"|\"semanal\"|\"mensal\", \"ativo\": true|false})\n" .
                     "- gerar_fatura_fiado (data: {\"cliente_id\": ID})\n" .
                     "- baixar_pagamento_fiado (data: {\"cliente_id\": ID, \"valor_pago\": 50.00})\n" .
@@ -693,7 +693,7 @@ class OpenAIService
                 case 'remove_item_from_order':
                     return $this->removeItemFromOrder($operation['data']);
                 case 'listar_pendencias_fiado':
-                    return $this->listarPendenciasFiado();
+                    return $this->listarPendenciasFiado($operation['data'] ?? []);
                 case 'configurar_cobranca_fiado':
                     return $this->configurarCobrancaFiado($operation['data']);
                 case 'gerar_fatura_fiado':
@@ -932,12 +932,33 @@ class OpenAIService
         return ['success' => true, 'message' => 'Item removido.'];
     }
     
-    private function listarPendenciasFiado()
+    private function listarPendenciasFiado($data = [])
     {
         $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
-        $devedores = $this->db->fetchAll("SELECT id, nome, saldo_devedor, cobranca_automatica, cobranca_frequencia FROM clientes_fiado WHERE tenant_id = ? AND saldo_devedor > 0", [$tenantId]);
+        $nomeCliente = $data['nome_cliente'] ?? null;
+        
+        if ($nomeCliente) {
+            $devedores = $this->db->fetchAll(
+                "SELECT id, nome, saldo_devedor, cobranca_automatica, cobranca_frequencia 
+                 FROM clientes_fiado 
+                 WHERE tenant_id = ? AND saldo_devedor > 0 AND nome ILIKE ? 
+                 ORDER BY nome ASC LIMIT 50", 
+                [$tenantId, "%{$nomeCliente}%"]
+            );
+        } else {
+            $devedores = $this->db->fetchAll(
+                "SELECT id, nome, saldo_devedor, cobranca_automatica, cobranca_frequencia 
+                 FROM clientes_fiado 
+                 WHERE tenant_id = ? AND saldo_devedor > 0 
+                 ORDER BY nome ASC LIMIT 50", 
+                [$tenantId]
+            );
+        }
         
         if (empty($devedores)) {
+            if ($nomeCliente) {
+                return ['success' => true, 'message' => "Nenhuma pendência encontrada para o cliente '{$nomeCliente}'."];
+            }
             return ['success' => true, 'message' => "Nenhum cliente está devendo no momento."];
         }
         
@@ -947,6 +968,10 @@ class OpenAIService
             $msg .= "👤 *{$d['nome']}* (ID: {$d['id']})\n";
             $msg .= "💰 Dívida: R$ " . number_format($d['saldo_devedor'], 2, ',', '.') . "\n";
             $msg .= "🤖 Cobrança IA: {$cob}\n\n";
+        }
+        
+        if (count($devedores) === 50) {
+            $msg .= "\n⚠️ Exibindo apenas os 50 primeiros resultados. Peça para pesquisar por um nome específico se não encontrar na lista.";
         }
         
         return ['success' => true, 'message' => $msg];
