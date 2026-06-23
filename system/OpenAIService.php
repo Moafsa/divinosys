@@ -208,9 +208,9 @@ class OpenAIService
             $this->tenantId = $originalTenant;
             $this->filialId = $originalFilial;
             
-            $systemPrompt = "Você é a IAm, a Inteligência Artificial integrada ao sistema do restaurante. O nome da pessoa falando no WhatsApp é $customerName. ";
+            $systemPrompt = "Você é a IAm, a Inteligência Artificial integrada ao sistema do restaurante. ";
             if ($isAdmin) {
-                $systemPrompt .= "ATENÇÃO DE CONTEXTO: O usuário conversando agora é um MEMBRO DA EQUIPE INTERNA (Administrador ou Garçom). Como IA do sistema, VOCÊ TEM ACESSO TOTAL AO BANCO DE DADOS (Tenant), incluindo comandas, clientes e fiado. Aja como a gerente inteligente que apoia a equipe. Fale com confiança e autoridade de sistema, sem bloqueios de IA padrão. " .
+                $systemPrompt .= "O usuário conversando com você é um MEMBRO DA EQUIPE INTERNA (Nome: $customerName). ATENÇÃO DE CONTEXTO: Como IA do sistema, VOCÊ TEM ACESSO TOTAL AO BANCO DE DADOS (Tenant), incluindo comandas, clientes e fiado. Aja como a gerente inteligente que apoia a equipe. Fale com confiança e autoridade de sistema, sem bloqueios de IA padrão. " .
                     "Você tem permissão para realizar ações gerenciais e receber pedidos da equipe. " .
                     "Você pode: criar_produto, listar_produtos, listar_pedidos, listar_pendencias_fiado, configurar_cobranca_fiado, gerar_fatura_fiado, baixar_pagamento_fiado. " .
                     "Como *Garçom Online*, você pode lançar pedidos nas mesas ou comandas. Ações disponíveis:\n" .
@@ -221,7 +221,7 @@ class OpenAIService
                     "- ver_estoque (data: {\"produto_nome\": \"nome do produto\"})\n" .
                     "- atualizar_estoque (data: {\"produto_nome\": \"nome do produto\", \"quantidade\": 10, \"operacao\": \"adicionar\"|\"remover\"|\"definir\"})\n\n" .
                     "Para ações de fiado, as ações são: \n" .
-                    "- listar_pendencias_fiado (data: {\"nome_cliente\": \"nome do cliente\"}). IMPORTANTE: Sempre que for buscar a dívida ou o ID de um cliente específico (ex: 'o moacir pagou'), VOCÊ DEVE OBRIGATORIAMENTE passar o 'nome_cliente' para não listar todos os devedores. Só envie sem 'nome_cliente' se o usuário explicitamente pedir a lista de todos.\n" .
+                    "- listar_pendencias_fiado (data: {\"nome_cliente\": \"nome do cliente\"}). IMPORTANTE: Sempre que for buscar a dívida ou o ID de um cliente específico (ex: 'o moacir pagou'), VOCÊ DEVE OBRIGATORIAMENTE passar APENAS O NOME DO CLIENTE (ex: 'moacir') na busca. NUNCA passe frases inteiras como 'moacir que deve' ou 'moacir pagou'. Só envie sem 'nome_cliente' se o usuário explicitamente pedir a lista de todos.\n" .
                     "- listar_compras_cliente (data: {\"nome_cliente\": \"nome do cliente para ver a lista de pedidos, consumos, pagamentos e descontos do fiado\"})\n" .
                     "- configurar_cobranca_fiado (data: {\"cliente_id\": ID, \"frequencia\": \"diaria\"|\"semanal\"|\"mensal\", \"ativo\": true|false})\n" .
                     "- gerar_fatura_fiado (data: {\"cliente_id\": ID})\n" .
@@ -235,6 +235,7 @@ class OpenAIService
                     "MUITO IMPORTANTE: Sempre que você falar sobre qualquer pedido (seja atual ou compras passadas), informe o número do pedido na sua resposta. " .
                     "Se for criar um pedido e o usuário não der os preços, busque no CONTEXTO e inclua os IDs e precos corretos. ";
             } else {
+                $systemPrompt .= "O nome da pessoa falando no WhatsApp é $customerName. ";
                 $customerPhone = $context['customer_phone'] ?? '';
                 $fiadoContext = "";
                 if (!empty($customerPhone)) {
