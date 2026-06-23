@@ -668,11 +668,11 @@ function pagamentoLoteCliente($pdo, $tenantId, $filialId) {
                 $sqlPagamento = "
                     INSERT INTO pagamentos_pedido (
                         pedido_id, valor_pago, forma_pagamento, data_pagamento,
-                        observacoes, tenant_id, filial_id, created_at
-                    ) VALUES (?, ?, ?, NOW(), 'Pagamento Fiado em Lote', ?, ?, NOW())
+                        descricao, tenant_id, filial_id, created_at, usuario_id, usuario_global_id
+                    ) VALUES (?, ?, ?, NOW(), 'Pagamento Fiado em Lote', ?, ?, NOW(), ?, ?)
                 ";
                 $stmtPagamento = $pdo->prepare($sqlPagamento);
-                $stmtPagamento->execute([$venda['id'], $valorPagarNestaVenda, $formaPagamento, $tenantId, $filialId]);
+                $stmtPagamento->execute([$venda['id'], $valorPagarNestaVenda, $formaPagamento, $tenantId, $filialId, $_SESSION['user_id'] ?? 1, $clienteId]);
 
                 $novoValorPago = floatval($venda['valor_pago']) + $valorPagarNestaVenda;
                 $novoSaldoDevedor = floatval($venda['saldo_devedor']) - $valorPagarNestaVenda;
@@ -724,14 +724,16 @@ function pagamentoLoteCliente($pdo, $tenantId, $filialId) {
             $valorRestante -= $valorPagarNestaVenda;
         }
         
-        // Atualizar saldo total do cliente fiado
-        $sqlUpdateCliente = "
-            UPDATE clientes_fiado 
-            SET saldo_devedor = GREATEST(0, saldo_devedor - ?) 
-            WHERE id = ? AND tenant_id = ?
-        ";
-        $stmtUpdateCliente = $pdo->prepare($sqlUpdateCliente);
-        $stmtUpdateCliente->execute([$valorPagamento, $clienteId, $tenantId]);
+        // Atualizar saldo total do cliente fiado apenas se for origem de fiado
+        if ($origem !== 'pedido') {
+            $sqlUpdateCliente = "
+                UPDATE clientes_fiado 
+                SET saldo_devedor = GREATEST(0, saldo_devedor - ?) 
+                WHERE id = ? AND tenant_id = ?
+            ";
+            $stmtUpdateCliente = $pdo->prepare($sqlUpdateCliente);
+            $stmtUpdateCliente->execute([$valorPagamento, $clienteId, $tenantId]);
+        }
         
         $pdo->commit();
         echo json_encode(['success' => true, 'message' => 'Pagamento registrado com sucesso e abatido dos pedidos em aberto.']);
@@ -739,7 +741,7 @@ function pagamentoLoteCliente($pdo, $tenantId, $filialId) {
     } catch (Exception $e) {
         $pdo->rollBack();
         error_log("Erro em pagamentoLoteCliente: " . $e->getMessage());
-        echo json_encode(['success' => false, 'message' => 'Erro ao processar pagamento.']);
+        echo json_encode(['success' => false, 'message' => 'Erro ao processar pagamento: ' . $e->getMessage()]);
     }
 }
 ?>
