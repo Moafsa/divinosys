@@ -1070,7 +1070,7 @@ class OpenAIService
         $cId = $cliente['id'];
         
         $itens = $this->db->fetchAll("
-            SELECT p.data, pr.nome as produto_nome, pi.quantidade, pi.valor_total
+            SELECT p.idpedido, p.data, pr.nome as produto_nome, pi.quantidade, pi.valor_total
             FROM vendas_fiadas v
             JOIN pedido p ON v.pedido_id = p.idpedido
             JOIN pedido_itens pi ON p.idpedido = pi.pedido_id
@@ -1083,13 +1083,31 @@ class OpenAIService
             return ['success' => true, 'message' => "O cliente {$cliente['nome']} não possui consumações detalhadas atreladas a pedidos não pagos."];
         }
         
-        $msg = "Detalhes do consumo pendente de {$cliente['nome']}:\n";
+        $itensPorPedido = [];
         foreach ($itens as $i) {
-            $dataCompra = date('d/m/Y', strtotime($i['data']));
-            $msg .= "- [{$dataCompra}] {$i['quantidade']}x {$i['produto_nome']} (R$ " . number_format($i['valor_total'], 2, ',', '.') . ")\n";
+            $itensPorPedido[$i['idpedido']]['data'] = $i['data'];
+            $itensPorPedido[$i['idpedido']]['itens'][] = $i;
+        }
+
+        $msg = "Detalhes do consumo pendente de {$cliente['nome']}:\n";
+        foreach ($itensPorPedido as $idPedido => $pedido) {
+            $dataCompra = date('d/m/Y', strtotime($pedido['data']));
+            $msg .= "- Pedido #{$idPedido} em {$dataCompra}:\n";
+            foreach ($pedido['itens'] as $item) {
+                $msg .= "  * {$item['quantidade']}x {$item['produto_nome']} (R$ " . number_format($item['valor_total'], 2, ',', '.') . ")\n";
+            }
+            
+            // Buscar pagamentos e descontos atrelados ao pedido
+            $pagamentos = $this->db->fetchAll("SELECT forma_pagamento, valor_pago FROM pagamentos_pedido WHERE pedido_id = ?", [$idPedido]);
+            if (!empty($pagamentos)) {
+                $msg .= "  * Divisão de pagamentos do pedido no caixa:\n";
+                foreach ($pagamentos as $pag) {
+                    $msg .= "    - " . $pag['forma_pagamento'] . ": R$ " . number_format($pag['valor_pago'], 2, ',', '.') . "\n";
+                }
+            }
         }
         
-        $msg .= "\n[INSTRUÇÃO PARA A IA]: Atenção! O valor total dos itens acima pode ser maior que a dívida pendente do cliente. Isso ocorre porque o cliente pode ter dado uma entrada (pagamento parcial em dinheiro/pix/desconto) no momento do pedido, pendurando no fiado apenas o restante. NÃO invente valores nem diga que ele pagou 'compras anteriores' se você não tiver essa informação. Se o usuário perguntar sobre a diferença, explique que houve pagamento parcial no ato da compra.";
+        $msg .= "\n[INSTRUÇÃO PARA A IA]: Acima está a lista de itens consumidos e como o pedido foi fechado no caixa (incluindo dinheiro, descontos e o valor que efetivamente foi para o FIADO). Use essas informações para explicar exatamente o que o cliente consumiu e como a conta foi dividida (ex: pagou X em dinheiro, teve Y de desconto, e sobrou Z para o fiado).";
         
         return ['success' => true, 'message' => $msg];
     }
