@@ -58,9 +58,10 @@ class OpenAIService
                 "- listar_compras_cliente (data: {\"nome_cliente\": \"nome do cliente para ver a lista de pedidos, consumos, pagamentos e descontos do fiado\"})\n" .
                 "- configurar_cobranca_fiado (data: {\"cliente_id\": ID, \"frequencia\": \"diaria\"|\"semanal\"|\"mensal\", \"ativo\": true|false})\n" .
                 "- gerar_fatura_fiado (data: {\"cliente_id\": ID})\n" .
-                "- baixar_pagamento_fiado (data: {\"cliente_id\": ID, \"valor_pago\": 50.00})\n" .
+                "- baixar_pagamento_fiado (data: {\"cliente_id\": ID, \"pagamentos\": [{\"valor\": 10.0, \"forma_pagamento\": \"dinheiro\"}], \"desconto_valor\": 2.50, \"destino\": \"ambos\"}). O destino pode ser 'fiado', 'pedido' ou 'ambos'. Se o usuário não informar as formas de pagamento para baixar um saldo, VOCÊ DEVE OBRIGATORIAMENTE PERGUNTAR antes de executar a ação. Se ele pedir um desconto % ou R$, calcule o valor final absoluto e mande em desconto_valor. \n" .
+                "Sempre que o usuário relatar um pagamento (ex: 'o cliente pagou X'), você deve agir para BAIXAR O PAGAMENTO usando a ação baixar_pagamento_fiado. Se precisar do ID do cliente, chame listar_pendencias_fiado primeiro e, COM O RESULTADO EM MÃOS, decida o próximo passo. \n" .
                 "Para executar UMA DESSAS AÇÕES, responda EXATAMENTE neste formato JSON: {\"type\":\"action\",\"action\":\"nome_da_acao\",\"data\":{...}}. " .
-                "Sempre que o usuário perguntar sobre o que o cliente consumiu, como pagou, se teve desconto, ou o número do pedido fiado, VOCÊ DEVE OBRIGATORIAMENTE executar a ação `listar_compras_cliente` antes de responder para não inventar dados. " .
+                "IMPORTANTE: Se o usuário pedir o EXTRATO ou HISTÓRICO do fiado (ex: 'o que o Moacir consumiu?', 'quais são os pedidos pendentes dele?'), use a ação `listar_compras_cliente`. NÃO use essa ação se a intenção do usuário for pagar/baixar uma dívida. " .
                 "Atenção: Os IDs que você acessa no fiado são 'IDs do Fiado', que podem ser diferentes dos IDs globais do cliente. Se for citar o ID, chame de 'ID Fiado'. " .
                 "MUITO IMPORTANTE: Sempre que você falar sobre qualquer pedido (seja atual ou compras passadas), informe o número do pedido na sua resposta. " .
                 "Se for criar um pedido e o usuário não der os preços, busque no CONTEXTO e inclua os IDs e precos corretos. ";
@@ -90,50 +91,40 @@ class OpenAIService
                 $messages[1]['content'] .= "\n\nDados dos anexos:\n" . json_encode($attachmentData, JSON_PRETTY_PRINT);
             }
             
-            // Call OpenAI API
-            $response = $this->callOpenAI($messages);
+            // Use loop para MCP (Agentic Loop)
+            $maxIterations = 4;
+            $iteration = 0;
+            $finalAction = ['type' => 'response', 'message' => 'Desculpe, não entendi.'];
             
-            // Parse response and determine action
-            $action = $this->parseAIResponse($response, $attachmentData);
-            
-            // If it's an action, we should execute it right away to mimic WhatsApp behavior
-            if (isset($action['type']) && $action['type'] === 'action') {
-                if (in_array($action['action'], [
-                    'listar_pendencias_fiado', 'configurar_cobranca_fiado', 
-                    'gerar_fatura_fiado', 'baixar_pagamento_fiado', 
-                    'create_order', 'add_item_to_order', 'remove_item_from_order',
-                    'solicitar_fatura_fiado', 'ver_estoque', 'atualizar_estoque'
-                ])) {
-                    $opResult = $this->executeOperation($action);
+            while ($iteration < $maxIterations) {
+                $iteration++;
+                
+                $response = $this->callOpenAI($messages);
+                $action = $this->parseAIResponse($response, $attachmentData);
+                
+                if (isset($action['type']) && $action['type'] === 'action') {
+                    $messages[] = ['role' => 'assistant', 'content' => json_encode($action)];
                     
-                    if (in_array($action['action'], ['listar_pendencias_fiado', 'listar_compras_cliente'])) {
-                        $messages[] = ['role' => 'assistant', 'content' => json_encode($action)];
-                        $messages[] = ['role' => 'user', 'content' => "Resultado retornado do sistema: " . json_encode($opResult) . ". Baseado nesses dados, responda o usuário de forma conversacional e amigável. Retorne o mesmo formato JSON de resposta padrão com {'type':'response', 'message':'sua resposta natural aqui'}. Não copie o JSON recebido, mas sim a informação contida nele."];
-                        $response2 = $this->callOpenAI($messages);
-                        $finalAction = $this->parseAIResponse($response2, $attachmentData);
-                        if (isset($finalAction['type']) && $finalAction['type'] === 'response') {
-                            return $finalAction;
-                        }
-                    }
-                    
-                    return [
-                        'type' => 'response',
-                        'message' => $opResult['message'] ?? 'Ação executada com sucesso.'
-                    ];
-                } else {
                     $opToExecute = [
                         'type' => $action['action'] ?? $action['type'],
                         'data' => $action['data'] ?? []
                     ];
+                    
                     $execResult = $this->executeOperation($opToExecute);
-                    return [
-                        'type' => 'response',
-                        'message' => $execResult['message'] ?? "Ação concluída com sucesso!"
+                    
+                    $resultStr = json_encode($execResult);
+                    $messages[] = [
+                        'role' => 'user',
+                        'content' => "O sistema executou a ação e retornou:\n{$resultStr}\n\nAnalise o resultado. Se a tarefa foi totalmente concluída, retorne {'type':'response', 'message':'mensagem natural aqui'}. Se precisar perguntar algo ao usuário (como a forma de pagamento), retorne {'type':'response', 'message':'sua pergunta'}. Se precisar de outra ação do sistema, retorne outro {'type':'action', ...}."
                     ];
+                    continue;
+                } else {
+                    $finalAction = $action;
+                    break;
                 }
             }
             
-            return $action;
+            return $finalAction;
             
         } catch (Exception $e) {
             error_log('OpenAI Service Error: ' . $e->getMessage());
