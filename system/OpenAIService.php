@@ -52,6 +52,7 @@ class OpenAIService
                 "- remove_item_from_order (data: {\"pedido_item_id\": 25})\n\n" .
                 "Para ações de fiado, as ações são: \n" .
                 "- listar_pendencias_fiado (data: {\"nome_cliente\": \"opcional, nome do cliente para buscar especifico\"})\n" .
+                "- listar_compras_cliente (data: {\"nome_cliente\": \"nome do cliente para ver detalhes do que consumiu\"})\n" .
                 "- configurar_cobranca_fiado (data: {\"cliente_id\": ID, \"frequencia\": \"diaria\"|\"semanal\"|\"mensal\", \"ativo\": true|false})\n" .
                 "- gerar_fatura_fiado (data: {\"cliente_id\": ID})\n" .
                 "- baixar_pagamento_fiado (data: {\"cliente_id\": ID, \"valor_pago\": 50.00})\n" .
@@ -98,6 +99,17 @@ class OpenAIService
                     'solicitar_fatura_fiado'
                 ])) {
                     $opResult = $this->executeOperation($action);
+                    
+                    if (in_array($action['action'], ['listar_pendencias_fiado', 'listar_compras_cliente'])) {
+                        $messages[] = ['role' => 'assistant', 'content' => json_encode($action)];
+                        $messages[] = ['role' => 'user', 'content' => "Resultado retornado do sistema: " . json_encode($opResult) . ". Baseado nesses dados, responda o usuário de forma conversacional e amigável. Retorne o mesmo formato JSON de resposta padrão com {'type':'response', 'message':'sua resposta natural aqui'}. Não copie o JSON recebido, mas sim a informação contida nele."];
+                        $response2 = $this->callOpenAI($messages);
+                        $finalAction = $this->parseAIResponse($response2, $attachmentData);
+                        if (isset($finalAction['type']) && $finalAction['type'] === 'response') {
+                            return $finalAction;
+                        }
+                    }
+                    
                     return [
                         'type' => 'response',
                         'message' => $opResult['message'] ?? 'Ação executada com sucesso.'
@@ -188,6 +200,7 @@ class OpenAIService
                     "- remove_item_from_order (data: {\"pedido_item_id\": 25})\n\n" .
                     "Para ações de fiado, as ações são: \n" .
                     "- listar_pendencias_fiado (data: {\"nome_cliente\": \"opcional, nome do cliente\"})\n" .
+                    "- listar_compras_cliente (data: {\"nome_cliente\": \"nome do cliente para ver o que ele consumiu\"})\n" .
                     "- configurar_cobranca_fiado (data: {\"cliente_id\": ID, \"frequencia\": \"diaria\"|\"semanal\"|\"mensal\", \"ativo\": true|false})\n" .
                     "- gerar_fatura_fiado (data: {\"cliente_id\": ID})\n" .
                     "- baixar_pagamento_fiado (data: {\"cliente_id\": ID, \"valor_pago\": 50.00})\n" .
@@ -260,6 +273,29 @@ class OpenAIService
                     'solicitar_fatura_fiado'
                 ])) {
                     $opResult = $this->executeOperation($parsedAction);
+                    
+                    if (in_array($parsedAction['action'], ['listar_pendencias_fiado', 'listar_compras_cliente'])) {
+                        $messages[] = ['role' => 'assistant', 'content' => $aiText];
+                        $messages[] = ['role' => 'user', 'content' => "Resultado retornado do sistema: " . json_encode($opResult) . ". Baseado nesses dados, responda o usuário de forma conversacional e amigável. Você deve gerar apenas o texto puro da mensagem, sem JSON na resposta final."];
+                        
+                        $data['messages'] = $messages;
+                        $ch = curl_init('https://api.openai.com/v1/chat/completions');
+                        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                        curl_setopt($ch, CURLOPT_POST, true);
+                        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+                        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                            'Content-Type: application/json',
+                            'Authorization: Bearer ' . $this->apiKey
+                        ]);
+                        $response2 = curl_exec($ch);
+                        curl_close($ch);
+                        
+                        $result2 = json_decode($response2, true);
+                        $finalAiText = $result2['choices'][0]['message']['content'] ?? $opResult['message'];
+                        
+                        return ['success' => true, 'response' => ['message' => $finalAiText]];
+                    }
+                    
                     return ['success' => true, 'response' => ['message' => $opResult['message'] ?? 'Ação executada com sucesso.']];
                 } else {
                     // Try to execute general operation
@@ -697,6 +733,8 @@ class OpenAIService
                     return $this->removeItemFromOrder($operation['data']);
                 case 'listar_pendencias_fiado':
                     return $this->listarPendenciasFiado($operation['data'] ?? []);
+                case 'listar_compras_cliente':
+                    return $this->listarComprasCliente($operation['data'] ?? []);
                 case 'configurar_cobranca_fiado':
                     return $this->configurarCobrancaFiado($operation['data']);
                 case 'gerar_fatura_fiado':
@@ -975,6 +1013,44 @@ class OpenAIService
         
         if (count($devedores) === 50) {
             $msg .= "\n⚠️ Exibindo apenas os 50 primeiros resultados. Peça para pesquisar por um nome específico se não encontrar na lista.";
+        }
+        
+        return ['success' => true, 'message' => $msg];
+    }
+    
+    private function listarComprasCliente($data)
+    {
+        $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
+        $nomeCliente = $data['nome_cliente'] ?? null;
+        
+        if (!$nomeCliente) {
+            return ['success' => false, 'message' => "Informe o nome do cliente."];
+        }
+        
+        $cliente = $this->db->fetch("SELECT id, nome FROM clientes_fiado WHERE nome ILIKE ? AND tenant_id = ?", ["%{$nomeCliente}%", $tenantId]);
+        if (!$cliente) {
+            return ['success' => true, 'message' => "Nenhum cliente fiado encontrado com esse nome."];
+        }
+        
+        $cId = $cliente['id'];
+        
+        $itens = $this->db->fetchAll("
+            SELECT p.data, pi.produto_nome, pi.quantidade, pi.valor_total
+            FROM vendas_fiadas v
+            JOIN pedido p ON v.pedido_id = p.idpedido
+            JOIN pedido_itens pi ON p.idpedido = pi.pedido_id
+            WHERE v.cliente_id = ? AND v.status IN ('pendente', 'vencido')
+            ORDER BY p.data DESC
+        ", [$cId]);
+        
+        if (empty($itens)) {
+            return ['success' => true, 'message' => "O cliente {$cliente['nome']} não possui consumações detalhadas atreladas a pedidos não pagos."];
+        }
+        
+        $msg = "Detalhes do consumo pendente de {$cliente['nome']}:\n";
+        foreach ($itens as $i) {
+            $dataCompra = date('d/m/Y', strtotime($i['data']));
+            $msg .= "- [{$dataCompra}] {$i['quantidade']}x {$i['produto_nome']} (R$ " . number_format($i['valor_total'], 2, ',', '.') . ")\n";
         }
         
         return ['success' => true, 'message' => $msg];
