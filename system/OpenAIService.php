@@ -208,7 +208,7 @@ class OpenAIService
                     "- ver_estoque (data: {\"produto_nome\": \"nome do produto\"})\n" .
                     "- atualizar_estoque (data: {\"produto_nome\": \"nome do produto\", \"quantidade\": 10, \"operacao\": \"adicionar\"|\"remover\"|\"definir\"})\n\n" .
                     "Para ações de fiado, as ações são: \n" .
-                    "- listar_pendencias_fiado (data: {\"nome_cliente\": \"opcional, nome do cliente para buscar saldo devedor\"})\n" .
+                    "- listar_pendencias_fiado (data: {\"nome_cliente\": \"nome do cliente\"}). IMPORTANTE: Sempre que for buscar a dívida ou o ID de um cliente específico (ex: 'o moacir pagou'), VOCÊ DEVE OBRIGATORIAMENTE passar o 'nome_cliente' para não listar todos os devedores. Só envie sem 'nome_cliente' se o usuário explicitamente pedir a lista de todos.\n" .
                     "- listar_compras_cliente (data: {\"nome_cliente\": \"nome do cliente para ver a lista de pedidos, consumos, pagamentos e descontos do fiado\"})\n" .
                     "- configurar_cobranca_fiado (data: {\"cliente_id\": ID, \"frequencia\": \"diaria\"|\"semanal\"|\"mensal\", \"ativo\": true|false})\n" .
                     "- gerar_fatura_fiado (data: {\"cliente_id\": ID})\n" .
