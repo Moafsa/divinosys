@@ -399,30 +399,11 @@ class AIChatWidget {
     }
     
     loadChatHistory() {
-        try {
-            const saved = localStorage.getItem(this.storageKey);
-            if (saved) {
-                const history = JSON.parse(saved);
-                this.messages = history;
-                
-                // Render saved messages
-                history.forEach(msg => {
-                    this.renderMessageToDOM(msg.sender, msg.content, msg.attachments || []);
-                });
-                
-                console.log(`✅ Loaded ${history.length} messages from localStorage - Conversa restaurada!`);
-            }
-        } catch (error) {
-            console.error('Error loading chat history:', error);
-        }
+        // Chat history is no longer persisted to clear on page reload
     }
     
     saveChatHistory() {
-        try {
-            localStorage.setItem(this.storageKey, JSON.stringify(this.messages));
-        } catch (error) {
-            console.error('Error saving chat history:', error);
-        }
+        // Chat history is no longer persisted
     }
 
     setupEventListeners() {
