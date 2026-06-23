@@ -1454,7 +1454,6 @@ class OpenAIService
                         'forma_pagamento' => $pgto['forma_pagamento'],
                         'descricao' => $pgto['is_desconto'] ? 'Desconto (IA)' : 'Pagamento Fiado/Comanda (IA)',
                         'usuario_id' => $this->session->getUserId() ?? 1,
-                        'usuario_global_id' => $usuarioGlobalId,
                         'tenant_id' => $tenantId,
                         'filial_id' => $filialId
                     ]);
