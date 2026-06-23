@@ -789,8 +789,16 @@ class OpenAIService
                     return $this->deleteProduct($operation['data']);
                 case 'create_category':
                     return $this->createCategory($operation['data']);
+                case 'update_category':
+                    return $this->updateCategory($operation['data']);
+                case 'delete_category':
+                    return $this->deleteCategory($operation['data']);
                 case 'create_ingredient':
                     return $this->createIngredient($operation['data']);
+                case 'update_ingredient':
+                    return $this->updateIngredient($operation['data']);
+                case 'delete_ingredient':
+                    return $this->deleteIngredient($operation['data']);
                 case 'create_order':
                     return $this->createOrder($operation['data']);
                 case 'add_item_to_order':
@@ -930,6 +938,48 @@ class OpenAIService
     }
 
     /**
+     * Update category
+     */
+    private function updateCategory($data)
+    {
+        $tenantId = $this->session->getTenantId() ?? 1;
+        $filialId = $this->session->getFilialId() ?? 1;
+        
+        if (!isset($data['id'])) return ['success' => false, 'message' => 'ID da categoria é obrigatório.'];
+        
+        $updateData = [];
+        if (isset($data['nome'])) $updateData['nome'] = $data['nome'];
+        
+        $this->db->update(
+            'categorias',
+            $updateData,
+            'id = ? AND tenant_id = ? AND filial_id = ?',
+            [$data['id'], $tenantId, $filialId]
+        );
+        
+        return ['success' => true, 'message' => 'Categoria atualizada com sucesso!'];
+    }
+
+    /**
+     * Delete category
+     */
+    private function deleteCategory($data)
+    {
+        $tenantId = $this->session->getTenantId() ?? 1;
+        $filialId = $this->session->getFilialId() ?? 1;
+        
+        if (!isset($data['id'])) return ['success' => false, 'message' => 'ID da categoria é obrigatório.'];
+        
+        $this->db->delete(
+            'categorias',
+            'id = ? AND tenant_id = ? AND filial_id = ?',
+            [$data['id'], $tenantId, $filialId]
+        );
+        
+        return ['success' => true, 'message' => 'Categoria excluída com sucesso!'];
+    }
+
+    /**
      * Create new ingredient
      */
     private function createIngredient($data)
@@ -951,6 +1001,51 @@ class OpenAIService
             'message' => 'Ingrediente criado com sucesso!',
             'ingredient_id' => $ingredientId
         ];
+    }
+
+    /**
+     * Update ingredient
+     */
+    private function updateIngredient($data)
+    {
+        $tenantId = $this->session->getTenantId() ?? 1;
+        $filialId = $this->session->getFilialId() ?? 1;
+        
+        if (!isset($data['id'])) return ['success' => false, 'message' => 'ID do ingrediente é obrigatório.'];
+        
+        $updateData = [];
+        if (isset($data['nome'])) $updateData['nome'] = $data['nome'];
+        if (isset($data['tipo'])) $updateData['tipo'] = $data['tipo'];
+        if (isset($data['preco_adicional'])) $updateData['preco_adicional'] = $data['preco_adicional'];
+        if (isset($data['disponivel'])) $updateData['disponivel'] = $data['disponivel'];
+        
+        $this->db->update(
+            'ingredientes',
+            $updateData,
+            'id = ? AND tenant_id = ? AND filial_id = ?',
+            [$data['id'], $tenantId, $filialId]
+        );
+        
+        return ['success' => true, 'message' => 'Ingrediente atualizado com sucesso!'];
+    }
+
+    /**
+     * Delete ingredient
+     */
+    private function deleteIngredient($data)
+    {
+        $tenantId = $this->session->getTenantId() ?? 1;
+        $filialId = $this->session->getFilialId() ?? 1;
+        
+        if (!isset($data['id'])) return ['success' => false, 'message' => 'ID do ingrediente é obrigatório.'];
+        
+        $this->db->delete(
+            'ingredientes',
+            'id = ? AND tenant_id = ? AND filial_id = ?',
+            [$data['id'], $tenantId, $filialId]
+        );
+        
+        return ['success' => true, 'message' => 'Ingrediente excluído com sucesso!'];
     }
 
     /**
