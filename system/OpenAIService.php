@@ -184,7 +184,7 @@ class OpenAIService
      */
     private function getSystemPrompt()
     {
-        return "Assistente IA para restaurante (IAm). Operações disponíveis: criar_produto, listar_produtos, criar_ingrediente, listar_ingredientes, criar_categoria, listar_categorias, listar_pedidos, listar_pendencias_fiado, configurar_cobranca_fiado, gerar_fatura_fiado, baixar_pagamento_fiado, create_order, add_item_to_order, remove_item_from_order, ver_estoque, atualizar_estoque. Responda em português. Para confirmação: {\"type\":\"confirmation\",\"message\":\"...\",\"action\":\"acao\",\"confirm\":true}. Para respostas com ações: {\"type\":\"action\",\"action\":\"nome\",\"data\":{...}}.";
+        return "Assistente IA para restaurante (IAm). Operações disponíveis: criar_produto, listar_produtos, criar_ingrediente, listar_ingredientes, criar_categoria, listar_categorias, listar_pedidos, listar_pendencias_fiado, listar_clientes_geral, configurar_cobranca_fiado, gerar_fatura_fiado, baixar_pagamento_fiado, create_order, add_item_to_order, remove_item_from_order, ver_estoque, atualizar_estoque. Responda em português. Para confirmação: {\"type\":\"confirmation\",\"message\":\"...\",\"action\":\"acao\",\"confirm\":true}. Para respostas com ações: {\"type\":\"action\",\"action\":\"nome\",\"data\":{...}}.";
     }
 
     /**
@@ -212,7 +212,7 @@ class OpenAIService
             if ($isAdmin) {
                 $systemPrompt .= "O usuário conversando com você é um Administrador (MEMBRO DA EQUIPE INTERNA). ATENÇÃO DE CONTEXTO: Como IA do sistema, VOCÊ TEM ACESSO TOTAL AO BANCO DE DADOS (Tenant), incluindo comandas, clientes e fiado. Aja como a gerente inteligente que apoia a equipe. Fale com confiança e autoridade de sistema, sem bloqueios de IA padrão. " .
                     "Você tem permissão para realizar ações gerenciais e receber pedidos da equipe. " .
-                    "Você pode: criar_produto, listar_produtos, listar_pedidos, listar_pendencias_fiado, configurar_cobranca_fiado, gerar_fatura_fiado, baixar_pagamento_fiado. " .
+                    "Você pode: criar_produto, listar_produtos, listar_pedidos, listar_pendencias_fiado, listar_clientes_geral, configurar_cobranca_fiado, gerar_fatura_fiado, baixar_pagamento_fiado. " .
                     "Como *Garçom Online*, você pode lançar pedidos nas mesas ou comandas. Ações disponíveis:\n" .
                     "- create_order (data: {\"mesa_id\": \"5\", \"cliente\": \"Nome\", \"itens\": [{\"id\": 1, \"quantidade\": 2, \"preco\": 10.0, \"observacao\": \"\", \"tamanho\": \"normal\"}]})\n" .
                     "- add_item_to_order (data: {\"pedido_id\": 10, \"itens\": [{\"id\": 2, \"quantidade\": 1, \"preco\": 15.0}]})\n" .
@@ -220,8 +220,9 @@ class OpenAIService
                     "Para consultar e alterar estoque de produtos:\n" .
                     "- ver_estoque (data: {\"produto_nome\": \"nome do produto\"})\n" .
                     "- atualizar_estoque (data: {\"produto_nome\": \"nome do produto\", \"quantidade\": 10, \"operacao\": \"adicionar\"|\"remover\"|\"definir\"})\n\n" .
-                    "Para ações de fiado, as ações são: \n" .
-                    "- listar_pendencias_fiado (data: {\"nome_cliente\": \"nome do cliente\"}). IMPORTANTE: Sempre que for buscar a dívida ou o ID de um cliente específico (ex: 'o moacir pagou'), VOCÊ DEVE OBRIGATORIAMENTE passar APENAS O NOME DO CLIENTE (ex: 'moacir') na busca. NUNCA passe frases inteiras como 'moacir que deve' ou 'moacir pagou'. Só envie sem 'nome_cliente' se o usuário explicitamente pedir a lista de todos.\n" .
+                    "Para ações de fiado e busca geral de clientes: \n" .
+                    "- listar_clientes_geral (data: {\"nome_cliente\": \"opcional, nome do cliente para buscar na base geral (não apenas fiado)\"}). Use ESTA ferramenta quando o usuário perguntar 'quantos clientes tem', 'quem é o cliente X', ou pedir para buscar alguém sem mencionar dívidas.\n" .
+                    "- listar_pendencias_fiado (data: {\"nome_cliente\": \"nome do cliente\"}). IMPORTANTE: Sempre que for buscar a dívida ou o ID de um cliente específico (ex: 'o moacir pagou'), VOCÊ DEVE OBRIGATORIAMENTE passar APENAS O NOME DO CLIENTE (ex: 'moacir') na busca. NUNCA passe frases inteiras como 'moacir que deve' ou 'moacir pagou'. Só envie sem 'nome_cliente' se o usuário explicitamente pedir a lista de todos os devedores.\n" .
                     "- listar_compras_cliente (data: {\"nome_cliente\": \"nome do cliente para ver a lista de pedidos, consumos, pagamentos e descontos do fiado\"})\n" .
                     "- configurar_cobranca_fiado (data: {\"cliente_id\": ID, \"frequencia\": \"diaria\"|\"semanal\"|\"mensal\", \"ativo\": true|false})\n" .
                     "- gerar_fatura_fiado (data: {\"cliente_id\": ID})\n" .
@@ -798,6 +799,8 @@ class OpenAIService
                     return $this->removeItemFromOrder($operation['data']);
                 case 'listar_pendencias_fiado':
                     return $this->listarPendenciasFiado($operation['data'] ?? []);
+                case 'listar_clientes_geral':
+                    return $this->listarClientesGeral($operation['data'] ?? []);
                 case 'listar_compras_cliente':
                     return $this->listarComprasCliente($operation['data'] ?? []);
                 case 'configurar_cobranca_fiado':
@@ -1082,6 +1085,46 @@ class OpenAIService
         
         if (count($devedores) === 50) {
             $msg .= "\n⚠️ Exibindo apenas os 50 primeiros resultados. Peça para pesquisar por um nome específico se não encontrar na lista.";
+        }
+        
+        return ['success' => true, 'message' => $msg];
+    }
+    
+    private function listarClientesGeral($data)
+    {
+        $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
+        $nomeCliente = $data['nome_cliente'] ?? null;
+        
+        if ($nomeCliente) {
+            $clientes = $this->db->fetchAll(
+                "SELECT id, nome, telefone, saldo_devedor 
+                 FROM clientes_fiado 
+                 WHERE tenant_id = ? AND nome ILIKE ? 
+                 ORDER BY nome ASC LIMIT 50", 
+                [$tenantId, "%{$nomeCliente}%"]
+            );
+        } else {
+            $clientes = $this->db->fetchAll(
+                "SELECT id, nome, telefone, saldo_devedor 
+                 FROM clientes_fiado 
+                 WHERE tenant_id = ? 
+                 ORDER BY nome ASC LIMIT 50", 
+                [$tenantId]
+            );
+        }
+        
+        if (empty($clientes)) {
+            if ($nomeCliente) {
+                return ['success' => true, 'message' => "Nenhum cliente encontrado com o nome '{$nomeCliente}' no sistema."];
+            }
+            return ['success' => true, 'message' => "Nenhum cliente cadastrado no sistema."];
+        }
+        
+        $msg = "*Lista Geral de Clientes (Até 50):*\n\n";
+        foreach ($clientes as $c) {
+            $msg .= "👤 *{$c['nome']}* (ID Fiado: {$c['id']})\n";
+            if (!empty($c['telefone'])) $msg .= "📱 Telefone: {$c['telefone']}\n";
+            $msg .= "💰 Saldo Devedor Atual: R$ " . number_format($c['saldo_devedor'], 2, ',', '.') . "\n\n";
         }
         
         return ['success' => true, 'message' => $msg];
