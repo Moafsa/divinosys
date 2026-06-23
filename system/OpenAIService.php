@@ -85,10 +85,11 @@ class OpenAIService
             // Add chat history if available
             if (isset($context['chat_history']) && is_array($context['chat_history'])) {
                 foreach ($context['chat_history'] as $msg) {
-                    if (isset($msg['text']) && trim($msg['text']) !== '') {
+                    $msgText = $msg['content'] ?? $msg['text'] ?? '';
+                    if (trim($msgText) !== '') {
                         $messages[] = [
-                            'role' => ($msg['sender'] === 'user') ? 'user' : 'assistant',
-                            'content' => $msg['text']
+                            'role' => (isset($msg['sender']) && $msg['sender'] === 'user') ? 'user' : 'assistant',
+                            'content' => $msgText
                         ];
                     }
                 }

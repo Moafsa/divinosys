@@ -433,12 +433,24 @@ class AIChat {
         this.showTypingIndicator();
 
         try {
+            // Extract only essential data from messages to save bandwidth
+            const historyToMap = this.messages.map(m => ({
+                sender: m.sender,
+                content: m.content
+            })).slice(-10); // Keep only last 10 messages to avoid token limit issues
+            
+            const requestBody = new URLSearchParams({
+                'action': 'send_message',
+                'message': message,
+                'history': JSON.stringify(historyToMap)
+            });
+
             const response = await fetch('mvc/ajax/ai_chat.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 },
-                body: `action=send_message&message=${encodeURIComponent(message)}`
+                body: requestBody.toString()
             });
 
             const data = await response.json();
