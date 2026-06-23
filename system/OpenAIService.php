@@ -1089,6 +1089,8 @@ class OpenAIService
             $msg .= "- [{$dataCompra}] {$i['quantidade']}x {$i['produto_nome']} (R$ " . number_format($i['valor_total'], 2, ',', '.') . ")\n";
         }
         
+        $msg .= "\n[INSTRUÇÃO PARA A IA]: Atenção! O valor total dos itens acima pode ser maior que a dívida pendente do cliente. Isso ocorre porque o cliente pode ter dado uma entrada (pagamento parcial em dinheiro/pix/desconto) no momento do pedido, pendurando no fiado apenas o restante. NÃO invente valores nem diga que ele pagou 'compras anteriores' se você não tiver essa informação. Se o usuário perguntar sobre a diferença, explique que houve pagamento parcial no ato da compra.";
+        
         return ['success' => true, 'message' => $msg];
     }
     
