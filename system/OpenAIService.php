@@ -48,29 +48,7 @@ class OpenAIService
                 "- baixar_pagamento_fiado (data: {\"cliente_id\": ID, \"pagamentos\": [{\"valor\": 10.0, \"forma_pagamento\": \"dinheiro\"}], \"desconto_valor\": 2.50, \"destino\": \"ambos\"}). O destino pode ser 'fiado', 'pedido' ou 'ambos'. O 'cliente_id' é OBRIGATÓRIO. Se você não tiver certeza absoluta do ID (ex: só tem o nome), você DEVE executar listar_pendencias_fiado PRIMEIRO. Se o usuário não informar a forma de pagamento, PERGUNTE antes de executar.\n" .
                 "Sempre que o usuário relatar um pagamento (ex: 'o cliente pagou X'), você deve agir para BAIXAR O PAGAMENTO usando a ação baixar_pagamento_fiado. Se precisar do ID do cliente, chame listar_pendencias_fiado primeiro e, COM O RESULTADO EM MÃOS, decida o próximo passo. \n" .
                 "MUITO IMPORTANTE: Para interagir com o sistema, você deve retornar um JSON. \n" .
-                "1. Se precisar EXECUTAR UMA AÇÃO (ex: pagar, listar), retorne APENAS E EXATAMENTE neste formato JSON: {\"type\":\"action\",\"action\":\"nome_da_acao\",\"data\":{...}}.\n" .
-                "2. Se a tarefa foi concluída com sucesso ou se precisar falar/perguntar algo ao usuário, retorne APENAS E EXATAMENTE neste formato JSON: {\"type\":\"response\",\"message\":\"sua mensagem aqui\"}.\n" .
-                "NÃO escreva texto fora do JSON. NÃO diga 'Vou fazer isso'. APENAS O JSON.\n\n" .
-                "IMPORTANTE: Se o usuário pedir o EXTRATO ou HISTÓRICO do fiado (ex: 'o que o Moacir consumiu?', 'quais são os pedidos pendentes dele?'), use a ação `listar_compras_cliente`. NÃO use essa ação se a intenção do usuário for pagar/baixar uma dívida. " .
-                "Atenção: Os IDs que você acessa no fiado são 'IDs do Fiado', que podem ser diferentes dos IDs globais do cliente. Se for citar o ID, chame de 'ID Fiado'. " .
-                "MUITO IMPORTANTE: Sempre que você falar sobre qualquer pedido (seja atual ou compras passadas), informe o número do pedido na sua resposta. " .
-                "Se for criar um pedido e o usuário não der os preços, busque no CONTEXTO e inclua os IDs e precos corretos. ";
-            
-            // Generate context safely
-            try {
-                $systemContext = $this->getSystemContext();
-                $systemPrompt .= "\n\nCONTEXTO ATUAL DO RESTAURANTE:\n" . $systemContext;
-            } catch (\Exception $ctxErr) {
-                error_log("Failed to load context: " . $ctxErr->getMessage());
-            }
-
-            // Prepare messages for OpenAI
-            $messages = [
-                [
-                    'role' => 'system',
-                    'content' => $systemPrompt
-                ]
-            ];
+            $messages = [];
             
             // Add chat history if available
             if (isset($context['chat_history']) && is_array($context['chat_history'])) {
@@ -97,43 +75,17 @@ class OpenAIService
                 $messages[$lastIndex]['content'] .= "\n\nDados dos anexos:\n" . json_encode($attachmentData, JSON_PRETTY_PRINT);
             }
             
-            // Use loop para MCP (Agentic Loop)
-            $maxIterations = 4;
-            $iteration = 0;
-            $finalAction = ['type' => 'response', 'message' => 'Desculpe, não entendi. Limite de iterações atingido.'];
+            // Invoca o SupervisorAgent (Multi-Agentes nativos)
+            $supervisor = new \System\Agents\SupervisorAgent();
+            $supervisor->setContext($this->tenantId, $this->filialId);
             
-            while ($iteration < $maxIterations) {
-                $iteration++;
-                
-                $response = $this->callOpenAI($messages);
-                $action = $this->parseAIResponse($response, $attachmentData);
-                
-                if (isset($action['type']) && $action['type'] === 'action') {
-                    $messages[] = ['role' => 'assistant', 'content' => json_encode($action)];
-                    
-                    $opToExecute = [
-                        'type' => $action['action'] ?? $action['type'],
-                        'data' => $action['data'] ?? []
-                    ];
-                    
-                    $execResult = $this->executeOperation($opToExecute);
-                    
-                    $resultStr = json_encode($execResult);
-                    $messages[] = [
-                        'role' => 'user',
-                        'content' => "O sistema executou a ação e retornou:\n{$resultStr}\n\nAnalise o resultado. Se a tarefa foi totalmente concluída, retorne {'type':'response', 'message':'mensagem natural aqui'}. Se precisar perguntar algo ao usuário (como a forma de pagamento), retorne {'type':'response', 'message':'sua pergunta'}. Se precisar de outra ação do sistema, retorne outro {'type':'action', ...}."
-                    ];
-                    continue;
-                } else {
-                    $finalAction = $action;
-                    break;
-                }
-            }
+            $result = $supervisor->process($messages);
             
-            if ($iteration >= $maxIterations) {
-                return ['type' => 'error', 'message' => 'Loop infinito detectado. Histórico: ' . json_encode($messages)];
+            if (isset($result['success']) && $result['success']) {
+                return ['type' => 'response', 'message' => $result['response']];
+            } else {
+                return ['type' => 'error', 'message' => $result['error'] ?? 'Erro desconhecido'];
             }
-            return $finalAction;
             
         } catch (Exception $e) {
             error_log('OpenAI Service Error: ' . $e->getMessage());
@@ -206,172 +158,52 @@ class OpenAIService
         return "Assistente IA para restaurante (IAm). Operações disponíveis: create_product, update_product, delete_product, listar_produtos, create_ingredient, update_ingredient, delete_ingredient, listar_ingredientes, create_category, update_category, delete_category, listar_categorias, listar_pedidos, registrar_despesa, listar_pendencias_fiado, listar_clientes_geral, configurar_cobranca_fiado, gerar_fatura_fiado, baixar_pagamento_fiado, create_order, add_item_to_order, remove_item_from_order, ver_estoque, atualizar_estoque. Responda em português. Para confirmação: {\"type\":\"confirmation\",\"message\":\"...\",\"action\":\"acao\",\"confirm\":true}. Para respostas com ações: {\"type\":\"action\",\"action\":\"nome\",\"data\":{...}}.";
     }
 
-    /**
-     * Process WhatsApp messages
-     */
     public function processWhatsAppMessage($message, $tenantId, $filialId, $context)
     {
         try {
             $isAdmin = $context['is_admin'] ?? false;
             $customerName = $context['customer_name'] ?? 'Cliente';
             
-            // Temporarily set session IDs so getSystemContext works
-            $originalTenant = $this->tenantId;
-            $originalFilial = $this->filialId;
             $this->tenantId = $tenantId;
             $this->filialId = $filialId;
             
-            $systemContext = $this->getSystemContext();
+            $messages = [];
             
-            // Restore originals
-            $this->tenantId = $originalTenant;
-            $this->filialId = $originalFilial;
+            // Provide context about the user
+            $userRole = $isAdmin ? "Administrador/Dono" : "Cliente ($customerName)";
             
-            $systemPrompt = "Você é a IAm, a Inteligência Artificial integrada ao sistema do restaurante. ";
-            if ($isAdmin) {
-                $systemPrompt .= "O usuário conversando com você é um Administrador (MEMBRO DA EQUIPE INTERNA). " . $this->getAdminSystemPrompt();
-            } else {
-                $systemPrompt .= "O nome da pessoa falando no WhatsApp é $customerName. ";
+            // Se for cliente e tiver dívida, passar esse contexto também (para Atendente/Fiado)
+            $fiadoContext = "";
+            if (!$isAdmin) {
                 $customerPhone = $context['customer_phone'] ?? '';
-                $fiadoContext = "";
                 if (!empty($customerPhone)) {
                     $clienteFiado = $this->db->fetch("SELECT id, saldo_devedor FROM clientes_fiado WHERE telefone = ? AND tenant_id = ?", [$customerPhone, $tenantId]);
                     if ($clienteFiado && $clienteFiado['saldo_devedor'] > 0) {
-                        $fiadoContext = "ATENÇÃO: Este cliente possui uma dívida no Fiado de R$ " . number_format($clienteFiado['saldo_devedor'], 2, ',', '.') . ". " .
-                            "Se ele perguntar sobre dívidas ou quiser pagar, informe esse valor educadamente. " .
-                            "Se ele pedir a fatura, você pode gerar usando a ação: {\"type\":\"action\",\"action\":\"solicitar_fatura_fiado\",\"data\":{\"cliente_id\": " . $clienteFiado['id'] . "}}. Ele é o ID: " . $clienteFiado['id'] . "\n\n";
+                        $fiadoContext = " (Dívida no fiado: R$ " . number_format($clienteFiado['saldo_devedor'], 2, ',', '.') . " - ID do Cliente: " . $clienteFiado['id'] . ")";
                     }
                 }
-                $systemPrompt .= "ATENÇÃO DE CONTEXTO: O usuário conversando agora é um CLIENTE do restaurante. Seja muito educado(a), prestativo(a) e simpático(a). " . 
-                                 "Seu objetivo é tirar dúvidas do cardápio, informar status de pedidos e ajudar no que for preciso.\n\n" . $fiadoContext .
-                    "Você pode receber pedidos do cliente. Para lançar um pedido, responda EXATAMENTE neste formato JSON: {\"type\":\"action\",\"action\":\"create_order\",\"data\":{...}}. " .
-                    "Caso contrário, o formato da sua resposta deve ser apenas texto limpo para o WhatsApp.";
             }
-            
-            $systemPrompt .= "\n\nCONTEXTO ATUAL DO RESTAURANTE:\n" . $systemContext;
 
-            $messages = [
-                ['role' => 'system', 'content' => $systemPrompt],
-                ['role' => 'user', 'content' => $message]
+            $messages[] = [
+                'role' => 'user',
+                'content' => "[Sistema: Você está falando com um $userRole via WhatsApp.$fiadoContext] \n\n" . $message
             ];
-
-            $maxIterations = 4;
-            $iteration = 0;
-            $finalResponseText = 'Desculpe, não entendi.';
-
-            while ($iteration < $maxIterations) {
-                $iteration++;
-
-                // Use gpt-4o-mini for better JSON/action extraction
-                $ch = curl_init('https://api.openai.com/v1/chat/completions');
-                $data = [
-                    'model' => 'gpt-4o-mini',
-                    'messages' => $messages,
-                    'temperature' => 0.7
-                ];
-                
-                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($ch, CURLOPT_POST, true);
-                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-                curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                    'Content-Type: application/json',
-                    'Authorization: Bearer ' . $this->apiKey
-                ]);
-                
-                $response = curl_exec($ch);
-                curl_close($ch);
-                
-                $result = json_decode($response, true);
-                $aiText = $result['choices'][0]['message']['content'] ?? '';
-                if (empty($aiText)) break;
-                
-                // Parse response to check for actions
-                $parsedAction = null;
-                $jsonData = json_decode($aiText, true);
-                if (json_last_error() === JSON_ERROR_NONE && is_array($jsonData)) {
-                    $parsedAction = $jsonData;
-                } else {
-                    $jsonStart = strpos($aiText, '{');
-                    $jsonEnd = strrpos($aiText, '}');
-                    if ($jsonStart !== false && $jsonEnd !== false && $jsonEnd > $jsonStart) {
-                        $jsonString = substr($aiText, $jsonStart, $jsonEnd - $jsonStart + 1);
-                        $extractedJson = json_decode($jsonString, true);
-                        if (json_last_error() === JSON_ERROR_NONE && is_array($extractedJson)) {
-                            $parsedAction = $extractedJson;
-                        }
-                    }
-                    
-                    if (!$parsedAction && preg_match('/```(?:json)?\s*(\{.*?\})\s*```/s', $aiText, $matches)) {
-                        $extractedJson = json_decode($matches[1], true);
-                        if (json_last_error() === JSON_ERROR_NONE && is_array($extractedJson)) {
-                            $parsedAction = $extractedJson;
-                        }
-                    }
-                }
-                
-                if ($parsedAction && isset($parsedAction['type']) && $parsedAction['type'] === 'action') {
-                    $this->tenantId = $tenantId;
-                    $this->filialId = $filialId;
-                    
-                    // SEGURANÇA: Validar se cliente está tentando executar ação de administrador
-                    $adminActions = [
-                        'create_product', 'update_product', 'delete_product', 'listar_produtos',
-                        'create_category', 'update_category', 'delete_category', 'listar_categorias',
-                        'create_ingredient', 'update_ingredient', 'delete_ingredient', 'listar_ingredientes', 
-                        'listar_pendencias_fiado', 'listar_clientes_geral', 'configurar_cobranca_fiado', 
-                        'baixar_pagamento_fiado', 'ver_estoque', 'atualizar_estoque', 'registrar_despesa', 'listar_pedidos'
-                    ];
-                    
-                    $requestedAction = $parsedAction['action'] ?? $parsedAction['type'];
-                    
-                    if (!$isAdmin && in_array($requestedAction, $adminActions)) {
-                        $messages[] = [
-                            'role' => 'user', 
-                            'content' => "Erro de Segurança: Você tentou executar uma ação restrita ({$requestedAction}) em uma conversa com um CLIENTE. Clientes não podem gerenciar o sistema. Responda educadamente dizendo que você não pode fazer isso."
-                        ];
-                        continue;
-                    }
-
-                    // Registra a ação tomada pela IA
-                    $messages[] = ['role' => 'assistant', 'content' => $aiText];
-                    
-                    // Formata a ação para o executeOperation
-                    $opToExecute = [
-                        'type' => $parsedAction['action'] ?? $parsedAction['type'],
-                        'data' => $parsedAction['data'] ?? []
-                    ];
-                    
-                    $execResult = $this->executeOperation($opToExecute);
-                    
-                    if (isset($execResult['success']) && !$execResult['success']) {
-                        // Bypass AI and return error directly to user to avoid "polite" AI masking the error
-                        return ['success' => true, 'response' => ['message' => "❌ Erro Técnico do Sistema:\n" . ($execResult['message'] ?? 'Desconhecido')]];
-                    }
-                    
-                    $resultStr = json_encode($execResult);
-                    $promptAfterAction = "O sistema executou a ação e retornou:\n{$resultStr}\n\nAnalise o resultado. ";
-                    $promptAfterAction .= "Se a tarefa foi totalmente concluída e o objetivo alcançado, responda ao usuário final apenas com TEXTO natural comunicando o sucesso/conclusão. Se você ainda precisar de dados do usuário (ex: forma de pagamento), responda perguntando em TEXTO. Se precisar de outra ação do sistema, gere outro JSON de ação.";
-
-                    $messages[] = [
-                        'role' => 'user', 
-                        'content' => $promptAfterAction
-                    ];
-                    
-                    continue; // Loop again para nova decisão
-                } else {
-                    // Não é uma ação, é uma resposta final para o usuário
-                    $finalResponseText = $aiText;
-                    if ($parsedAction && isset($parsedAction['type']) && $parsedAction['type'] === 'response') {
-                        $finalResponseText = $parsedAction['message'] ?? $aiText;
-                    }
-                    break;
-                }
+            
+            // Invoca o SupervisorAgent
+            $supervisor = new \System\Agents\SupervisorAgent();
+            $supervisor->setContext($this->tenantId, $this->filialId);
+            
+            $result = $supervisor->process($messages);
+            
+            if (isset($result['success']) && $result['success']) {
+                return ['success' => true, 'response' => ['message' => $result['response']]];
+            } else {
+                return ['success' => false, 'response' => ['message' => $result['error'] ?? 'Erro desconhecido']];
             }
             
-            return ['success' => true, 'response' => ['message' => $finalResponseText]];
-
         } catch (\Exception $e) {
-            return ['success' => false, 'error' => $e->getMessage()];
+            error_log('OpenAI Service Error WhatsApp: ' . $e->getMessage());
+            return ['success' => false, 'response' => ['message' => 'Erro ao processar sua solicitação: ' . $e->getMessage()]];
         }
     }
 
