@@ -92,9 +92,57 @@ class GarcomAgent extends BaseAgent {
                         'type' => 'object',
                         'properties' => [
                             'pedido_id' => ['type' => 'integer'],
-                            'item_id' => ['type' => 'integer', 'description' => 'ID do item do pedido (tabela pedido_item) a ser removido']
+                            'item_id' => ['type' => 'integer', 'description' => 'ID do item do pedido a ser removido']
                         ],
                         'required' => ['pedido_id', 'item_id']
+                    ]
+                ]
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'update_order',
+                    'description' => 'Atualiza dados de um pedido existente, como mudar a mesa, cliente ou status.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'pedido_id' => ['type' => 'integer'],
+                            'mesa_id' => ['type' => 'string'],
+                            'cliente' => ['type' => 'string'],
+                            'observacao' => ['type' => 'string'],
+                            'status' => ['type' => 'string', 'enum' => ['Pendente', 'Em Preparo', 'Pronto', 'Saiu para Entrega', 'Entregue']]
+                        ],
+                        'required' => ['pedido_id']
+                    ]
+                ]
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'delete_order',
+                    'description' => 'Exclui/cancela um pedido inteiro e todos os seus itens.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'pedido_id' => ['type' => 'integer']
+                        ],
+                        'required' => ['pedido_id']
+                    ]
+                ]
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'fechar_pedido',
+                    'description' => 'Fecha um pedido, marcando-o como Finalizado e o pagamento como quitado.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'pedido_id' => ['type' => 'integer'],
+                            'forma_pagamento' => ['type' => 'string', 'enum' => ['dinheiro', 'pix', 'cartao', 'fiado']],
+                            'observacao_fechamento' => ['type' => 'string']
+                        ],
+                        'required' => ['pedido_id', 'forma_pagamento']
                     ]
                 ]
             ]

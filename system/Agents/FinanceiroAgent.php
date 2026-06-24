@@ -87,6 +87,69 @@ class FinanceiroAgent extends BaseAgent {
                         'required' => ['descricao', 'valor']
                     ]
                 ]
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'listar_funcionarios',
+                    'description' => 'Busca a lista de todos os funcionários cadastrados no sistema.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => []
+                    ]
+                ]
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'create_user',
+                    'description' => 'Cria um novo usuário ou funcionário (garcom, cozinha, admin).',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'nome' => ['type' => 'string'],
+                            'email' => ['type' => 'string'],
+                            'telefone' => ['type' => 'string'],
+                            'tipo_usuario' => ['type' => 'string', 'enum' => ['garcom', 'cozinha', 'admin', 'caixa', 'entregador', 'cliente']]
+                        ],
+                        'required' => ['nome', 'tipo_usuario']
+                    ]
+                ]
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'update_user',
+                    'description' => 'Atualiza dados básicos de um usuário/funcionário.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'id' => ['type' => 'integer'],
+                            'nome' => ['type' => 'string'],
+                            'telefone' => ['type' => 'string'],
+                            'tipo_usuario' => ['type' => 'string']
+                        ],
+                        'required' => ['id']
+                    ]
+                ]
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'registrar_pagamento_funcionario',
+                    'description' => 'Registra um pagamento de salário ou adiantamento para um funcionário.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'usuario_id' => ['type' => 'integer'],
+                            'valor' => ['type' => 'number'],
+                            'tipo_pagamento' => ['type' => 'string', 'enum' => ['salario', 'adiantamento', 'comissao', 'ferias', 'decimo_terceiro']],
+                            'data_pagamento' => ['type' => 'string'],
+                            'observacoes' => ['type' => 'string']
+                        ],
+                        'required' => ['usuario_id', 'valor', 'tipo_pagamento']
+                    ]
+                ]
             ]
         ];
     }

@@ -45,6 +45,80 @@ class AtendenteAgent extends BaseAgent {
                         'required' => ['nome_cliente']
                     ]
                 ]
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'create_order',
+                    'description' => 'Cria um novo pedido.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'mesa_id' => ['type' => 'string', 'description' => 'Número da mesa'],
+                            'cliente' => ['type' => 'string'],
+                            'itens' => [
+                                'type' => 'array',
+                                'items' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'id' => ['type' => 'integer'],
+                                        'quantidade' => ['type' => 'integer'],
+                                        'preco' => ['type' => 'number']
+                                    ],
+                                    'required' => ['id', 'quantidade', 'preco']
+                                ]
+                            ]
+                        ],
+                        'required' => ['mesa_id', 'itens']
+                    ]
+                ]
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'update_order',
+                    'description' => 'Atualiza dados de um pedido existente, como mudar a mesa, cliente ou status.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'pedido_id' => ['type' => 'integer'],
+                            'mesa_id' => ['type' => 'string'],
+                            'cliente' => ['type' => 'string'],
+                            'status' => ['type' => 'string']
+                        ],
+                        'required' => ['pedido_id']
+                    ]
+                ]
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'delete_order',
+                    'description' => 'Exclui/cancela um pedido inteiro.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'pedido_id' => ['type' => 'integer']
+                        ],
+                        'required' => ['pedido_id']
+                    ]
+                ]
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'fechar_pedido',
+                    'description' => 'Fecha um pedido, marcando-o como Finalizado e quitado.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'pedido_id' => ['type' => 'integer'],
+                            'forma_pagamento' => ['type' => 'string', 'enum' => ['dinheiro', 'pix', 'cartao', 'fiado']],
+                            'observacao_fechamento' => ['type' => 'string']
+                        ],
+                        'required' => ['pedido_id', 'forma_pagamento']
+                    ]
+                ]
             ]
         ];
     }

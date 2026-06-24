@@ -97,7 +97,28 @@ class OpenAIService
     }
 
     /**
-     * Get system context with current data
+     * List employees
+     */
+    private function listarFuncionarios($filters)
+    {
+        $tenantId = $this->session->getTenantId() ?? 1;
+        $filialId = $this->session->getFilialId() ?? 1;
+        
+        $sql = "SELECT ug.id, ug.nome, ug.telefone, ug.tipo_usuario, ue.cargo 
+                FROM usuarios_globais ug 
+                JOIN usuarios_estabelecimento ue ON ug.id = ue.usuario_global_id 
+                WHERE ue.tenant_id = ? AND ue.filial_id = ?";
+                
+        $funcionarios = $this->db->fetchAll($sql, [$tenantId, $filialId]);
+        
+        return [
+            'success' => true,
+            'funcionarios' => $funcionarios
+        ];
+    }
+    
+    /**
+     * List customers with unpaid tabs (fiado)
      */
     private function getSystemContext()
     {
@@ -636,6 +657,12 @@ class OpenAIService
                     return $this->deleteIngredient($operation['data']);
                 case 'create_order':
                     return $this->createOrder($operation['data']);
+                case 'update_order':
+                    return $this->updateOrder($operation['data']);
+                case 'delete_order':
+                    return $this->deleteOrder($operation['data']);
+                case 'fechar_pedido':
+                    return $this->fecharPedido($operation['data']);
                 case 'add_item_to_order':
                     return $this->addItemToOrder($operation['data']);
                 case 'remove_item_from_order':
@@ -650,6 +677,14 @@ class OpenAIService
                     return $this->listarPedidos($operation['data'] ?? []);
                 case 'registrar_despesa':
                     return $this->registrarDespesa($operation['data']);
+                case 'create_user':
+                    return $this->createUser($operation['data']);
+                case 'update_user':
+                    return $this->updateUser($operation['data']);
+                case 'registrar_pagamento_funcionario':
+                    return $this->registrarPagamentoFuncionario($operation['data']);
+                case 'listar_funcionarios':
+                    return $this->listarFuncionarios($operation['data'] ?? []);
                 case 'listar_pendencias_fiado':
                     return $this->listarPendenciasFiado($operation['data'] ?? []);
                 case 'listar_clientes_geral':
@@ -690,9 +725,12 @@ class OpenAIService
         $productId = $this->db->insert('produtos', [
             'nome' => $data['nome'],
             'categoria_id' => $data['categoria_id'],
-            'preco_normal' => $data['preco_normal'],
+            'preco_normal' => $data['preco_normal'] ?? $data['preco'] ?? 0,
             'preco_mini' => $data['preco_mini'] ?? null,
             'descricao' => $data['descricao'] ?? '',
+            'em_promocao' => $data['em_promocao'] ?? false,
+            'preco_promocional' => $data['preco_promocional'] ?? null,
+            'ativo' => $data['ativo'] ?? true,
             'tenant_id' => $tenantId,
             'filial_id' => $filialId
         ]);
@@ -700,7 +738,7 @@ class OpenAIService
         return [
             'success' => true,
             'message' => 'Produto criado com sucesso!',
-            'product_id' => $productId
+            'data' => ['id' => $productId, 'nome' => $data['nome']]
         ];
     }
 
@@ -709,25 +747,24 @@ class OpenAIService
      */
     private function updateProduct($data)
     {
-        $tenantId = $this->session->getTenantId() ?? 1;
-        $filialId = $this->session->getFilialId() ?? 1;
+        $tenantId = $this->session->getTenantId();
         
         $updateData = [];
         if (isset($data['nome'])) $updateData['nome'] = $data['nome'];
+        if (isset($data['categoria_id'])) $updateData['categoria_id'] = $data['categoria_id'];
         if (isset($data['preco_normal'])) $updateData['preco_normal'] = $data['preco_normal'];
+        if (isset($data['preco'])) $updateData['preco_normal'] = $data['preco']; // alias
         if (isset($data['preco_mini'])) $updateData['preco_mini'] = $data['preco_mini'];
         if (isset($data['descricao'])) $updateData['descricao'] = $data['descricao'];
+        if (isset($data['em_promocao'])) $updateData['em_promocao'] = $data['em_promocao'];
+        if (isset($data['preco_promocional'])) $updateData['preco_promocional'] = $data['preco_promocional'];
+        if (isset($data['ativo'])) $updateData['ativo'] = $data['ativo'];
         
-        $this->db->update(
-            'produtos',
-            $updateData,
-            'id = ? AND tenant_id = ? AND filial_id = ?',
-            [$data['id'], $tenantId, $filialId]
-        );
+        $success = $this->db->update('produtos', $updateData, "id = ? AND tenant_id = ?", [$data['id'], $tenantId]);
         
         return [
-            'success' => true,
-            'message' => 'Produto atualizado com sucesso!'
+            'success' => $success,
+            'message' => $success ? 'Produto atualizado com sucesso!' : 'Erro ao atualizar produto.'
         ];
     }
 

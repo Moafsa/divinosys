@@ -45,7 +45,10 @@ class EstoqueAgent extends BaseAgent {
                             'nome' => ['type' => 'string'],
                             'descricao' => ['type' => 'string'],
                             'preco' => ['type' => 'number'],
-                            'categoria_id' => ['type' => 'integer']
+                            'categoria_id' => ['type' => 'integer'],
+                            'em_promocao' => ['type' => 'boolean', 'description' => 'Colocar em promoção?'],
+                            'preco_promocional' => ['type' => 'number', 'description' => 'Preço de promoção'],
+                            'ativo' => ['type' => 'boolean', 'description' => 'true para mostrar no cardápio online, false para ocultar']
                         ],
                         'required' => ['nome', 'preco']
                     ]
@@ -62,7 +65,11 @@ class EstoqueAgent extends BaseAgent {
                             'id' => ['type' => 'integer'],
                             'nome' => ['type' => 'string'],
                             'descricao' => ['type' => 'string'],
-                            'preco' => ['type' => 'number']
+                            'preco' => ['type' => 'number'],
+                            'categoria_id' => ['type' => 'integer'],
+                            'em_promocao' => ['type' => 'boolean'],
+                            'preco_promocional' => ['type' => 'number'],
+                            'ativo' => ['type' => 'boolean']
                         ],
                         'required' => ['id']
                     ]
