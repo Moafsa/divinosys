@@ -22,11 +22,11 @@ class SupervisorAgent extends BaseAgent {
                 'type' => 'function',
                 'function' => [
                     'name' => 'delegar_para_estoque',
-                    'description' => 'Aciona o Agente de Estoque/Cardápio para buscar produtos, ver preços, ingredientes ou categorias.',
+                    'description' => 'Aciona o Agente de Estoque para buscar produtos, ver preços, criar, editar ou excluir produtos/categorias/ingredientes, e gerenciar o estoque.',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
-                            'resumo_solicitacao' => ['type' => 'string', 'description' => 'Resumo do que o usuário quer do estoque.']
+                            'resumo_solicitacao' => ['type' => 'string', 'description' => 'Resumo do que o usuário quer do estoque/cardápio.']
                         ],
                         'required' => ['resumo_solicitacao']
                     ]

@@ -4,8 +4,8 @@ namespace System\Agents;
 class FinanceiroAgent extends BaseAgent {
     
     protected function getSystemPrompt(): string {
-        return "Você é o Agente Financeiro do DivinoSys. Sua função é gerenciar o fiado, contas de clientes, pagamentos e faturas.\n" .
-               "Você pode buscar dívidas, registrar pagamentos e gerar faturas.\n" .
+        return "Você é o Agente Financeiro do DivinoSys. Sua função é gerenciar o fiado, contas de clientes, pagamentos, faturas e despesas operacionais do restaurante.\n" .
+               "Você pode buscar dívidas, registrar pagamentos, gerar faturas e lançar contas a pagar (despesas).\n" .
                "Se um usuário não informar o ID do cliente, use `listar_pendencias_fiado` para buscar o cliente pelo nome antes de registrar pagamentos.";
     }
     
@@ -19,10 +19,7 @@ class FinanceiroAgent extends BaseAgent {
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
-                            'nome_cliente' => [
-                                'type' => 'string',
-                                'description' => 'Nome do cliente para buscar (opcional)'
-                            ]
+                            'nome_cliente' => ['type' => 'string', 'description' => 'Nome do cliente para buscar (opcional)']
                         ]
                     ]
                 ]
@@ -35,24 +32,12 @@ class FinanceiroAgent extends BaseAgent {
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
-                            'cliente_id' => [
-                                'type' => 'integer',
-                                'description' => 'ID do cliente'
-                            ],
-                            'pagamentos' => [
-                                'type' => 'array',
-                                'items' => [
-                                    'type' => 'object',
-                                    'properties' => [
-                                        'valor' => ['type' => 'number'],
-                                        'forma_pagamento' => ['type' => 'string', 'enum' => ['dinheiro', 'pix', 'cartao_credito', 'cartao_debito']]
-                                    ]
-                                ]
-                            ],
+                            'cliente_id' => ['type' => 'integer'],
+                            'valor_pago' => ['type' => 'number'],
                             'desconto_valor' => ['type' => 'number'],
                             'destino' => ['type' => 'string', 'enum' => ['fiado', 'pedido', 'ambos']]
                         ],
-                        'required' => ['cliente_id', 'pagamentos']
+                        'required' => ['cliente_id', 'valor_pago']
                     ]
                 ]
             ],
@@ -64,12 +49,42 @@ class FinanceiroAgent extends BaseAgent {
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
-                            'cliente_id' => [
-                                'type' => 'integer',
-                                'description' => 'ID do cliente'
-                            ]
+                            'cliente_id' => ['type' => 'integer']
                         ],
                         'required' => ['cliente_id']
+                    ]
+                ]
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'configurar_cobranca_fiado',
+                    'description' => 'Configura os lembretes de cobrança automática para um cliente.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'cliente_id' => ['type' => 'integer'],
+                            'frequencia' => ['type' => 'string', 'enum' => ['diaria', 'semanal', 'mensal']],
+                            'ativo' => ['type' => 'boolean']
+                        ],
+                        'required' => ['cliente_id', 'frequencia', 'ativo']
+                    ]
+                ]
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'registrar_despesa',
+                    'description' => 'Registra uma saída de caixa/despesa operacional (contas a pagar ou pagas).',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'descricao' => ['type' => 'string'],
+                            'valor' => ['type' => 'number'],
+                            'categoria_id' => ['type' => 'integer', 'description' => 'ID da categoria financeira'],
+                            'data_pagamento' => ['type' => 'string', 'description' => 'Data no formato YYYY-MM-DD (deixe vazio se for hoje)']
+                        ],
+                        'required' => ['descricao', 'valor']
                     ]
                 ]
             ]
@@ -77,10 +92,7 @@ class FinanceiroAgent extends BaseAgent {
     }
     
     protected function executeTool(string $name, array $args): array {
-        // Usa o serviço legado temporariamente para não duplicar 1000 linhas de código
         $legacyService = new \System\OpenAIService();
-        
-        // Garante que o tenant_id e filial_id estão no data
         $args['tenant_id'] = $this->tenantId;
         $args['filial_id'] = $this->filialId;
         
