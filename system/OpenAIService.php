@@ -560,7 +560,7 @@ class OpenAIService
     private function callOpenAI($messages)
     {
         $data = [
-            'model' => 'gpt-4',
+            'model' => 'gpt-4o-mini',
             'messages' => $messages,
             'temperature' => 0.1,
             'max_tokens' => 500
@@ -575,7 +575,7 @@ class OpenAIService
     private function callOpenAIVision($messages)
     {
         $data = [
-            'model' => 'gpt-4-vision-preview',
+            'model' => 'gpt-4o-mini',
             'messages' => $messages,
             'temperature' => 0.1,
             'max_tokens' => 1000
