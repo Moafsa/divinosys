@@ -225,9 +225,9 @@ class EstoqueAgent extends BaseAgent {
             $query = $args['query'] ?? '';
             if (empty($query)) return ['success' => false, 'message' => 'Termo de busca vazio'];
             
-            $sql = "SELECT id, nome, preco, preco_promocional, controla_estoque, estoque_atual, status 
+            $sql = "SELECT id, nome, preco_normal, estoque_atual, ativo 
                     FROM produtos 
-                    WHERE tenant_id = ? AND filial_id = ? AND nome ILIKE ? AND status = 'ativo'
+                    WHERE tenant_id = ? AND filial_id = ? AND nome ILIKE ? AND ativo = true
                     LIMIT 10";
             
             $produtos = $this->db->fetchAll($sql, [

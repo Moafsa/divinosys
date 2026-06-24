@@ -13,7 +13,7 @@ class SupervisorAgent extends BaseAgent {
                "REGRAS OBRIGATÓRIAS:\n" .
                "1. Se a mensagem for sobre um assunto específico, DELEGUE imediatamente para o agente correspondente usando as ferramentas disponíveis.\n" .
                "2. Se for um simples 'Oi' ou pergunta geral sobre quem você é, responda DIRETAMENTE como o Gerente Inteligente.\n" .
-               "3. Se o usuário falar sobre algo técnico que não seja do restaurante, informe que você só cuida do restaurante.";
+               "3. Se o usuário perguntar algo como 'quantos X existem no sistema', ele está se referindo ao banco de dados do restaurante (ex: clientes cadastrados, usuários, produtos). Delegue para o agente correto (Atendente para pessoas/clientes, Estoque para produtos, etc).";
     }
     
     protected function getTools(): array {

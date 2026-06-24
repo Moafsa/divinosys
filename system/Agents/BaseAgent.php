@@ -107,7 +107,8 @@ abstract class BaseAgent {
                         }
                         
                         $resultStr = json_encode($toolResult, JSON_UNESCAPED_UNICODE);
-                    } catch (\Exception $e) {
+                    } catch (\Throwable $e) {
+                        file_put_contents(__DIR__ . '/../../ai_debug.log', date('Y-m-d H:i:s') . " - Tool " . $functionName . " Error: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine() . "\n", FILE_APPEND);
                         $toolResult = ['success' => false, 'error' => $e->getMessage()];
                         $resultStr = json_encode($toolResult, JSON_UNESCAPED_UNICODE);
                     }
