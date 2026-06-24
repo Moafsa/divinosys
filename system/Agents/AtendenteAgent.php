@@ -125,9 +125,19 @@ class AtendenteAgent extends BaseAgent {
     
     protected function executeTool(string $name, array $args): array {
         if ($name === 'buscar_cliente') {
-            $sql = "SELECT id, nome, telefone, email FROM clientes WHERE tenant_id = ? AND nome ILIKE ? LIMIT 10";
+            $sql = "SELECT ug.id, ug.nome, ug.telefone, ug.email 
+                    FROM usuarios_globais ug 
+                    JOIN cliente_estabelecimentos ce ON ug.id = ce.usuario_global_id 
+                    WHERE ce.tenant_id = ? AND ug.nome ILIKE ? LIMIT 10";
             $nome = $args['nome'] ?? '';
             $clientes = $this->db->fetchAll($sql, [$this->tenantId, '%' . $nome . '%']);
+            
+            // Tentar também buscar no clientes_fiado como fallback, caso seja um cliente apenas de fiado antigo
+            if (empty($clientes)) {
+                $sqlFiado = "SELECT id, nome, telefone, '' as email FROM clientes_fiado WHERE tenant_id = ? AND nome ILIKE ? LIMIT 10";
+                $clientes = $this->db->fetchAll($sqlFiado, [$this->tenantId, '%' . $nome . '%']);
+            }
+            
             return ['success' => true, 'clientes' => $clientes];
         }
         

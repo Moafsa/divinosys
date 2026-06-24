@@ -636,6 +636,13 @@ class OpenAIService
     public function executeOperation($operation)
     {
         try {
+            if (isset($operation['data']['tenant_id'])) {
+                $this->tenantId = $operation['data']['tenant_id'];
+            }
+            if (isset($operation['data']['filial_id'])) {
+                $this->filialId = $operation['data']['filial_id'];
+            }
+            
             switch ($operation['type']) {
                 case 'create_product':
                     return $this->createProduct($operation['data']);
@@ -1024,7 +1031,7 @@ class OpenAIService
     
     private function listarPendenciasFiado($data = [])
     {
-        $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
+        $tenantId = $data['tenant_id'] ?? $this->tenantId ?? $this->session->getTenantId() ?? 1;
         $nomeCliente = $data['nome_cliente'] ?? null;
         
         if ($nomeCliente) {
@@ -1069,7 +1076,7 @@ class OpenAIService
     
     private function listarClientesGeral($data)
     {
-        $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
+        $tenantId = $data['tenant_id'] ?? $this->tenantId ?? $this->session->getTenantId() ?? 1;
         $nomeCliente = $data['nome_cliente'] ?? null;
         
         if ($nomeCliente) {
@@ -1113,7 +1120,7 @@ class OpenAIService
     
     private function listarComprasCliente($data)
     {
-        $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
+        $tenantId = $data['tenant_id'] ?? $this->tenantId ?? $this->session->getTenantId() ?? 1;
         $nomeCliente = $data['nome_cliente'] ?? null;
         
         if (!$nomeCliente) {
