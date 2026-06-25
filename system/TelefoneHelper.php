@@ -22,7 +22,7 @@ class TelefoneHelper
             $semNove = substr($base, 0, 2) . substr($base, 3);
             $variacoes[] = $semNove;
             $variacoes[] = '55' . $semNove;
-        } elseif (strlen($base) === 10 && ($base[2] ?? '') !== '9') {
+        } elseif (strlen($base) === 10) {
             $comNove = substr($base, 0, 2) . '9' . substr($base, 2);
             $variacoes[] = $comNove;
             $variacoes[] = '55' . $comNove;
