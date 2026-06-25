@@ -108,7 +108,20 @@ class ClienteWhatsAppAgent extends BaseAgent {
                 'type' => 'function',
                 'function' => [
                     'name' => 'cancelar_pedido',
-                    'description' => 'Cancela o pedido atual se o cliente desistir ou pedir para cancelar.',
+                    'description' => 'Cancela o pedido atual ou um pedido específico se o cliente fornecer o ID.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'pedido_id' => ['type' => 'integer', 'description' => 'ID opcional do pedido para cancelar']
+                        ]
+                    ]
+                ]
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'consultar_pedidos_cliente',
+                    'description' => 'Lista os pedidos ativos (em andamento) deste cliente.',
                     'parameters' => ['type' => 'object', 'properties' => (object)[]]
                 ]
             ],
@@ -225,6 +238,7 @@ class ClienteWhatsAppAgent extends BaseAgent {
             );
             $payload['tenant_id'] = $this->tenantId;
             $payload['filial_id'] = $this->filialId;
+            $payload['cliente_telefone'] = $this->customerPhone;
 
             $result = $legacyService->executeOperation(['type' => 'create_order', 'data' => $payload]);
             if (!empty($result['success'])) {
@@ -351,17 +365,63 @@ class ClienteWhatsAppAgent extends BaseAgent {
         }
 
         if ($name === 'cancelar_pedido') {
+            $pedidoId = (int) ($args['pedido_id'] ?? 0);
             $draft = $sessionSvc->getDraft($this->orderSessionId);
-            $pedidoId = $draft['pedido_id'] ?? null;
-            if ($pedidoId) {
-                $this->db->update('pedido', ['status' => 'Cancelado'], 'idpedido = ? AND tenant_id = ? AND filial_id = ?', [$pedidoId, $this->tenantId, $this->filialId]);
+            
+            if (!$pedidoId) {
+                $pedidoId = $draft['pedido_id'] ?? null;
             }
-            $sessionSvc->closeSession($this->orderSessionId, 'cancelled');
-            return [
-                'success' => true, 
-                'message' => 'O pedido foi cancelado com sucesso. A sessão também foi fechada.',
-                '_final_handoff_response' => 'Seu pedido foi cancelado conforme solicitado. Se precisar de mais alguma coisa no futuro, é só chamar! Até logo!'
-            ];
+            
+            if (!$pedidoId) {
+                // Tenta achar o último pedido ativo desse cliente
+                $lastOrder = $this->db->fetch(
+                    "SELECT idpedido FROM pedido WHERE tenant_id = ? AND filial_id = ? AND cliente_telefone = ? AND status IN ('Pendente', 'Em Preparo') ORDER BY idpedido DESC LIMIT 1",
+                    [$this->tenantId, $this->filialId, $this->customerPhone]
+                );
+                $pedidoId = $lastOrder['idpedido'] ?? null;
+            }
+
+            if ($pedidoId) {
+                // Verifica se o pedido pertence ao cliente (ou se está no rascunho atual)
+                $orderData = $this->db->fetch(
+                    "SELECT cliente_telefone FROM pedido WHERE idpedido = ? AND tenant_id = ? AND filial_id = ?",
+                    [$pedidoId, $this->tenantId, $this->filialId]
+                );
+                
+                $isOwner = ($orderData && $orderData['cliente_telefone'] === $this->customerPhone);
+                $isInDraft = (($draft['pedido_id'] ?? null) == $pedidoId);
+
+                if ($isOwner || $isInDraft) {
+                    $this->db->update('pedido', ['status' => 'Cancelado'], 'idpedido = ?', [$pedidoId]);
+                    $sessionSvc->closeSession($this->orderSessionId, 'cancelled');
+                    return [
+                        'success' => true, 
+                        'message' => 'O pedido #' . $pedidoId . ' foi cancelado com sucesso. A sessão também foi fechada.',
+                        '_final_handoff_response' => 'Seu pedido #' . $pedidoId . ' foi cancelado conforme solicitado. Se precisar de mais alguma coisa no futuro, é só chamar! Até logo!'
+                    ];
+                } else {
+                    return ['success' => false, 'message' => 'Pedido #' . $pedidoId . ' não encontrado ou não pertence a este número.'];
+                }
+            } else {
+                $sessionSvc->closeSession($this->orderSessionId, 'cancelled');
+                return [
+                    'success' => false, 
+                    'message' => 'Não encontrei nenhum pedido em andamento para cancelar.',
+                    '_final_handoff_response' => 'Não encontrei nenhum pedido ativo para cancelar no momento. Posso ajudar com mais alguma coisa?'
+                ];
+            }
+        }
+
+        if ($name === 'consultar_pedidos_cliente') {
+            $pedidos = $this->db->fetchAll(
+                "SELECT idpedido, data, hora_pedido, valor_total, status, idmesa FROM pedido WHERE tenant_id = ? AND filial_id = ? AND cliente_telefone = ? AND status NOT IN ('Cancelado', 'Entregue', 'Finalizado') ORDER BY idpedido DESC LIMIT 5",
+                [$this->tenantId, $this->filialId, $this->customerPhone]
+            );
+            
+            if (empty($pedidos)) {
+                return ['success' => true, 'message' => 'Nenhum pedido ativo encontrado para este cliente.'];
+            }
+            return ['success' => true, 'pedidos' => $pedidos];
         }
 
         return ['success' => false, 'message' => "Ferramenta desconhecida: {$name}"];

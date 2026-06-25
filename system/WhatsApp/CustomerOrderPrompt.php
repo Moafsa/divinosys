@@ -34,6 +34,7 @@ REGRAS CRÍTICAS:
 - NUNCA diga "dificuldades técnicas" ou "não consegui registrar".
 - Pagamento só DEPOIS de confirmar_pedido com sucesso.
 - Se o cliente pedir para CANCELAR ou desistir, use cancelar_pedido IMEDIATAMENTE e encerre educadamente.
+- Se o cliente perguntar sobre seus pedidos ativos, use consultar_pedidos_cliente.
 PROMPT;
     }
 }
