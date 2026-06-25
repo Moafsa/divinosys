@@ -121,7 +121,7 @@ class ClienteWhatsAppAgent extends BaseAgent {
                 'type' => 'function',
                 'function' => [
                     'name' => 'consultar_pedidos_cliente',
-                    'description' => 'Lista os pedidos deste cliente. Pode listar apenas ativos ou o histórico completo.',
+                    'description' => 'Lista os pedidos deste cliente, incluindo os detalhes e produtos (itens) consumidos. Pode listar apenas ativos ou o histórico completo.',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
