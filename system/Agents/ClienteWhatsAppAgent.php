@@ -121,8 +121,17 @@ class ClienteWhatsAppAgent extends BaseAgent {
                 'type' => 'function',
                 'function' => [
                     'name' => 'consultar_pedidos_cliente',
-                    'description' => 'Lista os pedidos ativos (em andamento) deste cliente.',
-                    'parameters' => ['type' => 'object', 'properties' => (object)[]]
+                    'description' => 'Lista os pedidos deste cliente. Pode listar apenas ativos ou o histórico completo.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'tipo' => [
+                                'type' => 'string',
+                                'enum' => ['ativos', 'historico'],
+                                'description' => 'ativos para pedidos em andamento, historico para pedidos antigos.'
+                            ]
+                        ]
+                    ]
                 ]
             ],
         ];
@@ -429,14 +438,19 @@ class ClienteWhatsAppAgent extends BaseAgent {
             }
             $placeholders = implode(',', array_fill(0, count($variacoes), '?'));
             $params = array_merge([$this->tenantId, $this->filialId], $variacoes);
+            $tipo = $args['tipo'] ?? 'ativos';
+            $statusCondition = "";
+            if ($tipo === 'ativos') {
+                $statusCondition = "AND status NOT IN ('Cancelado', 'Entregue', 'Finalizado', 'quitado', 'fechado')";
+            }
             
             $pedidos = $this->db->fetchAll(
-                "SELECT idpedido, data, hora_pedido, valor_total, status, idmesa FROM pedido WHERE tenant_id = ? AND filial_id = ? AND REGEXP_REPLACE(COALESCE(telefone_cliente, ''), '[^0-9]', '', 'g') IN ({$placeholders}) AND status NOT IN ('Cancelado', 'Entregue', 'Finalizado') ORDER BY idpedido DESC LIMIT 5",
+                "SELECT idpedido, data, hora_pedido, valor_total, status, idmesa FROM pedido WHERE tenant_id = ? AND filial_id = ? AND REGEXP_REPLACE(COALESCE(telefone_cliente, ''), '[^0-9]', '', 'g') IN ({$placeholders}) {$statusCondition} ORDER BY idpedido DESC LIMIT 5",
                 $params
             );
             
             if (empty($pedidos)) {
-                return ['success' => true, 'message' => 'Nenhum pedido ativo encontrado para este cliente.'];
+                return ['success' => true, 'message' => "Nenhum pedido ({$tipo}) encontrado para este cliente."];
             }
             return ['success' => true, 'pedidos' => $pedidos];
         }
