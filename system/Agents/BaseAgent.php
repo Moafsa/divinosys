@@ -11,6 +11,20 @@ abstract class BaseAgent {
     protected $personaPrompt = '';
     protected $whatsappCustomerMode = false;
     protected $ignoreStock = false;
+    protected $orderSessionId = null;
+    protected $customerName = '';
+    protected $customerPhone = '';
+    
+    public function setOrderSessionId(?int $sessionId): void
+    {
+        $this->orderSessionId = $sessionId;
+    }
+
+    public function setCustomerContext(string $name, string $phone): void
+    {
+        $this->customerName = trim($name);
+        $this->customerPhone = trim($phone);
+    }
     
     public function __construct() {
         $this->db = \System\Database::getInstance();
@@ -153,6 +167,18 @@ abstract class BaseAgent {
                 'messages' => $messages
             ];
         }
+
+        // Ao atingir o limite, devolve a última resposta textual se existir
+        for ($i = count($messages) - 1; $i >= 0; $i--) {
+            $msg = $messages[$i];
+            if (($msg['role'] ?? '') === 'assistant' && !empty($msg['content'])) {
+                return [
+                    'success' => true,
+                    'response' => $msg['content'],
+                    'messages' => $messages
+                ];
+            }
+        }
         
         return [
             'success' => false,
@@ -172,7 +198,7 @@ abstract class BaseAgent {
                 'Content-Type: application/json',
                 'Authorization: Bearer ' . $this->apiKey
             ],
-            CURLOPT_TIMEOUT => 60,
+            CURLOPT_TIMEOUT => 120,
             CURLOPT_SSL_VERIFYPEER => true
         ]);
         

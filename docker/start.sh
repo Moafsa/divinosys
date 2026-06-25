@@ -34,9 +34,12 @@ if [ $? -ne 0 ]; then
   echo "⚠️  The application will start anyway, but please check the logs"
 fi
 
-# Setup cron job for payment reminders (runs every 2 minutes)
-echo "Setting up cron job for payment reminders..."
-echo "*/2 * * * * curl -s http://localhost/mvc/ajax/process_payment_reminders.php > /dev/null 2>&1" | crontab -
+# Setup cron jobs
+echo "Setting up cron jobs..."
+(
+  echo "*/2 * * * * curl -s http://localhost/mvc/ajax/process_payment_reminders.php > /dev/null 2>&1"
+  echo "*/5 * * * * curl -s http://localhost/mvc/ajax/process_ai_automations.php > /dev/null 2>&1"
+) | crontab -
 service cron start
 
 # Start Apache

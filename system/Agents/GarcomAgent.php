@@ -1,25 +1,21 @@
 <?php
 namespace System\Agents;
 
+/**
+ * Agente para garçons/equipe (telefones em whatsapp_admins).
+ * NÃO atende clientes finais via WhatsApp — use ClienteWhatsAppAgent.
+ */
 class GarcomAgent extends BaseAgent {
-    
-    protected function getSystemPrompt(): string {
-        if ($this->whatsappCustomerMode) {
-            return "Você é o Assistente de Pedidos (Delivery e Retirada) do DivinoSys atendendo via WhatsApp.\n" .
-                   "Sua função é anotar os pedidos do cliente e registrá-los no sistema.\n" .
-                   "REGRA CRÍTICA: O cliente está pedindo de casa pelo WhatsApp. NUNCA pergunte o 'número da mesa' ou 'comanda'.\n" .
-                   "Para registrar o pedido no WhatsApp, use a ferramenta create_order informando mesa_id = '999' (Delivery) ou '998' (Retirada no Balcão).\n" .
-                   "Sempre confirme com o cliente se é para entregar ou se ele vem buscar antes de lançar o pedido.\n" .
-                   "IMPORTANTE: Se o cliente pedir um item e você não souber o ID ou o preço, USE IMEDIATAMENTE a ferramenta `buscar_produtos` para descobrir. NUNCA diga 'um momento vou verificar' sem usar a ferramenta. Busque e já dê a resposta ao cliente.";
-        }
 
-        return "Você é o Garçom Virtual do DivinoSys. Você está falando com um Administrador/Garçom da equipe do restaurante.\n" .
+    protected function getSystemPrompt(): string {
+        return "Você é o Garçom Virtual do DivinoSys. Você está falando com um Garçom, Administrador ou membro da EQUIPE do restaurante.\n" .
                "Sua função é tirar pedidos, listar comandas abertas, lançar itens nas mesas e verificar comandas.\n" .
                "REGRA IMPORTANTE: Se o funcionário pedir para lançar um item e NÃO informar a mesa ou comanda, VOCÊ DEVE PERGUNTAR QUAL A MESA ou COMANDA antes de prosseguir.\n" .
                "Você DEVE usar listar_pedidos ou ver_mesas_ativas para consultar comandas em aberto.\n" .
+               "REGRA CRÍTICA: Continue chamando ferramentas em loop até concluir o que foi solicitado antes de responder.\n" .
                "IMPORTANTE: Se um usuário pedir para lançar um produto, mas não der o preço ou o ID correto, USE IMEDIATAMENTE a ferramenta `buscar_produtos` para descobrir os valores corretos. NUNCA diga 'vou consultar o cardápio' sem de fato chamar a ferramenta.";
     }
-    
+
     protected function getTools(): array {
         return [
             [
@@ -89,7 +85,7 @@ class GarcomAgent extends BaseAgent {
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
-                            'pedido_id' => ['type' => 'integer', 'description' => 'ID numérico interno do pedido (NÃO é o número da mesa)'],
+                            'pedido_id' => ['type' => 'integer'],
                             'itens' => [
                                 'type' => 'array',
                                 'items' => [
@@ -117,7 +113,7 @@ class GarcomAgent extends BaseAgent {
                         'type' => 'object',
                         'properties' => [
                             'pedido_id' => ['type' => 'integer'],
-                            'item_id' => ['type' => 'integer', 'description' => 'ID do item do pedido a ser removido']
+                            'item_id' => ['type' => 'integer']
                         ],
                         'required' => ['pedido_id', 'item_id']
                     ]
@@ -127,7 +123,7 @@ class GarcomAgent extends BaseAgent {
                 'type' => 'function',
                 'function' => [
                     'name' => 'update_order',
-                    'description' => 'Atualiza dados de um pedido existente, como mudar a mesa, cliente ou status.',
+                    'description' => 'Atualiza dados de um pedido existente.',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
@@ -135,7 +131,7 @@ class GarcomAgent extends BaseAgent {
                             'mesa_id' => ['type' => 'string'],
                             'cliente' => ['type' => 'string'],
                             'observacao' => ['type' => 'string'],
-                            'status' => ['type' => 'string', 'enum' => ['Pendente', 'Em Preparo', 'Pronto', 'Saiu para Entrega', 'Entregue']]
+                            'status' => ['type' => 'string']
                         ],
                         'required' => ['pedido_id']
                     ]
@@ -145,7 +141,7 @@ class GarcomAgent extends BaseAgent {
                 'type' => 'function',
                 'function' => [
                     'name' => 'delete_order',
-                    'description' => 'Exclui/cancela um pedido inteiro e todos os seus itens.',
+                    'description' => 'Exclui/cancela um pedido inteiro.',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
@@ -159,7 +155,7 @@ class GarcomAgent extends BaseAgent {
                 'type' => 'function',
                 'function' => [
                     'name' => 'fechar_pedido',
-                    'description' => 'Fecha um pedido, marcando-o como Finalizado e o pagamento como quitado.',
+                    'description' => 'Fecha um pedido, marcando-o como Finalizado.',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
@@ -170,10 +166,10 @@ class GarcomAgent extends BaseAgent {
                         'required' => ['pedido_id', 'forma_pagamento']
                     ]
                 ]
-            ]
+            ],
         ];
     }
-    
+
     protected function executeTool(string $name, array $args): array {
         if ($name === 'ver_mesas_ativas') {
             $sql = "SELECT idpedido as id, idmesa as mesa, cliente, valor_total, hora_pedido 
@@ -182,12 +178,23 @@ class GarcomAgent extends BaseAgent {
             $mesas = $this->db->fetchAll($sql, [$this->tenantId, $this->filialId]);
             return ['success' => true, 'mesas_ativas' => $mesas];
         }
-        
+
+        if ($name === 'buscar_produtos') {
+            return \System\WhatsApp\ProductSearchHelper::search(
+                $this->db,
+                $this->tenantId,
+                $this->filialId,
+                $args['query'] ?? '',
+                10,
+                $this->ignoreStock
+            );
+        }
+
         $legacyService = new \System\OpenAIService();
         $legacyService->setIgnoreStock($this->ignoreStock);
         $args['tenant_id'] = $this->tenantId;
         $args['filial_id'] = $this->filialId;
-        
+
         return $legacyService->executeOperation([
             'type' => $name,
             'data' => $args

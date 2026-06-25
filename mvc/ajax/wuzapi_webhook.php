@@ -382,6 +382,7 @@ try {
         'customer_name' => $customerName,
         'source' => 'whatsapp',
         'instance_id' => $parsed['instance_id'],
+        'instance_db_id' => $instanceDbId,
         'is_admin' => (bool) $isAdmin,
         'ai_system_prompt' => $aiSystemPrompt,
         'ignore_stock' => $ignoreStock,

@@ -193,12 +193,47 @@ class OpenAIService
             $this->tenantId = $tenantId;
             $this->filialId = $filialId;
             
-            $messages = [];
-            
             // Provide context about the user
             $userRole = $isAdmin ? "Administrador/Dono" : "Cliente ($customerName)";
             
             $customerPhone = $context['customer_phone'] ?? '';
+            $instanceDbId = (int) ($context['instance_db_id'] ?? 0);
+            $sessionPrep = null;
+            $sessionSvc = null;
+
+            if (!$isAdmin && !empty($customerPhone)) {
+                $sessionSvc = new \System\WhatsApp\WhatsAppOrderSessionService($this->db);
+                $sessionPrep = $sessionSvc->prepareForMessage(
+                    $tenantId,
+                    $filialId,
+                    $instanceDbId ?: null,
+                    $customerPhone,
+                    $customerName,
+                    trim($message)
+                );
+
+                if (!empty($sessionPrep['cancel_response'])) {
+                    return [
+                        'success' => true,
+                        'response' => ['message' => $sessionPrep['cancel_response']],
+                        'session_action' => 'cancelled',
+                    ];
+                }
+
+                $quickReply = $this->tryQuickOrderFlow(
+                    $sessionSvc,
+                    $sessionPrep,
+                    trim($message),
+                    $customerName,
+                    $customerPhone,
+                    $tenantId,
+                    $filialId,
+                    !empty($context['ignore_stock'])
+                );
+                if ($quickReply !== null) {
+                    return ['success' => true, 'response' => ['message' => $quickReply]];
+                }
+            }
             
             // Se for cliente e tiver dívida, passar esse contexto também (para Atendente/Fiado)
             $fiadoContext = "";
@@ -209,61 +244,103 @@ class OpenAIService
                 }
             }
 
-            // BUSCAR HISTÓRICO DE MENSAGENS RECENTES (MÁX 20 MENSAGENS)
+            $historyRows = [];
             if (!empty($customerPhone)) {
                 $historyRows = $this->db->query(
-                    "SELECT message_text, metadata FROM whatsapp_messages 
+                    "SELECT message_text, metadata, created_at FROM whatsapp_messages 
                      WHERE from_number = ? AND tenant_id = ? 
                      ORDER BY created_at DESC LIMIT 20", 
                     [$customerPhone, $tenantId]
                 )->fetchAll();
-                
-                if (!empty($historyRows)) {
-                    $historyRows = array_reverse($historyRows);
-                    foreach ($historyRows as $row) {
-                        $msgText = trim($row['message_text'] ?? '');
-                        if (!empty($msgText)) {
-                            $messages[] = [
-                                'role' => 'user',
-                                'content' => $msgText
-                            ];
-                        }
-                        
-                        // Resposta da IA fica no metadata
-                        $meta = json_decode($row['metadata'] ?? '{}', true);
-                        $aiResponseText = trim($meta['response'] ?? '');
-                        if (!empty($aiResponseText)) {
-                            $messages[] = [
-                                'role' => 'assistant',
-                                'content' => $aiResponseText
-                            ];
-                        }
+            }
+
+            $messages = [];
+            $messageTrimmed = trim($message);
+            $historyCutoff = $sessionPrep['history_cutoff'] ?? null;
+
+            // BUSCAR HISTÓRICO DE MENSAGENS RECENTES (MÁX 20 MENSAGENS)
+            if (!empty($historyRows)) {
+                $historyRows = array_reverse($historyRows);
+                foreach ($historyRows as $row) {
+                    if ($historyCutoff && !empty($row['created_at']) && strtotime($row['created_at']) < strtotime($historyCutoff)) {
+                        continue;
+                    }
+
+                    $msgText = trim($row['message_text'] ?? '');
+                    if ($msgText !== '' && strcasecmp($msgText, $messageTrimmed) === 0) {
+                        continue;
+                    }
+                    if ($msgText === '' || $msgText === '[automação abandono]') {
+                        continue;
+                    }
+                    if (!empty($msgText)) {
+                        $messages[] = [
+                            'role' => 'user',
+                            'content' => $msgText
+                        ];
+                    }
+                    
+                    $meta = json_decode($row['metadata'] ?? '{}', true);
+                    $aiResponseText = trim($meta['response'] ?? '');
+                    if (!empty($aiResponseText)) {
+                        $messages[] = [
+                            'role' => 'assistant',
+                            'content' => $aiResponseText
+                        ];
                     }
                 }
             }
 
+            $contextLine = "[Sistema: Você está falando com um $userRole via WhatsApp.";
+            if (!$isAdmin) {
+                $contextLine .= " Telefone do cliente: {$customerPhone}. Nome: {$customerName}.";
+            }
+            if (!empty($sessionPrep['system_note'])) {
+                $contextLine .= ' ' . $sessionPrep['system_note'];
+            }
+            if (!$isAdmin && $sessionSvc && !empty($sessionPrep['session_id'])) {
+                $draftSummary = $sessionSvc->getDraftSummary((int) $sessionPrep['session_id']);
+                if ($draftSummary !== 'Nenhum item anotado ainda.') {
+                    $contextLine .= "\n[Rascunho do pedido em andamento:\n{$draftSummary}]";
+                }
+                $taxas = \System\WhatsApp\DeliveryFeeHelper::bairrosTexto($this->db, $tenantId, $filialId);
+                $contextLine .= "\n[Taxas de entrega configuradas:\n{$taxas}]";
+            }
+            $contextLine .= "{$fiadoContext}]";
+
             $messages[] = [
                 'role' => 'user',
-                'content' => "[Sistema: Você está falando com um $userRole via WhatsApp.$fiadoContext] \n\n" . $message
+                'content' => $contextLine . " \n\n" . $message
             ];
-            
-            // Invoca o SupervisorAgent
-            $supervisor = new \System\Agents\SupervisorAgent();
-            $supervisor->setContext($this->tenantId, $this->filialId);
-            if ($aiSystemPrompt !== '') {
-                $supervisor->setPersonaPrompt($aiSystemPrompt);
-            }
+
             if (!$isAdmin) {
-                $supervisor->setWhatsAppCustomerMode(true);
+                $agent = new \System\Agents\ClienteWhatsAppAgent();
+                $maxIterations = 18;
+            } else {
+                $agent = new \System\Agents\SupervisorAgent();
+                $maxIterations = 8;
+            }
+
+            $agent->setContext($this->tenantId, $this->filialId);
+            if ($aiSystemPrompt !== '') {
+                $agent->setPersonaPrompt($aiSystemPrompt);
             }
             if (!empty($context['ignore_stock'])) {
-                $supervisor->setIgnoreStock(true);
+                $agent->setIgnoreStock(true);
             }
-            
-            $result = $supervisor->process($messages);
+            if (!$isAdmin && $agent instanceof \System\Agents\ClienteWhatsAppAgent) {
+                $agent->setCustomerContext($customerName, $customerPhone);
+                if (!empty($sessionPrep['session_id'])) {
+                    $agent->setOrderSessionId((int) $sessionPrep['session_id']);
+                }
+            }
+
+            $result = $agent->process($messages, $maxIterations);
             
             if (isset($result['success']) && $result['success']) {
-                return ['success' => true, 'response' => ['message' => $result['response']]];
+                $responseText = (string) ($result['response'] ?? '');
+
+                return ['success' => true, 'response' => ['message' => $responseText]];
             } else {
                 return ['success' => false, 'response' => ['message' => $result['error'] ?? 'Erro desconhecido']];
             }
@@ -754,6 +831,8 @@ class OpenAIService
                     return $this->deleteOrder($operation['data']);
                 case 'fechar_pedido':
                     return $this->fecharPedido($operation['data']);
+                case 'gerar_fatura_pix':
+                    return $this->gerarFaturaPixPedido($operation['data']);
                 case 'add_item_to_order':
                     return $this->addItemToOrder($operation['data']);
                 case 'remove_item_from_order':
@@ -1020,7 +1099,7 @@ class OpenAIService
     {
         $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
         $filialId = $this->filialId ?? $this->session->getFilialId() ?? 1;
-        $usuarioId = $this->session->getUserId() ?? 1;
+        $usuarioId = $this->resolveUsuarioIdForOrder($tenantId);
 
         if (!empty($data['itens'])) {
             $stockError = $this->validateItensEstoque($data['itens'], $tenantId, $filialId);
@@ -1034,23 +1113,40 @@ class OpenAIService
             foreach ($data['itens'] as $item) {
                 $valorTotal += (float)($item['preco'] ?? 0) * (int)($item['quantidade'] ?? 1);
             }
-        } else {
-            $valorTotal = $data['valor_total'] ?? 0;
+        }
+        if (isset($data['valor_total']) && (float) $data['valor_total'] > 0) {
+            $valorTotal = (float) $data['valor_total'];
+        } elseif (!empty($data['taxa_entrega'])) {
+            $valorTotal += (float) $data['taxa_entrega'];
         }
         
-        $orderId = $this->db->insert('pedido', [
-            'idmesa' => $data['mesa_id'] ?? '999',
+        $mesaId = (string) ($data['mesa_id'] ?? '999');
+        $isDelivery = array_key_exists('delivery', $data)
+            ? (bool) $data['delivery']
+            : ($mesaId === '999');
+
+        $insertData = [
+            'idmesa' => $mesaId,
             'cliente' => $data['cliente'] ?? 'Cliente IA',
-            'delivery' => $data['delivery'] ?? false,
+            'delivery' => $isDelivery,
             'data' => date('Y-m-d'),
             'hora_pedido' => date('H:i:s'),
             'valor_total' => $valorTotal,
             'status' => 'Pendente',
-            'observacao' => $data['observacao'] ?? 'Pedido criado via IA',
-            'usuario_id' => $usuarioId,
+            'observacao' => $data['observacao'] ?? 'Pedido criado via WhatsApp',
             'tenant_id' => $tenantId,
-            'filial_id' => $filialId
-        ]);
+            'filial_id' => $filialId,
+        ];
+
+        if ($usuarioId !== null) {
+            $insertData['usuario_id'] = $usuarioId;
+        }
+
+        if (!empty($data['forma_pagamento'])) {
+            $insertData['forma_pagamento'] = strtolower((string) $data['forma_pagamento']);
+        }
+
+        $orderId = $this->db->insert('pedido', $insertData);
         
         if (!empty($data['itens']) && $orderId) {
             foreach ($data['itens'] as $item) {
@@ -1069,8 +1165,8 @@ class OpenAIService
         }
         
         // Atualizar status da mesa
-        if (($data['mesa_id'] ?? '999') !== '999') {
-            $this->db->update('mesas', ['status' => '2'], 'id_mesa = ? AND tenant_id = ?', [$data['mesa_id'], $tenantId]);
+        if ($mesaId !== '999' && $mesaId !== '998') {
+            $this->db->update('mesas', ['status' => '2'], 'id_mesa = ? AND tenant_id = ?', [$mesaId, $tenantId]);
         }
         
         return [
@@ -1078,6 +1174,114 @@ class OpenAIService
             'message' => 'Pedido criado com sucesso! ID: ' . $orderId,
             'order_id' => $orderId
         ];
+    }
+
+    private function updateOrder($data)
+    {
+        $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
+        $filialId = $this->filialId ?? $this->session->getFilialId() ?? 1;
+        $pedidoId = (int) ($data['pedido_id'] ?? 0);
+
+        if ($pedidoId <= 0) {
+            return ['success' => false, 'message' => 'ID do pedido não fornecido.'];
+        }
+
+        $pedido = $this->db->fetch(
+            'SELECT observacao FROM pedido WHERE idpedido = ? AND tenant_id = ? AND filial_id = ?',
+            [$pedidoId, $tenantId, $filialId]
+        );
+
+        if (!$pedido) {
+            return ['success' => false, 'message' => 'Pedido não encontrado.'];
+        }
+
+        $updateData = [];
+        if (isset($data['cliente'])) {
+            $updateData['cliente'] = $data['cliente'];
+        }
+        if (isset($data['status'])) {
+            $updateData['status'] = $data['status'];
+        }
+        if (isset($data['mesa_id'])) {
+            $updateData['idmesa'] = (string) $data['mesa_id'];
+            $updateData['delivery'] = ((string) $data['mesa_id']) === '999';
+        }
+        if (isset($data['observacao'])) {
+            $obsAtual = trim((string) ($pedido['observacao'] ?? ''));
+            $novaObs = trim((string) $data['observacao']);
+            $updateData['observacao'] = $obsAtual !== '' ? $obsAtual . "\n" . $novaObs : $novaObs;
+        }
+
+        if (empty($updateData)) {
+            return ['success' => false, 'message' => 'Nenhum dado para atualizar.'];
+        }
+
+        $this->db->update(
+            'pedido',
+            $updateData,
+            'idpedido = ? AND tenant_id = ? AND filial_id = ?',
+            [$pedidoId, $tenantId, $filialId]
+        );
+
+        return ['success' => true, 'message' => 'Pedido #' . $pedidoId . ' atualizado com sucesso.'];
+    }
+
+    private function fecharPedido($data)
+    {
+        $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
+        $filialId = $this->filialId ?? $this->session->getFilialId() ?? 1;
+        $pedidoId = (int) ($data['pedido_id'] ?? 0);
+        $formaPagamento = strtolower(trim((string) ($data['forma_pagamento'] ?? '')));
+
+        if ($pedidoId <= 0 || $formaPagamento === '') {
+            return ['success' => false, 'message' => 'ID do pedido e forma de pagamento são obrigatórios.'];
+        }
+
+        $pedido = $this->db->fetch(
+            'SELECT * FROM pedido WHERE idpedido = ? AND tenant_id = ? AND filial_id = ?',
+            [$pedidoId, $tenantId, $filialId]
+        );
+
+        if (!$pedido) {
+            return ['success' => false, 'message' => 'Pedido não encontrado.'];
+        }
+
+        $obsFechamento = trim((string) ($data['observacao_fechamento'] ?? ''));
+        $obsAtual = trim((string) ($pedido['observacao'] ?? ''));
+        $obsFinal = $obsFechamento !== ''
+            ? ($obsAtual !== '' ? $obsAtual . "\n\nFechamento: " . $obsFechamento : 'Fechamento: ' . $obsFechamento)
+            : $obsAtual;
+
+        $this->db->update(
+            'pedido',
+            [
+                'status' => 'Finalizado',
+                'forma_pagamento' => $formaPagamento,
+                'troco_para' => $data['troco_para'] ?? null,
+                'observacao' => $obsFinal,
+            ],
+            'idpedido = ? AND tenant_id = ? AND filial_id = ?',
+            [$pedidoId, $tenantId, $filialId]
+        );
+
+        return ['success' => true, 'message' => 'Pedido #' . $pedidoId . ' fechado com sucesso.'];
+    }
+
+    private function gerarFaturaPixPedido($data)
+    {
+        $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
+        $filialId = $this->filialId ?? $this->session->getFilialId() ?? 1;
+
+        return \System\WhatsApp\PixInvoiceHelper::gerarParaPedido(
+            $this->db,
+            $tenantId,
+            $filialId,
+            (int) ($data['pedido_id'] ?? 0),
+            (float) ($data['valor'] ?? 0),
+            (string) ($data['nome_cliente'] ?? ''),
+            (string) ($data['telefone_cliente'] ?? ''),
+            (string) ($data['descricao'] ?? '')
+        );
     }
     
     private function addItemToOrder($data)
@@ -1128,6 +1332,110 @@ class OpenAIService
         }
         
         return ['success' => true, 'message' => 'Item removido.'];
+    }
+
+    private function tryQuickOrderFlow(
+        \System\WhatsApp\WhatsAppOrderSessionService $sessionSvc,
+        ?array $sessionPrep,
+        string $message,
+        string $customerName,
+        string $customerPhone,
+        int $tenantId,
+        int $filialId,
+        bool $ignoreStock
+    ): ?string {
+        $sessionId = (int) ($sessionPrep['session_id'] ?? 0);
+        if ($sessionId <= 0) {
+            return null;
+        }
+
+        $draft = $sessionSvc->getDraft($sessionId);
+        $agent = new \System\Agents\ClienteWhatsAppAgent();
+        $agent->setContext($tenantId, $filialId);
+        $agent->setCustomerContext($customerName, $customerPhone);
+        $agent->setOrderSessionId($sessionId);
+        if ($ignoreStock) {
+            $agent->setIgnoreStock(true);
+        }
+
+        if ($sessionSvc->isConfirmIntent($message) && \System\WhatsApp\WhatsAppOrderDraft::isReadyForConfirmation($draft)) {
+            $result = $agent->runTool('confirmar_pedido', ['cliente' => $customerName ?: 'Cliente WhatsApp']);
+            if (!empty($result['_final_handoff_response'])) {
+                return (string) $result['_final_handoff_response'];
+            }
+            if (!empty($result['success'])) {
+                $pedidoId = (int) ($result['pedido_id'] ?? 0);
+                return 'Perfeito! Pedido #' . $pedidoId . ' registrado. Como prefere pagar: PIX, dinheiro ou cartão?';
+            }
+            return 'Não consegui confirmar agora. ' . ($result['message'] ?? 'Tente novamente.');
+        }
+
+        $forma = $sessionSvc->parsePaymentIntent($message);
+        $cpfFromMessage = $sessionSvc->parseCpf($message);
+
+        if ($cpfFromMessage && \System\WhatsApp\WhatsAppOrderDraft::isAwaitingPayment($draft)) {
+            $draft['cpf'] = $cpfFromMessage;
+            $sessionSvc->saveDraft($sessionId, $draft);
+            if (($draft['pending_payment'] ?? '') === 'pix' || $forma === 'pix') {
+                $forma = 'pix';
+            }
+        }
+
+        if ($forma && \System\WhatsApp\WhatsAppOrderDraft::isAwaitingPayment($draft)) {
+            $pedidoId = (int) ($draft['pedido_id'] ?? 0);
+            if ($forma === 'dinheiro') {
+                $troco = $sessionSvc->parseTrocoPara($message);
+                if ($troco === null || $troco <= 0) {
+                    return 'Para pagamento em dinheiro, informe para quanto precisa de troco (ex: troco para 50).';
+                }
+                $result = $agent->runTool('registrar_pagamento', [
+                    'pedido_id' => $pedidoId,
+                    'forma' => 'dinheiro',
+                    'troco_para' => $troco,
+                ]);
+            } elseif ($forma === 'pix') {
+                $cpf = (string) ($draft['cpf'] ?? '');
+                if ($cpf === '') {
+                    $draft['pending_payment'] = 'pix';
+                    $sessionSvc->saveDraft($sessionId, $draft);
+                    return 'Para gerar o PIX, informe seu CPF (apenas os 11 números).';
+                }
+                $result = $agent->runTool('registrar_pagamento', [
+                    'pedido_id' => $pedidoId,
+                    'forma' => 'pix',
+                    'cpf' => $cpf,
+                ]);
+            } else {
+                $result = $agent->runTool('registrar_pagamento', [
+                    'pedido_id' => $pedidoId,
+                    'forma' => $forma,
+                ]);
+            }
+
+            if (!empty($result['_final_handoff_response'])) {
+                return (string) $result['_final_handoff_response'];
+            }
+            if (!empty($result['success'])) {
+                return (string) ($result['message'] ?? 'Pagamento registrado!');
+            }
+            return (string) ($result['message'] ?? 'Não foi possível registrar o pagamento.');
+        }
+
+        return null;
+    }
+
+    private function resolveUsuarioIdForOrder(int $tenantId): ?int
+    {
+        $uid = $this->session->getUserId();
+        if ($uid) {
+            $row = $this->db->fetch('SELECT id FROM usuarios WHERE id = ? AND tenant_id = ?', [$uid, $tenantId]);
+            if ($row) {
+                return (int) $row['id'];
+            }
+        }
+
+        $fallback = $this->db->fetch('SELECT id FROM usuarios WHERE tenant_id = ? ORDER BY id ASC LIMIT 1', [$tenantId]);
+        return $fallback ? (int) $fallback['id'] : null;
     }
 
     private function validateItensEstoque(array $itens, int $tenantId, int $filialId): ?array

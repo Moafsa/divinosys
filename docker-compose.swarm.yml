@@ -1,0 +1,291 @@
+﻿version: "3.7"
+
+services:
+  # Divino Lanches Application
+  divinosys_app:
+    image: divinosys:latest
+    networks:
+      - network_public
+    environment:
+      # Database Configuration
+      - DB_HOST=divinosys_db
+      - DB_PORT=5432
+      - DB_NAME=divino_db
+      - DB_USER=divino_user
+      - DB_PASSWORD=YOUR_DB_PASSWORD
+      
+      # Application Configuration
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - APP_URL=https://divsys.conext.click
+      - APP_NAME="Divino Lanches"
+      - APP_VERSION="2.0"
+
+      # N8N Integration
+      - AI_N8N_WEBHOOK_URL=https://wapp.conext.click/webhook/ai-chat
+      - AI_N8N_TIMEOUT=30
+      
+      # Security
+      - SESSION_LIFETIME=120
+      - SESSION_ENCRYPT=true
+      
+      # Redis Configuration
+      - REDIS_HOST=divinosys_redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      
+      # Email Configuration
+      - MAIL_MAILER=log
+      - MAIL_HOST=127.0.0.1
+      - MAIL_PORT=2525
+      - MAIL_USERNAME=
+      - MAIL_PASSWORD=
+      - MAIL_ENCRYPTION=null
+      - MAIL_FROM_ADDRESS=noreply@divinolanches.com
+      - MAIL_FROM_NAME="Divino Lanches"
+      
+      # File Upload
+      - UPLOAD_MAX_SIZE=10M
+      - ALLOWED_EXTENSIONS=jpg,jpeg,png,gif,pdf
+      
+      # MinIO embutido no container (storage local persistente)
+      - MINIO_ENDPOINT=http://127.0.0.1:9000
+      - MINIO_ROOT_USER=divinosys_minio
+      - MINIO_ROOT_PASSWORD=YOUR_MINIO_PASSWORD
+      - MINIO_ACCESS_KEY=divinosys_minio
+      - MINIO_SECRET_KEY=YOUR_MINIO_SECRET_KEY
+      - MINIO_BUCKET=divinosys
+      - MINIO_PUBLIC_URL=https://divsys.conext.click/storage
+      - MINIO_DATA_DIR=/var/www/html/storage/minio
+      
+      # Asaas Payment Gateway Configuration
+      - ASAAS_API_KEY=YOUR_ASAAS_API_KEY
+      - ASAAS_API_URL=https://www.asaas.com/api/v3
+      
+      # OpenAI Configuration (n8n webhook indisponÃ­vel â€” integraÃ§Ã£o direta)
+      - USE_N8N_AI=false
+      
+      - OPENAI_API_KEY=YOUR_OPENAI_API_KEY
+      
+      # MCP Server Configuration
+      - MCP_API_KEY=YOUR_MCP_API_KEY
+      - MCP_SERVER_URL=http://divinosys_mcp-server:3100
+      
+      # WuzAPI Configuration
+      - WUZAPI_URL=http://divinosys_wuzapi:8080
+      - WUZAPI_API_KEY=YOUR_WUZAPI_API_KEY
+      
+      # Multi-tenant Configuration
+      - DEFAULT_TENANT_ID=1
+      - ENABLE_MULTI_TENANT=true
+      
+      # WhatsApp Chatwoot Configuration
+      - WHATSAPP_ENABLED=true
+      - CHATWOOT_URL=https://services.conext.click/
+      - CHATWOOT_API_KEY=YOUR_CHATWOOT_API_KEY
+      - CHATWOOT_ACCOUNT_ID=11
+      
+      # Timezone
+      - TZ=America/Sao_Paulo
+    volumes:
+      - divinosys_data:/var/www/html/storage
+      - divinosys_logs:/var/log
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=network_public
+        # HTTP Router (for Let's Encrypt validation)
+        - traefik.http.routers.divinosys-http.entrypoints=web
+        - traefik.http.routers.divinosys-http.rule=Host(`divsys.conext.click`) && !PathPrefix(`/.well-known/acme-challenge/`)
+        - traefik.http.routers.divinosys-http.middlewares=divinosys-redirect
+        # HTTPS Router
+        - traefik.http.routers.divinosys.entrypoints=websecure
+        - traefik.http.routers.divinosys.priority=1
+        - traefik.http.routers.divinosys.rule=Host(`divsys.conext.click`)
+        - traefik.http.routers.divinosys.service=divinosys
+        - traefik.http.routers.divinosys.tls.certresolver=letsencryptresolver
+        - traefik.http.services.divinosys.loadbalancer.server.port=80
+        # Middleware to redirect HTTP to HTTPS
+        - traefik.http.middlewares.divinosys-redirect.redirectscheme.scheme=https
+        - traefik.http.middlewares.divinosys-redirect.redirectscheme.permanent=true
+
+  # PostgreSQL Database
+  divinosys_db:
+    image: postgres:15-alpine
+    networks:
+      - network_public
+    environment:
+      - POSTGRES_DB=divino_db
+      - POSTGRES_USER=divino_user
+      - POSTGRES_PASSWORD=YOUR_DB_PASSWORD
+      - POSTGRES_INITDB_ARGS=-E UTF8
+    volumes:
+      - divinosys_db_data:/var/lib/postgresql/data
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+  # Redis Cache
+  divinosys_redis:
+    image: redis:7-alpine
+    networks:
+      - network_public
+    volumes:
+      - divinosys_redis_data:/data
+    command: redis-server --appendonly yes
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+  # WuzAPI - WhatsApp API (asternic fork com whatsmeow atualizado)
+  divinosys_wuzapi:
+    image: asternic/wuzapi:latest
+    networks:
+      - network_public
+    environment:
+      - WUZAPI_ADMIN_TOKEN=YOUR_WUZAPI_TOKEN
+      - WUZAPI_GLOBAL_ENCRYPTION_KEY=YOUR_WUZAPI_ENC_KEY
+      - DB_HOST=divinosys_db
+      - DB_PORT=5432
+      - DB_NAME=divino_db
+      - DB_USER=divino_user
+      - DB_PASSWORD=YOUR_DB_PASSWORD
+      - WEBHOOK_URL=https://divsys.conext.click/webhook/wuzapi.php
+      - TZ=America/Sao_Paulo
+    volumes:
+      - divinosys_wuzapi_sessions:/app/sessions
+      - divinosys_wuzapi_data:/app/data
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=network_public
+        # HTTP Router (for Let's Encrypt validation)
+        - traefik.http.routers.divinosys-wuzapi-http.entrypoints=web
+        - traefik.http.routers.divinosys-wuzapi-http.rule=Host(`wuzapidiv.conext.click`) && !PathPrefix(`/.well-known/acme-challenge/`)
+        - traefik.http.routers.divinosys-wuzapi-http.middlewares=wuzapi-redirect
+        # HTTPS Router - Backend API (path /api) - strip /api prefix before sending to backend
+        - traefik.http.routers.divinosys-wuzapi-api.entrypoints=websecure
+        - traefik.http.routers.divinosys-wuzapi-api.priority=5
+        - traefik.http.routers.divinosys-wuzapi-api.rule=Host(`wuzapidiv.conext.click`) && PathPrefix(`/api`)
+        - traefik.http.routers.divinosys-wuzapi-api.service=divinosys-wuzapi-api
+        - traefik.http.routers.divinosys-wuzapi-api.middlewares=wuzapi-api-stripprefix
+        - traefik.http.routers.divinosys-wuzapi-api.tls.certresolver=letsencryptresolver
+        - traefik.http.services.divinosys-wuzapi-api.loadbalancer.server.port=8080
+        - traefik.http.middlewares.wuzapi-api-stripprefix.stripprefix.prefixes=/api
+        # HTTPS Router - Frontend (everything else - static files, pages)
+        - traefik.http.routers.divinosys-wuzapi-frontend.entrypoints=websecure
+        - traefik.http.routers.divinosys-wuzapi-frontend.priority=3
+        - traefik.http.routers.divinosys-wuzapi-frontend.rule=Host(`wuzapidiv.conext.click`)
+        - traefik.http.routers.divinosys-wuzapi-frontend.service=divinosys-wuzapi-frontend
+        - traefik.http.routers.divinosys-wuzapi-frontend.tls.certresolver=letsencryptresolver
+        - traefik.http.services.divinosys-wuzapi-frontend.loadbalancer.server.port=8080
+        # Middleware to redirect HTTP to HTTPS
+        - traefik.http.middlewares.wuzapi-redirect.redirectscheme.scheme=https
+        - traefik.http.middlewares.wuzapi-redirect.redirectscheme.permanent=true
+
+  # MCP Server - AI Integration
+  divinosys_mcp-server:
+    build:
+      context: ./n8n-mcp-server
+      dockerfile: Dockerfile
+    image: divinosys-mcp-server:latest
+    networks:
+      - network_public
+    environment:
+      - MCP_PORT=3100
+      - DB_HOST=divinosys_db
+      - DB_PORT=5432
+      - DB_NAME=divino_db
+      - DB_USER=divino_user
+      - DB_PASSWORD=YOUR_DB_PASSWORD
+      - MCP_API_KEY=mcp_divinosys_2024_secret_key
+      - NODE_ENV=production
+      - TZ=America/Sao_Paulo
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=network_public
+        # HTTP Router (for Let's Encrypt validation)
+        - traefik.http.routers.divinosys-mcp-http.entrypoints=web
+        - traefik.http.routers.divinosys-mcp-http.rule=Host(`mcp.conext.click`) && !PathPrefix(`/.well-known/acme-challenge/`)
+        - traefik.http.routers.divinosys-mcp-http.middlewares=mcp-redirect
+        # HTTPS Router
+        - traefik.http.routers.divinosys-mcp.entrypoints=websecure
+        - traefik.http.routers.divinosys-mcp.priority=2
+        - traefik.http.routers.divinosys-mcp.rule=Host(`mcp.conext.click`)
+        - traefik.http.routers.divinosys-mcp.service=divinosys-mcp
+        - traefik.http.routers.divinosys-mcp.tls.certresolver=letsencryptresolver
+        - traefik.http.services.divinosys-mcp.loadbalancer.server.port=3100
+        # Middleware to redirect HTTP to HTTPS
+        - traefik.http.middlewares.mcp-redirect.redirectscheme.scheme=https
+        - traefik.http.middlewares.mcp-redirect.redirectscheme.permanent=true
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  divinosys_data:
+    external: true
+    name: divinosys_data
+  divinosys_logs:
+    external: true
+    name: divinosys_logs
+  divinosys_db_data:
+    external: true
+    name: divinosys_db_data
+  divinosys_redis_data:
+    external: true
+    name: divinosys_redis_data
+  divinosys_wuzapi_sessions:
+    external: false
+  divinosys_wuzapi_data:
+    external: false
+
+networks:
+  network_public:
+    name: network_public
+    external: true

@@ -1,0 +1,1 @@
+c99edef5d6082212433c7c81946dbbe8645917a3 2026-06-24 14:24:23 -0300 Fix: correct columns in buscar_produtos, improve SupervisorAgent prompt and add BaseAgent debug logging
