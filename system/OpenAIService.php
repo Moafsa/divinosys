@@ -1141,36 +1141,36 @@ class OpenAIService
 
         if ($usuarioId !== null) {
             $insertData['usuario_id'] = $usuarioId;
-        } else {
-            $clienteTelefone = $data['cliente_telefone'] ?? null;
-            $clienteNome = $data['cliente'] ?? 'Cliente IA';
-            
-            if ($clienteTelefone) {
-                $variacoes = \System\TelefoneHelper::getVariacoes($clienteTelefone);
-                if (!empty($variacoes)) {
-                    $placeholders = implode(',', array_fill(0, count($variacoes), '?'));
-                    $clienteExistente = $this->db->fetch(
-                        "SELECT id FROM usuarios_globais WHERE REGEXP_REPLACE(COALESCE(telefone, ''), '[^0-9]', '', 'g') IN ({$placeholders}) LIMIT 1",
-                        $variacoes
-                    );
-                    
-                    if ($clienteExistente) {
-                        $insertData['usuario_global_id'] = $clienteExistente['id'];
-                        // Optional: Could update the name if we want, but keeping it simple.
-                    } else {
-                        $telCanonico = \System\TelefoneHelper::canonico($clienteTelefone);
-                        if (empty($telCanonico)) {
-                            $telCanonico = preg_replace('/[^0-9]/', '', $clienteTelefone);
-                        }
-                        $insertData['usuario_global_id'] = $this->db->insert('usuarios_globais', [
-                            'nome' => $clienteNome,
-                            'telefone' => $telCanonico,
-                            'tipo_usuario' => 'cliente',
-                            'ativo' => true,
-                            'created_at' => \System\TimeHelper::now('Y-m-d H:i:s', $filialId),
-                            'updated_at' => \System\TimeHelper::now('Y-m-d H:i:s', $filialId)
-                        ]);
+        }
+
+        $clienteTelefone = $data['cliente_telefone'] ?? null;
+        $clienteNome = $data['cliente'] ?? 'Cliente IA';
+        
+        if ($clienteTelefone) {
+            $variacoes = \System\TelefoneHelper::getVariacoes($clienteTelefone);
+            if (!empty($variacoes)) {
+                $placeholders = implode(',', array_fill(0, count($variacoes), '?'));
+                $clienteExistente = $this->db->fetch(
+                    "SELECT id FROM usuarios_globais WHERE REGEXP_REPLACE(COALESCE(telefone, ''), '[^0-9]', '', 'g') IN ({$placeholders}) LIMIT 1",
+                    $variacoes
+                );
+                
+                if ($clienteExistente) {
+                    $insertData['usuario_global_id'] = $clienteExistente['id'];
+                    // Optional: Could update the name if we want, but keeping it simple.
+                } else {
+                    $telCanonico = \System\TelefoneHelper::canonico($clienteTelefone);
+                    if (empty($telCanonico)) {
+                        $telCanonico = preg_replace('/[^0-9]/', '', $clienteTelefone);
                     }
+                    $insertData['usuario_global_id'] = $this->db->insert('usuarios_globais', [
+                        'nome' => $clienteNome,
+                        'telefone' => $telCanonico,
+                        'tipo_usuario' => 'cliente',
+                        'ativo' => true,
+                        'created_at' => \System\TimeHelper::now('Y-m-d H:i:s', $filialId),
+                        'updated_at' => \System\TimeHelper::now('Y-m-d H:i:s', $filialId)
+                    ]);
                 }
             }
         }
