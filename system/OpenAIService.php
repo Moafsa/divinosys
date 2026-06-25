@@ -1128,7 +1128,7 @@ class OpenAIService
         $insertData = [
             'idmesa' => $mesaId,
             'cliente' => $data['cliente'] ?? 'Cliente IA',
-            'cliente_telefone' => $data['cliente_telefone'] ?? null,
+            'telefone_cliente' => $data['cliente_telefone'] ?? null,
             'delivery' => $isDelivery,
             'data' => date('Y-m-d'),
             'hora_pedido' => date('H:i:s'),
