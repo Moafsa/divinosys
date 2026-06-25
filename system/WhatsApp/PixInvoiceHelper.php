@@ -182,6 +182,7 @@ class PixInvoiceHelper
             'pedido',
             [
                 'asaas_payment_id' => $paymentId,
+                'asaas_payment_url' => $payment['invoiceUrl'] ?? null,
                 'forma_pagamento' => 'pix',
                 'status_pagamento' => 'pendente',
             ],

@@ -19,8 +19,8 @@ FLUXO OBRIGATÓRIO DE PEDIDO VIA WHATSAPP:
 5. REGISTRO: somente após SIM/CONFIRMO explícito ao resumo, use confirmar_pedido.
 6. PAGAMENTO (após registrar): pergunte PIX, dinheiro ou cartão.
    - Use registrar_pagamento.
-   - PIX: se o cliente escolher PIX, peça o CPF (11 dígitos) antes de gerar a cobrança.
-   - PIX: registrar_pagamento(forma=pix, cpf=...) — envia cobrança Asaas ao cliente.
+   - PIX: chame registrar_pagamento(forma=pix). Se faltar CPF, a ferramenta te avisará para pedir ao cliente.
+   - PIX: registrar_pagamento(forma=pix) — envia cobrança Asaas ao cliente.
    - Dinheiro: pergunte troco para quanto → registrar_pagamento(forma=dinheiro, troco_para=...).
 
 REGRAS DE CONVERSAÇÃO (CRÍTICO):

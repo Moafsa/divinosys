@@ -569,13 +569,23 @@ $stats = [
                                                     <i class="fas fa-shopping-cart me-1"></i>
                                                     Cardápio Online
                                                 </div>
+                                            <?php elseif ($pedido['idmesa'] == '999'): ?>
+                                                <div class="pedido-mesa" style="background: rgba(23, 162, 184, 0.15); color: #17a2b8;">
+                                                    <i class="fas fa-motorcycle me-1"></i>
+                                                    Delivery
+                                                </div>
+                                            <?php elseif ($pedido['idmesa'] == '998'): ?>
+                                                <div class="pedido-mesa" style="background: rgba(253, 126, 20, 0.15); color: #fd7e14;">
+                                                    <i class="fas fa-walking me-1"></i>
+                                                    Retirada
+                                                </div>
                                             <?php elseif ($pedido['idmesa']): ?>
                                                 <div class="pedido-mesa">
                                                     <i class="fas fa-table me-1"></i>
                                                     Mesa <?php echo $pedido['id_mesa']; ?>
                                                 </div>
                                             <?php else: ?>
-                                                <div class="pedido-mesa">
+                                                <div class="pedido-mesa" style="background: rgba(23, 162, 184, 0.15); color: #17a2b8;">
                                                     <i class="fas fa-motorcycle me-1"></i>
                                                     Delivery
                                                 </div>

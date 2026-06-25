@@ -159,7 +159,7 @@ class PaymentNotificationService
     /**
      * Agendar lembrete para 10 minutos depois
      */
-    private function scheduleReminder(
+    public function scheduleReminder(
         $pedidoId,
         $tenantId,
         $filialId,
@@ -396,17 +396,16 @@ class PaymentNotificationService
             
             // Montar mensagem de lembrete
             $mensagem = "⏰ *Falta pouco para concluir seu pedido!*\n\n";
-            $mensagem .= "Olá, {$reminder['cliente_nome']}!\n\n";
-            $mensagem .= "Notamos que você ainda não finalizou o pagamento do pedido *#{$reminder['pedido_id']}*.\n\n";
-            $mensagem .= "💰 *Valor: R$ " . number_format($reminder['valor_total'], 2, ',', '.') . "*\n\n";
+            $mensagem .= "Olá, {$reminder['cliente_nome']}! Notamos que o pagamento do pedido *#{$reminder['pedido_id']}* ainda está pendente.\n\n";
+            $mensagem .= "Tem alguma dúvida ou dificuldade com o pagamento? É só me avisar que eu te ajudo!\n\n";
             
             if ($reminder['billing_type'] === 'PIX' && !empty($reminder['pix_copy_paste'])) {
-                $mensagem .= "📱 *Código PIX (copiar e colar):*\n\n";
+                $mensagem .= "Para pagar, basta copiar o código PIX abaixo e colar no app do seu banco (opção PIX Copia e Cola):\n\n";
                 $mensagem .= "```\n{$reminder['pix_copy_paste']}\n```\n\n";
             }
             
             if ($reminder['payment_url']) {
-                $mensagem .= "🔗 Finalize agora: {$reminder['payment_url']}\n\n";
+                $mensagem .= "🔗 Ou clique aqui: {$reminder['payment_url']}\n\n";
             }
             
             $mensagem .= "Não perca seu pedido! Finalize o pagamento agora. 🍔\n\n";
@@ -427,6 +426,65 @@ class PaymentNotificationService
                 'success' => false,
                 'message' => 'Erro ao enviar lembrete: ' . $e->getMessage()
             ];
+        }
+    }
+    
+    /**
+     * Enviar mensagem de confirmação de pagamento
+     */
+    public function sendPaymentConfirmed($pedidoId, $tenantId, $filialId)
+    {
+        try {
+            $reminder = $this->db->fetch(
+                "SELECT cliente_telefone, cliente_nome, whatsapp_instance_id FROM payment_reminders WHERE pedido_id = ? ORDER BY id DESC LIMIT 1",
+                [$pedidoId]
+            );
+            
+            if ($reminder) {
+                $telefone = $reminder['cliente_telefone'];
+                $nome = $reminder['cliente_nome'];
+                $instanceId = $reminder['whatsapp_instance_id'];
+            } else {
+                // Tenta achar via whatsapp_order_sessions
+                $session = $this->db->fetch(
+                    "SELECT phone, customer_name, instance_id FROM whatsapp_order_sessions WHERE draft_json->>'pedido_id' = ? ORDER BY id DESC LIMIT 1",
+                    [(string)$pedidoId]
+                );
+                if ($session) {
+                    $telefone = $session['phone'];
+                    $nome = $session['customer_name'];
+                    $instanceId = $session['instance_id'];
+                } else {
+                    return ['success' => false, 'message' => 'Nenhum telefone encontrado para o pedido'];
+                }
+            }
+            
+            if (!$instanceId) {
+                $instancia = $this->db->fetch(
+                    "SELECT id FROM whatsapp_instances 
+                     WHERE tenant_id = ? AND (filial_id = ? OR filial_id IS NULL) 
+                     AND status IN ('open', 'connected') AND ativo = true
+                     ORDER BY created_at DESC LIMIT 1",
+                    [$tenantId, $filialId]
+                );
+                if ($instancia) {
+                    $instanceId = $instancia['id'];
+                }
+            }
+            
+            if (!$instanceId) return ['success' => false, 'message' => 'Sem instância'];
+            
+            $telefoneFormatado = $this->formatPhone($telefone);
+            $nomeFirst = explode(' ', trim($nome))[0];
+            
+            $mensagem = "✅ *Pagamento Confirmado!*\n\n";
+            $mensagem .= "Maravilha, {$nomeFirst}! Seu pagamento do pedido *#{$pedidoId}* foi confirmado com sucesso!\n\n";
+            $mensagem .= "Já estamos preparando tudo com muito carinho. Assim que sair para entrega (ou estiver pronto para retirada), avisaremos você. 🚀🍔";
+            
+            return $this->wuzapiManager->sendMessage($instanceId, $telefoneFormatado, $mensagem);
+        } catch (\Exception $e) {
+            error_log("PaymentNotificationService::sendPaymentConfirmed - Exception: " . $e->getMessage());
+            return ['success' => false, 'message' => $e->getMessage()];
         }
     }
     

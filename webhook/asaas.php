@@ -90,6 +90,17 @@ try {
         
         $db->update('pedido', $updateData, 'idpedido = ?', [$pedido['idpedido']]);
         
+        if ($newStatusPagamento === 'quitado') {
+            try {
+                require_once __DIR__ . '/../system/WhatsApp/PaymentNotificationService.php';
+                $paymentSvc = new \System\WhatsApp\PaymentNotificationService();
+                $paymentSvc->sendPaymentConfirmed($pedido['idpedido'], $pedido['tenant_id'], $pedido['filial_id']);
+                error_log("ASAAS WEBHOOK - Notificação de pagamento confirmado enviada para Pedido {$pedido['idpedido']}");
+            } catch (Exception $e) {
+                error_log("ASAAS WEBHOOK - Erro ao enviar notificação de pgto confirmado: " . $e->getMessage());
+            }
+        }
+        
         error_log("ASAAS WEBHOOK - Pedido atualizado: Status={$newStatusPagamento}, Valor Pago={$valorPago}, Saldo Devedor={$saldoDevedor}");
         
         // Continue processing (don't return yet, in case it's also a subscription payment)

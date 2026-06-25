@@ -269,6 +269,18 @@ class ClienteWhatsAppAgent extends BaseAgent {
 
             if ($forma === 'pix') {
                 $cpf = preg_replace('/[^0-9]/', '', (string) ($args['cpf'] ?? $sessionSvc->getDraft($this->orderSessionId)['cpf'] ?? ''));
+                
+                if (empty($cpf) && !empty($this->customerPhone)) {
+                    $clienteDb = $this->db->fetch('SELECT cpf FROM clientes WHERE telefone = ? AND tenant_id = ? AND filial_id = ? AND cpf IS NOT NULL AND cpf != \'\'', [$this->customerPhone, $this->tenantId, $this->filialId]);
+                    if ($clienteDb && !empty($clienteDb['cpf'])) {
+                        $cpf = preg_replace('/[^0-9]/', '', $clienteDb['cpf']);
+                    }
+                }
+
+                if (empty($cpf)) {
+                    return ['success' => false, 'message' => 'Para gerar o PIX, preciso do seu CPF. Por favor, me informe seu CPF (apenas números).'];
+                }
+
                 $pix = \System\WhatsApp\PixInvoiceHelper::gerarParaPedido(
                     $this->db, $this->tenantId, $this->filialId,
                     $pedidoId, $valor,
@@ -283,6 +295,28 @@ class ClienteWhatsAppAgent extends BaseAgent {
                     $sessionSvc->saveDraft($this->orderSessionId, $draft);
                     $sessionSvc->closeSession($this->orderSessionId, 'completed');
                     $pix['_final_handoff_response'] = $pix['message'] ?? 'PIX gerado para o pedido #' . $pedidoId . '.';
+                    
+                    // Schedule a 10-minute reminder
+                    require_once __DIR__ . '/../WhatsApp/PaymentNotificationService.php';
+                    $paymentService = new \System\WhatsApp\PaymentNotificationService();
+                    $sessionData = $this->db->fetch('SELECT instance_id FROM whatsapp_order_sessions WHERE id = ?', [$this->orderSessionId]);
+                    $instanceId = $sessionData['instance_id'] ?? null;
+                    
+                    if ($instanceId) {
+                        $paymentService->scheduleReminder(
+                            $pedidoId,
+                            $this->tenantId,
+                            $this->filialId,
+                            $pix['payment_id'],
+                            $this->customerPhone,
+                            $this->customerName,
+                            $valor,
+                            $pix['payment_url'],
+                            $pix['pix_copy_paste'],
+                            'PIX',
+                            $instanceId
+                        );
+                    }
                 }
                 return $pix;
             }
