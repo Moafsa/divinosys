@@ -4,6 +4,8 @@ namespace MVC\Model;
 
 use System\Database;
 
+require_once __DIR__ . '/../../system/TelefoneHelper.php';
+
 class Cliente
 {
     private $db;
@@ -50,32 +52,7 @@ class Cliente
      */
     private function getVariacoesTelefone($telefone)
     {
-        $telNormalizado = preg_replace('/[^0-9]/', '', (string)$telefone);
-        if (empty($telNormalizado)) {
-            return [];
-        }
-
-        $base = $telNormalizado;
-        if (str_starts_with($base, '55') && strlen($base) >= 12) {
-            $base = substr($base, 2);
-        }
-
-        $variacoes = [$base, '55' . $base];
-
-        // Se tem 11 dígitos e o 3º é 9 (ex: 54981150243), a versão sem 9 é DDD + 8 digitos
-        if (strlen($base) === 11 && $base[2] === '9') {
-            $semNove = substr($base, 0, 2) . substr($base, 3);
-            $variacoes[] = $semNove;
-            $variacoes[] = '55' . $semNove;
-        } 
-        // Se tem 10 dígitos (ex: 5481150243), a versão com 9 é DDD + 9 + 8 digitos
-        elseif (strlen($base) === 10) {
-            $comNove = substr($base, 0, 2) . '9' . substr($base, 2);
-            $variacoes[] = $comNove;
-            $variacoes[] = '55' . $comNove;
-        }
-
-        return array_values(array_unique(array_filter($variacoes)));
+        return \System\TelefoneHelper::getVariacoes($telefone);
     }
 
     /**

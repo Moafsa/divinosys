@@ -6,7 +6,8 @@ class EstoqueAgent extends BaseAgent {
     protected function getSystemPrompt(): string {
         return "Você é o Agente de Estoque e Cardápio do DivinoSys. Sua função é responder a dúvidas sobre os produtos, seus preços, estoque atual, ingredientes e GERENCIAR o cardápio.\n" .
                "Você pode buscar produtos usando a ferramenta `buscar_produtos`.\n" .
-               "SEMPRE use a ferramenta de busca antes de dizer que um produto não existe ou falar o preço dele.\n" .
+               "Para perguntas sobre promoções (ex: 'o que está em promoção hoje?'), use OBRIGATORIAMENTE a ferramenta `listar_promocoes` antes de responder.\n" .
+               "SEMPRE use as ferramentas de busca/listagem antes de dizer que um produto não existe ou falar o preço dele.\n" .
                "Você também tem permissão para Adicionar, Editar e Excluir produtos, categorias e ingredientes, além de atualizar o estoque.";
     }
     
@@ -29,9 +30,17 @@ class EstoqueAgent extends BaseAgent {
             [
                 'type' => 'function',
                 'function' => [
+                    'name' => 'listar_promocoes',
+                    'description' => 'Lista todos os produtos que estão em promoção no cardápio hoje.',
+                    'parameters' => ['type' => 'object', 'properties' => (object)[]]
+                ]
+            ],
+            [
+                'type' => 'function',
+                'function' => [
                     'name' => 'listar_produtos',
                     'description' => 'Lista todos os produtos ativos do cardápio.',
-                    'parameters' => ['type' => 'object', 'properties' => []]
+                    'parameters' => ['type' => 'object', 'properties' => (object)[]]
                 ]
             ],
             [
@@ -94,7 +103,7 @@ class EstoqueAgent extends BaseAgent {
                 'function' => [
                     'name' => 'listar_categorias',
                     'description' => 'Lista as categorias do cardápio.',
-                    'parameters' => ['type' => 'object', 'properties' => []]
+                    'parameters' => ['type' => 'object', 'properties' => (object)[]]
                 ]
             ],
             [
@@ -145,7 +154,7 @@ class EstoqueAgent extends BaseAgent {
                 'function' => [
                     'name' => 'listar_ingredientes',
                     'description' => 'Lista todos os ingredientes e insumos.',
-                    'parameters' => ['type' => 'object', 'properties' => []]
+                    'parameters' => ['type' => 'object', 'properties' => (object)[]]
                 ]
             ],
             [
@@ -198,7 +207,7 @@ class EstoqueAgent extends BaseAgent {
                 'function' => [
                     'name' => 'ver_estoque',
                     'description' => 'Retorna os produtos que estão com estoque baixo ou a quantidade de todos os produtos que controlam estoque.',
-                    'parameters' => ['type' => 'object', 'properties' => []]
+                    'parameters' => ['type' => 'object', 'properties' => (object)[]]
                 ]
             ],
             [
@@ -225,9 +234,9 @@ class EstoqueAgent extends BaseAgent {
             $query = $args['query'] ?? '';
             if (empty($query)) return ['success' => false, 'message' => 'Termo de busca vazio'];
             
-            $sql = "SELECT id, nome, preco_normal, estoque_atual, ativo 
+            $sql = "SELECT id, nome, preco_normal, preco_promocional, em_promocao, estoque_atual, ativo 
                     FROM produtos 
-                    WHERE tenant_id = ? AND filial_id = ? AND nome ILIKE ? AND ativo = true
+                    WHERE tenant_id = ? AND filial_id = ? AND nome ILIKE ? AND COALESCE(ativo, true) = true
                     LIMIT 10";
             
             $produtos = $this->db->fetchAll($sql, [
@@ -239,11 +248,38 @@ class EstoqueAgent extends BaseAgent {
             if (empty($produtos)) {
                 return ['success' => true, 'message' => 'Nenhum produto encontrado com esse nome.'];
             }
+
+            if ($this->ignoreStock) {
+                foreach ($produtos as &$produto) {
+                    unset($produto['estoque_atual']);
+                }
+                unset($produto);
+            } else {
+                foreach ($produtos as &$produto) {
+                    $estoque = (float) ($produto['estoque_atual'] ?? 0);
+                    $produto['disponivel'] = $estoque > 0;
+                    $produto['status_estoque'] = $estoque > 0 ? 'disponível' : 'sem estoque';
+                }
+                unset($produto);
+            }
             
             return ['success' => true, 'produtos' => $produtos];
         }
+
+        if ($name === 'listar_promocoes') {
+            $legacyService = new \System\OpenAIService();
+            $legacyService->setIgnoreStock($this->ignoreStock);
+            return $legacyService->executeOperation([
+                'type' => 'listar_promocoes',
+                'data' => [
+                    'tenant_id' => $this->tenantId,
+                    'filial_id' => $this->filialId,
+                ],
+            ]);
+        }
         
         $legacyService = new \System\OpenAIService();
+        $legacyService->setIgnoreStock($this->ignoreStock);
         $args['tenant_id'] = $this->tenantId;
         $args['filial_id'] = $this->filialId;
         

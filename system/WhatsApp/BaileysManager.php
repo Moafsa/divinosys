@@ -7,28 +7,62 @@ use System\Config;
 use Exception;
 
 require_once __DIR__ . '/WuzAPIManager.php';
+require_once __DIR__ . '/AiPromptBuilder.php';
 
 class BaileysManager {
     private $db;
     private $wuzapiManager;
+    private static $aiConfigColumnChecked = false;
 
     public function __construct() {
         $this->db = Database::getInstance();
+        $this->ensureAiConfigColumn();
         error_log("BaileysManager::__construct - Carregando WuzAPIManager");
         $this->wuzapiManager = new WuzAPIManager();
         error_log("BaileysManager::__construct - WuzAPIManager carregado");
     }
 
+    private function ensureAiConfigColumn(): void
+    {
+        if (self::$aiConfigColumnChecked) {
+            return;
+        }
+
+        try {
+            $this->db->query(
+                "ALTER TABLE whatsapp_instances ADD COLUMN IF NOT EXISTS ai_config JSONB DEFAULT NULL"
+            );
+        } catch (\Exception $e) {
+            error_log('BaileysManager::ensureAiConfigColumn - ' . $e->getMessage());
+        }
+
+        self::$aiConfigColumnChecked = true;
+    }
+
+    private function buildAiConfig(array $input, ?string $fallbackBusiness = null): array
+    {
+        return AiPromptBuilder::normalizeConfig([
+            'assistant_name' => trim((string) ($input['ai_assistant_name'] ?? $input['assistant_name'] ?? '')),
+            'business_name' => trim((string) ($input['ai_business_name'] ?? $input['business_name'] ?? '')),
+            'tone' => (string) ($input['ai_tone'] ?? $input['tone'] ?? 'amigavel'),
+            'custom_instructions' => trim((string) ($input['ai_custom_instructions'] ?? $input['custom_instructions'] ?? '')),
+            'ignore_stock' => filter_var($input['ai_ignore_stock'] ?? $input['ignore_stock'] ?? false, FILTER_VALIDATE_BOOLEAN),
+        ], $fallbackBusiness);
+    }
+
     /**
      * Criar nova instância WhatsApp
      */
-    public function createInstance($instanceName, $phoneNumber, $tenantId, $filialId = 1, $webhookUrl = '') {
+    public function createInstance($instanceName, $phoneNumber, $tenantId, $filialId = 1, $webhookUrl = '', array $aiInput = []) {
         error_log("BaileysManager::createInstance - Criando $instanceName / $phoneNumber");
         
         try {
             // Garantir valores padrão válidos
             $tenantId = $tenantId ?: 1;
             $filialId = $filialId ?: null;
+
+            $tenant = $this->db->fetch("SELECT nome FROM tenants WHERE id = ?", [$tenantId]);
+            $aiConfig = $this->buildAiConfig($aiInput, $tenant['nome'] ?? null);
             
             error_log("BaileysManager::createInstance - Tenant: $tenantId, Filial: $filialId, Webhook: $webhookUrl");
             
@@ -66,8 +100,8 @@ class BaileysManager {
             
             // Criar instância no banco com dados da WuzAPI
             $this->db->query(
-                "INSERT INTO whatsapp_instances (tenant_id, filial_id, instance_name, phone_number, status, wuzapi_instance_id, wuzapi_token, ativo) VALUES (?, ?, ?, ?, 'disconnected', ?, ?, true)",
-                [$tenantId, $filialId, $instanceName, $phoneNumber, $wuzapiResult['instance_id'], $wuzapiResult['token']]
+                "INSERT INTO whatsapp_instances (tenant_id, filial_id, instance_name, phone_number, status, wuzapi_instance_id, wuzapi_token, ai_config, ativo) VALUES (?, ?, ?, ?, 'disconnected', ?, ?, ?::jsonb, true)",
+                [$tenantId, $filialId, $instanceName, $phoneNumber, $wuzapiResult['instance_id'], $wuzapiResult['token'], json_encode($aiConfig, JSON_UNESCAPED_UNICODE)]
             );
             
             $instanceId = $this->db->lastInsertId();
@@ -110,12 +144,14 @@ class BaileysManager {
             error_log("BaileysManager::getInstances - Instâncias encontradas no DB: " . count($instances));
 
             return array_map(function($instance) {
+                $aiConfig = AiPromptBuilder::normalizeConfig($instance['ai_config'] ?? null);
                 return [
                     'id' => $instance['id'],
                     'instance_name' => $instance['instance_name'],
                     'phone_number' => $instance['phone_number'],
                     'status' => $instance['status'] === 'connected' ? 'connected' : 'disconnected',
-                    'created_at' => $instance['created_at']
+                    'created_at' => $instance['created_at'],
+                    'ai_config' => $aiConfig,
                 ];
             }, $instances);
 
@@ -123,6 +159,75 @@ class BaileysManager {
             error_log("BaileysManager::getInstances - Error: " . $e->getMessage());
             throw $e;
         }
+    }
+
+    public function updateAiConfig(int $instanceId, int $tenantId, array $aiInput): array
+    {
+        $instance = $this->db->fetch(
+            "SELECT * FROM whatsapp_instances WHERE id = ? AND tenant_id = ? AND ativo = true",
+            [$instanceId, $tenantId]
+        );
+
+        if (!$instance) {
+            throw new \Exception('Inst??ncia n??o encontrada');
+        }
+
+        $tenant = $this->db->fetch("SELECT nome FROM tenants WHERE id = ?", [$tenantId]);
+        $aiConfig = $this->buildAiConfig($aiInput, $tenant['nome'] ?? null);
+
+        $this->db->query(
+            "UPDATE whatsapp_instances SET ai_config = ?::jsonb, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            [json_encode($aiConfig, JSON_UNESCAPED_UNICODE), $instanceId]
+        );
+
+        return [
+            'success' => true,
+            'message' => 'Prompt da IA atualizado com sucesso',
+            'ai_config' => $aiConfig,
+            'ai_system_prompt' => AiPromptBuilder::build($aiConfig),
+        ];
+    }
+
+    public function toggleIgnoreStock(int $instanceId, int $tenantId, bool $ignoreStock): array
+    {
+        $current = $this->getAiConfig($instanceId, $tenantId);
+        $aiConfig = $current['ai_config'];
+        $aiConfig['ignore_stock'] = $ignoreStock;
+
+        $this->db->query(
+            "UPDATE whatsapp_instances SET ai_config = ?::jsonb, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            [json_encode($aiConfig, JSON_UNESCAPED_UNICODE), $instanceId]
+        );
+
+        return [
+            'success' => true,
+            'message' => $ignoreStock ? 'IA passou a ignorar estoque' : 'IA passou a respeitar estoque',
+            'ignore_stock' => $ignoreStock,
+            'ai_config' => $aiConfig,
+        ];
+    }
+
+    public function getAiConfig(int $instanceId, int $tenantId): array
+    {
+        $instance = $this->db->fetch(
+            "SELECT id, instance_name, ai_config FROM whatsapp_instances WHERE id = ? AND tenant_id = ? AND ativo = true",
+            [$instanceId, $tenantId]
+        );
+
+        if (!$instance) {
+            throw new \Exception('Inst??ncia n??o encontrada');
+        }
+
+        $tenant = $this->db->fetch("SELECT nome FROM tenants WHERE id = ?", [$tenantId]);
+        $aiConfig = AiPromptBuilder::normalizeConfig($instance['ai_config'] ?? null, $tenant['nome'] ?? null);
+
+        return [
+            'success' => true,
+            'instance_id' => (int) $instance['id'],
+            'instance_name' => $instance['instance_name'],
+            'ai_config' => $aiConfig,
+            'ai_system_prompt' => AiPromptBuilder::build($aiConfig),
+        ];
     }
 
     /**

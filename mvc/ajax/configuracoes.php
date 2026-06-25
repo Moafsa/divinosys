@@ -239,8 +239,57 @@ try {
             $webhookUrl = $_ENV['N8N_WEBHOOK_URL'] ?? '';
             
             $baileysManager = new \System\WhatsApp\BaileysManager();
-            $result = $baileysManager->createInstance($instanceName, $phoneNumber, $tenantId, $filialId, $webhookUrl);
+            $result = $baileysManager->createInstance($instanceName, $phoneNumber, $tenantId, $filialId, $webhookUrl, [
+                'ai_assistant_name' => $_POST['ai_assistant_name'] ?? '',
+                'ai_business_name' => $_POST['ai_business_name'] ?? '',
+                'ai_tone' => $_POST['ai_tone'] ?? 'amigavel',
+                'ai_custom_instructions' => $_POST['ai_custom_instructions'] ?? '',
+                'ai_ignore_stock' => $_POST['ai_ignore_stock'] ?? false,
+            ]);
             
+            echo json_encode($result);
+            break;
+
+        case 'obter_prompt_ia':
+            $instanceId = (int) ($_POST['instance_id'] ?? $_GET['instance_id'] ?? 0);
+            if ($instanceId <= 0) {
+                throw new \Exception('ID da inst??ncia inv??lido');
+            }
+
+            $session = \System\Session::getInstance();
+            $baileysManager = new \System\WhatsApp\BaileysManager();
+            $result = $baileysManager->getAiConfig($instanceId, (int) $session->getTenantId());
+            echo json_encode($result);
+            break;
+
+        case 'salvar_prompt_ia':
+            $instanceId = (int) ($_POST['instance_id'] ?? 0);
+            if ($instanceId <= 0) {
+                throw new \Exception('ID da inst??ncia inv??lido');
+            }
+
+            $session = \System\Session::getInstance();
+            $baileysManager = new \System\WhatsApp\BaileysManager();
+            $result = $baileysManager->updateAiConfig($instanceId, (int) $session->getTenantId(), [
+                'ai_assistant_name' => $_POST['ai_assistant_name'] ?? '',
+                'ai_business_name' => $_POST['ai_business_name'] ?? '',
+                'ai_tone' => $_POST['ai_tone'] ?? 'amigavel',
+                'ai_custom_instructions' => $_POST['ai_custom_instructions'] ?? '',
+                'ai_ignore_stock' => $_POST['ai_ignore_stock'] ?? false,
+            ]);
+            echo json_encode($result);
+            break;
+
+        case 'toggle_ignorar_estoque':
+            $instanceId = (int) ($_POST['instance_id'] ?? 0);
+            if ($instanceId <= 0) {
+                throw new \Exception('ID da inst??ncia inv??lido');
+            }
+
+            $ignoreStock = filter_var($_POST['ignore_stock'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            $session = \System\Session::getInstance();
+            $baileysManager = new \System\WhatsApp\BaileysManager();
+            $result = $baileysManager->toggleIgnoreStock($instanceId, (int) $session->getTenantId(), $ignoreStock);
             echo json_encode($result);
             break;
             

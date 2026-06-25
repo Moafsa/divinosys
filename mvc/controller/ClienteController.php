@@ -86,7 +86,7 @@ class ClienteController
                 'data' => $clientes,
                 'total' => $total
             ]);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return $this->jsonResponse(['success' => false, 'message' => $e->getMessage()]);
         }
     }
@@ -111,7 +111,7 @@ class ClienteController
                 'success' => true,
                 'data' => $clientes
             ]);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return $this->jsonResponse(['success' => false, 'message' => $e->getMessage()]);
         }
     }
@@ -138,7 +138,7 @@ class ClienteController
 
             $result = $this->clienteModel->create($data);
             return $this->jsonResponse($result);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return $this->jsonResponse(['success' => false, 'message' => $e->getMessage()]);
         }
     }
@@ -174,7 +174,7 @@ class ClienteController
             error_log("ClienteController::atualizar - Result: " . print_r($result, true));
             
             return $this->jsonResponse($result);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             error_log("ClienteController::atualizar - Exception: " . $e->getMessage());
             return $this->jsonResponse(['success' => false, 'message' => $e->getMessage()]);
         }
@@ -210,7 +210,7 @@ class ClienteController
                     'message' => 'Cliente não encontrado'
                 ]);
             }
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             error_log("ClienteController::buscarPorTelefone - Erro: " . $e->getMessage());
             return $this->jsonResponse(['success' => false, 'message' => $e->getMessage()]);
         }
@@ -236,7 +236,7 @@ class ClienteController
                 'success' => true,
                 'data' => $pedidos
             ]);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return $this->jsonResponse(['success' => false, 'message' => $e->getMessage()]);
         }
     }
@@ -261,7 +261,7 @@ class ClienteController
                 'success' => true,
                 'data' => $pagamentos
             ]);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return $this->jsonResponse(['success' => false, 'message' => $e->getMessage()]);
         }
     }
@@ -283,7 +283,7 @@ class ClienteController
                 'success' => true,
                 'data' => $estabelecimentos
             ]);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return $this->jsonResponse(['success' => false, 'message' => $e->getMessage()]);
         }
     }
@@ -306,7 +306,7 @@ class ClienteController
                 'success' => true,
                 'data' => $estatisticas
             ]);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return $this->jsonResponse(['success' => false, 'message' => $e->getMessage()]);
         }
     }
@@ -328,7 +328,7 @@ class ClienteController
                 'success' => true,
                 'data' => $enderecos
             ]);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return $this->jsonResponse(['success' => false, 'message' => $e->getMessage()]);
         }
     }
@@ -408,7 +408,7 @@ class ClienteController
 
             $result = $this->clienteModel->adicionarEndereco($clienteId, $data);
             return $this->jsonResponse($result);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return $this->jsonResponse(['success' => false, 'message' => $e->getMessage()]);
         }
     }
@@ -440,7 +440,7 @@ class ClienteController
 
             $result = $this->clienteModel->atualizarEndereco($enderecoId, $data);
             return $this->jsonResponse($result);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return $this->jsonResponse(['success' => false, 'message' => $e->getMessage()]);
         }
     }
@@ -458,7 +458,7 @@ class ClienteController
 
             $result = $this->clienteModel->removerEndereco($enderecoId);
             return $this->jsonResponse($result);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return $this->jsonResponse(['success' => false, 'message' => $e->getMessage()]);
         }
     }
@@ -483,7 +483,7 @@ class ClienteController
                 'success' => true,
                 'data' => $preferencias
             ]);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return $this->jsonResponse(['success' => false, 'message' => $e->getMessage()]);
         }
     }
@@ -511,7 +511,7 @@ class ClienteController
 
             $result = $this->clienteModel->atualizarPreferencias($clienteId, $tenantId, $filialId, $data);
             return $this->jsonResponse($result);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return $this->jsonResponse(['success' => false, 'message' => $e->getMessage()]);
         }
     }
@@ -529,7 +529,7 @@ class ClienteController
 
             $result = $this->clienteModel->deactivate($id);
             return $this->jsonResponse($result);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return $this->jsonResponse(['success' => false, 'message' => $e->getMessage()]);
         }
     }
@@ -546,7 +546,7 @@ class ClienteController
             // Try to find existing client by phone
             if (!empty($dados['telefone'])) {
                 error_log("Buscando cliente por telefone: " . $dados['telefone']);
-                $cliente = $this->clienteModel->findByTelefone($dados['telefone']);
+                $cliente = $this->clienteModel->findByTelefone($dados['telefone'], $this->session->getTenant()['id'] ?? null);
                 if ($cliente) {
                     error_log("✅ Cliente encontrado por telefone: " . json_encode($cliente));
                     
@@ -625,8 +625,8 @@ class ClienteController
 
             error_log("=== FIM DEBUG CLIENTE CONTROLLER ===");
             return ['success' => false, 'message' => 'Não foi possível criar ou encontrar o cliente'];
-        } catch (Exception $e) {
-            error_log("❌ Exception no ClienteController: " . $e->getMessage());
+        } catch (\Exception $e) {
+            error_log("🔴 Exception no ClienteController: " . $e->getMessage());
             error_log("Stack trace: " . $e->getTraceAsString());
             return ['success' => false, 'message' => $e->getMessage()];
         }
@@ -662,7 +662,7 @@ class ClienteController
             $this->clienteModel->atualizarVisitaEstabelecimento($clienteId, $tenantId, $filialId, $valorPedido);
 
             return ['success' => true];
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return ['success' => false, 'message' => $e->getMessage()];
         }
     }
@@ -691,7 +691,7 @@ class ClienteController
                 'success' => true,
                 'data' => $pedido
             ]);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return $this->jsonResponse(['success' => false, 'message' => $e->getMessage()]);
         }
     }

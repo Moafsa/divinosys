@@ -684,6 +684,7 @@ class WuzAPIManager
             
             if ($response && isset($response['success']) && $response['success']) {
                 error_log("WuzAPIManager::startSession - Sessão iniciada com sucesso");
+                $this->syncWebhookForToken($token);
                 return true;
             }
             
@@ -694,6 +695,70 @@ class WuzAPIManager
             error_log("WuzAPIManager::startSession - Error: " . $e->getMessage());
             return false;
         }
+    }
+
+    /**
+     * Registra webhook na mem??ria da WuzAPI (necess??rio al??m do campo users.webhook no banco).
+     */
+    public function setWebhook(string $token, string $webhookUrl): array
+    {
+        try {
+            $response = $this->makeApiCall(
+                'POST',
+                '/webhook',
+                json_encode([
+                    'webhookURL' => $webhookUrl,
+                    'events' => ['Message'],
+                ]),
+                $token
+            );
+
+            if (!empty($response['success'])) {
+                error_log("WuzAPIManager::setWebhook - OK: $webhookUrl");
+                return ['success' => true, 'message' => 'Webhook configurado'];
+            }
+
+            return [
+                'success' => false,
+                'message' => $response['message'] ?? 'Falha ao configurar webhook',
+            ];
+        } catch (Exception $e) {
+            error_log('WuzAPIManager::setWebhook - ' . $e->getMessage());
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function syncWebhookForToken(string $token, ?string $webhookUrl = null): array
+    {
+        $webhookUrl = $webhookUrl ?: ($_ENV['WEBHOOK_URL'] ?? '');
+        if ($webhookUrl === '') {
+            return ['success' => false, 'message' => 'WEBHOOK_URL n??o configurada'];
+        }
+
+        return $this->setWebhook($token, $webhookUrl);
+    }
+
+    /**
+     * Sincroniza webhook de todas as inst??ncias conectadas.
+     */
+    public function syncAllInstanceWebhooks(?string $webhookUrl = null): array
+    {
+        $webhookUrl = $webhookUrl ?: ($_ENV['WEBHOOK_URL'] ?? '');
+        if ($webhookUrl === '') {
+            return ['success' => false, 'message' => 'WEBHOOK_URL n??o configurada'];
+        }
+
+        $db = \System\Database::getInstance();
+        $instances = $db->fetchAll(
+            "SELECT id, wuzapi_token FROM whatsapp_instances WHERE wuzapi_token IS NOT NULL AND wuzapi_token <> ''"
+        );
+
+        $results = [];
+        foreach ($instances as $instance) {
+            $results[$instance['id']] = $this->setWebhook($instance['wuzapi_token'], $webhookUrl);
+        }
+
+        return ['success' => true, 'results' => $results];
     }
     
     /**
@@ -790,6 +855,155 @@ class WuzAPIManager
         }
     }
     
+    /**
+     * Baixa m??dia de uma mensagem WhatsApp e salva em arquivo tempor??rio.
+     */
+    public function downloadMediaToFile(int $instanceDbId, string $mediaType, array $mediaMessage): array
+    {
+        $endpoints = [
+            'audio' => '/chat/downloadaudio',
+            'image' => '/chat/downloadimage',
+            'video' => '/chat/downloadvideo',
+            'document' => '/chat/downloaddocument',
+        ];
+
+        $mediaType = strtolower($mediaType);
+        if (!isset($endpoints[$mediaType])) {
+            return ['success' => false, 'message' => 'Tipo de m??dia n??o suportado: ' . $mediaType];
+        }
+
+        $fields = $this->normalizeMediaFields($mediaMessage);
+        if (empty($fields['url']) || empty($fields['mediaKey'])) {
+            return ['success' => false, 'message' => 'Metadados da m??dia incompletos'];
+        }
+
+        try {
+            $db = \System\Database::getInstance();
+            $instance = $db->fetch(
+                'SELECT wuzapi_token FROM whatsapp_instances WHERE id = ?',
+                [$instanceDbId]
+            );
+
+            if (!$instance || empty($instance['wuzapi_token'])) {
+                return ['success' => false, 'message' => 'Token da inst??ncia n??o encontrado'];
+            }
+
+            $payload = json_encode([
+                'Url' => $fields['url'],
+                'MediaKey' => $fields['mediaKey'],
+                'Mimetype' => $fields['mimetype'] ?? 'application/octet-stream',
+                'FileSHA256' => $fields['fileSha256'] ?? '',
+                'FileLength' => (int) ($fields['fileLength'] ?? 0),
+                'FileEncSHA256' => $fields['fileEncSha256'] ?? '',
+            ]);
+
+            $response = $this->makeApiCall(
+                'POST',
+                $endpoints[$mediaType],
+                $payload,
+                $instance['wuzapi_token']
+            );
+
+            $base64 = $this->extractBase64FromDownloadResponse($response);
+            if ($base64 === null || $base64 === '') {
+                return ['success' => false, 'message' => 'Resposta de download sem dados'];
+            }
+
+            $binary = base64_decode($base64, true);
+            if ($binary === false) {
+                return ['success' => false, 'message' => 'Falha ao decodificar m??dia'];
+            }
+
+            $ext = $this->extensionFromMimetype($fields['mimetype'] ?? '', $mediaType);
+            $path = sys_get_temp_dir() . '/wuzapi_' . $mediaType . '_' . uniqid('', true) . '.' . $ext;
+            file_put_contents($path, $binary);
+
+            return ['success' => true, 'path' => $path, 'mimetype' => $fields['mimetype'] ?? ''];
+        } catch (Exception $e) {
+            error_log('WuzAPIManager::downloadMediaToFile - ' . $e->getMessage());
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    private function normalizeMediaFields(array $media): array
+    {
+        $pick = static function (array $source, array $keys) {
+            foreach ($keys as $key) {
+                if (isset($source[$key]) && $source[$key] !== '' && $source[$key] !== null) {
+                    return $source[$key];
+                }
+            }
+            return null;
+        };
+
+        return [
+            'url' => $pick($media, ['URL', 'Url', 'url']),
+            'mediaKey' => $pick($media, ['mediaKey', 'MediaKey']),
+            'mimetype' => $pick($media, ['mimetype', 'Mimetype', 'mimeType', 'MIMEType']),
+            'fileSha256' => $pick($media, ['fileSHA256', 'fileSha256', 'FileSHA256']),
+            'fileLength' => $pick($media, ['fileLength', 'FileLength']),
+            'fileEncSha256' => $pick($media, ['fileEncSHA256', 'fileEncSha256', 'FileEncSHA256']),
+        ];
+    }
+
+    private function extractBase64FromDownloadResponse($response): ?string
+    {
+        if (!is_array($response)) {
+            return null;
+        }
+
+        if (!empty($response['success']) && isset($response['data'])) {
+            $data = $response['data'];
+            if (is_string($data)) {
+                return $data;
+            }
+            if (is_array($data)) {
+                foreach (['Data', 'data', 'base64', 'Base64', 'content'] as $key) {
+                    if (!empty($data[$key]) && is_string($data[$key])) {
+                        return $data[$key];
+                    }
+                }
+            }
+        }
+
+        foreach (['Data', 'data', 'base64'] as $key) {
+            if (!empty($response[$key]) && is_string($response[$key])) {
+                return $response[$key];
+            }
+        }
+
+        return null;
+    }
+
+    private function extensionFromMimetype(string $mimetype, string $fallbackType): string
+    {
+        $map = [
+            'image/jpeg' => 'jpg',
+            'image/jpg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+            'image/gif' => 'gif',
+            'audio/ogg' => 'ogg',
+            'audio/opus' => 'ogg',
+            'audio/mpeg' => 'mp3',
+            'audio/mp4' => 'm4a',
+            'video/mp4' => 'mp4',
+            'application/pdf' => 'pdf',
+        ];
+
+        $mimetype = strtolower(trim(explode(';', $mimetype)[0]));
+        if (isset($map[$mimetype])) {
+            return $map[$mimetype];
+        }
+
+        return match ($fallbackType) {
+            'image' => 'jpg',
+            'audio' => 'ogg',
+            'video' => 'mp4',
+            default => 'bin',
+        };
+    }
+
     /**
      * Fazer chamada para API WuzAPI
      */

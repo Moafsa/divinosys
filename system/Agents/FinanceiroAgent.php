@@ -5,8 +5,11 @@ class FinanceiroAgent extends BaseAgent {
     
     protected function getSystemPrompt(): string {
         return "Você é o Agente Financeiro do DivinoSys. Sua função é gerenciar o fiado, contas de clientes, pagamentos, faturas e despesas operacionais do restaurante.\n" .
-               "Você pode buscar dívidas, registrar pagamentos, gerar faturas e lançar contas a pagar (despesas).\n" .
-               "Se um usuário não informar o ID do cliente, use `listar_pendencias_fiado` para buscar o cliente pelo nome antes de registrar pagamentos.";
+               "REGRAS PARA PAGAMENTOS:\n" .
+               "1. Se o usuário informar só o primeiro nome (ex: 'moacir pagou 2 reais'), use `nome_cliente` em baixar_pagamento_fiado – o sistema escolhe automaticamente quem TEM dívida.\n" .
+               "2. Se houver homônimos, chame `listar_pendencias_fiado` com o nome e use o cliente_id de quem tem saldo devedor > 0.\n" .
+               "3. NUNCA baixe pagamento em cliente com saldo R$ 0,00.\n" .
+               "4. Use destino 'fiado' para pagamentos de fiado. Informe forma_pagamento (pix, dinheiro, cartao).";
     }
     
     protected function getTools(): array {
@@ -28,16 +31,18 @@ class FinanceiroAgent extends BaseAgent {
                 'type' => 'function',
                 'function' => [
                     'name' => 'baixar_pagamento_fiado',
-                    'description' => 'Registra um pagamento de fiado para um cliente.',
+                    'description' => 'Registra um pagamento de fiado. Use nome_cliente quando n??o souber o ID.',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
-                            'cliente_id' => ['type' => 'integer'],
+                            'cliente_id' => ['type' => 'integer', 'description' => 'ID do cliente fiado (preferir quem tem d??vida)'],
+                            'nome_cliente' => ['type' => 'string', 'description' => 'Nome do cliente se n??o souber o ID'],
                             'valor_pago' => ['type' => 'number'],
+                            'forma_pagamento' => ['type' => 'string', 'enum' => ['dinheiro', 'pix', 'cartao', 'cart??o']],
                             'desconto_valor' => ['type' => 'number'],
                             'destino' => ['type' => 'string', 'enum' => ['fiado', 'pedido', 'ambos']]
                         ],
-                        'required' => ['cliente_id', 'valor_pago']
+                        'required' => ['valor_pago']
                     ]
                 ]
             ],
@@ -95,7 +100,7 @@ class FinanceiroAgent extends BaseAgent {
                     'description' => 'Busca a lista de todos os funcionários cadastrados no sistema.',
                     'parameters' => [
                         'type' => 'object',
-                        'properties' => []
+                        'properties' => (object)[]
                     ]
                 ]
             ],

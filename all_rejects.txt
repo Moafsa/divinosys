@@ -1,0 +1,1511 @@
+﻿=== C:\Users\moaci\OneDrive\Documentos\Divsys\mvc\ajax\financeiro.php.rej ===
+--- mvc/ajax/financeiro.php
++++ mvc/ajax/financeiro.php
+@@ -155,30 +155,33 @@ try {
+                 error_log("financeiro.php - buscar_pedidos_fiado - Total de pagamentos FIADO no banco: " . ($checkFiado['total'] ?? 0));
+             }
+             
+-            // Filtrar apenas pedidos com saldo fiado real pendente
++            // Filtrar: s?? pedidos com saldo fiado pendente
+             $pedidosFiltrados = [];
+             foreach ($pedidos as $pedido) {
+-                // Calcular saldo fiado real (fiado original - fiado quitado)
+                 $fiadoOriginal = $db->fetch(
+-                    "SELECT SUM(valor_pago) as total FROM pagamentos_pedido 
++                    "SELECT COALESCE(SUM(valor_pago), 0) as total FROM pagamentos_pedido 
+                      WHERE pedido_id = ? AND forma_pagamento = 'FIADO' AND tenant_id = ? AND filial_id = ?",
+                     [$pedido['idpedido'], $tenantId, $filialId]
+                 );
+-                
++
+                 $fiadoQuitado = $db->fetch(
+-                    "SELECT SUM(valor_pago) as total FROM pagamentos_pedido 
+-                     WHERE pedido_id = ? AND forma_pagamento != 'FIADO' AND tenant_id = ? AND filial_id = ?
+-                     AND descricao LIKE '%fiado%'",
++                    "SELECT COALESCE(SUM(pf.valor_pago), 0) as total
++                     FROM pagamentos_fiado pf
++                     INNER JOIN vendas_fiadas vf ON vf.id = pf.venda_fiada_id
++                     WHERE vf.pedido_id = ? AND pf.tenant_id = ? AND pf.filial_id = ?",
+                     [$pedido['idpedido'], $tenantId, $filialId]
+                 );
+-                
+-                $saldoFiadoReal = ($fiadoOriginal['total'] ?? 0) - ($fiadoQuitado['total'] ?? 0);
+-                
++
++                $saldoFiadoReal = max(0, (float)($fiadoOriginal['total'] ?? 0) - (float)($fiadoQuitado['total'] ?? 0));
++
+                 error_log("financeiro.php - Pedido #{$pedido['idpedido']}: Fiado Original = " . ($fiadoOriginal['total'] ?? 0) . ", Fiado Quitado = " . ($fiadoQuitado['total'] ?? 0) . ", Saldo = $saldoFiadoReal");
+-                
+-                // Incluir todos os pedidos que tiveram FIADO (mesmo se j?? quitados)
+-                // O frontend mostrar?? o status correto
++
++                if ($saldoFiadoReal <= 0.01) {
++                    continue;
++                }
++
+                 $pedido['saldo_fiado_pendente'] = $saldoFiadoReal;
++                $pedido['total_pago_nao_fiado'] = (float)($fiadoQuitado['total'] ?? 0);
+                 $pedidosFiltrados[] = $pedido;
+             }
+             
+
+
+
+=== C:\Users\moaci\OneDrive\Documentos\Divsys\mvc\ajax\wuzapi_webhook.php.rej ===
+--- mvc/ajax/wuzapi_webhook.php
++++ mvc/ajax/wuzapi_webhook.php
+@@ -1,252 +1,434 @@
+ <?php
+ /**
+- * Wuzapi Webhook Handler
+- * 
+- * Receives messages from WhatsApp via Wuzapi and processes with AI
++ * Wuzapi Webhook Handler ??? recebe mensagens do WhatsApp e responde com IA.
+  */
+ 
+-// Disable error display
+ ini_set('display_errors', 0);
+ error_reporting(E_ALL);
+ 
++spl_autoload_register(function ($class) {
++    $prefixes = [
++        'System\\' => __DIR__ . '/../../system/',
++    ];
++    foreach ($prefixes as $prefix => $baseDir) {
++        $len = strlen($prefix);
++        if (strncmp($prefix, $class, $len) !== 0) {
++            continue;
++        }
++        $file = $baseDir . str_replace('\\', '/', substr($class, $len)) . '.php';
++        if (file_exists($file)) {
++            require $file;
++        }
++    }
++});
++
+ require_once __DIR__ . '/../../system/Config.php';
+ require_once __DIR__ . '/../../system/Database.php';
+-require_once __DIR__ . '/../../system/Session.php';
+ require_once __DIR__ . '/../../system/OpenAIService.php';
+ require_once __DIR__ . '/../../system/WhatsApp/WuzAPIManager.php';
++require_once __DIR__ . '/../../system/TelefoneHelper.php';
++require_once __DIR__ . '/../../system/WhatsApp/AiPromptBuilder.php';
+ 
+ header('Content-Type: application/json');
+ 
++function extrairTelefoneWhatsApp(string $jid): string
++{
++    $jid = trim($jid);
++    if ($jid === '') {
++        return '';
++    }
++
++    // 555497092223:7@s.whatsapp.net ou 5554997092223@c.us
++    $parte = explode('@', $jid)[0] ?? $jid;
++    $parte = explode(':', $parte)[0] ?? $parte;
++    $digitos = preg_replace('/[^0-9]/', '', $parte);
++
++    return \System\TelefoneHelper::canonico($digitos) ?: $digitos;
++}
++
++function saveInlineMediaToFile(array $inline): ?string
++{
++    if (empty($inline['base64'])) {
++        return null;
++    }
++
++    $binary = base64_decode((string) $inline['base64'], true);
++    if ($binary === false || $binary === '') {
++        return null;
++    }
++
++    $filename = (string) ($inline['filename'] ?? 'media');
++    $ext = pathinfo($filename, PATHINFO_EXTENSION);
++    if ($ext === '' || $ext === $filename) {
++        $mime = strtolower((string) ($inline['mimetype'] ?? ''));
++        $ext = match (true) {
++            str_contains($mime, 'ogg'), str_contains($mime, 'opus') => 'ogg',
++            str_contains($mime, 'jpeg'), str_contains($mime, 'jpg') => 'jpg',
++            str_contains($mime, 'png') => 'png',
++            str_contains($mime, 'webp') => 'webp',
++            str_contains($mime, 'mp3'), str_contains($mime, 'mpeg') => 'mp3',
++            default => 'bin',
++        };
++    }
++
++    $path = sys_get_temp_dir() . '/wuzapi_inline_' . uniqid('', true) . '.' . $ext;
++    file_put_contents($path, $binary);
++
++    return $path;
++}
++
++function applyInlineMediaMeta(array &$result, array $inner): void
++{
++    if (empty($inner['base64'])) {
++        return;
++    }
++
++    $result['inline_media'] = [
++        'base64' => (string) $inner['base64'],
++        'mimetype' => (string) ($inner['mimeType'] ?? $inner['mimetype'] ?? ''),
++        'filename' => (string) ($inner['fileName'] ?? $inner['filename'] ?? 'media'),
++    ];
++
++    $mime = strtolower($result['inline_media']['mimetype']);
++    if (str_starts_with($mime, 'audio/') || str_contains($mime, 'ogg') || str_contains($mime, 'opus')) {
++        $result['message_type'] = 'audio';
++    } elseif (str_starts_with($mime, 'image/')) {
++        $result['message_type'] = 'image';
++    }
++}
++
++function parseWuzapiPayload(array $data): array
++{
++    $result = [
++        'instance_id' => '',
++        'from' => '',
++        'message' => '',
++        'message_type' => 'text',
++        'is_group' => false,
++        'is_from_me' => false,
++        'message_id' => '',
++        'push_name' => '',
++        'media' => null,
++        'inline_media' => null,
++    ];
++
++    // Formato asternic/wuzapi: { instanceName, jsonData, userID }
++    if (!empty($data['jsonData'])) {
++        $inner = json_decode((string) $data['jsonData'], true);
++        if (!is_array($inner)) {
++            throw new Exception('jsonData inv??lido no webhook WuzAPI');
++        }
++
++        $result['instance_id'] = (string) ($data['userID'] ?? '');
++        $event = $inner['event'] ?? $inner;
++        $info = $event['Info'] ?? $event['info'] ?? [];
++
++        $result['is_from_me'] = (bool) ($info['IsFromMe'] ?? false);
++        $result['is_group'] = (bool) ($info['IsGroup'] ?? false);
++        $result['message_id'] = (string) ($info['ID'] ?? '');
++        $result['push_name'] = (string) ($info['PushName'] ?? '');
++
++        $senderAlt = (string) ($info['SenderAlt'] ?? '');
++        $sender = (string) ($info['Sender'] ?? ($info['Chat'] ?? ''));
++        $jid = $senderAlt !== '' ? $senderAlt : $sender;
++        $result['from'] = $jid;
++
++        $msg = $event['Message'] ?? [];
++        if (!empty($msg['conversation'])) {
++            $result['message'] = (string) $msg['conversation'];
++            $result['message_type'] = 'text';
++        } elseif (!empty($msg['extendedTextMessage']['text'])) {
++            $result['message'] = (string) $msg['extendedTextMessage']['text'];
++            $result['message_type'] = 'text';
++        } elseif (!empty($msg['audioMessage'])) {
++            $result['message_type'] = 'audio';
++            $result['media'] = $msg['audioMessage'];
++        } elseif (!empty($msg['imageMessage'])) {
++            $result['message_type'] = 'image';
++            $result['media'] = $msg['imageMessage'];
++            $result['message'] = (string) ($msg['imageMessage']['caption'] ?? '');
++        } else {
++            $result['message_type'] = 'other';
++        }
++
++        applyInlineMediaMeta($result, $inner);
++
++        return $result;
++    }
++
++    // WuzAPI JSON mode: event no corpo raiz
++    if (!empty($data['event']) && is_array($data['event'])) {
++        $wrapped = [
++            'userID' => (string) ($data['userID'] ?? $data['instanceId'] ?? ''),
++            'instanceName' => (string) ($data['instanceName'] ?? ''),
++            'jsonData' => json_encode($data),
++        ];
++        return parseWuzapiPayload($wrapped);
++    }
++
++    // Formato simplificado (testes / legado)
++    if (isset($data['event']) && isset($data['data']['Info'])) {
++        $info = $data['data']['Info'];
++        $result['instance_id'] = (string) ($data['instanceId'] ?? $data['instance_id'] ?? '');
++        $result['is_from_me'] = (bool) ($info['MessageSource']['IsFromMe'] ?? $info['IsFromMe'] ?? false);
++        $result['is_group'] = (bool) ($info['MessageSource']['IsGroup'] ?? $info['IsGroup'] ?? false);
++        $result['from'] = (string) ($info['MessageSource']['Sender'] ?? $info['SenderAlt'] ?? $info['Sender'] ?? '');
++        $msg = $data['data']['Message'] ?? [];
++        $result['message'] = (string) ($msg['conversation'] ?? ($msg['extendedTextMessage']['text'] ?? ''));
++        return $result;
++    }
++
++    $result['instance_id'] = (string) ($data['instanceId'] ?? $data['instance_id'] ?? $data['userID'] ?? '');
++    $result['from'] = (string) ($data['from'] ?? '');
++    $result['message'] = (string) ($data['message'] ?? $data['text'] ?? '');
++    $result['message_type'] = (string) ($data['type'] ?? 'text');
++    $result['is_group'] = (bool) ($data['isGroup'] ?? false);
++    $result['is_from_me'] = (bool) ($data['isFromMe'] ?? false);
++
++    return $result;
++}
++
+ try {
+-    // Get raw input
++    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
++        http_response_code(405);
++        echo json_encode(['error' => 'Method not allowed']);
++        exit;
++    }
++
+     $input = file_get_contents('php://input');
+-    error_log("Wuzapi Webhook - Raw input: " . $input);
+-    
++    error_log('Wuzapi Webhook - Raw: ' . substr($input, 0, 500));
++
+     $data = json_decode($input, true);
+-    
++    if (!$data && !empty($_POST['jsonData'])) {
++        $data = [
++            'jsonData' => $_POST['jsonData'],
++            'userID' => $_POST['userID'] ?? '',
++            'instanceName' => $_POST['instanceName'] ?? '',
++        ];
++    }
++    if (!$data && $input !== '') {
++        $form = [];
++        parse_str($input, $form);
++        if (!empty($form['jsonData'])) {
++            $data = [
++                'jsonData' => $form['jsonData'],
++                'userID' => $form['userID'] ?? '',
++                'instanceName' => $form['instanceName'] ?? '',
++            ];
++        }
++    }
+     if (!$data) {
+         throw new Exception('Invalid JSON payload');
+     }
+-    
+-    // Extract data from Wuzapi webhook
+-    $from = '';
+-    $message = '';
+-    $isGroup = false;
+-    $instanceId = '';
+-    $messageType = 'text';
+ 
+-    if (isset($data['event']) && isset($data['data']['Info'])) {
+-        // WuzAPI format
+-        $from = $data['data']['Info']['MessageSource']['Sender'] ?? '';
+-        $isGroup = $data['data']['Info']['MessageSource']['IsGroup'] ?? false;
+-        
+-        if (isset($data['data']['Message']['conversation'])) {
+-            $message = $data['data']['Message']['conversation'];
+-        } elseif (isset($data['data']['Message']['extendedTextMessage']['text'])) {
+-            $message = $data['data']['Message']['extendedTextMessage']['text'];
+-        } elseif (isset($data['data']['Message']['audioMessage'])) {
+-            $messageType = 'audio';
+-            $message = ''; // Ser?? preenchido com a transcri????o
+-        } else {
+-            $messageType = 'other'; // non-text
+-        }
+-        
+-        $instanceId = $data['instanceId'] ?? '';
+-        
+-        // Ignore messages sent by the bot itself
+-        if (!empty($data['data']['Info']['MessageSource']['IsFromMe'])) {
+-            error_log("Wuzapi Webhook - Ignoring message from me");
+-            http_response_code(200);
+-            echo json_encode(['success' => true, 'message' => 'Self messages ignored']);
+-            exit;
+-        }
+-    } else {
+-        // Old/Fallback format
+-        $from = $data['from'] ?? '';
+-        $message = $data['message'] ?? $data['text'] ?? '';
+-        $instanceId = $data['instanceId'] ?? $data['instance_id'] ?? '';
+-        $messageType = $data['type'] ?? 'text';
+-        $isGroup = $data['isGroup'] ?? false;
+-    }
+-    
+-    error_log("Wuzapi Webhook - From: $from, Instance: $instanceId, Type: $messageType, IsGroup: " . ($isGroup ? 'yes' : 'no'));
+-    
+-    // Ignore group messages
+-    if ($isGroup) {
+-        error_log("Wuzapi Webhook - Ignoring group message");
+-        http_response_code(200);
++    $parsed = parseWuzapiPayload($data);
++
++    if ($parsed['is_from_me']) {
++        echo json_encode(['success' => true, 'message' => 'Self messages ignored']);
++        exit;
++    }
++
++    if ($parsed['is_group']) {
+         echo json_encode(['success' => true, 'message' => 'Group messages ignored']);
+         exit;
+     }
+-    
+-    // Ignore non-text and non-audio messages for now
+-    if ($messageType !== 'text' && $messageType !== 'chat' && $messageType !== 'audio') {
+-        error_log("Wuzapi Webhook - Ignoring non-text/audio message type: $messageType");
+-        http_response_code(200);
+-        echo json_encode(['success' => true, 'message' => 'Non-text messages ignored']);
++
++    if (!in_array($parsed['message_type'], ['text', 'chat', 'audio', 'image'], true)) {
++        echo json_encode(['success' => true, 'message' => 'Unsupported message type ignored']);
+         exit;
+     }
+-    
+-    // Validate required fields
+-    if (empty($from) || empty($instanceId) || ($messageType !== 'audio' && empty($message))) {
+-        throw new Exception('Missing required fields: from, message, or instanceId');
++
++    if ($parsed['instance_id'] === '') {
++        throw new Exception('Missing required field: instanceId');
++    }
++
++    if (in_array($parsed['message_type'], ['text', 'chat'], true) && trim($parsed['message']) === '') {
++        throw new Exception('Missing required field: message');
++    }
++
++    if (in_array($parsed['message_type'], ['audio', 'image'], true)
++        && empty($parsed['media']) && empty($parsed['inline_media'])) {
++        throw new Exception('Missing media metadata');
+     }
+-    
+-    // Get database connection
++
++    $phoneNumber = extrairTelefoneWhatsApp($parsed['from']);
++    if ($phoneNumber === '') {
++        throw new Exception('Could not extract phone from: ' . $parsed['from']);
++    }
++
+     $db = \System\Database::getInstance();
+-    
+-    // Find tenant/filial by WhatsApp instance
++
+     $instance = $db->fetch(
+-        "SELECT tenant_id, filial_id, nome FROM whatsapp_instances WHERE instance_id = ? OR phone = ?",
+-        [$instanceId, $instanceId]
++        "SELECT id, tenant_id, filial_id, instance_name, phone_number, ai_config
++         FROM whatsapp_instances
++         WHERE wuzapi_instance_id = ?
++            OR instance_name = ?
++            OR REPLACE(phone_number, '+', '') = ?
++         ORDER BY CASE WHEN status = 'connected' THEN 0 ELSE 1 END, id
++         LIMIT 1",
++        [$parsed['instance_id'], $data['instanceName'] ?? '', $phoneNumber]
+     );
+-    
++
+     if (!$instance) {
+-        error_log("Wuzapi Webhook - Instance not found: $instanceId");
+-        
+-        // Try to find any active instance for fallback
+         $instance = $db->fetch(
+-            "SELECT tenant_id, filial_id, nome FROM whatsapp_instances WHERE ativo = true ORDER BY id LIMIT 1"
++            "SELECT id, tenant_id, filial_id, instance_name, phone_number
++             FROM whatsapp_instances
++             WHERE ativo = true
++             ORDER BY CASE WHEN status = 'connected' THEN 0 ELSE 1 END, id
++             LIMIT 1"
+         );
+-        
+-        if (!$instance) {
+-            throw new Exception('No active WhatsApp instance found');
+-        }
+-        
+-        error_log("Wuzapi Webhook - Using fallback instance: {$instance['nome']}");
+-    }
+-    
+-    $tenantId = $instance['tenant_id'];
+-    $filialId = $instance['filial_id'];
+-    
+-    error_log("Wuzapi Webhook - Using Tenant: $tenantId, Filial: $filialId");
+-    
+-    // Extract phone number (remove @c.us suffix)
+-    $phoneNumber = str_replace('@c.us', '', $from);
+-    $phoneNumber = preg_replace('/[^0-9]/', '', $phoneNumber);
+-    
+-    // Check if customer exists, create if not
++    }
++
++    if (!$instance) {
++        throw new Exception('No active WhatsApp instance found');
++    }
++
++    $tenantId = (int) $instance['tenant_id'];
++    $filialId = (int) $instance['filial_id'];
++    $instanceDbId = (int) $instance['id'];
++
++    $variacoes = \System\TelefoneHelper::getVariacoes($phoneNumber);
++    $placeholders = implode(',', array_fill(0, count($variacoes), '?'));
++
+     $cliente = $db->fetch(
+-        "SELECT id, nome, telefone FROM clientes WHERE telefone = ? AND tenant_id = ?",
+-        [$phoneNumber, $tenantId]
++        "SELECT id, nome, telefone FROM usuarios_globais
++         WHERE ativo = true
++           AND REGEXP_REPLACE(COALESCE(telefone, ''), '[^0-9]', '', 'g') IN ({$placeholders})
++         LIMIT 1",
++        $variacoes
+     );
+-    
+-    if (!$cliente) {
+-        // Create new customer
+-        $clienteId = $db->insert('clientes', [
+-            'nome' => 'Cliente WhatsApp ' . substr($phoneNumber, -4),
+-            'telefone' => $phoneNumber,
+-            'whatsapp' => $phoneNumber,
+-            'tenant_id' => $tenantId,
+-            'filial_id' => $filialId,
+-            'ativo' => true
+-        ]);
+-        
+-        error_log("Wuzapi Webhook - New customer created: ID $clienteId");
+-    } else {
+-        error_log("Wuzapi Webhook - Existing customer: {$cliente['nome']}");
+-    }
+-    
+-    // Check if phone number is Admin
+-    $isAdmin = $db->exists("whatsapp_admins", "tenant_id = ? AND filial_id = ? AND telefone = ? AND ativo = true", [$tenantId, $filialId, $phoneNumber]);
+ 
+-    // Process message with AI
++    $customerName = $parsed['push_name'] ?: ($cliente['nome'] ?? 'Cliente WhatsApp');
++
++    $isAdmin = (bool) $db->fetch(
++        "SELECT 1 AS ok FROM whatsapp_admins
++         WHERE tenant_id = ? AND filial_id = ? AND ativo = true
++           AND REGEXP_REPLACE(COALESCE(telefone, ''), '[^0-9]', '', 'g') IN ({$placeholders})
++         LIMIT 1",
++        array_merge([$tenantId, $filialId], $variacoes)
++    );
++
++    $message = trim($parsed['message']);
+     $aiService = new \System\OpenAIService();
+-    
+-    // Handle audio message
+-    if ($messageType === 'audio') {
+-        error_log("Wuzapi Webhook - Recebeu ??udio. Tentando transcrever...");
+-        
+-        // Aqui deve entrar a l??gica para baixar o mediaMessage (via WuzAPI /chat/download)
+-        // Por ora, vamos simular que o ??udio foi baixado para um arquivo temp
+-        // Se a WuzAPI mandar em base64: $audioData = base64_decode($data['data']['Message']['audioMessage']['fileSha256']);
+-        $wuzapi = new \System\WhatsApp\WuzAPIManager();
+-        $messageId = $data['data']['Info']['Id'] ?? '';
+-        
+-        // Exemplo: O ideal ?? ter um $wuzapi->downloadMedia($instance['id'], $messageId)
+-        // Como n??o temos a info exata da WuzAPI, vamos salvar e enviar
+-        // Para testes, o gar??om precisaria ter mandado ??udio. Se o Whisper falhar, retornar?? erro amig??vel.
+-        
+-        $tempAudioPath = sys_get_temp_dir() . '/wuzapi_audio_' . uniqid() . '.ogg';
+-        
+-        // TODO: Implementar o download real do ??udio da WuzAPI para $tempAudioPath
+-        // file_put_contents($tempAudioPath, $audioRawData);
+-        
+-        // Mocking transcription (se falhar o arquivo f??sico, a IA retorna erro normal)
+-        $transcription = $aiService->transcribeAudio($tempAudioPath);
+-        
+-        if ($transcription['success']) {
+-            $message = $transcription['text'];
+-            error_log("Wuzapi Webhook - ??udio transcrito: " . $message);
++    $wuzapi = new \System\WhatsApp\WuzAPIManager();
++    $mediaPath = null;
++
++    if ($parsed['message_type'] === 'audio') {
++        if (!empty($parsed['inline_media'])) {
++            $mediaPath = saveInlineMediaToFile($parsed['inline_media']);
++        } elseif (!empty($parsed['media'])) {
++            $download = $wuzapi->downloadMediaToFile($instanceDbId, 'audio', $parsed['media']);
++            if (!empty($download['success'])) {
++                $mediaPath = $download['path'];
++            } else {
++                error_log('Wuzapi Webhook - Falha download ??udio: ' . ($download['message'] ?? ''));
++            }
++        }
++
++        if ($mediaPath && file_exists($mediaPath)) {
++            $transcription = $aiService->transcribeAudio($mediaPath);
++            if (!empty($transcription['success']) && trim($transcription['text'] ?? '') !== '') {
++                $message = trim($transcription['text']);
++                error_log('Wuzapi Webhook - ??udio transcrito: ' . substr($message, 0, 120));
++            } else {
++                $message = 'Recebi um ??udio, mas n??o consegui transcrever. Pode repetir por texto?';
++            }
+         } else {
+-            $message = "O cliente ou administrador enviou um ??udio, mas eu n??o consegui transcrever/baixar. Diga a ele que n??o conseguiu entender o ??udio.";
+-            error_log("Wuzapi Webhook - Falha na transcri????o: " . $transcription['message']);
++            $message = 'Recebi seu ??udio, mas n??o consegui process??-lo. Pode repetir por texto?';
+         }
+-        
+-        // Cleanup
+-        if (file_exists($tempAudioPath)) {
+-            @unlink($tempAudioPath);
++    } elseif ($parsed['message_type'] === 'image') {
++        if (!empty($parsed['inline_media'])) {
++            $mediaPath = saveInlineMediaToFile($parsed['inline_media']);
++        } elseif (!empty($parsed['media'])) {
++            $download = $wuzapi->downloadMediaToFile($instanceDbId, 'image', $parsed['media']);
++            if (!empty($download['success'])) {
++                $mediaPath = $download['path'];
++            } else {
++                error_log('Wuzapi Webhook - Falha download imagem: ' . ($download['message'] ?? ''));
++            }
++        }
++
++        if ($mediaPath && file_exists($mediaPath)) {
++            $analysis = $aiService->analyzeImageFile($mediaPath);
++            if (!empty($analysis['success'])) {
++                $message = 'O cliente enviou uma imagem.';
++                if (trim($parsed['message']) !== '') {
++                    $message .= ' Legenda: ' . trim($parsed['message']) . '.';
++                }
++                $message .= ' Conte??do identificado na imagem: ' . $analysis['text'];
++            } else {
++                error_log('Wuzapi Webhook - Falha an??lise imagem: ' . ($analysis['message'] ?? ''));
++                $message = trim($parsed['message']) !== ''
++                    ? 'O cliente enviou uma imagem com a legenda: ' . trim($parsed['message'])
++                    : 'O cliente enviou uma imagem, mas n??o consegui analis??-la. Pode descrever por texto?';
++            }
++        } else {
++            $message = trim($parsed['message']) !== ''
++                ? 'O cliente enviou uma imagem com a legenda: ' . trim($parsed['message'])
++                : 'Recebi sua imagem, mas n??o consegui abri-la. Pode descrever por texto?';
+         }
+     }
+-    
+-    // Add context for AI
++
++    if ($mediaPath && file_exists($mediaPath)) {
++        @unlink($mediaPath);
++    }
++
++    $tenant = $db->fetch("SELECT nome FROM tenants WHERE id = ?", [$tenantId]);
++    $aiSystemPrompt = \System\WhatsApp\AiPromptBuilder::buildFromInstance($instance, $tenant['nome'] ?? null);
++    $ignoreStock = \System\WhatsApp\AiPromptBuilder::ignoresStock($instance);
++
+     $contextData = [
+         'customer_phone' => $phoneNumber,
+-        'customer_name' => $cliente['nome'] ?? 'Cliente WhatsApp',
++        'customer_name' => $customerName,
+         'source' => 'whatsapp',
+-        'instance_id' => $instanceId,
+-        'is_admin' => $isAdmin
++        'instance_id' => $parsed['instance_id'],
++        'is_admin' => (bool) $isAdmin,
++        'ai_system_prompt' => $aiSystemPrompt,
++        'ignore_stock' => $ignoreStock,
+     ];
+-    
++
+     $aiResponse = $aiService->processWhatsAppMessage($message, $tenantId, $filialId, $contextData);
+-    
+-    if (!$aiResponse['success']) {
+-        throw new Exception('AI processing failed: ' . ($aiResponse['error'] ?? 'Unknown error'));
++
++    if (empty($aiResponse['success'])) {
++        throw new Exception('AI processing failed: ' . ($aiResponse['error'] ?? ($aiResponse['response']['message'] ?? 'Unknown error')));
+     }
+-    
+-    // Extract AI response message
++
+     $responseMessage = $aiResponse['response']['message'] ?? $aiResponse['message'] ?? 'Desculpe, n??o entendi. Pode repetir?';
+-    
+-    error_log("Wuzapi Webhook - AI Response: " . substr($responseMessage, 0, 100) . "...");
+-    
+-    // Send response back via WhatsApp
+-    $wuzapi = new \System\WhatsApp\WuzAPIManager();
+-    // Using $instance['id'] as it expects the DB instance ID to fetch the token
+-    $sendResult = $wuzapi->sendMessage($instance['id'], $phoneNumber, $responseMessage);
+-    
+-    if (!$sendResult['success']) {
+-        error_log("Wuzapi Webhook - Failed to send response: " . ($sendResult['message'] ?? 'Unknown error'));
+-    }
+-    
+-    // Log interaction
+-    $db->insert('whatsapp_messages', [
+-        'instance_id' => $instanceId,
+-        'phone' => $phoneNumber,
+-        'message_in' => $message,
+-        'message_out' => $responseMessage,
+-        'tenant_id' => $tenantId,
+-        'filial_id' => $filialId,
+-        'processed' => true,
+-        'created_at' => date('Y-m-d H:i:s')
+-    ]);
+-    
++
++    $sendResult = $wuzapi->sendMessage($instanceDbId, $phoneNumber, $responseMessage);
++
++    if (empty($sendResult['success'])) {
++        error_log('Wuzapi Webhook - Failed to send response: ' . ($sendResult['message'] ?? 'Unknown error'));
++    }
++
++    try {
++        $db->insert('whatsapp_messages', [
++            'instance_id' => $instanceDbId,
++            'tenant_id' => $tenantId,
++            'filial_id' => $filialId,
++            'message_id' => $parsed['message_id'] ?: null,
++            'from_number' => $phoneNumber,
++            'to_number' => preg_replace('/[^0-9]/', '', $instance['phone_number'] ?? ''),
++            'message_text' => $message,
++            'message_type' => $parsed['message_type'],
++            'status' => 'received',
++            'source' => 'whatsapp',
++            'direction' => 'inbound',
++            'metadata' => json_encode(['response' => $responseMessage]),
++        ]);
++    } catch (\Exception $logErr) {
++        error_log('Wuzapi Webhook - log insert failed: ' . $logErr->getMessage());
++    }
++
+     http_response_code(200);
+     echo json_encode([
+         'success' => true,
+         'message' => 'Message processed and response sent',
+-        'phone' => $phoneNumber
++        'phone' => $phoneNumber,
++        'sent' => !empty($sendResult['success']),
+     ]);
+-    
+ } catch (Exception $e) {
+-    error_log("Wuzapi Webhook - Error: " . $e->getMessage());
+-    error_log("Wuzapi Webhook - Trace: " . $e->getTraceAsString());
+-    
++    error_log('Wuzapi Webhook - Error: ' . $e->getMessage());
+     http_response_code(500);
+-    echo json_encode([
+-        'success' => false,
+-        'error' => $e->getMessage()
+-    ]);
++    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+ }
+-
+-
+-
+
+
+
+=== C:\Users\moaci\OneDrive\Documentos\Divsys\mvc\controller\ClienteController.php.rej ===
+--- mvc/controller/ClienteController.php
++++ mvc/controller/ClienteController.php
+@@ -625,7 +625,7 @@ class ClienteController
+ 
+             error_log("=== FIM DEBUG CLIENTE CONTROLLER ===");
+             return ['success' => false, 'message' => 'N??o foi poss??vel criar ou encontrar o cliente'];
+-        } catch (Exception $e) {
++        } catch (\Exception $e) {
+             error_log("??? Exception no ClienteController: " . $e->getMessage());
+             error_log("Stack trace: " . $e->getTraceAsString());
+             return ['success' => false, 'message' => $e->getMessage()];
+
+
+
+=== C:\Users\moaci\OneDrive\Documentos\Divsys\mvc\model\Cliente.php.rej ===
+--- mvc/model/Cliente.php
++++ mvc/model/Cliente.php
+@@ -52,32 +54,7 @@ class Cliente
+      */
+     private function getVariacoesTelefone($telefone)
+     {
+-        $telNormalizado = preg_replace('/[^0-9]/', '', (string)$telefone);
+-        if (empty($telNormalizado)) {
+-            return [];
+-        }
+-
+-        $base = $telNormalizado;
+-        if (str_starts_with($base, '55') && strlen($base) >= 12) {
+-            $base = substr($base, 2);
+-        }
+-
+-        $variacoes = [$base, '55' . $base];
+-
+-        // Se tem 11 d??gitos e o 3?? ?? 9 (ex: 54981150243), a vers??o sem 9 ?? DDD + 8 digitos
+-        if (strlen($base) === 11 && $base[2] === '9') {
+-            $semNove = substr($base, 0, 2) . substr($base, 3);
+-            $variacoes[] = $semNove;
+-            $variacoes[] = '55' . $semNove;
+-        } 
+-        // Se tem 10 d??gitos (ex: 5481150243), a vers??o com 9 ?? DDD + 9 + 8 digitos
+-        elseif (strlen($base) === 10) {
+-            $comNove = substr($base, 0, 2) . '9' . substr($base, 2);
+-            $variacoes[] = $comNove;
+-            $variacoes[] = '55' . $comNove;
+-        }
+-
+-        return array_values(array_unique(array_filter($variacoes)));
++        return \System\TelefoneHelper::getVariacoes($telefone);
+     }
+ 
+     /**
+
+
+
+=== C:\Users\moaci\OneDrive\Documentos\Divsys\mvc\views\configuracoes.php.rej ===
+--- mvc/views/configuracoes.php
++++ mvc/views/configuracoes.php
+@@ -1975,19 +1975,81 @@ if ($tenant && $filial) {
+ 
+         // ===== WUZAPI FUNCTIONS =====
+ 
++        const TENANT_BUSINESS_NAME = <?php echo json_encode($tenant['nome'] ?? 'Divino Lanches'); ?>;
++
++        function htmlCamposPromptIA(prefix = '', values = {}) {
++            const assistantName = values.assistant_name || 'Assistente';
++            const businessName = values.business_name || TENANT_BUSINESS_NAME;
++            const tone = values.tone || 'amigavel';
++            const custom = values.custom_instructions || '';
++            const ignoreStock = !!values.ignore_stock;
++
++            return `
++                <hr class="my-3">
++                <h6 class="mb-2"><i class="fas fa-robot me-1"></i> Personaliza????o da IA (WhatsApp)</h6>
++                <p class="text-muted small mb-3">Defina como a IA se apresenta e atende seus clientes no WhatsApp.</p>
++                <div class="mb-3 text-start">
++                    <label class="form-label">Nome da assistente</label>
++                    <input type="text" class="form-control" id="${prefix}aiAssistantName" value="${assistantName}" placeholder="ex: Ana, Bia, Assistente Divino">
++                </div>
++                <div class="mb-3 text-start">
++                    <label class="form-label">Nome do estabelecimento</label>
++                    <input type="text" class="form-control" id="${prefix}aiBusinessName" value="${businessName}" placeholder="ex: Divino Lanches">
++                </div>
++                <div class="mb-3 text-start">
++                    <label class="form-label">Tom de atendimento</label>
++                    <select class="form-select" id="${prefix}aiTone">
++                        <option value="amigavel" ${tone === 'amigavel' ? 'selected' : ''}>Amig??vel</option>
++                        <option value="formal" ${tone === 'formal' ? 'selected' : ''}>Formal</option>
++                        <option value="descontraido" ${tone === 'descontraido' ? 'selected' : ''}>Descontra??do</option>
++                        <option value="profissional" ${tone === 'profissional' ? 'selected' : ''}>Profissional</option>
++                    </select>
++                </div>
++                <div class="mb-3 text-start">
++                    <div class="form-check form-switch">
++                        <input class="form-check-input" type="checkbox" id="${prefix}aiIgnoreStock" ${ignoreStock ? 'checked' : ''}>
++                        <label class="form-check-label" for="${prefix}aiIgnoreStock">
++                            <strong>Ignorar estoque</strong>
++                        </label>
++                    </div>
++                    <small class="form-text text-muted">
++                        Desligado: a IA respeita o estoque ao informar produtos e lan??ar pedidos.
++                        Ligado: ignora estoque e aceita qualquer item do card??pio.
++                    </small>
++                </div>
++                <div class="mb-2 text-start">
++                    <label class="form-label">Instru????es adicionais</label>
++                    <textarea class="form-control" id="${prefix}aiCustomInstructions" rows="4" placeholder="Ex: Sempre ofere??a delivery. Mencione que aceitamos Pix. Hor??rio: 18h ??s 23h.">${custom}</textarea>
++                    <small class="form-text text-muted">Regras extras: hor??rio, delivery, formas de pagamento, promo????es fixas, etc.</small>
++                </div>
++            `;
++        }
++
++        function lerCamposPromptIA(prefix = '') {
++            return {
++                ai_assistant_name: document.getElementById(prefix + 'aiAssistantName')?.value || '',
++                ai_business_name: document.getElementById(prefix + 'aiBusinessName')?.value || '',
++                ai_tone: document.getElementById(prefix + 'aiTone')?.value || 'amigavel',
++                ai_custom_instructions: document.getElementById(prefix + 'aiCustomInstructions')?.value || '',
++                ai_ignore_stock: document.getElementById(prefix + 'aiIgnoreStock')?.checked ? '1' : '0'
++            };
++        }
++
+         function abrirModalNovaCaixaEntrada() {
+             Swal.fire({
+                 title: 'Nova Inst??ncia WhatsApp',
++                width: 650,
+                 html: `
+-                    <div class="mb-3">
++                    <div class="mb-3 text-start">
+                         <label class="form-label">Nome da Inst??ncia</label>
+                         <input type="text" class="form-control" id="nomeCaixaEntrada" placeholder="ex: atendimento_loja1">
+                     </div>
+-                    <div class="mb-3">
++                    <div class="mb-3 text-start">
+                         <label class="form-label">N??mero do WhatsApp</label>
+                         <input type="text" class="form-control" id="numeroWhatsApp" placeholder="5511999999999">
+                         <small class="form-text text-muted">Inclua o c??digo do pa??s (ex: 5511999999999)</small>
+                     </div>
++                    ${htmlCamposPromptIA('nova')}
+                 `,
+                 showCancelButton: true,
+                 confirmButtonText: 'Criar Inst??ncia',
+
+
+
+=== C:\Users\moaci\OneDrive\Documentos\Divsys\mvc\views\FecharPedido.php.rej ===
+--- mvc/views/FecharPedido.php
++++ mvc/views/FecharPedido.php
+@@ -1939,18 +1964,21 @@ if ($tenant && $filial && $pedido['idmesa']) {
+                 .then(response => response.json())
+                 .then(data => {
+                     if (data.success && data.cliente) {
+-                        // Load client data into form
+-                        document.getElementById('nomeCliente').value = data.cliente.nome || '';
+-                        
+-                        // Load fiscal data if available
+-                        if (data.cliente.cpf) {
+-                            document.getElementById('clienteCpf').value = data.cliente.cpf;
++                        const nomeField = document.getElementById('nomeCliente');
++                        if (nomeField) {
++                            nomeField.value = data.cliente.nome || '';
+                         }
+-                        if (data.cliente.cnpj) {
+-                            document.getElementById('clienteCnpj').value = data.cliente.cnpj;
++
++                        const cpfField = document.getElementById('clienteCpf');
++                        if (cpfField && data.cliente.cpf) {
++                            cpfField.value = data.cliente.cpf;
+                         }
+-                        
+-                        // Show success message inline
++
++                        const cnpjField = document.getElementById('clienteCnpj');
++                        if (cnpjField && data.cliente.cnpj) {
++                            cnpjField.value = data.cliente.cnpj;
++                        }
++
+                         showInlineMessage(`??? Cliente encontrado: ${data.cliente.nome}`, 'success');
+                     } else {
+                         showInlineMessage('?????? Cliente n??o encontrado. Voc?? pode cadastrar preenchendo os dados.', 'info');
+
+
+
+=== C:\Users\moaci\OneDrive\Documentos\Divsys\mvc\views\financeiro.php.rej ===
+--- mvc/views/financeiro.php
++++ mvc/views/financeiro.php
+@@ -1596,20 +1596,16 @@ $contas = $db->fetchAll(
+                     
+                     data.pedidos.forEach(pedido => {
+                         const row = document.createElement('tr');
+-                        const saldoDevedorReal = parseFloat(pedido.saldo_devedor_real) || 0;
++                        const saldoFiadoPendente = parseFloat(pedido.saldo_fiado_pendente) || 0;
+                         const totalPagoNaoFiado = parseFloat(pedido.total_pago_nao_fiado) || 0;
+-                        const totalPagoFiado = parseFloat(pedido.total_pago_fiado) || 0;
+-                        const totalPago = parseFloat(pedido.total_pago) || 0;
+                         const totalDescontos = parseFloat(pedido.total_descontos || 0) || 0;
+                         const valorLiquido = parseFloat(pedido.valor_total) - totalDescontos;
+                         
+-                        // Status baseado no status_pagamento do pedido
+-                        const statusBadge = pedido.status_pagamento === 'quitado' ? 'bg-success' : 'bg-warning';
+-                        const statusText = pedido.status_pagamento === 'quitado' ? 'Quitado' : 'Pendente';
++                        const statusBadge = saldoFiadoPendente <= 0.01 ? 'bg-success' : 'bg-warning';
++                        const statusText = saldoFiadoPendente <= 0.01 ? 'Quitado' : 'Pendente';
+                         
+-                        // Somar apenas valores FIADO de pedidos N??O quitados ao total de receb??veis
+-                        if (pedido.status_pagamento !== 'quitado') {
+-                            totalRecebiveis += totalPagoFiado;
++                        if (saldoFiadoPendente > 0.01) {
++                            totalRecebiveis += saldoFiadoPendente;
+                         }
+                         
+                         row.innerHTML = `
+
+
+
+=== C:\Users\moaci\OneDrive\Documentos\Divsys\mvc\views\gestao_clientes_fiado.php.rej ===
+--- mvc/views/gestao_clientes_fiado.php
++++ mvc/views/gestao_clientes_fiado.php
+@@ -19,6 +20,16 @@ if (!$tenant || !$filial) {
+ // Get clients with fiado balance or automatic billing enabled
+ $clientes = [];
+ if ($tenant && $filial) {
++    // Unificar duplicados por telefone antes de exibir
++    try {
++        $unificados = \System\FiadoClienteService::unificarDuplicados($db, (int) $tenant['id']);
++        if ($unificados > 0) {
++            error_log("gestao_clientes_fiado: {$unificados} clientes fiado duplicados unificados");
++        }
++    } catch (\Exception $e) {
++        error_log('gestao_clientes_fiado unificar: ' . $e->getMessage());
++    }
++
+     // ---- SINCRONIZA????O AUTOM??TICA DE FIADOS LEGADOS ----
+     try {
+         $legacyFiados = $db->fetchAll("
+@@ -48,37 +59,29 @@ if ($tenant && $filial) {
+         ", [$tenant['id']]);
+ 
+         foreach (array_merge($legacyFiados, $legacyPedidosFiado) as $lf) {
+-            $telefone = preg_replace('/[^0-9]/', '', $lf['telefone_cliente'] ?? '');
+-            if (empty($telefone)) {
++            $telefone = $lf['telefone_cliente'] ?? '';
++            if (trim((string) $telefone) === '') {
+                 continue;
+             }
+ 
+             $nome = $lf['nome_cliente'] ?: 'Cliente N??o Identificado';
+-            $cf = $db->fetch("SELECT id FROM clientes_fiado WHERE telefone = ? AND tenant_id = ?", [$telefone, $tenant['id']]);
+-
+-            if (!$cf) {
+-                $cfId = $db->insert('clientes_fiado', [
+-                    'nome' => $nome,
+-                    'telefone' => $telefone,
+-                    'tenant_id' => $tenant['id'],
+-                    'filial_id' => $filial['id'],
+-                    'saldo_devedor' => 0
+-                ]);
+-            } else {
+-                $cfId = $cf['id'];
+-            }
+-
+-            $db->insert('vendas_fiadas', [
+-                'cliente_id' => $cfId,
+-                'pedido_id' => $lf['pedido_id'],
+-                'valor_total' => $lf['valor_pago'],
+-                'status' => 'pendente',
+-                'tenant_id' => $tenant['id'],
+-                'filial_id' => $filial['id'],
+-                'data_vencimento' => date('Y-m-d', strtotime(($lf['created_at'] ?? date('Y-m-d H:i:s')) . ' + 30 days'))
+-            ]);
+-
+-            $db->query("UPDATE clientes_fiado SET saldo_devedor = saldo_devedor + ? WHERE id = ?", [$lf['valor_pago'], $cfId]);
++            $cfId = \System\FiadoClienteService::findOrCreate(
++                $db,
++                (int) $tenant['id'],
++                (int) $filial['id'],
++                $nome,
++                $telefone
++            );
++
++            \System\FiadoClienteService::registrarVendaFiada(
++                $db,
++                $cfId,
++                (int) $lf['pedido_id'],
++                (float) $lf['valor_pago'],
++                (int) $tenant['id'],
++                (int) $filial['id'],
++                $lf['created_at'] ?? null
++            );
+         }
+     } catch (\Exception $e) {
+         error_log("Erro na sincronizacao de fiados: " . $e->getMessage());
+
+
+
+=== C:\Users\moaci\OneDrive\Documentos\Divsys\system\OpenAIService.php.rej ===
+--- system/OpenAIService.php
++++ system/OpenAIService.php
+@@ -51,9 +57,7 @@ class OpenAIService
+             $systemPrompt = "Voc?? ?? a IAm, a Intelig??ncia Artificial e o c??rebro integrado diretamente ao sistema de gest??o deste restaurante. ";
+             $systemPrompt .= "O usu??rio com quem voc?? est?? falando ?? o Dono/Administrador do sistema (sua base de dados). ";
+             $systemPrompt .= $this->getAdminSystemPrompt();
+-                "- baixar_pagamento_fiado (data: {\"cliente_id\": ID, \"pagamentos\": [{\"valor\": 10.0, \"forma_pagamento\": \"dinheiro\"}], \"desconto_valor\": 2.50, \"destino\": \"ambos\"}). O destino pode ser 'fiado', 'pedido' ou 'ambos'. O 'cliente_id' ?? OBRIGAT??RIO. Se voc?? n??o tiver certeza absoluta do ID (ex: s?? tem o nome), voc?? DEVE executar listar_pendencias_fiado PRIMEIRO. Se o usu??rio n??o informar a forma de pagamento, PERGUNTE antes de executar.\n" .
+-                "Sempre que o usu??rio relatar um pagamento (ex: 'o cliente pagou X'), voc?? deve agir para BAIXAR O PAGAMENTO usando a a????o baixar_pagamento_fiado. Se precisar do ID do cliente, chame listar_pendencias_fiado primeiro e, COM O RESULTADO EM M??OS, decida o pr??ximo passo. \n" .
+-                "MUITO IMPORTANTE: Para interagir com o sistema, voc?? deve retornar um JSON. \n" .
++
+             $messages = [];
+             
+             // Add chat history if available
+@@ -1053,8 +1114,16 @@ class OpenAIService
+     private function addItemToOrder($data)
+     {
+         $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
++        $filialId = $this->filialId ?? $this->session->getFilialId() ?? 1;
+         $pedidoId = $data['pedido_id'] ?? null;
+         if (!$pedidoId) return ['success' => false, 'message' => 'ID do pedido n??o fornecido.'];
++
++        if (!empty($data['itens'])) {
++            $stockError = $this->validateItensEstoque($data['itens'], $tenantId, $filialId);
++            if ($stockError !== null) {
++                return $stockError;
++            }
++        }
+         
+         foreach ($data['itens'] as $item) {
+             $this->db->insert('pedido_itens', [
+@@ -1463,20 +1631,27 @@ class OpenAIService
+                     $p['saldo_devedor'] = $novoSaldoDevedor;
+                     
+                     // Lan??a no caixa (movimentacoes_financeiras) a partir da baixa fiado
+-                    if (!$pgto['is_desconto']) {
++                    if (!$pgto['is_desconto'] && $valorPagarNestaVenda > 0) {
++                        $vendaRow = $this->db->fetch("SELECT pedido_id FROM vendas_fiadas WHERE id = ?", [$p['id']]);
++                        $pedidoIdVenda = (int)($vendaRow['pedido_id'] ?? 0);
++
+                         $this->db->insert('movimentacoes_financeiras', [
+                             'tenant_id' => $tenantId,
+                             'filial_id' => $filialId,
+                             'tipo' => 'entrada',
+                             'categoria_id' => 2,
++                            'conta_id' => $contaCaixaId,
+                             'data_movimentacao' => date('Y-m-d'),
+-                            'descricao' => "Pagamento fiado lote (IA) - Venda ID: {$p['id']} - {$pgto['forma_pagamento']}",
++                            'status' => 'pago',
++                            'forma_pagamento' => $pgto['forma_pagamento'],
++                            'descricao' => "Pagamento fiado (IA) - {$cliente['nome']} - Venda ID: {$p['id']}",
+                             'valor' => $valorPagarNestaVenda,
+-                            'referencia_id' => $p['id']
++                            'pedido_id' => $pedidoIdVenda ?: null
+                         ]);
+                     }
+                     
+                     $valorRestanteFiado -= $valorPagarNestaVenda;
++                    $totalAmortizado += $valorPagarNestaVenda;
+                 }
+                 
+                 // 2. Amortiza na tabela pedido (apenas baixa de sistema, n??o lan??a no caixa de novo)
+@@ -1520,11 +1695,21 @@ class OpenAIService
+             $saldoFiadoAtualizado = $this->db->fetch("SELECT SUM(valor_total - valor_pago) as total FROM vendas_fiadas WHERE cliente_id = ? AND tenant_id = ? AND status IN ('pendente', 'vencido')", [$cId, $tenantId]);
+             $novoSaldo = max(0, (float)($saldoFiadoAtualizado['total'] ?? 0));
+             $this->db->update('clientes_fiado', ['saldo_devedor' => $novoSaldo], 'id = ?', [$cId]);
++
++            if ($valorTotalPago > 0 && $totalAmortizado <= 0) {
++                $this->db->rollBack();
++                return ['success' => false, 'message' => "Nenhum valor foi abatido da d??vida de {$cliente['nome']}. Verifique o cliente e o saldo pendente."];
++            }
+             
+             $this->db->commit();
+-            return ['success' => true, 'message' => "Transa????o de R$ " . number_format($valorTotalPago, 2, ',', '.') . " registrada com sucesso. Desconto aplicado: R$ " . number_format($descontoValor, 2, ',', '.') . ". Novo saldo do fiado (n??o inclui comandas soltas): R$ " . number_format($novoSaldo, 2, ',', '.')];
++            return ['success' => true, 'message' => "Pagamento de R$ " . number_format($totalAmortizado > 0 ? $totalAmortizado : $valorTotalPago, 2, ',', '.') . " registrado para *{$cliente['nome']}* (ID {$cId}). Desconto: R$ " . number_format($descontoValor, 2, ',', '.') . ". Novo saldo fiado: R$ " . number_format($novoSaldo, 2, ',', '.')];
+         } catch (\Exception $e) {
+-            $this->db->rollBack();
++            try {
++                if ($this->db->getConnection()->inTransaction()) {
++                    $this->db->rollBack();
++                }
++            } catch (\Exception $ignored) {
++            }
+             return ['success' => false, 'message' => "Erro ao registrar pagamento: " . $e->getMessage()];
+         }
+     }
+@@ -1585,15 +1770,52 @@ class OpenAIService
+     {
+         $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
+         $filialId = $this->filialId ?? $this->session->getFilialId() ?? 1;
+-        $produtos = $this->db->fetchAll("SELECT id, nome, preco_normal, estoque_atual FROM produtos WHERE tenant_id = ? AND filial_id = ? ORDER BY nome ASC", [$tenantId, $filialId]);
++        $produtos = $this->db->fetchAll("SELECT id, nome, preco_normal, preco_promocional, em_promocao, estoque_atual FROM produtos WHERE tenant_id = ? AND filial_id = ? ORDER BY nome ASC", [$tenantId, $filialId]);
+         
+-        if (empty($produtos)) return ['success' => true, 'message' => "Nenhum produto cadastrado."];
++        if (empty($produtos)) return ['success' => true, 'message' => "Nenhum produto cadastrado.", 'total' => 0];
+         
+-        $msg = "*Lista de Produtos:*\n";
++        $msg = "*Lista de Produtos (total: " . count($produtos) . "):*\n";
+         foreach ($produtos as $p) {
+-            $msg .= "- ID: {$p['id']} | {$p['nome']} | Pre??o: R$ " . number_format($p['preco_normal'], 2, ',', '.') . " | Estoque: " . ($p['estoque_atual'] ?? 0) . "\n";
++            $preco = (!empty($p['em_promocao']) && !empty($p['preco_promocional']))
++                ? 'R$ ' . number_format((float) $p['preco_promocional'], 2, ',', '.') . ' (promo????o, de R$ ' . number_format((float) $p['preco_normal'], 2, ',', '.') . ')'
++                : 'R$ ' . number_format((float) $p['preco_normal'], 2, ',', '.');
++            $linha = "- ID: {$p['id']} | {$p['nome']} | Pre??o: {$preco}";
++            if (!$this->ignoreStock) {
++                $estoque = (float) ($p['estoque_atual'] ?? 0);
++                $linha .= ' | Estoque: ' . $estoque . ($estoque <= 0 ? ' (indispon??vel)' : '');
++            }
++            $msg .= $linha . "\n";
+         }
+-        return ['success' => true, 'message' => $msg];
++        return ['success' => true, 'message' => $msg, 'total' => count($produtos)];
++    }
++
++    private function listarPromocoes($data)
++    {
++        $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
++        $filialId = $this->filialId ?? $this->session->getFilialId() ?? 1;
++
++        $produtos = $this->db->fetchAll(
++            "SELECT id, nome, preco_normal, preco_promocional, em_promocao
++             FROM produtos
++             WHERE tenant_id = ? AND filial_id = ?
++               AND em_promocao = true
++               AND COALESCE(ativo, true) = true
++             ORDER BY nome ASC",
++            [$tenantId, $filialId]
++        );
++
++        if (empty($produtos)) {
++            return ['success' => true, 'message' => 'Nenhum produto em promo????o no momento.', 'total' => 0, 'produtos' => []];
++        }
++
++        $msg = '*Produtos em promo????o hoje (' . count($produtos) . "):*\n";
++        foreach ($produtos as $p) {
++            $msg .= '- ID: ' . $p['id'] . ' | ' . $p['nome']
++                . ' | De R$ ' . number_format((float) $p['preco_normal'], 2, ',', '.')
++                . ' por R$ ' . number_format((float) $p['preco_promocional'], 2, ',', '.') . "\n";
++        }
++
++        return ['success' => true, 'message' => $msg, 'total' => count($produtos), 'produtos' => $produtos];
+     }
+ 
+     private function listarCategorias($data)
+
+
+
+=== C:\Users\moaci\OneDrive\Documentos\Divsys\system\Agents\BaseAgent.php.rej ===
+--- system/Agents/BaseAgent.php
++++ system/Agents/BaseAgent.php
+@@ -65,6 +83,9 @@ abstract class BaseAgent {
+         $systemPrompt = $this->getSystemPrompt();
+         $systemContext = "\n\nData e Hora Atual: " . date('Y-m-d H:i:s');
+         $systemContext .= "\n[IMPORTANTE] Voc?? ?? o Agente: " . static::class;
++        if ($this->personaPrompt !== '') {
++            $systemContext .= "\n\n[PERSONALIZA????O DO ATENDIMENTO WHATSAPP]\n" . $this->personaPrompt;
++        }
+         
+         $hasSystem = false;
+         foreach ($messages as &$msg) {
+
+
+
+=== C:\Users\moaci\OneDrive\Documentos\Divsys\system\Agents\EstoqueAgent.php.rej ===
+--- system/Agents/EstoqueAgent.php
++++ system/Agents/EstoqueAgent.php
+@@ -6,7 +6,8 @@ class EstoqueAgent extends BaseAgent {
+     protected function getSystemPrompt(): string {
+         return "Voc?? ?? o Agente de Estoque e Card??pio do DivinoSys. Sua fun????o ?? responder a d??vidas sobre os produtos, seus pre??os, estoque atual, ingredientes e GERENCIAR o card??pio.\n" .
+                "Voc?? pode buscar produtos usando a ferramenta `buscar_produtos`.\n" .
+-               "SEMPRE use a ferramenta de busca antes de dizer que um produto n??o existe ou falar o pre??o dele.\n" .
++               "Para perguntas sobre promo????es (ex: 'o que est?? em promo????o hoje?'), use OBRIGATORIAMENTE a ferramenta `listar_promocoes` antes de responder.\n" .
++               "SEMPRE use as ferramentas de busca/listagem antes de dizer que um produto n??o existe ou falar o pre??o dele.\n" .
+                "Voc?? tamb??m tem permiss??o para Adicionar, Editar e Excluir produtos, categorias e ingredientes, al??m de atualizar o estoque.";
+     }
+     
+@@ -26,12 +27,20 @@ class EstoqueAgent extends BaseAgent {
+                     ]
+                 ]
+             ],
++            [
++                'type' => 'function',
++                'function' => [
++                    'name' => 'listar_promocoes',
++                    'description' => 'Lista todos os produtos que est??o em promo????o no card??pio hoje.',
++                    'parameters' => ['type' => 'object', 'properties' => (object)[]]
++                ]
++            ],
+             [
+                 'type' => 'function',
+                 'function' => [
+                     'name' => 'listar_produtos',
+                     'description' => 'Lista todos os produtos ativos do card??pio.',
+-                    'parameters' => ['type' => 'object', 'properties' => []]
++                    'parameters' => ['type' => 'object', 'properties' => (object)[]]
+                 ]
+             ],
+             [
+@@ -94,7 +103,7 @@ class EstoqueAgent extends BaseAgent {
+                 'function' => [
+                     'name' => 'listar_categorias',
+                     'description' => 'Lista as categorias do card??pio.',
+-                    'parameters' => ['type' => 'object', 'properties' => []]
++                    'parameters' => ['type' => 'object', 'properties' => (object)[]]
+                 ]
+             ],
+             [
+@@ -198,7 +207,7 @@ class EstoqueAgent extends BaseAgent {
+                 'function' => [
+                     'name' => 'ver_estoque',
+                     'description' => 'Retorna os produtos que est??o com estoque baixo ou a quantidade de todos os produtos que controlam estoque.',
+-                    'parameters' => ['type' => 'object', 'properties' => []]
++                    'parameters' => ['type' => 'object', 'properties' => (object)[]]
+                 ]
+             ],
+             [
+
+
+
+=== C:\Users\moaci\OneDrive\Documentos\Divsys\system\Agents\FinanceiroAgent.php.rej ===
+--- system/Agents/FinanceiroAgent.php
++++ system/Agents/FinanceiroAgent.php
+@@ -5,8 +5,11 @@ class FinanceiroAgent extends BaseAgent {
+     
+     protected function getSystemPrompt(): string {
+         return "Voc?? ?? o Agente Financeiro do DivinoSys. Sua fun????o ?? gerenciar o fiado, contas de clientes, pagamentos, faturas e despesas operacionais do restaurante.\n" .
+-               "Voc?? pode buscar d??vidas, registrar pagamentos, gerar faturas e lan??ar contas a pagar (despesas).\n" .
+-               "Se um usu??rio n??o informar o ID do cliente, use `listar_pendencias_fiado` para buscar o cliente pelo nome antes de registrar pagamentos.";
++               "REGRAS PARA PAGAMENTOS:\n" .
++               "1. Se o usu??rio informar s?? o primeiro nome (ex: 'moacir pagou 2 reais'), use `nome_cliente` em baixar_pagamento_fiado ??? o sistema escolhe automaticamente quem TEM d??vida.\n" .
++               "2. Se houver hom??nimos, chame `listar_pendencias_fiado` com o nome e use o cliente_id de quem tem saldo devedor > 0.\n" .
++               "3. NUNCA baixe pagamento em cliente com saldo R$ 0,00.\n" .
++               "4. Use destino 'fiado' para pagamentos de fiado. Informe forma_pagamento (pix, dinheiro, cartao).";
+     }
+     
+     protected function getTools(): array {
+
+
+
+=== C:\Users\moaci\OneDrive\Documentos\Divsys\system\Agents\GarcomAgent.php.rej ===
+--- system/Agents/GarcomAgent.php
++++ system/Agents/GarcomAgent.php
+@@ -16,7 +16,7 @@ class GarcomAgent extends BaseAgent {
+                 'function' => [
+                     'name' => 'ver_mesas_ativas',
+                     'description' => 'Lista todas as mesas e comandas que est??o abertas/pendentes no restaurante no momento.',
+-                    'parameters' => ['type' => 'object', 'properties' => []]
++                    'parameters' => ['type' => 'object', 'properties' => (object)[]]
+                 ]
+             ],
+             [
+
+
+
+=== C:\Users\moaci\OneDrive\Documentos\Divsys\system\Agents\SupervisorAgent.php.rej ===
+--- system/Agents/SupervisorAgent.php
++++ system/Agents/SupervisorAgent.php
+@@ -4,6 +4,21 @@ namespace System\Agents;
+ class SupervisorAgent extends BaseAgent {
+     
+     protected function getSystemPrompt(): string {
++        if ($this->whatsappCustomerMode) {
++            return "Voc?? coordena o atendimento de CLIENTES via WhatsApp deste restaurante.\n" .
++                   "Delegue para os departamentos quando precisar consultar dados (card??pio, pedidos, fiado, cadastro).\n" .
++                   "Departamentos dispon??veis:\n" .
++                   "- Estoque/Card??pio: produtos, pre??os, promo????es e ingredientes.\n" .
++                   "- Gar??om: novos pedidos, comandas e mesas.\n" .
++                   "- Financeiro: fiado, faturas e pagamentos.\n" .
++                   "- Atendente: cadastro e hist??rico de clientes.\n\n" .
++                   "REGRAS:\n" .
++                   "1. Responda ao cliente seguindo a PERSONALIZA????O DO ATENDIMENTO WHATSAPP (nome, tom e instru????es).\n" .
++                   "2. Para promo????es, card??pio ou pre??os, delegue para Estoque antes de responder.\n" .
++                   "3. N??o mencione DivinoSys, sistemas internos nem que ?? gerente geral.\n" .
++                   "4. Em sauda????es simples, apresente-se com o nome configurado na personaliza????o.";
++        }
++
+         return "Voc?? ?? o Gerente Geral (Supervisor) do DivinoSys. Sua fun????o ?? receber a mensagem do usu??rio e decidir qual departamento deve cuidar da solicita????o.\n" .
+                "Voc?? tem uma equipe de agentes especializados:\n" .
+                "- Estoque/Card??pio: Responde sobre pre??os, produtos, ingredientes e categorias.\n" .
+
+
+
+=== C:\Users\moaci\OneDrive\Documentos\Divsys\system\WhatsApp\BaileysManager.php.rej ===
+--- system/WhatsApp/BaileysManager.php
++++ system/WhatsApp/BaileysManager.php
+@@ -7,28 +7,62 @@ use System\Config;
+ use Exception;
+ 
+ require_once __DIR__ . '/WuzAPIManager.php';
++require_once __DIR__ . '/AiPromptBuilder.php';
+ 
+ class BaileysManager {
+     private $db;
+     private $wuzapiManager;
++    private static $aiConfigColumnChecked = false;
+ 
+     public function __construct() {
+         $this->db = Database::getInstance();
++        $this->ensureAiConfigColumn();
+         error_log("BaileysManager::__construct - Carregando WuzAPIManager");
+         $this->wuzapiManager = new WuzAPIManager();
+         error_log("BaileysManager::__construct - WuzAPIManager carregado");
+     }
+ 
++    private function ensureAiConfigColumn(): void
++    {
++        if (self::$aiConfigColumnChecked) {
++            return;
++        }
++
++        try {
++            $this->db->query(
++                "ALTER TABLE whatsapp_instances ADD COLUMN IF NOT EXISTS ai_config JSONB DEFAULT NULL"
++            );
++        } catch (\Exception $e) {
++            error_log('BaileysManager::ensureAiConfigColumn - ' . $e->getMessage());
++        }
++
++        self::$aiConfigColumnChecked = true;
++    }
++
++    private function buildAiConfig(array $input, ?string $fallbackBusiness = null): array
++    {
++        return AiPromptBuilder::normalizeConfig([
++            'assistant_name' => trim((string) ($input['ai_assistant_name'] ?? $input['assistant_name'] ?? '')),
++            'business_name' => trim((string) ($input['ai_business_name'] ?? $input['business_name'] ?? '')),
++            'tone' => (string) ($input['ai_tone'] ?? $input['tone'] ?? 'amigavel'),
++            'custom_instructions' => trim((string) ($input['ai_custom_instructions'] ?? $input['custom_instructions'] ?? '')),
++            'ignore_stock' => filter_var($input['ai_ignore_stock'] ?? $input['ignore_stock'] ?? false, FILTER_VALIDATE_BOOLEAN),
++        ], $fallbackBusiness);
++    }
++
+     /**
+      * Criar nova inst??ncia WhatsApp
+      */
+-    public function createInstance($instanceName, $phoneNumber, $tenantId, $filialId = 1, $webhookUrl = '') {
++    public function createInstance($instanceName, $phoneNumber, $tenantId, $filialId = 1, $webhookUrl = '', array $aiInput = []) {
+         error_log("BaileysManager::createInstance - Criando $instanceName / $phoneNumber");
+         
+         try {
+             // Garantir valores padr??o v??lidos
+             $tenantId = $tenantId ?: 1;
+             $filialId = $filialId ?: null;
++
++            $tenant = $this->db->fetch("SELECT nome FROM tenants WHERE id = ?", [$tenantId]);
++            $aiConfig = $this->buildAiConfig($aiInput, $tenant['nome'] ?? null);
+             
+             error_log("BaileysManager::createInstance - Tenant: $tenantId, Filial: $filialId, Webhook: $webhookUrl");
+             
+
+
+
+=== C:\Users\moaci\OneDrive\Documentos\Divsys\system\WhatsApp\WuzAPIManager.php.rej ===
+--- system/WhatsApp/WuzAPIManager.php
++++ system/WhatsApp/WuzAPIManager.php
+@@ -684,6 +684,7 @@ class WuzAPIManager
+             
+             if ($response && isset($response['success']) && $response['success']) {
+                 error_log("WuzAPIManager::startSession - Sess??o iniciada com sucesso");
++                $this->syncWebhookForToken($token);
+                 return true;
+             }
+             
+
+
+
+=== C:\Users\moaci\OneDrive\Documentos\Divsys\webhook\wuzapi.php.rej ===
+--- webhook/wuzapi.php
++++ webhook/wuzapi.php
+@@ -1,151 +1,7 @@
+ <?php
+ /**
+- * Webhook para receber eventos da WuzAPI
++ * Webhook para receber eventos da WuzAPI e processar com IA.
+  * Endpoint: /webhook/wuzapi.php
+  */
+ 
+-header('Content-Type: application/json');
+-
+-try {
+-    // Verificar se ?? POST
+-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+-        http_response_code(405);
+-        echo json_encode(['error' => 'Method not allowed']);
+-        exit;
+-    }
+-    
+-    // Ler dados do webhook
+-    $input = file_get_contents('php://input');
+-    $data = json_decode($input, true);
+-    
+-    if (!$data) {
+-        http_response_code(400);
+-        echo json_encode(['error' => 'Invalid JSON']);
+-        exit;
+-    }
+-    
+-    error_log("WuzAPI Webhook received: " . json_encode($data));
+-    
+-    // Processar evento
+-    $eventType = $data['event'] ?? 'unknown';
+-    $instanceId = $data['instance_id'] ?? null;
+-    
+-    switch ($eventType) {
+-        case 'qr':
+-            handleQREvent($data);
+-            break;
+-            
+-        case 'status':
+-            handleStatusEvent($data);
+-            break;
+-            
+-        case 'message':
+-            handleMessageEvent($data);
+-            break;
+-            
+-        default:
+-            error_log("WuzAPI Webhook - Unknown event type: {$eventType}");
+-    }
+-    
+-    // Responder com sucesso
+-    echo json_encode(['success' => true, 'message' => 'Event processed']);
+-    
+-} catch (Exception $e) {
+-    error_log("WuzAPI Webhook Error: " . $e->getMessage());
+-    http_response_code(500);
+-    echo json_encode(['error' => 'Internal server error']);
+-}
+-
+-/**
+- * Processar evento de QR code
+- */
+-function handleQREvent($data) {
+-    $instanceId = $data['instance_id'] ?? null;
+-    $qrCode = $data['qrcode'] ?? null;
+-    
+-    if ($instanceId && $qrCode) {
+-        error_log("WuzAPI QR Event - Instance: {$instanceId}, QR available");
+-        
+-        // Atualizar status no banco
+-        updateInstanceStatus($instanceId, 'connecting', $qrCode);
+-    }
+-}
+-
+-/**
+- * Processar evento de status
+- */
+-function handleStatusEvent($data) {
+-    $instanceId = $data['instance_id'] ?? null;
+-    $status = $data['status'] ?? 'unknown';
+-    $connected = $data['connected'] ?? false;
+-    
+-    if ($instanceId) {
+-        error_log("WuzAPI Status Event - Instance: {$instanceId}, Status: {$status}, Connected: " . ($connected ? 'true' : 'false'));
+-        
+-        $dbStatus = $connected ? 'connected' : 'disconnected';
+-        updateInstanceStatus($instanceId, $dbStatus);
+-    }
+-}
+-
+-/**
+- * Processar evento de mensagem
+- */
+-function handleMessageEvent($data) {
+-    $instanceId = $data['instance_id'] ?? null;
+-    $message = $data['message'] ?? null;
+-    
+-    if ($instanceId && $message) {
+-        error_log("WuzAPI Message Event - Instance: {$instanceId}, Message received");
+-        
+-        // Processar mensagem recebida
+-        processReceivedMessage($instanceId, $message);
+-    }
+-}
+-
+-/**
+- * Atualizar status da inst??ncia no banco
+- */
+-function updateInstanceStatus($instanceId, $status, $qrCode = null) {
+-    try {
+-        require_once __DIR__ . '/../system/Database.php';
+-        
+-        $db = \System\Database::getInstance();
+-        
+-        $updateData = [
+-            'status' => $status,
+-            'updated_at' => date('Y-m-d H:i:s')
+-        ];
+-        
+-        if ($qrCode) {
+-            $updateData['qr_code'] = $qrCode;
+-        }
+-        
+-        $db->update(
+-            'whatsapp_instances',
+-            $updateData,
+-            'id = ?',
+-            [$instanceId]
+-        );
+-        
+-        error_log("WuzAPI - Instance {$instanceId} status updated to {$status}");
+-        
+-    } catch (Exception $e) {
+-        error_log("WuzAPI - Error updating instance status: " . $e->getMessage());
+-    }
+-}
+-
+-/**
+- * Processar mensagem recebida
+- */
+-function processReceivedMessage($instanceId, $message) {
+-    try {
+-        // Aqui voc?? pode processar a mensagem recebida
+-        // Por exemplo, salvar no banco, enviar para n8n, etc.
+-        
+-        error_log("WuzAPI - Processing message for instance {$instanceId}: " . json_encode($message));
+-        
+-    } catch (Exception $e) {
+-        error_log("WuzAPI - Error processing message: " . $e->getMessage());
+-    }
+-}
+-?>
++require_once __DIR__ . '/../mvc/ajax/wuzapi_webhook.php';
+
+
+

@@ -9,6 +9,8 @@ header('Content-Type: application/json');
 require_once __DIR__ . '/../../system/Config.php';
 require_once __DIR__ . '/../../system/Database.php';
 require_once __DIR__ . '/../../system/Session.php';
+require_once __DIR__ . '/../../system/TelefoneHelper.php';
+require_once __DIR__ . '/../../system/FiadoClienteService.php';
 
 try {
     $db = \System\Database::getInstance();
@@ -38,6 +40,13 @@ try {
                 throw new \Exception('Nome é obrigatório');
             }
 
+            if (!empty($telefone)) {
+                $existenteTel = \System\FiadoClienteService::findByTelefone($db, $telefone, (int) $tenant['id']);
+                if ($existenteTel) {
+                    throw new \Exception('J?? existe um cliente fiado com este telefone: ' . ($existenteTel['nome'] ?? ''));
+                }
+            }
+
             if ($limite_credito < 0) {
                 throw new \Exception('Limite de crédito deve ser maior ou igual a zero');
             }
@@ -57,10 +66,11 @@ try {
             $db->beginTransaction();
 
             try {
+                $telefoneCanonico = $telefone ? \System\TelefoneHelper::canonico($telefone) : null;
                 $clienteId = $db->insert('clientes_fiado', [
                     'nome' => $nome,
                     'cpf_cnpj' => $cpf_cnpj ?: null,
-                    'telefone' => $telefone ?: null,
+                    'telefone' => $telefoneCanonico ?: ($telefone ?: null),
                     'email' => $email ?: null,
                     'endereco' => $endereco ?: null,
                     'limite_credito' => $limite_credito,

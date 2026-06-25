@@ -1975,19 +1975,81 @@ if ($tenant && $filial) {
 
         // ===== WUZAPI FUNCTIONS =====
 
+        const TENANT_BUSINESS_NAME = <?php echo json_encode($tenant['nome'] ?? 'Divino Lanches'); ?>;
+
+        function htmlCamposPromptIA(prefix = '', values = {}) {
+            const assistantName = values.assistant_name || 'Assistente';
+            const businessName = values.business_name || TENANT_BUSINESS_NAME;
+            const tone = values.tone || 'amigavel';
+            const custom = values.custom_instructions || '';
+            const ignoreStock = !!values.ignore_stock;
+
+            return `
+                <hr class="my-3">
+                <h6 class="mb-2"><i class="fas fa-robot me-1"></i> Personalização da IA (WhatsApp)</h6>
+                <p class="text-muted small mb-3">Defina como a IA se apresenta e atende seus clientes no WhatsApp.</p>
+                <div class="mb-3 text-start">
+                    <label class="form-label">Nome da assistente</label>
+                    <input type="text" class="form-control" id="${prefix}aiAssistantName" value="${assistantName}" placeholder="ex: Ana, Bia, Assistente Divino">
+                </div>
+                <div class="mb-3 text-start">
+                    <label class="form-label">Nome do estabelecimento</label>
+                    <input type="text" class="form-control" id="${prefix}aiBusinessName" value="${businessName}" placeholder="ex: Divino Lanches">
+                </div>
+                <div class="mb-3 text-start">
+                    <label class="form-label">Tom de atendimento</label>
+                    <select class="form-select" id="${prefix}aiTone">
+                        <option value="amigavel" ${tone === 'amigavel' ? 'selected' : ''}>Amigável</option>
+                        <option value="formal" ${tone === 'formal' ? 'selected' : ''}>Formal</option>
+                        <option value="descontraido" ${tone === 'descontraido' ? 'selected' : ''}>Descontraído</option>
+                        <option value="profissional" ${tone === 'profissional' ? 'selected' : ''}>Profissional</option>
+                    </select>
+                </div>
+                <div class="mb-3 text-start">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="${prefix}aiIgnoreStock" ${ignoreStock ? 'checked' : ''}>
+                        <label class="form-check-label" for="${prefix}aiIgnoreStock">
+                            <strong>Ignorar estoque</strong>
+                        </label>
+                    </div>
+                    <small class="form-text text-muted">
+                        Desligado: a IA respeita o estoque ao informar produtos e lançar pedidos.<br>
+                        Ligado: ignora estoque e aceita qualquer item do cardápio.
+                    </small>
+                </div>
+                <div class="mb-2 text-start">
+                    <label class="form-label">Instruções adicionais</label>
+                    <textarea class="form-control" id="${prefix}aiCustomInstructions" rows="4" placeholder="Ex: Sempre ofereça delivery. Mencione que aceitamos Pix. Horário: 18h às 23h.">${custom}</textarea>
+                    <small class="form-text text-muted">Regras extras: horário, delivery, formas de pagamento, promoções fixas, etc.</small>
+                </div>
+            `;
+        }
+
+        function lerCamposPromptIA(prefix = '') {
+            return {
+                ai_assistant_name: document.getElementById(prefix + 'aiAssistantName')?.value || '',
+                ai_business_name: document.getElementById(prefix + 'aiBusinessName')?.value || '',
+                ai_tone: document.getElementById(prefix + 'aiTone')?.value || 'amigavel',
+                ai_custom_instructions: document.getElementById(prefix + 'aiCustomInstructions')?.value || '',
+                ai_ignore_stock: document.getElementById(prefix + 'aiIgnoreStock')?.checked ? '1' : '0'
+            };
+        }
+
         function abrirModalNovaCaixaEntrada() {
             Swal.fire({
                 title: 'Nova Instância WhatsApp',
+                width: 650,
                 html: `
-                    <div class="mb-3">
+                    <div class="mb-3 text-start">
                         <label class="form-label">Nome da Instância</label>
                         <input type="text" class="form-control" id="nomeCaixaEntrada" placeholder="ex: atendimento_loja1">
                     </div>
-                    <div class="mb-3">
+                    <div class="mb-3 text-start">
                         <label class="form-label">Número do WhatsApp</label>
                         <input type="text" class="form-control" id="numeroWhatsApp" placeholder="5511999999999">
                         <small class="form-text text-muted">Inclua o código do país (ex: 5511999999999)</small>
                     </div>
+                    ${htmlCamposPromptIA('nova')}
                 `,
                 showCancelButton: true,
                 confirmButtonText: 'Criar Instância',
@@ -2001,11 +2063,15 @@ if ($tenant && $filial) {
                         return false;
                     }
                     
-                    return { instance_name: nome, phone_number: numero };
+                    return {
+                        instance_name: nome,
+                        phone_number: numero,
+                        ...lerCamposPromptIA('nova')
+                    };
                 }
             }).then((result) => {
                 if (result.isConfirmed) {
-                    criarCaixaEntrada(result.value.instance_name, result.value.phone_number);
+                    criarCaixaEntrada(result.value);
                 }
             });
         }
@@ -2055,19 +2121,34 @@ if ($tenant && $filial) {
                 console.log('Processando instância:', instance);
                 const statusClass = instance.status === 'connected' ? 'success' : 'danger';
                 const statusText = instance.status === 'connected' ? 'Conectado' : 'Desconectado';
+                const ignoreStock = !!(instance.ai_config && instance.ai_config.ignore_stock);
                 
                 html += `
                     <div class="card mb-2">
                         <div class="card-body">
                             <div class="row align-items-center">
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <h6 class="mb-1">${instance.instance_name}</h6>
                                     <small class="text-muted">${instance.phone_number}</small>
                                 </div>
                                 <div class="col-md-3">
                                     <span class="badge bg-${statusClass}">${statusText}</span>
+                                    <div class="form-check form-switch mt-2">
+                                        <input class="form-check-input" type="checkbox" id="ignoreStock_${instance.id}"
+                                            ${ignoreStock ? 'checked' : ''}
+                                            onchange="toggleIgnorarEstoque(${instance.id}, this.checked)">
+                                        <label class="form-check-label small" for="ignoreStock_${instance.id}">
+                                            Ignorar estoque
+                                        </label>
+                                    </div>
+                                    <small class="text-muted d-block" style="font-size: 11px;">
+                                        ${ignoreStock ? 'IA ignora estoque' : 'IA respeita estoque'}
+                                    </small>
                                 </div>
-                                <div class="col-md-5 text-end">
+                                <div class="col-md-6 text-end">
+                                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="configurarPromptIA(${instance.id}, '${instance.instance_name.replace(/'/g, "\\'")}')">
+                                        <i class="fas fa-robot"></i> IA
+                                    </button>
                                     <button class="btn btn-sm btn-outline-primary me-1" onclick="conectarCaixaEntrada('${instance.instance_name}', ${instance.id})">
                                         <i class="fas fa-qrcode"></i> Conectar
                                     </button>
@@ -2093,14 +2174,25 @@ if ($tenant && $filial) {
             container.innerHTML = html;
         }
 
-        function criarCaixaEntrada(instanceName, phoneNumber) {
+        function criarCaixaEntrada(payload) {
+            const body = new URLSearchParams({
+                action: 'criar_caixa_entrada',
+                instance_name: payload.instance_name,
+                phone_number: payload.phone_number,
+                ai_assistant_name: payload.ai_assistant_name || '',
+                ai_business_name: payload.ai_business_name || '',
+                ai_tone: payload.ai_tone || 'amigavel',
+                ai_custom_instructions: payload.ai_custom_instructions || '',
+                ai_ignore_stock: payload.ai_ignore_stock || '0'
+            });
+
             fetch('mvc/ajax/configuracoes.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                     'X-Requested-With': 'XMLHttpRequest',
                 },
-                body: `action=criar_caixa_entrada&instance_name=${encodeURIComponent(instanceName)}&phone_number=${encodeURIComponent(phoneNumber)}`
+                body: body.toString()
             })
             .then(response => {
                 console.log('Response status:', response.status);
@@ -2126,6 +2218,101 @@ if ($tenant && $filial) {
                 console.error('Erro:', error);
                 Swal.fire('Erro', 'Erro ao criar instância', 'error');
             });
+        }
+
+        function toggleIgnorarEstoque(instanceId, ignoreStock) {
+            fetch('mvc/ajax/configuracoes.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: `action=toggle_ignorar_estoque&instance_id=${instanceId}&ignore_stock=${ignoreStock ? '1' : '0'}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const toast = Swal.mixin({
+                        toast: true,
+                        position: 'top-end',
+                        showConfirmButton: false,
+                        timer: 2000
+                    });
+                    toast.fire({
+                        icon: 'success',
+                        title: data.message
+                    });
+                    carregarCaixasEntrada();
+                } else {
+                    Swal.fire('Erro', data.message || 'N??o foi poss??vel atualizar', 'error');
+                    carregarCaixasEntrada();
+                }
+            })
+            .catch(() => {
+                Swal.fire('Erro', 'Erro ao atualizar configura????o de estoque', 'error');
+                carregarCaixasEntrada();
+            });
+        }
+
+        function configurarPromptIA(instanceId, instanceName) {
+            fetch('mvc/ajax/configuracoes.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: `action=obter_prompt_ia&instance_id=${instanceId}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    Swal.fire('Erro', data.message || 'N??o foi poss??vel carregar a configura????o da IA', 'error');
+                    return;
+                }
+
+                const cfg = data.ai_config || {};
+                Swal.fire({
+                    title: `IA ??? ${instanceName}`,
+                    width: 650,
+                    html: htmlCamposPromptIA('edit', cfg),
+                    showCancelButton: true,
+                    confirmButtonText: 'Salvar',
+                    cancelButtonText: 'Cancelar',
+                    preConfirm: () => lerCamposPromptIA('edit')
+                }).then((result) => {
+                    if (!result.isConfirmed) return;
+
+                    const saveBody = new URLSearchParams({
+                        action: 'salvar_prompt_ia',
+                        instance_id: instanceId,
+                        ai_assistant_name: result.value.ai_assistant_name || '',
+                        ai_business_name: result.value.ai_business_name || '',
+                        ai_tone: result.value.ai_tone || 'amigavel',
+                        ai_custom_instructions: result.value.ai_custom_instructions || '',
+                        ai_ignore_stock: result.value.ai_ignore_stock || '0'
+                    });
+
+                    fetch('mvc/ajax/configuracoes.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        body: saveBody.toString()
+                    })
+                    .then(r => r.json())
+                    .then(saveData => {
+                        if (saveData.success) {
+                            Swal.fire('Salvo', 'Prompt da IA atualizado com sucesso!', 'success');
+                            carregarCaixasEntrada();
+                        } else {
+                            Swal.fire('Erro', saveData.message || 'Erro ao salvar', 'error');
+                        }
+                    })
+                    .catch(() => Swal.fire('Erro', 'Erro ao salvar prompt da IA', 'error'));
+                });
+            })
+            .catch(() => Swal.fire('Erro', 'Erro ao carregar configura????o da IA', 'error'));
         }
 
         function conectarCaixaEntrada(nomeCaixa, instanceId) {

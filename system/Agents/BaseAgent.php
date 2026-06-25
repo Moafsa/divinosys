@@ -8,6 +8,9 @@ abstract class BaseAgent {
     protected $model = 'gpt-4o-mini';
     protected $tenantId;
     protected $filialId;
+    protected $personaPrompt = '';
+    protected $whatsappCustomerMode = false;
+    protected $ignoreStock = false;
     
     public function __construct() {
         $this->db = \System\Database::getInstance();
@@ -22,6 +25,21 @@ abstract class BaseAgent {
     public function setContext($tenantId, $filialId) {
         $this->tenantId = $tenantId;
         $this->filialId = $filialId;
+    }
+
+    public function setPersonaPrompt(?string $prompt): void
+    {
+        $this->personaPrompt = trim((string) $prompt);
+    }
+
+    public function setWhatsAppCustomerMode(bool $enabled): void
+    {
+        $this->whatsappCustomerMode = $enabled;
+    }
+
+    public function setIgnoreStock(bool $enabled): void
+    {
+        $this->ignoreStock = $enabled;
     }
     
     /**
@@ -47,6 +65,9 @@ abstract class BaseAgent {
         $systemPrompt = $this->getSystemPrompt();
         $systemContext = "\n\nData e Hora Atual: " . date('Y-m-d H:i:s');
         $systemContext .= "\n[IMPORTANTE] Você é o Agente: " . static::class;
+        if ($this->personaPrompt !== '') {
+            $systemContext .= "\n\n[PERSONALIZAÇÃO DO ATENDIMENTO WHATSAPP]\n" . $this->personaPrompt;
+        }
         
         $hasSystem = false;
         foreach ($messages as &$msg) {

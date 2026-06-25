@@ -7,6 +7,7 @@
 require_once __DIR__ . '/../../system/Config.php';
 require_once __DIR__ . '/../../system/Database.php';
 require_once __DIR__ . '/../../system/Session.php';
+require_once __DIR__ . '/../../system/FiadoClienteService.php';
 require_once __DIR__ . '/../model/AsaasAPIClient.php';
 
 header('Content-Type: application/json');
@@ -33,6 +34,39 @@ function buscarClienteAsaasPorExternalReference(callable $makeAsaasRequest, ?str
     }
 
     return null;
+}
+
+function registrarFiadoParaPedido(
+    $db,
+    int $tenantId,
+    int $filialId,
+    int $pedidoId,
+    float $valor,
+    string $nome,
+    string $telefone,
+    ?int $clienteGlobalId = null
+): void {
+    if ($valor <= 0) {
+        return;
+    }
+
+    $cfId = \System\FiadoClienteService::findOrCreate(
+        $db,
+        $tenantId,
+        $filialId,
+        $nome,
+        $telefone,
+        $clienteGlobalId
+    );
+
+    \System\FiadoClienteService::registrarVendaFiada(
+        $db,
+        $cfId,
+        $pedidoId,
+        $valor,
+        $tenantId,
+        $filialId
+    );
 }
 
 try {
@@ -306,6 +340,19 @@ try {
                     'tenant_id' => $tenantId,
                     'filial_id' => $filialId
                 ]);
+
+                if ($formaPagamento === 'FIADO') {
+                    registrarFiadoParaPedido(
+                        $db,
+                        (int) $tenantId,
+                        (int) $filialId,
+                        (int) $pedidoId,
+                        (float) $valorPago,
+                        (string) $nomeCliente,
+                        (string) $telefoneCliente,
+                        $clienteId ? (int) $clienteId : null
+                    );
+                }
                 
                 // Garantir que o saldo_devedor está correto (sempre recalcular)
                 // Saldo devedor = valor_total - descontos - pagamentos
@@ -669,6 +716,19 @@ try {
                     'tenant_id' => $tenantId,
                     'filial_id' => $filialId
                 ]);
+
+                if ($formaPagamento === 'FIADO') {
+                    registrarFiadoParaPedido(
+                        $db,
+                        (int) $tenantId,
+                        (int) $filialId,
+                        (int) $pedidoId,
+                        (float) $valorAPagarNestePedido,
+                        (string) $nomeCliente,
+                        (string) $telefoneCliente,
+                        $clienteId ? (int) $clienteId : null
+                    );
+                }
 
                 // Calcular o novo valor pago total para este pedido (excluindo descontos)
                 $totalPagoResult = $db->fetch(

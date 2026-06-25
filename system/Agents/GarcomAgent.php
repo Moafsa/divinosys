@@ -4,9 +4,20 @@ namespace System\Agents;
 class GarcomAgent extends BaseAgent {
     
     protected function getSystemPrompt(): string {
-        return "Você é o Garçom Virtual do DivinoSys. Sua função é tirar pedidos, listar comandas abertas, lançar itens nas mesas e verificar comandas.\n" .
+        if ($this->whatsappCustomerMode) {
+            return "Você é o Assistente de Pedidos (Delivery e Retirada) do DivinoSys atendendo via WhatsApp.\n" .
+                   "Sua função é anotar os pedidos do cliente e registrá-los no sistema.\n" .
+                   "REGRA CRÍTICA: O cliente está pedindo de casa pelo WhatsApp. NUNCA pergunte o 'número da mesa' ou 'comanda'.\n" .
+                   "Para registrar o pedido no WhatsApp, use a ferramenta create_order informando mesa_id = '999' (Delivery) ou '998' (Retirada no Balcão).\n" .
+                   "Sempre confirme com o cliente se é para entregar ou se ele vem buscar antes de lançar o pedido.\n" .
+                   "IMPORTANTE: Se o cliente pedir um item e você não souber o ID ou o preço, USE IMEDIATAMENTE a ferramenta `buscar_produtos` para descobrir. NUNCA diga 'um momento vou verificar' sem usar a ferramenta. Busque e já dê a resposta ao cliente.";
+        }
+
+        return "Você é o Garçom Virtual do DivinoSys. Você está falando com um Administrador/Garçom da equipe do restaurante.\n" .
+               "Sua função é tirar pedidos, listar comandas abertas, lançar itens nas mesas e verificar comandas.\n" .
+               "REGRA IMPORTANTE: Se o funcionário pedir para lançar um item e NÃO informar a mesa ou comanda, VOCÊ DEVE PERGUNTAR QUAL A MESA ou COMANDA antes de prosseguir.\n" .
                "Você DEVE usar listar_pedidos ou ver_mesas_ativas para consultar comandas em aberto.\n" .
-               "Se um usuário pedir para lançar um produto, mas não der o preço ou o ID correto, você DEVE consultar o agente de estoque ou pedir os detalhes ao cliente.";
+               "IMPORTANTE: Se um usuário pedir para lançar um produto, mas não der o preço ou o ID correto, USE IMEDIATAMENTE a ferramenta `buscar_produtos` para descobrir os valores corretos. NUNCA diga 'vou consultar o cardápio' sem de fato chamar a ferramenta.";
     }
     
     protected function getTools(): array {
@@ -14,9 +25,23 @@ class GarcomAgent extends BaseAgent {
             [
                 'type' => 'function',
                 'function' => [
+                    'name' => 'buscar_produtos',
+                    'description' => 'Busca produtos no cardápio pelo nome para descobrir o ID e preço corretos antes de fazer o pedido.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'query' => ['type' => 'string', 'description' => 'O nome do produto para pesquisar']
+                        ],
+                        'required' => ['query']
+                    ]
+                ]
+            ],
+            [
+                'type' => 'function',
+                'function' => [
                     'name' => 'ver_mesas_ativas',
                     'description' => 'Lista todas as mesas e comandas que estão abertas/pendentes no restaurante no momento.',
-                    'parameters' => ['type' => 'object', 'properties' => []]
+                    'parameters' => ['type' => 'object', 'properties' => (object)[]]
                 ]
             ],
             [
@@ -24,7 +49,7 @@ class GarcomAgent extends BaseAgent {
                 'function' => [
                     'name' => 'listar_pedidos',
                     'description' => 'Lista todos os pedidos recentes, abertos ou fechados.',
-                    'parameters' => ['type' => 'object', 'properties' => []]
+                    'parameters' => ['type' => 'object', 'properties' => (object)[]]
                 ]
             ],
             [
@@ -159,6 +184,7 @@ class GarcomAgent extends BaseAgent {
         }
         
         $legacyService = new \System\OpenAIService();
+        $legacyService->setIgnoreStock($this->ignoreStock);
         $args['tenant_id'] = $this->tenantId;
         $args['filial_id'] = $this->filialId;
         

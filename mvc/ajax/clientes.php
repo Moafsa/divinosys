@@ -9,6 +9,7 @@ require_once __DIR__ . '/../../system/Config.php';
 require_once __DIR__ . '/../../system/Database.php';
 require_once __DIR__ . '/../../system/Session.php';
 require_once __DIR__ . '/../model/Cliente.php';
+require_once __DIR__ . '/../../system/TelefoneHelper.php';
 require_once __DIR__ . '/../controller/ClienteController.php';
 
 ob_clean();

@@ -1,252 +1,434 @@
 <?php
 /**
- * Wuzapi Webhook Handler
- * 
- * Receives messages from WhatsApp via Wuzapi and processes with AI
+ * Wuzapi Webhook Handler — recebe mensagens do WhatsApp e responde com IA.
  */
 
-// Disable error display
 ini_set('display_errors', 0);
 error_reporting(E_ALL);
 
+spl_autoload_register(function ($class) {
+    $prefixes = [
+        'System\\' => __DIR__ . '/../../system/',
+    ];
+    foreach ($prefixes as $prefix => $baseDir) {
+        $len = strlen($prefix);
+        if (strncmp($prefix, $class, $len) !== 0) {
+            continue;
+        }
+        $file = $baseDir . str_replace('\\', '/', substr($class, $len)) . '.php';
+        if (file_exists($file)) {
+            require $file;
+        }
+    }
+});
+
 require_once __DIR__ . '/../../system/Config.php';
 require_once __DIR__ . '/../../system/Database.php';
-require_once __DIR__ . '/../../system/Session.php';
 require_once __DIR__ . '/../../system/OpenAIService.php';
 require_once __DIR__ . '/../../system/WhatsApp/WuzAPIManager.php';
+require_once __DIR__ . '/../../system/TelefoneHelper.php';
+require_once __DIR__ . '/../../system/WhatsApp/AiPromptBuilder.php';
 
 header('Content-Type: application/json');
 
+function extrairTelefoneWhatsApp(string $jid): string
+{
+    $jid = trim($jid);
+    if ($jid === '') {
+        return '';
+    }
+
+    // 555497092223:7@s.whatsapp.net ou 5554997092223@c.us
+    $parte = explode('@', $jid)[0] ?? $jid;
+    $parte = explode(':', $parte)[0] ?? $parte;
+    $digitos = preg_replace('/[^0-9]/', '', $parte);
+
+    return \System\TelefoneHelper::canonico($digitos) ?: $digitos;
+}
+
+function saveInlineMediaToFile(array $inline): ?string
+{
+    if (empty($inline['base64'])) {
+        return null;
+    }
+
+    $binary = base64_decode((string) $inline['base64'], true);
+    if ($binary === false || $binary === '') {
+        return null;
+    }
+
+    $filename = (string) ($inline['filename'] ?? 'media');
+    $ext = pathinfo($filename, PATHINFO_EXTENSION);
+    if ($ext === '' || $ext === $filename) {
+        $mime = strtolower((string) ($inline['mimetype'] ?? ''));
+        $ext = match (true) {
+            str_contains($mime, 'ogg'), str_contains($mime, 'opus') => 'ogg',
+            str_contains($mime, 'jpeg'), str_contains($mime, 'jpg') => 'jpg',
+            str_contains($mime, 'png') => 'png',
+            str_contains($mime, 'webp') => 'webp',
+            str_contains($mime, 'mp3'), str_contains($mime, 'mpeg') => 'mp3',
+            default => 'bin',
+        };
+    }
+
+    $path = sys_get_temp_dir() . '/wuzapi_inline_' . uniqid('', true) . '.' . $ext;
+    file_put_contents($path, $binary);
+
+    return $path;
+}
+
+function applyInlineMediaMeta(array &$result, array $inner): void
+{
+    if (empty($inner['base64'])) {
+        return;
+    }
+
+    $result['inline_media'] = [
+        'base64' => (string) $inner['base64'],
+        'mimetype' => (string) ($inner['mimeType'] ?? $inner['mimetype'] ?? ''),
+        'filename' => (string) ($inner['fileName'] ?? $inner['filename'] ?? 'media'),
+    ];
+
+    $mime = strtolower($result['inline_media']['mimetype']);
+    if (str_starts_with($mime, 'audio/') || str_contains($mime, 'ogg') || str_contains($mime, 'opus')) {
+        $result['message_type'] = 'audio';
+    } elseif (str_starts_with($mime, 'image/')) {
+        $result['message_type'] = 'image';
+    }
+}
+
+function parseWuzapiPayload(array $data): array
+{
+    $result = [
+        'instance_id' => '',
+        'from' => '',
+        'message' => '',
+        'message_type' => 'text',
+        'is_group' => false,
+        'is_from_me' => false,
+        'message_id' => '',
+        'push_name' => '',
+        'media' => null,
+        'inline_media' => null,
+    ];
+
+    // Formato asternic/wuzapi: { instanceName, jsonData, userID }
+    if (!empty($data['jsonData'])) {
+        $inner = json_decode((string) $data['jsonData'], true);
+        if (!is_array($inner)) {
+            throw new Exception('jsonData inválido no webhook WuzAPI');
+        }
+
+        $result['instance_id'] = (string) ($data['userID'] ?? '');
+        $event = $inner['event'] ?? $inner;
+        $info = $event['Info'] ?? $event['info'] ?? [];
+
+        $result['is_from_me'] = (bool) ($info['IsFromMe'] ?? false);
+        $result['is_group'] = (bool) ($info['IsGroup'] ?? false);
+        $result['message_id'] = (string) ($info['ID'] ?? '');
+        $result['push_name'] = (string) ($info['PushName'] ?? '');
+
+        $senderAlt = (string) ($info['SenderAlt'] ?? '');
+        $sender = (string) ($info['Sender'] ?? ($info['Chat'] ?? ''));
+        $jid = $senderAlt !== '' ? $senderAlt : $sender;
+        $result['from'] = $jid;
+
+        $msg = $event['Message'] ?? [];
+        if (!empty($msg['conversation'])) {
+            $result['message'] = (string) $msg['conversation'];
+            $result['message_type'] = 'text';
+        } elseif (!empty($msg['extendedTextMessage']['text'])) {
+            $result['message'] = (string) $msg['extendedTextMessage']['text'];
+            $result['message_type'] = 'text';
+        } elseif (!empty($msg['audioMessage'])) {
+            $result['message_type'] = 'audio';
+            $result['media'] = $msg['audioMessage'];
+        } elseif (!empty($msg['imageMessage'])) {
+            $result['message_type'] = 'image';
+            $result['media'] = $msg['imageMessage'];
+            $result['message'] = (string) ($msg['imageMessage']['caption'] ?? '');
+        } else {
+            $result['message_type'] = 'other';
+        }
+
+        applyInlineMediaMeta($result, $inner);
+
+        return $result;
+    }
+
+    // WuzAPI JSON mode: event no corpo raiz
+    if (!empty($data['event']) && is_array($data['event'])) {
+        $wrapped = [
+            'userID' => (string) ($data['userID'] ?? $data['instanceId'] ?? ''),
+            'instanceName' => (string) ($data['instanceName'] ?? ''),
+            'jsonData' => json_encode($data),
+        ];
+        return parseWuzapiPayload($wrapped);
+    }
+
+    // Formato simplificado (testes / legado)
+    if (isset($data['event']) && isset($data['data']['Info'])) {
+        $info = $data['data']['Info'];
+        $result['instance_id'] = (string) ($data['instanceId'] ?? $data['instance_id'] ?? '');
+        $result['is_from_me'] = (bool) ($info['MessageSource']['IsFromMe'] ?? $info['IsFromMe'] ?? false);
+        $result['is_group'] = (bool) ($info['MessageSource']['IsGroup'] ?? $info['IsGroup'] ?? false);
+        $result['from'] = (string) ($info['MessageSource']['Sender'] ?? $info['SenderAlt'] ?? $info['Sender'] ?? '');
+        $msg = $data['data']['Message'] ?? [];
+        $result['message'] = (string) ($msg['conversation'] ?? ($msg['extendedTextMessage']['text'] ?? ''));
+        return $result;
+    }
+
+    $result['instance_id'] = (string) ($data['instanceId'] ?? $data['instance_id'] ?? $data['userID'] ?? '');
+    $result['from'] = (string) ($data['from'] ?? '');
+    $result['message'] = (string) ($data['message'] ?? $data['text'] ?? '');
+    $result['message_type'] = (string) ($data['type'] ?? 'text');
+    $result['is_group'] = (bool) ($data['isGroup'] ?? false);
+    $result['is_from_me'] = (bool) ($data['isFromMe'] ?? false);
+
+    return $result;
+}
+
 try {
-    // Get raw input
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['error' => 'Method not allowed']);
+        exit;
+    }
+
     $input = file_get_contents('php://input');
-    error_log("Wuzapi Webhook - Raw input: " . $input);
-    
+    error_log('Wuzapi Webhook - Raw: ' . substr($input, 0, 500));
+
     $data = json_decode($input, true);
-    
+    if (!$data && !empty($_POST['jsonData'])) {
+        $data = [
+            'jsonData' => $_POST['jsonData'],
+            'userID' => $_POST['userID'] ?? '',
+            'instanceName' => $_POST['instanceName'] ?? '',
+        ];
+    }
+    if (!$data && $input !== '') {
+        $form = [];
+        parse_str($input, $form);
+        if (!empty($form['jsonData'])) {
+            $data = [
+                'jsonData' => $form['jsonData'],
+                'userID' => $form['userID'] ?? '',
+                'instanceName' => $form['instanceName'] ?? '',
+            ];
+        }
+    }
     if (!$data) {
         throw new Exception('Invalid JSON payload');
     }
-    
-    // Extract data from Wuzapi webhook
-    $from = '';
-    $message = '';
-    $isGroup = false;
-    $instanceId = '';
-    $messageType = 'text';
 
-    if (isset($data['event']) && isset($data['data']['Info'])) {
-        // WuzAPI format
-        $from = $data['data']['Info']['MessageSource']['Sender'] ?? '';
-        $isGroup = $data['data']['Info']['MessageSource']['IsGroup'] ?? false;
-        
-        if (isset($data['data']['Message']['conversation'])) {
-            $message = $data['data']['Message']['conversation'];
-        } elseif (isset($data['data']['Message']['extendedTextMessage']['text'])) {
-            $message = $data['data']['Message']['extendedTextMessage']['text'];
-        } elseif (isset($data['data']['Message']['audioMessage'])) {
-            $messageType = 'audio';
-            $message = ''; // Será preenchido com a transcrição
-        } else {
-            $messageType = 'other'; // non-text
-        }
-        
-        $instanceId = $data['instanceId'] ?? '';
-        
-        // Ignore messages sent by the bot itself
-        if (!empty($data['data']['Info']['MessageSource']['IsFromMe'])) {
-            error_log("Wuzapi Webhook - Ignoring message from me");
-            http_response_code(200);
-            echo json_encode(['success' => true, 'message' => 'Self messages ignored']);
-            exit;
-        }
-    } else {
-        // Old/Fallback format
-        $from = $data['from'] ?? '';
-        $message = $data['message'] ?? $data['text'] ?? '';
-        $instanceId = $data['instanceId'] ?? $data['instance_id'] ?? '';
-        $messageType = $data['type'] ?? 'text';
-        $isGroup = $data['isGroup'] ?? false;
+    $parsed = parseWuzapiPayload($data);
+
+    if ($parsed['is_from_me']) {
+        echo json_encode(['success' => true, 'message' => 'Self messages ignored']);
+        exit;
     }
-    
-    error_log("Wuzapi Webhook - From: $from, Instance: $instanceId, Type: $messageType, IsGroup: " . ($isGroup ? 'yes' : 'no'));
-    
-    // Ignore group messages
-    if ($isGroup) {
-        error_log("Wuzapi Webhook - Ignoring group message");
-        http_response_code(200);
+
+    if ($parsed['is_group']) {
         echo json_encode(['success' => true, 'message' => 'Group messages ignored']);
         exit;
     }
-    
-    // Ignore non-text and non-audio messages for now
-    if ($messageType !== 'text' && $messageType !== 'chat' && $messageType !== 'audio') {
-        error_log("Wuzapi Webhook - Ignoring non-text/audio message type: $messageType");
-        http_response_code(200);
-        echo json_encode(['success' => true, 'message' => 'Non-text messages ignored']);
+
+    if (!in_array($parsed['message_type'], ['text', 'chat', 'audio', 'image'], true)) {
+        echo json_encode(['success' => true, 'message' => 'Unsupported message type ignored']);
         exit;
     }
-    
-    // Validate required fields
-    if (empty($from) || empty($instanceId) || ($messageType !== 'audio' && empty($message))) {
-        throw new Exception('Missing required fields: from, message, or instanceId');
-    }
-    
-    // Get database connection
-    $db = \System\Database::getInstance();
-    
-    // Find tenant/filial by WhatsApp instance
-    $instance = $db->fetch(
-        "SELECT tenant_id, filial_id, nome FROM whatsapp_instances WHERE instance_id = ? OR phone = ?",
-        [$instanceId, $instanceId]
-    );
-    
-    if (!$instance) {
-        error_log("Wuzapi Webhook - Instance not found: $instanceId");
-        
-        // Try to find any active instance for fallback
-        $instance = $db->fetch(
-            "SELECT tenant_id, filial_id, nome FROM whatsapp_instances WHERE ativo = true ORDER BY id LIMIT 1"
-        );
-        
-        if (!$instance) {
-            throw new Exception('No active WhatsApp instance found');
-        }
-        
-        error_log("Wuzapi Webhook - Using fallback instance: {$instance['nome']}");
-    }
-    
-    $tenantId = $instance['tenant_id'];
-    $filialId = $instance['filial_id'];
-    
-    error_log("Wuzapi Webhook - Using Tenant: $tenantId, Filial: $filialId");
-    
-    // Extract phone number (remove @c.us suffix)
-    $phoneNumber = str_replace('@c.us', '', $from);
-    $phoneNumber = preg_replace('/[^0-9]/', '', $phoneNumber);
-    
-    // Check if customer exists, create if not
-    $cliente = $db->fetch(
-        "SELECT id, nome, telefone FROM clientes WHERE telefone = ? AND tenant_id = ?",
-        [$phoneNumber, $tenantId]
-    );
-    
-    if (!$cliente) {
-        // Create new customer
-        $clienteId = $db->insert('clientes', [
-            'nome' => 'Cliente WhatsApp ' . substr($phoneNumber, -4),
-            'telefone' => $phoneNumber,
-            'whatsapp' => $phoneNumber,
-            'tenant_id' => $tenantId,
-            'filial_id' => $filialId,
-            'ativo' => true
-        ]);
-        
-        error_log("Wuzapi Webhook - New customer created: ID $clienteId");
-    } else {
-        error_log("Wuzapi Webhook - Existing customer: {$cliente['nome']}");
-    }
-    
-    // Check if phone number is Admin
-    $isAdmin = $db->exists("whatsapp_admins", "tenant_id = ? AND filial_id = ? AND telefone = ? AND ativo = true", [$tenantId, $filialId, $phoneNumber]);
 
-    // Process message with AI
+    if ($parsed['instance_id'] === '') {
+        throw new Exception('Missing required field: instanceId');
+    }
+
+    if (in_array($parsed['message_type'], ['text', 'chat'], true) && trim($parsed['message']) === '') {
+        throw new Exception('Missing required field: message');
+    }
+
+    if (in_array($parsed['message_type'], ['audio', 'image'], true)
+        && empty($parsed['media']) && empty($parsed['inline_media'])) {
+        throw new Exception('Missing media metadata');
+    }
+
+    $phoneNumber = extrairTelefoneWhatsApp($parsed['from']);
+    if ($phoneNumber === '') {
+        throw new Exception('Could not extract phone from: ' . $parsed['from']);
+    }
+
+    $db = \System\Database::getInstance();
+
+    $instance = $db->fetch(
+        "SELECT id, tenant_id, filial_id, instance_name, phone_number, ai_config
+         FROM whatsapp_instances
+         WHERE wuzapi_instance_id = ?
+            OR instance_name = ?
+            OR REPLACE(phone_number, '+', '') = ?
+         ORDER BY CASE WHEN status = 'connected' THEN 0 ELSE 1 END, id
+         LIMIT 1",
+        [$parsed['instance_id'], $data['instanceName'] ?? '', $phoneNumber]
+    );
+
+    if (!$instance) {
+        $instance = $db->fetch(
+            "SELECT id, tenant_id, filial_id, instance_name, phone_number
+             FROM whatsapp_instances
+             WHERE ativo = true
+             ORDER BY CASE WHEN status = 'connected' THEN 0 ELSE 1 END, id
+             LIMIT 1"
+        );
+    }
+
+    if (!$instance) {
+        throw new Exception('No active WhatsApp instance found');
+    }
+
+    $tenantId = (int) $instance['tenant_id'];
+    $filialId = (int) $instance['filial_id'];
+    $instanceDbId = (int) $instance['id'];
+
+    $variacoes = \System\TelefoneHelper::getVariacoes($phoneNumber);
+    $placeholders = implode(',', array_fill(0, count($variacoes), '?'));
+
+    $cliente = $db->fetch(
+        "SELECT id, nome, telefone FROM usuarios_globais
+         WHERE ativo = true
+           AND REGEXP_REPLACE(COALESCE(telefone, ''), '[^0-9]', '', 'g') IN ({$placeholders})
+         LIMIT 1",
+        $variacoes
+    );
+
+    $customerName = $parsed['push_name'] ?: ($cliente['nome'] ?? 'Cliente WhatsApp');
+
+    $isAdmin = (bool) $db->fetch(
+        "SELECT 1 AS ok FROM whatsapp_admins
+         WHERE tenant_id = ? AND filial_id = ? AND ativo = true
+           AND REGEXP_REPLACE(COALESCE(telefone, ''), '[^0-9]', '', 'g') IN ({$placeholders})
+         LIMIT 1",
+        array_merge([$tenantId, $filialId], $variacoes)
+    );
+
+    $message = trim($parsed['message']);
     $aiService = new \System\OpenAIService();
-    
-    // Handle audio message
-    if ($messageType === 'audio') {
-        error_log("Wuzapi Webhook - Recebeu áudio. Tentando transcrever...");
-        
-        // Aqui deve entrar a lógica para baixar o mediaMessage (via WuzAPI /chat/download)
-        // Por ora, vamos simular que o áudio foi baixado para um arquivo temp
-        // Se a WuzAPI mandar em base64: $audioData = base64_decode($data['data']['Message']['audioMessage']['fileSha256']);
-        $wuzapi = new \System\WhatsApp\WuzAPIManager();
-        $messageId = $data['data']['Info']['Id'] ?? '';
-        
-        // Exemplo: O ideal é ter um $wuzapi->downloadMedia($instance['id'], $messageId)
-        // Como não temos a info exata da WuzAPI, vamos salvar e enviar
-        // Para testes, o garçom precisaria ter mandado áudio. Se o Whisper falhar, retornará erro amigável.
-        
-        $tempAudioPath = sys_get_temp_dir() . '/wuzapi_audio_' . uniqid() . '.ogg';
-        
-        // TODO: Implementar o download real do áudio da WuzAPI para $tempAudioPath
-        // file_put_contents($tempAudioPath, $audioRawData);
-        
-        // Mocking transcription (se falhar o arquivo físico, a IA retorna erro normal)
-        $transcription = $aiService->transcribeAudio($tempAudioPath);
-        
-        if ($transcription['success']) {
-            $message = $transcription['text'];
-            error_log("Wuzapi Webhook - Áudio transcrito: " . $message);
-        } else {
-            $message = "O cliente ou administrador enviou um áudio, mas eu não consegui transcrever/baixar. Diga a ele que não conseguiu entender o áudio.";
-            error_log("Wuzapi Webhook - Falha na transcrição: " . $transcription['message']);
+    $wuzapi = new \System\WhatsApp\WuzAPIManager();
+    $mediaPath = null;
+
+    if ($parsed['message_type'] === 'audio') {
+        if (!empty($parsed['inline_media'])) {
+            $mediaPath = saveInlineMediaToFile($parsed['inline_media']);
+        } elseif (!empty($parsed['media'])) {
+            $download = $wuzapi->downloadMediaToFile($instanceDbId, 'audio', $parsed['media']);
+            if (!empty($download['success'])) {
+                $mediaPath = $download['path'];
+            } else {
+                error_log('Wuzapi Webhook - Falha download áudio: ' . ($download['message'] ?? ''));
+            }
         }
-        
-        // Cleanup
-        if (file_exists($tempAudioPath)) {
-            @unlink($tempAudioPath);
+
+        if ($mediaPath && file_exists($mediaPath)) {
+            $transcription = $aiService->transcribeAudio($mediaPath);
+            if (!empty($transcription['success']) && trim($transcription['text'] ?? '') !== '') {
+                $message = trim($transcription['text']);
+                error_log('Wuzapi Webhook - Áudio transcrito: ' . substr($message, 0, 120));
+            } else {
+                $message = 'Recebi um áudio, mas não consegui transcrever. Pode repetir por texto?';
+            }
+        } else {
+            $message = 'Recebi seu áudio, mas não consegui processá-lo. Pode repetir por texto?';
+        }
+    } elseif ($parsed['message_type'] === 'image') {
+        if (!empty($parsed['inline_media'])) {
+            $mediaPath = saveInlineMediaToFile($parsed['inline_media']);
+        } elseif (!empty($parsed['media'])) {
+            $download = $wuzapi->downloadMediaToFile($instanceDbId, 'image', $parsed['media']);
+            if (!empty($download['success'])) {
+                $mediaPath = $download['path'];
+            } else {
+                error_log('Wuzapi Webhook - Falha download imagem: ' . ($download['message'] ?? ''));
+            }
+        }
+
+        if ($mediaPath && file_exists($mediaPath)) {
+            $analysis = $aiService->analyzeImageFile($mediaPath);
+            if (!empty($analysis['success'])) {
+                $message = 'O cliente enviou uma imagem.';
+                if (trim($parsed['message']) !== '') {
+                    $message .= ' Legenda: ' . trim($parsed['message']) . '.';
+                }
+                $message .= ' Conteúdo identificado na imagem: ' . $analysis['text'];
+            } else {
+                error_log('Wuzapi Webhook - Falha análise imagem: ' . ($analysis['message'] ?? ''));
+                $message = trim($parsed['message']) !== ''
+                    ? 'O cliente enviou uma imagem com a legenda: ' . trim($parsed['message'])
+                    : 'O cliente enviou uma imagem, mas não consegui analisá-la. Pode descrever por texto?';
+            }
+        } else {
+            $message = trim($parsed['message']) !== ''
+                ? 'O cliente enviou uma imagem com a legenda: ' . trim($parsed['message'])
+                : 'Recebi sua imagem, mas não consegui abri-la. Pode descrever por texto?';
         }
     }
-    
-    // Add context for AI
+
+    if ($mediaPath && file_exists($mediaPath)) {
+        @unlink($mediaPath);
+    }
+
+    $tenant = $db->fetch("SELECT nome FROM tenants WHERE id = ?", [$tenantId]);
+    $aiSystemPrompt = \System\WhatsApp\AiPromptBuilder::buildFromInstance($instance, $tenant['nome'] ?? null);
+    $ignoreStock = \System\WhatsApp\AiPromptBuilder::ignoresStock($instance);
+
     $contextData = [
         'customer_phone' => $phoneNumber,
-        'customer_name' => $cliente['nome'] ?? 'Cliente WhatsApp',
+        'customer_name' => $customerName,
         'source' => 'whatsapp',
-        'instance_id' => $instanceId,
-        'is_admin' => $isAdmin
+        'instance_id' => $parsed['instance_id'],
+        'is_admin' => (bool) $isAdmin,
+        'ai_system_prompt' => $aiSystemPrompt,
+        'ignore_stock' => $ignoreStock,
     ];
-    
+
     $aiResponse = $aiService->processWhatsAppMessage($message, $tenantId, $filialId, $contextData);
-    
-    if (!$aiResponse['success']) {
-        throw new Exception('AI processing failed: ' . ($aiResponse['error'] ?? 'Unknown error'));
+
+    if (empty($aiResponse['success'])) {
+        throw new Exception('AI processing failed: ' . ($aiResponse['error'] ?? ($aiResponse['response']['message'] ?? 'Unknown error')));
     }
-    
-    // Extract AI response message
+
     $responseMessage = $aiResponse['response']['message'] ?? $aiResponse['message'] ?? 'Desculpe, não entendi. Pode repetir?';
-    
-    error_log("Wuzapi Webhook - AI Response: " . substr($responseMessage, 0, 100) . "...");
-    
-    // Send response back via WhatsApp
-    $wuzapi = new \System\WhatsApp\WuzAPIManager();
-    // Using $instance['id'] as it expects the DB instance ID to fetch the token
-    $sendResult = $wuzapi->sendMessage($instance['id'], $phoneNumber, $responseMessage);
-    
-    if (!$sendResult['success']) {
-        error_log("Wuzapi Webhook - Failed to send response: " . ($sendResult['message'] ?? 'Unknown error'));
+
+    $sendResult = $wuzapi->sendMessage($instanceDbId, $phoneNumber, $responseMessage);
+
+    if (empty($sendResult['success'])) {
+        error_log('Wuzapi Webhook - Failed to send response: ' . ($sendResult['message'] ?? 'Unknown error'));
     }
-    
-    // Log interaction
-    $db->insert('whatsapp_messages', [
-        'instance_id' => $instanceId,
-        'phone' => $phoneNumber,
-        'message_in' => $message,
-        'message_out' => $responseMessage,
-        'tenant_id' => $tenantId,
-        'filial_id' => $filialId,
-        'processed' => true,
-        'created_at' => date('Y-m-d H:i:s')
-    ]);
-    
+
+    try {
+        $db->insert('whatsapp_messages', [
+            'instance_id' => $instanceDbId,
+            'tenant_id' => $tenantId,
+            'filial_id' => $filialId,
+            'message_id' => $parsed['message_id'] ?: null,
+            'from_number' => $phoneNumber,
+            'to_number' => preg_replace('/[^0-9]/', '', $instance['phone_number'] ?? ''),
+            'message_text' => $message,
+            'message_type' => $parsed['message_type'],
+            'status' => 'received',
+            'source' => 'whatsapp',
+            'direction' => 'inbound',
+            'metadata' => json_encode(['response' => $responseMessage]),
+        ]);
+    } catch (\Exception $logErr) {
+        error_log('Wuzapi Webhook - log insert failed: ' . $logErr->getMessage());
+    }
+
     http_response_code(200);
     echo json_encode([
         'success' => true,
         'message' => 'Message processed and response sent',
-        'phone' => $phoneNumber
+        'phone' => $phoneNumber,
+        'sent' => !empty($sendResult['success']),
     ]);
-    
 } catch (Exception $e) {
-    error_log("Wuzapi Webhook - Error: " . $e->getMessage());
-    error_log("Wuzapi Webhook - Trace: " . $e->getTraceAsString());
-    
+    error_log('Wuzapi Webhook - Error: ' . $e->getMessage());
     http_response_code(500);
-    echo json_encode([
-        'success' => false,
-        'error' => $e->getMessage()
-    ]);
+    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }
-
-
-

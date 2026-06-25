@@ -4,7 +4,8 @@ $session = \System\Session::getInstance();
 $router = \System\Router::getInstance();
 $db = \System\Database::getInstance();
 
-// Ensure tenant and filial context
+require_once __DIR__ . '/../../system/TelefoneHelper.php';
+require_once __DIR__ . '/../../system/FiadoClienteService.php';
 $context = \System\TenantHelper::ensureTenantContext();
 $tenant = $context['tenant'];
 $filial = $context['filial'];
@@ -18,6 +19,16 @@ if (!$tenant || !$filial) {
 // Get clients with fiado balance or automatic billing enabled
 $clientes = [];
 if ($tenant && $filial) {
+    // Unificar duplicados por telefone antes de exibir
+    try {
+        $unificados = \System\FiadoClienteService::unificarDuplicados($db, (int) $tenant['id']);
+        if ($unificados > 0) {
+            error_log("gestao_clientes_fiado: {$unificados} clientes fiado duplicados unificados");
+        }
+    } catch (\Exception $e) {
+        error_log('gestao_clientes_fiado unificar: ' . $e->getMessage());
+    }
+
     // ---- SINCRONIZAÇÃO AUTOMÁTICA DE FIADOS LEGADOS ----
     try {
         $legacyFiados = $db->fetchAll("
@@ -47,43 +58,62 @@ if ($tenant && $filial) {
         ", [$tenant['id']]);
 
         foreach (array_merge($legacyFiados, $legacyPedidosFiado) as $lf) {
-            $telefone = preg_replace('/[^0-9]/', '', $lf['telefone_cliente'] ?? '');
-            if (empty($telefone)) {
+            $telefone = $lf['telefone_cliente'] ?? '';
+            if (trim((string) $telefone) === '') {
                 continue;
             }
 
             $nome = $lf['nome_cliente'] ?: 'Cliente Não Identificado';
-            $cf = $db->fetch("SELECT id FROM clientes_fiado WHERE telefone = ? AND tenant_id = ?", [$telefone, $tenant['id']]);
+            $cfId = \System\FiadoClienteService::findOrCreate(
+                $db,
+                (int) $tenant['id'],
+                (int) $filial['id'],
+                $nome,
+                $telefone
+            );
 
-            if (!$cf) {
-                $cfId = $db->insert('clientes_fiado', [
-                    'nome' => $nome,
-                    'telefone' => $telefone,
-                    'tenant_id' => $tenant['id'],
-                    'filial_id' => $filial['id'],
-                    'saldo_devedor' => 0
-                ]);
-            } else {
-                $cfId = $cf['id'];
-            }
-
-            $db->insert('vendas_fiadas', [
-                'cliente_id' => $cfId,
-                'pedido_id' => $lf['pedido_id'],
-                'valor_total' => $lf['valor_pago'],
-                'status' => 'pendente',
-                'tenant_id' => $tenant['id'],
-                'filial_id' => $filial['id'],
-                'data_vencimento' => date('Y-m-d', strtotime(($lf['created_at'] ?? date('Y-m-d H:i:s')) . ' + 30 days'))
-            ]);
-
-            $db->query("UPDATE clientes_fiado SET saldo_devedor = saldo_devedor + ? WHERE id = ?", [$lf['valor_pago'], $cfId]);
+            \System\FiadoClienteService::registrarVendaFiada(
+                $db,
+                $cfId,
+                (int) $lf['pedido_id'],
+                (float) $lf['valor_pago'],
+                (int) $tenant['id'],
+                (int) $filial['id'],
+                $lf['created_at'] ?? null
+            );
         }
     } catch (\Exception $e) {
         error_log("Erro na sincronizacao de fiados: " . $e->getMessage());
     }
 
     $clientesMap = [];
+
+    $chaveTelefone = static function ($telefone) {
+        return \System\TelefoneHelper::chaveAgrupamento($telefone);
+    };
+
+    $mesclarCliente = static function (array &$map, string $key, array $cliente) {
+        if ($key === '' || !isset($map[$key])) {
+            if ($key !== '') {
+                $map[$key] = $cliente;
+            }
+            return;
+        }
+        $atual = $map[$key];
+        $map[$key]['qtd_pedidos_fiado'] = (int) ($atual['qtd_pedidos_fiado'] ?? 0) + (int) ($cliente['qtd_pedidos_fiado'] ?? 0);
+        $map[$key]['saldo_devedor'] = (float) ($atual['saldo_devedor'] ?? 0) + (float) ($cliente['saldo_devedor'] ?? 0);
+        $nomeAtual = trim((string) ($atual['nome'] ?? ''));
+        $nomeNovo = trim((string) ($cliente['nome'] ?? ''));
+        $generico = static fn($n) => $n === '' || stripos($n, 'Cliente Mesa') === 0;
+        if ($generico($nomeAtual) && !$generico($nomeNovo)) {
+            $map[$key]['nome'] = $nomeNovo;
+        }
+        if ((float) ($cliente['saldo_devedor'] ?? 0) > (float) ($atual['saldo_devedor'] ?? 0)) {
+            $map[$key]['id'] = $cliente['id'];
+            $map[$key]['origem'] = $cliente['origem'] ?? $atual['origem'];
+            $map[$key]['wpp'] = $cliente['wpp'] ?? $atual['wpp'];
+        }
+    };
 
     $clientesFiado = $db->fetchAll("
         SELECT
@@ -113,7 +143,7 @@ if ($tenant && $filial) {
         $cliente['limite_credito'] = $cliente['limite_credito'] ?? 0;
         $cliente['cobranca_automatica'] = $cliente['cobranca_automatica'] ?? false;
         $cliente['cobranca_frequencia'] = $cliente['cobranca_frequencia'] ?? 'semanal';
-        $clientesMap['cf_' . $cliente['id']] = $cliente;
+        $mesclarCliente($clientesMap, 'tel_' . $chaveTelefone($cliente['wpp'] ?? ''), $cliente);
     }
 
     $pedidosFiado = $db->fetchAll("
@@ -139,14 +169,7 @@ if ($tenant && $filial) {
     ", [$tenant['id'], $filial['id']]);
 
     foreach ($pedidosFiado as $cliente) {
-        $key = 'ug_' . $cliente['id'];
-        if (!isset($clientesMap[$key])) {
-            $clientesMap[$key] = $cliente;
-            continue;
-        }
-
-        $clientesMap[$key]['qtd_pedidos_fiado'] += (int) $cliente['qtd_pedidos_fiado'];
-        $clientesMap[$key]['saldo_devedor'] += (float) $cliente['saldo_devedor'];
+        $mesclarCliente($clientesMap, 'tel_' . $chaveTelefone($cliente['wpp'] ?? ''), $cliente);
     }
 
     $clientes = array_values($clientesMap);

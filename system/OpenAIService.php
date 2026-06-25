@@ -11,6 +11,7 @@ class OpenAIService
     private $config;
     private $db;
     private $session;
+    private $ignoreStock = false;
 
     public function __construct()
     {
@@ -24,6 +25,11 @@ class OpenAIService
         if (empty($this->apiKey)) {
             throw new Exception('OpenAI API key not configured');
         }
+    }
+
+    public function setIgnoreStock(bool $enabled): void
+    {
+        $this->ignoreStock = $enabled;
     }
 
     /**
@@ -45,9 +51,7 @@ class OpenAIService
             $systemPrompt = "Você é a IAm, a Inteligência Artificial e o cérebro integrado diretamente ao sistema de gestão deste restaurante. ";
             $systemPrompt .= "O usuário com quem você está falando é o Dono/Administrador do sistema (sua base de dados). ";
             $systemPrompt .= $this->getAdminSystemPrompt();
-                "- baixar_pagamento_fiado (data: {\"cliente_id\": ID, \"pagamentos\": [{\"valor\": 10.0, \"forma_pagamento\": \"dinheiro\"}], \"desconto_valor\": 2.50, \"destino\": \"ambos\"}). O destino pode ser 'fiado', 'pedido' ou 'ambos'. O 'cliente_id' é OBRIGATÓRIO. Se você não tiver certeza absoluta do ID (ex: só tem o nome), você DEVE executar listar_pendencias_fiado PRIMEIRO. Se o usuário não informar a forma de pagamento, PERGUNTE antes de executar.\n" .
-                "Sempre que o usuário relatar um pagamento (ex: 'o cliente pagou X'), você deve agir para BAIXAR O PAGAMENTO usando a ação baixar_pagamento_fiado. Se precisar do ID do cliente, chame listar_pendencias_fiado primeiro e, COM O RESULTADO EM MÃOS, decida o próximo passo. \n" .
-                "MUITO IMPORTANTE: Para interagir com o sistema, você deve retornar um JSON. \n" .
+            
             $messages = [];
             
             // Add chat history if available
@@ -184,6 +188,7 @@ class OpenAIService
         try {
             $isAdmin = $context['is_admin'] ?? false;
             $customerName = $context['customer_name'] ?? 'Cliente';
+            $aiSystemPrompt = trim((string) ($context['ai_system_prompt'] ?? ''));
             
             $this->tenantId = $tenantId;
             $this->filialId = $filialId;
@@ -193,14 +198,46 @@ class OpenAIService
             // Provide context about the user
             $userRole = $isAdmin ? "Administrador/Dono" : "Cliente ($customerName)";
             
+            $customerPhone = $context['customer_phone'] ?? '';
+            
             // Se for cliente e tiver dívida, passar esse contexto também (para Atendente/Fiado)
             $fiadoContext = "";
-            if (!$isAdmin) {
-                $customerPhone = $context['customer_phone'] ?? '';
-                if (!empty($customerPhone)) {
-                    $clienteFiado = $this->db->fetch("SELECT id, saldo_devedor FROM clientes_fiado WHERE telefone = ? AND tenant_id = ?", [$customerPhone, $tenantId]);
-                    if ($clienteFiado && $clienteFiado['saldo_devedor'] > 0) {
-                        $fiadoContext = " (Dívida no fiado: R$ " . number_format($clienteFiado['saldo_devedor'], 2, ',', '.') . " - ID do Cliente: " . $clienteFiado['id'] . ")";
+            if (!$isAdmin && !empty($customerPhone)) {
+                $clienteFiado = $this->db->fetch("SELECT id, saldo_devedor FROM clientes_fiado WHERE telefone = ? AND tenant_id = ?", [$customerPhone, $tenantId]);
+                if ($clienteFiado && $clienteFiado['saldo_devedor'] > 0) {
+                    $fiadoContext = " (Dívida no fiado: R$ " . number_format($clienteFiado['saldo_devedor'], 2, ',', '.') . " - ID do Cliente: " . $clienteFiado['id'] . ")";
+                }
+            }
+
+            // BUSCAR HISTÓRICO DE MENSAGENS RECENTES (MÁX 20 MENSAGENS)
+            if (!empty($customerPhone)) {
+                $historyRows = $this->db->query(
+                    "SELECT message_text, metadata FROM whatsapp_messages 
+                     WHERE from_number = ? AND tenant_id = ? 
+                     ORDER BY created_at DESC LIMIT 20", 
+                    [$customerPhone, $tenantId]
+                )->fetchAll();
+                
+                if (!empty($historyRows)) {
+                    $historyRows = array_reverse($historyRows);
+                    foreach ($historyRows as $row) {
+                        $msgText = trim($row['message_text'] ?? '');
+                        if (!empty($msgText)) {
+                            $messages[] = [
+                                'role' => 'user',
+                                'content' => $msgText
+                            ];
+                        }
+                        
+                        // Resposta da IA fica no metadata
+                        $meta = json_decode($row['metadata'] ?? '{}', true);
+                        $aiResponseText = trim($meta['response'] ?? '');
+                        if (!empty($aiResponseText)) {
+                            $messages[] = [
+                                'role' => 'assistant',
+                                'content' => $aiResponseText
+                            ];
+                        }
                     }
                 }
             }
@@ -213,6 +250,15 @@ class OpenAIService
             // Invoca o SupervisorAgent
             $supervisor = new \System\Agents\SupervisorAgent();
             $supervisor->setContext($this->tenantId, $this->filialId);
+            if ($aiSystemPrompt !== '') {
+                $supervisor->setPersonaPrompt($aiSystemPrompt);
+            }
+            if (!$isAdmin) {
+                $supervisor->setWhatsAppCustomerMode(true);
+            }
+            if (!empty($context['ignore_stock'])) {
+                $supervisor->setIgnoreStock(true);
+            }
             
             $result = $supervisor->process($messages);
             
@@ -305,6 +351,44 @@ class OpenAIService
             'name' => $fileName,
             'analysis' => $response['choices'][0]['message']['content'] ?? 'Análise não disponível'
         ];
+    }
+
+    /**
+     * Analyze image file for WhatsApp or chat attachments.
+     */
+    public function analyzeImageFile(string $filePath, ?string $prompt = null): array
+    {
+        if (!file_exists($filePath)) {
+            return ['success' => false, 'message' => 'Arquivo de imagem n??o encontrado.'];
+        }
+
+        try {
+            $base64 = base64_encode((string) file_get_contents($filePath));
+            $mimeType = mime_content_type($filePath) ?: 'image/jpeg';
+            $prompt = $prompt ?: 'Descreva esta imagem em portugu??s. Se for de produto, comanda, nota ou pagamento de restaurante, extraia nomes, quantidades e valores vis??veis.';
+
+            $response = $this->callOpenAIVision([
+                [
+                    'role' => 'user',
+                    'content' => [
+                        ['type' => 'text', 'text' => $prompt],
+                        [
+                            'type' => 'image_url',
+                            'image_url' => ['url' => "data:{$mimeType};base64,{$base64}"],
+                        ],
+                    ],
+                ],
+            ]);
+
+            $text = $response['choices'][0]['message']['content'] ?? '';
+            if ($text === '') {
+                return ['success' => false, 'message' => 'An??lise da imagem vazia'];
+            }
+
+            return ['success' => true, 'text' => $text];
+        } catch (Exception $e) {
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
     }
 
     /**
@@ -676,6 +760,8 @@ class OpenAIService
                     return $this->removeItemFromOrder($operation['data']);
                 case 'listar_produtos':
                     return $this->listarProdutos($operation['data'] ?? []);
+                case 'listar_promocoes':
+                    return $this->listarPromocoes($operation['data'] ?? []);
                 case 'listar_categorias':
                     return $this->listarCategorias($operation['data'] ?? []);
                 case 'listar_ingredientes':
@@ -935,6 +1021,13 @@ class OpenAIService
         $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
         $filialId = $this->filialId ?? $this->session->getFilialId() ?? 1;
         $usuarioId = $this->session->getUserId() ?? 1;
+
+        if (!empty($data['itens'])) {
+            $stockError = $this->validateItensEstoque($data['itens'], $tenantId, $filialId);
+            if ($stockError !== null) {
+                return $stockError;
+            }
+        }
         
         $valorTotal = 0;
         if (!empty($data['itens'])) {
@@ -990,8 +1083,16 @@ class OpenAIService
     private function addItemToOrder($data)
     {
         $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
+        $filialId = $this->filialId ?? $this->session->getFilialId() ?? 1;
         $pedidoId = $data['pedido_id'] ?? null;
         if (!$pedidoId) return ['success' => false, 'message' => 'ID do pedido não fornecido.'];
+
+        if (!empty($data['itens'])) {
+            $stockError = $this->validateItensEstoque($data['itens'], $tenantId, $filialId);
+            if ($stockError !== null) {
+                return $stockError;
+            }
+        }
         
         foreach ($data['itens'] as $item) {
             $this->db->insert('pedido_itens', [
@@ -1027,6 +1128,45 @@ class OpenAIService
         }
         
         return ['success' => true, 'message' => 'Item removido.'];
+    }
+
+    private function validateItensEstoque(array $itens, int $tenantId, int $filialId): ?array
+    {
+        if ($this->ignoreStock) {
+            return null;
+        }
+
+        foreach ($itens as $item) {
+            $produtoId = (int) ($item['id'] ?? 0);
+            $quantidade = max(1, (int) ($item['quantidade'] ?? 1));
+            if ($produtoId <= 0) {
+                continue;
+            }
+
+            $produto = $this->db->fetch(
+                "SELECT nome, estoque_atual, ativo FROM produtos WHERE id = ? AND tenant_id = ? AND filial_id = ?",
+                [$produtoId, $tenantId, $filialId]
+            );
+
+            if (!$produto) {
+                return ['success' => false, 'message' => "Produto ID {$produtoId} n??o encontrado no card??pio."];
+            }
+
+            if (isset($produto['ativo']) && !$produto['ativo']) {
+                return ['success' => false, 'message' => "O produto \"{$produto['nome']}\" est?? indispon??vel no momento."];
+            }
+
+            $estoque = (float) ($produto['estoque_atual'] ?? 0);
+            if ($estoque < $quantidade) {
+                $disp = rtrim(rtrim(number_format($estoque, 2, ',', '.'), '0'), ',');
+                return [
+                    'success' => false,
+                    'message' => "Sem estoque suficiente para \"{$produto['nome']}\" (dispon??vel: {$disp}, pedido: {$quantidade}).",
+                ];
+            }
+        }
+
+        return null;
     }
     
     private function listarPendenciasFiado($data = [])
@@ -1217,16 +1357,63 @@ class OpenAIService
         
         return ['success' => true, 'message' => $msg];
     }
+
+    private function resolveContaCaixaId(int $tenantId, int $filialId): int
+    {
+        $row = $this->db->fetch(
+            "SELECT id FROM contas_financeiras WHERE tenant_id = ? AND filial_id = ? AND tipo = 'caixa' AND ativo = true ORDER BY id ASC LIMIT 1",
+            [$tenantId, $filialId]
+        );
+        return (int)($row['id'] ?? 1);
+    }
+
+    private function resolveClienteIdParaPagamento(array $data, int $tenantId): ?int
+    {
+        if (!empty($data['cliente_id'])) {
+            return (int)$data['cliente_id'];
+        }
+
+        $nome = trim((string)($data['nome_cliente'] ?? ''));
+        if ($nome === '') {
+            return null;
+        }
+
+        $comDivida = $this->db->fetchAll(
+            "SELECT id, nome, saldo_devedor FROM clientes_fiado
+             WHERE tenant_id = ? AND saldo_devedor >= 0.01 AND nome ILIKE ?
+             ORDER BY saldo_devedor DESC, nome ASC",
+            [$tenantId, "%{$nome}%"]
+        );
+
+        if (empty($comDivida)) {
+            return null;
+        }
+
+        $nomeLower = mb_strtolower($nome);
+        $exatos = array_values(array_filter($comDivida, fn($c) => mb_strtolower(trim($c['nome'])) === $nomeLower));
+        if (count($exatos) === 1) {
+            return (int)$exatos[0]['id'];
+        }
+
+        if (count($comDivida) === 1) {
+            return (int)$comDivida[0]['id'];
+        }
+
+        return null;
+    }
     
     private function baixarPagamentoFiado($data)
     {
         $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
         $filialId = $this->filialId ?? $this->session->getFilialId() ?? 1;
-        $cId = $data['cliente_id'] ?? null;
+        $cId = $this->resolveClienteIdParaPagamento($data, $tenantId);
         
         $pagamentos = $data['pagamentos'] ?? [];
         if (empty($pagamentos) && isset($data['valor_pago'])) {
-            $pagamentos = [['valor' => (float)$data['valor_pago'], 'forma_pagamento' => 'dinheiro/pix (whatsapp)']];
+            $pagamentos = [[
+                'valor' => (float)$data['valor_pago'],
+                'forma_pagamento' => $data['forma_pagamento'] ?? 'dinheiro'
+            ]];
         }
         
         $descontoValor = (float)($data['desconto_valor'] ?? 0);
@@ -1238,7 +1425,11 @@ class OpenAIService
         }
         
         if (!$cId || ($valorTotalPago <= 0 && $descontoValor <= 0)) {
-            return ['success' => false, 'message' => "Informe o ID do cliente e os valores pagos ou desconto."];
+            $nomeHint = trim((string)($data['nome_cliente'] ?? ''));
+            if ($nomeHint !== '') {
+                return ['success' => false, 'message' => "Encontrei mais de um cliente com o nome '{$nomeHint}' ou nenhum com d??vida. Use listar_pendencias_fiado e informe o cliente_id correto."];
+            }
+            return ['success' => false, 'message' => "Informe o cliente_id (ou nome_cliente) e os valores pagos ou desconto."];
         }
         
         $cliente = $this->db->fetch("SELECT * FROM clientes_fiado WHERE id = ? AND tenant_id = ?", [$cId, $tenantId]);
@@ -1252,6 +1443,15 @@ class OpenAIService
         
         $pedidosFiado = ($destino === 'fiado' || $destino === 'ambos') ? $this->db->fetchAll($queryFiado, [$cId, $tenantId]) : [];
         $pedidosComanda = ($destino === 'pedido' || $destino === 'ambos') ? $this->db->fetchAll($queryPedido, [$usuarioGlobalId, $tenantId]) : [];
+
+        $temDividaFiado = !empty(array_filter($pedidosFiado, fn($p) => (float)$p['saldo_devedor'] > 0));
+        $temDividaComanda = !empty(array_filter($pedidosComanda, fn($p) => (float)$p['saldo_devedor'] > 0));
+        if ($valorTotalPago > 0 && !$temDividaFiado && !$temDividaComanda) {
+            return ['success' => false, 'message' => "O cliente {$cliente['nome']} (ID {$cId}) n??o possui d??vidas pendentes para receber R$ " . number_format($valorTotalPago, 2, ',', '.') . "."];
+        }
+        
+        $contaCaixaId = $this->resolveContaCaixaId($tenantId, $filialId);
+        $totalAmortizado = 0.0;
         
         // Adiciona o desconto como um pagamento virtual
         $listaAmortizacao = [];
@@ -1301,20 +1501,27 @@ class OpenAIService
                     $p['saldo_devedor'] = $novoSaldoDevedor;
                     
                     // Lança no caixa (movimentacoes_financeiras) a partir da baixa fiado
-                    if (!$pgto['is_desconto']) {
+                    if (!$pgto['is_desconto'] && $valorPagarNestaVenda > 0) {
+                        $vendaRow = $this->db->fetch("SELECT pedido_id FROM vendas_fiadas WHERE id = ?", [$p['id']]);
+                        $pedidoIdVenda = (int)($vendaRow['pedido_id'] ?? 0);
+
                         $this->db->insert('movimentacoes_financeiras', [
                             'tenant_id' => $tenantId,
                             'filial_id' => $filialId,
                             'tipo' => 'entrada',
                             'categoria_id' => 2,
+                            'conta_id' => $contaCaixaId,
                             'data_movimentacao' => date('Y-m-d'),
-                            'descricao' => "Pagamento fiado lote (IA) - Venda ID: {$p['id']} - {$pgto['forma_pagamento']}",
+                            'status' => 'pago',
+                            'forma_pagamento' => $pgto['forma_pagamento'],
+                            'descricao' => "Pagamento fiado (IA) - {$cliente['nome']} - Venda ID: {$p['id']}",
                             'valor' => $valorPagarNestaVenda,
-                            'referencia_id' => $p['id']
+                            'pedido_id' => $pedidoIdVenda ?: null
                         ]);
                     }
                     
                     $valorRestanteFiado -= $valorPagarNestaVenda;
+                    $totalAmortizado += $valorPagarNestaVenda;
                 }
                 
                 // 2. Amortiza na tabela pedido (apenas baixa de sistema, não lança no caixa de novo)
@@ -1358,11 +1565,21 @@ class OpenAIService
             $saldoFiadoAtualizado = $this->db->fetch("SELECT SUM(valor_total - valor_pago) as total FROM vendas_fiadas WHERE cliente_id = ? AND tenant_id = ? AND status IN ('pendente', 'vencido')", [$cId, $tenantId]);
             $novoSaldo = max(0, (float)($saldoFiadoAtualizado['total'] ?? 0));
             $this->db->update('clientes_fiado', ['saldo_devedor' => $novoSaldo], 'id = ?', [$cId]);
+
+            if ($valorTotalPago > 0 && $totalAmortizado <= 0) {
+                $this->db->rollBack();
+                return ['success' => false, 'message' => "Nenhum valor foi abatido da dívida de {$cliente['nome']}. Verifique o cliente e o saldo pendente."];
+            }
             
             $this->db->commit();
-            return ['success' => true, 'message' => "Transação de R$ " . number_format($valorTotalPago, 2, ',', '.') . " registrada com sucesso. Desconto aplicado: R$ " . number_format($descontoValor, 2, ',', '.') . ". Novo saldo do fiado (não inclui comandas soltas): R$ " . number_format($novoSaldo, 2, ',', '.')];
+            return ['success' => true, 'message' => "Pagamento de R$ " . number_format($totalAmortizado > 0 ? $totalAmortizado : $valorTotalPago, 2, ',', '.') . " registrado para *{$cliente['nome']}* (ID {$cId}). Desconto: R$ " . number_format($descontoValor, 2, ',', '.') . ". Novo saldo fiado: R$ " . number_format($novoSaldo, 2, ',', '.')];
         } catch (\Exception $e) {
-            $this->db->rollBack();
+            try {
+                if ($this->db->getConnection()->inTransaction()) {
+                    $this->db->rollBack();
+                }
+            } catch (\Exception $ignored) {
+            }
             return ['success' => false, 'message' => "Erro ao registrar pagamento: " . $e->getMessage()];
         }
     }
@@ -1373,6 +1590,10 @@ class OpenAIService
         $filialId = $this->filialId ?? $this->session->getFilialId() ?? 1;
         $nome = $data['produto_nome'] ?? '';
         
+        if ($this->ignoreStock) {
+            return ['success' => true, 'message' => 'O controle de estoque está desativado nas configurações. Todos os produtos são considerados disponíveis.'];
+        }
+
         if (empty($nome)) return ['success' => false, 'message' => 'Informe o nome do produto.'];
         
         $produtos = $this->db->fetchAll("SELECT id, nome, estoque_atual FROM produtos WHERE tenant_id = ? AND filial_id = ? AND nome ILIKE ? LIMIT 10", [$tenantId, $filialId, "%{$nome}%"]);
@@ -1396,6 +1617,10 @@ class OpenAIService
         $quantidade = $data['quantidade'] ?? null;
         $operacao = $data['operacao'] ?? 'adicionar';
         
+        if ($this->ignoreStock) {
+            return ['success' => false, 'message' => 'O controle de estoque está desativado nas configurações. Não é possível atualizar o estoque agora.'];
+        }
+
         if (empty($nome) || $quantidade === null) return ['success' => false, 'message' => 'Informe o nome do produto e a quantidade.'];
         
         $produtos = $this->db->fetchAll("SELECT id, nome, estoque_atual FROM produtos WHERE tenant_id = ? AND filial_id = ? AND nome ILIKE ? ORDER BY length(nome) ASC LIMIT 1", [$tenantId, $filialId, "%{$nome}%"]);
@@ -1423,15 +1648,52 @@ class OpenAIService
     {
         $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
         $filialId = $this->filialId ?? $this->session->getFilialId() ?? 1;
-        $produtos = $this->db->fetchAll("SELECT id, nome, preco_normal, estoque_atual FROM produtos WHERE tenant_id = ? AND filial_id = ? ORDER BY nome ASC", [$tenantId, $filialId]);
+        $produtos = $this->db->fetchAll("SELECT id, nome, preco_normal, preco_promocional, em_promocao, estoque_atual FROM produtos WHERE tenant_id = ? AND filial_id = ? ORDER BY nome ASC", [$tenantId, $filialId]);
         
-        if (empty($produtos)) return ['success' => true, 'message' => "Nenhum produto cadastrado."];
+        if (empty($produtos)) return ['success' => true, 'message' => "Nenhum produto cadastrado.", 'total' => 0];
         
-        $msg = "*Lista de Produtos:*\n";
+        $msg = "*Lista de Produtos (total: " . count($produtos) . "):*\n";
         foreach ($produtos as $p) {
-            $msg .= "- ID: {$p['id']} | {$p['nome']} | Preço: R$ " . number_format($p['preco_normal'], 2, ',', '.') . " | Estoque: " . ($p['estoque_atual'] ?? 0) . "\n";
+            $preco = (!empty($p['em_promocao']) && !empty($p['preco_promocional']))
+                ? 'R$ ' . number_format((float) $p['preco_promocional'], 2, ',', '.') . ' (promoção, de R$ ' . number_format((float) $p['preco_normal'], 2, ',', '.') . ')'
+                : 'R$ ' . number_format((float) $p['preco_normal'], 2, ',', '.');
+            $linha = "- ID: {$p['id']} | {$p['nome']} | Preço: {$preco}";
+            if (!$this->ignoreStock) {
+                $estoque = (float) ($p['estoque_atual'] ?? 0);
+                $linha .= ' | Estoque: ' . $estoque . ($estoque <= 0 ? ' (indisponível)' : '');
+            }
+            $msg .= $linha . "\n";
         }
-        return ['success' => true, 'message' => $msg];
+        return ['success' => true, 'message' => $msg, 'total' => count($produtos)];
+    }
+
+    private function listarPromocoes($data)
+    {
+        $tenantId = $this->tenantId ?? $this->session->getTenantId() ?? 1;
+        $filialId = $this->filialId ?? $this->session->getFilialId() ?? 1;
+
+        $produtos = $this->db->fetchAll(
+            "SELECT id, nome, preco_normal, preco_promocional, em_promocao
+             FROM produtos
+             WHERE tenant_id = ? AND filial_id = ?
+               AND em_promocao = true
+               AND COALESCE(ativo, true) = true
+             ORDER BY nome ASC",
+            [$tenantId, $filialId]
+        );
+
+        if (empty($produtos)) {
+            return ['success' => true, 'message' => 'Nenhum produto em promoção no momento.', 'total' => 0, 'produtos' => []];
+        }
+
+        $msg = '*Produtos em promoção hoje (' . count($produtos) . "):*\n";
+        foreach ($produtos as $p) {
+            $msg .= '- ID: ' . $p['id'] . ' | ' . $p['nome']
+                . ' | De R$ ' . number_format((float) $p['preco_normal'], 2, ',', '.')
+                . ' por R$ ' . number_format((float) $p['preco_promocional'], 2, ',', '.') . "\n";
+        }
+
+        return ['success' => true, 'message' => $msg, 'total' => count($produtos), 'produtos' => $produtos];
     }
 
     private function listarCategorias($data)

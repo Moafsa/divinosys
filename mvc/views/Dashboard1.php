@@ -1376,6 +1376,14 @@ if ($tenant && $filial) {
                     const pedido = data.pedido;
                     const itens = data.itens || [];
                     
+                    // Determinar tipo (mesa ou delivery)
+                    let tipoTexto = 'DELIVERY';
+                    if (pedido.idmesa && pedido.idmesa !== '999' && pedido.idmesa !== '998') {
+                        tipoTexto = `Mesa: ${pedido.idmesa}`;
+                    } else if (pedido.idmesa === '998') {
+                        tipoTexto = 'RETIRADA NO BALCÃO';
+                    }
+                    
                     let printHtml = `
                         <!DOCTYPE html>
                         <html>
@@ -1383,33 +1391,105 @@ if ($tenant && $filial) {
                             <meta charset="UTF-8">
                             <title>Cupom Fiscal - Pedido #${pedido.idpedido}</title>
                             <style>
-                                body { font-family: 'Courier New', monospace; font-size: 11px; margin: 0; padding: 8px; }
-                                .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
-                                .empresa { font-weight: bold; font-size: 13px; }
-                                .endereco { font-size: 9px; }
-                                .pedido-info { margin: 8px 0; font-size: 10px; }
-                                .item { margin: 3px 0; }
-                                .item-nome { font-weight: bold; font-size: 11px; }
-                                .item-detalhes { font-size: 10px; margin-left: 8px; }
-                                .modificacoes { margin-left: 15px; font-size: 10px; }
-                                .adicionado { color: green; }
-                                .removido { color: red; }
-                                .total { border-top: 1px dashed #000; padding-top: 8px; margin-top: 8px; font-weight: bold; font-size: 12px; }
-                                .footer { text-align: center; margin-top: 15px; font-size: 9px; }
-                                @media print { body { margin: 0; padding: 5px; font-size: 10px; } }
+                                body { 
+                                    font-family: 'Courier New', monospace; 
+                                    font-size: 16px; 
+                                    margin: 0; 
+                                    padding: 15px; 
+                                    line-height: 1.4;
+                                }
+                                .header { 
+                                    text-align: center; 
+                                    border-bottom: 2px solid #000; 
+                                    padding-bottom: 15px; 
+                                    margin-bottom: 15px; 
+                                }
+                                .empresa { 
+                                    font-weight: bold; 
+                                    font-size: 20px; 
+                                    margin-bottom: 5px;
+                                }
+                                .endereco { 
+                                    font-size: 14px; 
+                                    margin-bottom: 10px;
+                                }
+                                .pedido-info { 
+                                    margin: 15px 0; 
+                                    font-size: 16px;
+                                    font-weight: bold;
+                                }
+                                .item { 
+                                    margin: 8px 0; 
+                                    padding: 5px 0;
+                                    border-bottom: 1px dotted #ccc;
+                                }
+                                .item-nome { 
+                                    font-weight: bold; 
+                                    font-size: 18px; 
+                                    color: #000;
+                                }
+                                .item-detalhes { 
+                                    font-size: 16px; 
+                                    margin-left: 15px; 
+                                    margin-top: 5px;
+                                }
+                                .modificacoes { 
+                                    margin-left: 25px; 
+                                    font-size: 15px; 
+                                    margin-top: 8px;
+                                }
+                                .adicionado { 
+                                    color: #006400; 
+                                    font-weight: bold;
+                                }
+                                .removido { 
+                                    color: #DC143C; 
+                                    font-weight: bold;
+                                }
+                                .total { 
+                                    border-top: 2px solid #000; 
+                                    padding-top: 15px; 
+                                    margin-top: 20px; 
+                                    font-weight: bold; 
+                                    font-size: 20px;
+                                    text-align: center;
+                                }
+                                .footer { 
+                                    text-align: center; 
+                                    margin-top: 25px; 
+                                    font-size: 14px; 
+                                    font-weight: bold;
+                                }
+                                .observacao {
+                                    margin-top: 15px;
+                                    padding: 10px;
+                                    background-color: #f0f0f0;
+                                    border: 1px solid #000;
+                                    font-size: 16px;
+                                    font-weight: bold;
+                                }
+                                @media print { 
+                                    body { 
+                                        margin: 0; 
+                                        padding: 10px;
+                                        font-size: 14px;
+                                    }
+                                    .item-nome { font-size: 16px; }
+                                    .total { font-size: 18px; }
+                                }
                             </style>
                         </head>
                         <body>
                             <div class="header">
-                                <div class="empresa">DIVINO LANCHES</div>
-                                <div class="endereco">Rua das Flores, 123 - Centro</div>
-                                <div class="endereco">Tel: (11) 99999-9999</div>
+                                <div class="empresa"><?= strtoupper(htmlspecialchars($tenant["nome"] ?? "Empresa", ENT_QUOTES)) ?></div>
+                                <?= !empty($tenant["endereco"]) ? '<div class="endereco">'.htmlspecialchars($tenant["endereco"], ENT_QUOTES).'</div>' : '' ?>
+                                <?= !empty($tenant["telefone"]) ? '<div class="endereco">Tel: '.htmlspecialchars($tenant["telefone"], ENT_QUOTES).'</div>' : '' ?>
                             </div>
                             
                             <div class="pedido-info">
                                 <strong>PEDIDO #${pedido.idpedido}</strong><br>
                                 Data/Hora: ${pedido.data} ${pedido.hora_pedido}<br>
-                                ${pedido.idmesa && pedido.idmesa !== '999' ? `Mesa: ${pedido.idmesa}` : 'DELIVERY'}<br>
+                                ${tipoTexto}<br>
                                 ${pedido.cliente ? `Cliente: ${pedido.cliente}` : ''}
                                 ${pedido.telefone_cliente ? `<br>Telefone: ${pedido.telefone_cliente}` : ''}
                                 ${pedido.usuario_nome ? `<br>Atendente: ${pedido.usuario_nome}` : ''}
@@ -1419,22 +1499,42 @@ if ($tenant && $filial) {
                                 <strong>ITENS DO PEDIDO:</strong><br>`;
                     
                     itens.forEach(item => {
+                        // Processar ingredientes (podem vir como string separada por vírgula)
+                        let ingredientesCom = [];
+                        let ingredientesSem = [];
+                        
+                        if (item.ingredientes_com) {
+                            if (typeof item.ingredientes_com === 'string') {
+                                ingredientesCom = item.ingredientes_com.split(',').map(i => i.trim()).filter(i => i);
+                            } else if (Array.isArray(item.ingredientes_com)) {
+                                ingredientesCom = item.ingredientes_com;
+                            }
+                        }
+                        
+                        if (item.ingredientes_sem) {
+                            if (typeof item.ingredientes_sem === 'string') {
+                                ingredientesSem = item.ingredientes_sem.split(',').map(i => i.trim()).filter(i => i);
+                            } else if (Array.isArray(item.ingredientes_sem)) {
+                                ingredientesSem = item.ingredientes_sem;
+                            }
+                        }
+                        
                         printHtml += `
                             <div class="item">
                                 <div class="item-nome">${item.quantidade}x ${item.nome_produto || 'Produto'}</div>
-                                <div class="item-detalhes">R$ ${parseFloat(item.valor_unitario).toFixed(2).replace('.', ',')}</div>`;
+                                <div class="item-detalhes">R$ ${parseFloat(item.valor_unitario || 0).toFixed(2).replace('.', ',')}</div>`;
                         
-                        if (item.ingredientes_com && item.ingredientes_com.length > 0) {
+                        if (ingredientesCom.length > 0) {
                             printHtml += `<div class="modificacoes">`;
-                            item.ingredientes_com.forEach(ing => {
+                            ingredientesCom.forEach(ing => {
                                 printHtml += `<div class="adicionado">+ ${ing}</div>`;
                             });
                             printHtml += `</div>`;
                         }
                         
-                        if (item.ingredientes_sem && item.ingredientes_sem.length > 0) {
+                        if (ingredientesSem.length > 0) {
                             printHtml += `<div class="modificacoes">`;
-                            item.ingredientes_sem.forEach(ing => {
+                            ingredientesSem.forEach(ing => {
                                 printHtml += `<div class="removido">- ${ing}</div>`;
                             });
                             printHtml += `</div>`;
@@ -1451,15 +1551,14 @@ if ($tenant && $filial) {
                             </div>
                             
                             <div class="total">
-                                <strong>TOTAL: R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</strong>
+                                <strong>TOTAL: R$ ${parseFloat(pedido.valor_total || 0).toFixed(2).replace('.', ',')}</strong>
                             </div>
                             
-                            ${pedido.observacao ? `<div class="pedido-info"><strong>Observação:</strong> ${pedido.observacao}</div>` : ''}
+                            ${pedido.observacao ? `<div class="observacao"><strong>OBSERVAÇÃO:</strong> ${pedido.observacao}</div>` : ''}
                             
                             <div class="footer">
                                 Obrigado pela preferência!<br>
-                                Volte sempre!<br>
-                                Impresso em: ${new Date().toLocaleString('pt-BR')}
+                                Volte sempre!
                             </div>
                         </body>
                         </html>`;

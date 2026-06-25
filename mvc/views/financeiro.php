@@ -1596,20 +1596,16 @@ $contas = $db->fetchAll(
                     
                     data.pedidos.forEach(pedido => {
                         const row = document.createElement('tr');
-                        const saldoDevedorReal = parseFloat(pedido.saldo_devedor_real) || 0;
+                        const saldoFiadoPendente = parseFloat(pedido.saldo_fiado_pendente) || 0;
                         const totalPagoNaoFiado = parseFloat(pedido.total_pago_nao_fiado) || 0;
-                        const totalPagoFiado = parseFloat(pedido.total_pago_fiado) || 0;
-                        const totalPago = parseFloat(pedido.total_pago) || 0;
                         const totalDescontos = parseFloat(pedido.total_descontos || 0) || 0;
                         const valorLiquido = parseFloat(pedido.valor_total) - totalDescontos;
                         
-                        // Status baseado no status_pagamento do pedido
-                        const statusBadge = pedido.status_pagamento === 'quitado' ? 'bg-success' : 'bg-warning';
-                        const statusText = pedido.status_pagamento === 'quitado' ? 'Quitado' : 'Pendente';
+                        const statusBadge = saldoFiadoPendente <= 0.01 ? 'bg-success' : 'bg-warning';
+                        const statusText = saldoFiadoPendente <= 0.01 ? 'Quitado' : 'Pendente';
                         
-                        // Somar apenas valores FIADO de pedidos NÃO quitados ao total de recebíveis
-                        if (pedido.status_pagamento !== 'quitado') {
-                            totalRecebiveis += totalPagoFiado;
+                        if (saldoFiadoPendente > 0.01) {
+                            totalRecebiveis += saldoFiadoPendente;
                         }
                         
                         row.innerHTML = `
@@ -1622,17 +1618,21 @@ $contas = $db->fetchAll(
                                 <div>Total: R$ ${valorLiquido.toFixed(2).replace('.', ',')}</div>
                                 ${totalDescontos > 0 ? `<small class="text-muted text-decoration-line-through">R$ ${parseFloat(pedido.valor_total).toFixed(2).replace('.', ',')}</small><br><small class="text-warning">(-R$ ${totalDescontos.toFixed(2).replace('.', ',')} desconto)</small><br>` : ''}
                                 <small class="text-success">Pago Real: R$ ${totalPagoNaoFiado.toFixed(2).replace('.', ',')}</small>
-                                <small class="text-warning">Fiado: R$ ${totalPagoFiado.toFixed(2).replace('.', ',')}</small>
-                                ${saldoDevedorReal > 0 ? `<div class="text-danger">Saldo: R$ ${saldoDevedorReal.toFixed(2).replace('.', ',')}</div>` : ''}
+                                ${saldoFiadoPendente > 0.01 ? `<small class="text-warning">Fiado: R$ ${saldoFiadoPendente.toFixed(2).replace('.', ',')}</small>` : ''}
                             </td>
                             <td><span class="badge ${statusBadge}">${statusText}</span></td>
                             <td>
                                 <button class="btn btn-outline-primary btn-sm" onclick="verDetalhesPedido(${pedido.idpedido})" title="Ver Detalhes">
                                     <i class="fas fa-eye"></i>
                                 </button>
-                                <button class="btn btn-outline-success btn-sm" onclick="quitarPedidoFiado(${pedido.idpedido})" title="Quitar Saldo Fiado">
-                                    <i class="fas fa-check me-1"></i>Quitar
-                                </button>
+                                ${saldoFiadoPendente > 0.01 ? 
+                                    `<button class="btn btn-outline-success btn-sm" onclick="quitarPedidoFiado(${pedido.idpedido})" title="Quitar Fiado">
+                                        <i class="fas fa-check me-1"></i>Quitar
+                                    </button>` : 
+                                    `<button class="btn btn-outline-secondary btn-sm" disabled title="Fiado j?? quitado">
+                                        <i class="fas fa-check-circle me-1"></i>Quitado
+                                    </button>`
+                                }
                                 <button class="btn btn-outline-info btn-sm" onclick="imprimirPedido(${pedido.idpedido})" title="Imprimir">
                                     <i class="fas fa-print"></i>
                                 </button>

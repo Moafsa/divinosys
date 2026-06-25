@@ -155,30 +155,33 @@ try {
                 error_log("financeiro.php - buscar_pedidos_fiado - Total de pagamentos FIADO no banco: " . ($checkFiado['total'] ?? 0));
             }
             
-            // Filtrar apenas pedidos com saldo fiado real pendente
+            // Filtrar: só pedidos com saldo fiado pendente
             $pedidosFiltrados = [];
             foreach ($pedidos as $pedido) {
-                // Calcular saldo fiado real (fiado original - fiado quitado)
                 $fiadoOriginal = $db->fetch(
-                    "SELECT SUM(valor_pago) as total FROM pagamentos_pedido 
+                    "SELECT COALESCE(SUM(valor_pago), 0) as total FROM pagamentos_pedido 
                      WHERE pedido_id = ? AND forma_pagamento = 'FIADO' AND tenant_id = ? AND filial_id = ?",
                     [$pedido['idpedido'], $tenantId, $filialId]
                 );
-                
+
                 $fiadoQuitado = $db->fetch(
-                    "SELECT SUM(valor_pago) as total FROM pagamentos_pedido 
-                     WHERE pedido_id = ? AND forma_pagamento != 'FIADO' AND tenant_id = ? AND filial_id = ?
-                     AND descricao LIKE '%fiado%'",
+                    "SELECT COALESCE(SUM(pf.valor_pago), 0) as total
+                     FROM pagamentos_fiado pf
+                     INNER JOIN vendas_fiadas vf ON vf.id = pf.venda_fiada_id
+                     WHERE vf.pedido_id = ? AND pf.tenant_id = ? AND pf.filial_id = ?",
                     [$pedido['idpedido'], $tenantId, $filialId]
                 );
-                
-                $saldoFiadoReal = ($fiadoOriginal['total'] ?? 0) - ($fiadoQuitado['total'] ?? 0);
-                
+
+                $saldoFiadoReal = max(0, (float)($fiadoOriginal['total'] ?? 0) - (float)($fiadoQuitado['total'] ?? 0));
+
                 error_log("financeiro.php - Pedido #{$pedido['idpedido']}: Fiado Original = " . ($fiadoOriginal['total'] ?? 0) . ", Fiado Quitado = " . ($fiadoQuitado['total'] ?? 0) . ", Saldo = $saldoFiadoReal");
-                
-                // Incluir todos os pedidos que tiveram FIADO (mesmo se já quitados)
-                // O frontend mostrará o status correto
+
+                if ($saldoFiadoReal <= 0.01) {
+                    continue;
+                }
+
                 $pedido['saldo_fiado_pendente'] = $saldoFiadoReal;
+                $pedido['total_pago_nao_fiado'] = (float)($fiadoQuitado['total'] ?? 0);
                 $pedidosFiltrados[] = $pedido;
             }
             
@@ -219,13 +222,14 @@ try {
                 );
                 
                 $fiadoQuitado = $db->fetch(
-                    "SELECT SUM(valor_pago) as total FROM pagamentos_pedido 
-                     WHERE pedido_id = ? AND forma_pagamento != 'FIADO' AND tenant_id = ? AND filial_id = ?
-                     AND descricao LIKE '%fiado%'",
+                    "SELECT COALESCE(SUM(pf.valor_pago), 0) as total
+                     FROM pagamentos_fiado pf
+                     INNER JOIN vendas_fiadas vf ON vf.id = pf.venda_fiada_id
+                     WHERE vf.pedido_id = ? AND pf.tenant_id = ? AND pf.filial_id = ?",
                     [$pedido['idpedido'], $tenantId, $filialId]
                 );
                 
-                $saldoFiadoReal = ($fiadoOriginal['total'] ?? 0) - ($fiadoQuitado['total'] ?? 0);
+                $saldoFiadoReal = max(0, (float)($fiadoOriginal['total'] ?? 0) - (float)($fiadoQuitado['total'] ?? 0));
                 
                 if ($saldoFiadoReal > 0.01) {
                     $totalRecebiveis += $saldoFiadoReal;

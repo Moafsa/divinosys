@@ -102,15 +102,40 @@ if (!$pedido) {
     exit;
 }
 
-// Get pagamentos do pedido
+// Get pagamentos do pedido + quita????es do fiado (sem duplicar)
 $pagamentos = [];
 if ($tenant && $filial) {
     $pagamentos = $db->fetchAll(
         "SELECT * FROM pagamentos_pedido 
          WHERE pedido_id = ? AND tenant_id = ? AND filial_id = ?
+         AND (descricao IS NULL OR descricao NOT ILIKE '%quita????o fiado%')
          ORDER BY created_at DESC",
         [$pedidoId, $tenant['id'], $filial['id']]
     );
+
+    $pagamentosFiado = $db->fetchAll(
+        "SELECT pf.valor_pago, pf.forma_pagamento, pf.created_at, pf.observacoes AS descricao, cf.nome AS nome_cliente
+         FROM pagamentos_fiado pf
+         INNER JOIN vendas_fiadas vf ON vf.id = pf.venda_fiada_id
+         INNER JOIN clientes_fiado cf ON cf.id = vf.cliente_id
+         WHERE vf.pedido_id = ? AND pf.tenant_id = ? AND pf.filial_id = ?
+         ORDER BY pf.created_at DESC",
+        [$pedidoId, $tenant['id'], $filial['id']]
+    );
+
+    foreach ($pagamentosFiado as $pf) {
+        $pagamentos[] = [
+            'valor_pago' => $pf['valor_pago'],
+            'forma_pagamento' => strtoupper($pf['forma_pagamento']),
+            'created_at' => $pf['created_at'],
+            'nome_cliente' => $pf['nome_cliente'],
+            'descricao' => $pf['descricao'] ?: 'Quita????o fiado',
+        ];
+    }
+
+    usort($pagamentos, function ($a, $b) {
+        return strtotime($b['created_at']) <=> strtotime($a['created_at']);
+    });
 }
 
 // Get itens do pedido atual
@@ -1914,17 +1939,21 @@ if ($tenant && $filial && $pedido['idmesa']) {
                 .then(response => response.json())
                 .then(data => {
                     if (data.success && data.cliente) {
-                        // Load client data into form
-                        document.getElementById('nomeCliente').value = data.cliente.nome || '';
-                        
-                        // Load fiscal data if available
-                        if (data.cliente.cpf) {
-                            document.getElementById('clienteCpf').value = data.cliente.cpf;
+                        const nomeField = document.getElementById('nomeCliente');
+                        if (nomeField) {
+                            nomeField.value = data.cliente.nome || '';
                         }
-                        if (data.cliente.cnpj) {
-                            document.getElementById('clienteCnpj').value = data.cliente.cnpj;
+
+                        const cpfField = document.getElementById('clienteCpf');
+                        if (cpfField && data.cliente.cpf) {
+                            cpfField.value = data.cliente.cpf;
                         }
-                        
+
+                        const cnpjField = document.getElementById('clienteCnpj');
+                        if (cnpjField && data.cliente.cnpj) {
+                            cnpjField.value = data.cliente.cnpj;
+                        }
+
                         // Show success message inline
                         showInlineMessage(`✅ Cliente encontrado: ${data.cliente.nome}`, 'success');
                     } else {

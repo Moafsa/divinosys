@@ -29,7 +29,7 @@ class AtendenteAgent extends BaseAgent {
                 'function' => [
                     'name' => 'listar_clientes_geral',
                     'description' => 'Lista todos os clientes cadastrados.',
-                    'parameters' => ['type' => 'object', 'properties' => []]
+                    'parameters' => ['type' => 'object', 'properties' => (object)[]]
                 ]
             ],
             [
@@ -142,6 +142,7 @@ class AtendenteAgent extends BaseAgent {
         }
         
         $legacyService = new \System\OpenAIService();
+        $legacyService->setIgnoreStock($this->ignoreStock);
         $args['tenant_id'] = $this->tenantId;
         $args['filial_id'] = $this->filialId;
         
