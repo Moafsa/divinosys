@@ -478,6 +478,15 @@ class ClienteWhatsAppAgent extends BaseAgent {
             if (empty($pedidos)) {
                 return ['success' => true, 'message' => "Nenhum pedido ({$tipo}) encontrado para este cliente."];
             }
+
+            foreach ($pedidos as &$pedido) {
+                $itens = $this->db->fetchAll(
+                    "SELECT pi.quantidade, pi.valor_total as valor_item, p.nome as produto FROM pedido_itens pi LEFT JOIN produtos p ON pi.produto_id = p.id WHERE pi.pedido_id = ?",
+                    [$pedido['idpedido']]
+                );
+                $pedido['itens'] = $itens;
+            }
+
             return ['success' => true, 'pedidos' => $pedidos];
         }
 
