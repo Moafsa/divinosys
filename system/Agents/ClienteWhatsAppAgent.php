@@ -104,6 +104,14 @@ class ClienteWhatsAppAgent extends BaseAgent {
                     ]
                 ]
             ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'cancelar_pedido',
+                    'description' => 'Cancela o pedido atual se o cliente desistir ou pedir para cancelar.',
+                    'parameters' => ['type' => 'object', 'properties' => (object)[]]
+                ]
+            ],
         ];
     }
 
@@ -342,7 +350,21 @@ class ClienteWhatsAppAgent extends BaseAgent {
             ];
         }
 
-        return ['success' => false, 'message' => 'Ferramenta desconhecida: ' . $name];
+        if ($name === 'cancelar_pedido') {
+            $draft = $sessionSvc->getDraft($this->orderSessionId);
+            $pedidoId = $draft['pedido_id'] ?? null;
+            if ($pedidoId) {
+                $this->db->update('pedido', ['status' => 'Cancelado'], 'idpedido = ? AND tenant_id = ? AND filial_id = ?', [$pedidoId, $this->tenantId, $this->filialId]);
+            }
+            $sessionSvc->closeSession($this->orderSessionId, 'cancelled');
+            return [
+                'success' => true, 
+                'message' => 'O pedido foi cancelado com sucesso. A sessão também foi fechada.',
+                '_final_handoff_response' => 'Seu pedido foi cancelado conforme solicitado. Se precisar de mais alguma coisa no futuro, é só chamar! Até logo!'
+            ];
+        }
+
+        return ['success' => false, 'message' => "Ferramenta desconhecida: {$name}"];
     }
 
     public function runTool(string $name, array $args = []): array

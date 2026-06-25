@@ -215,6 +215,7 @@ if ($tenant && $filial) {
              AND (
                  delivery = true 
                  OR (usuario_global_id IS NOT NULL AND tipo_entrega IS NOT NULL AND tipo_entrega IN ('pickup', 'delivery'))
+                 OR idmesa IN ('998', '999')
              )
              AND status IN ('Pendente', 'Em Preparo', 'Pronto', 'Saiu para Entrega')",
             [$tenant['id'], $filial['id']]
@@ -226,6 +227,7 @@ if ($tenant && $filial) {
              AND (
                  delivery = true 
                  OR (usuario_global_id IS NOT NULL AND tipo_entrega IS NOT NULL AND tipo_entrega IN ('pickup', 'delivery'))
+                 OR idmesa IN ('998', '999')
              )
              AND data = CURRENT_DATE 
              AND status IN ('Pendente', 'Em Preparo', 'Pronto', 'Entregue', 'Saiu para Entrega', 'Finalizado')",
@@ -866,6 +868,7 @@ if ($tenant && $filial) {
                                          AND (
                                              p.delivery = true 
                                              OR (p.usuario_global_id IS NOT NULL AND p.tipo_entrega IS NOT NULL AND p.tipo_entrega IN ('pickup', 'delivery'))
+                                             OR p.idmesa IN ('998', '999')
                                          )
                                          AND p.status NOT IN ('Entregue', 'Finalizado', 'Cancelado')
                                          AND NOT (p.status = 'Entregue' AND p.status_pagamento = 'quitado')
@@ -890,6 +893,14 @@ if ($tenant && $filial) {
                                                     <?php if ($isOnlineOrder): ?>
                                                         <span class="badge bg-success" style="font-size: 0.7rem; margin-top: 2px;">
                                                             <i class="fas fa-shopping-cart me-1"></i>Cardápio Online
+                                                        </span>
+                                                    <?php elseif ($pedido['idmesa'] == '998'): ?>
+                                                        <span class="badge" style="background-color: #fd7e14; font-size: 0.7rem; margin-top: 2px;">
+                                                            <i class="fab fa-whatsapp me-1"></i>Retirada
+                                                        </span>
+                                                    <?php elseif ($pedido['idmesa'] == '999'): ?>
+                                                        <span class="badge" style="background-color: #17a2b8; font-size: 0.7rem; margin-top: 2px;">
+                                                            <i class="fab fa-whatsapp me-1"></i>Delivery
                                                         </span>
                                                     <?php endif; ?>
                                                 </div>
