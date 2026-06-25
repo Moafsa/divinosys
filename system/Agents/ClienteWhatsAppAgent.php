@@ -373,12 +373,17 @@ class ClienteWhatsAppAgent extends BaseAgent {
             }
             
             if (!$pedidoId) {
-                // Tenta achar o último pedido ativo desse cliente
-                $lastOrder = $this->db->fetch(
-                    "SELECT idpedido FROM pedido WHERE tenant_id = ? AND filial_id = ? AND cliente_telefone = ? AND status IN ('Pendente', 'Em Preparo') ORDER BY idpedido DESC LIMIT 1",
-                    [$this->tenantId, $this->filialId, $this->customerPhone]
-                );
-                $pedidoId = $lastOrder['idpedido'] ?? null;
+                // Tenta achar o último pedido ativo desse cliente com normalização de telefone
+                $variacoes = \System\TelefoneHelper::getVariacoes($this->customerPhone);
+                if (!empty($variacoes)) {
+                    $placeholders = implode(',', array_fill(0, count($variacoes), '?'));
+                    $params = array_merge([$this->tenantId, $this->filialId], $variacoes);
+                    $lastOrder = $this->db->fetch(
+                        "SELECT idpedido FROM pedido WHERE tenant_id = ? AND filial_id = ? AND REGEXP_REPLACE(COALESCE(cliente_telefone, ''), '[^0-9]', '', 'g') IN ({$placeholders}) AND status IN ('Pendente', 'Em Preparo') ORDER BY idpedido DESC LIMIT 1",
+                        $params
+                    );
+                    $pedidoId = $lastOrder['idpedido'] ?? null;
+                }
             }
 
             if ($pedidoId) {
@@ -388,7 +393,12 @@ class ClienteWhatsAppAgent extends BaseAgent {
                     [$pedidoId, $this->tenantId, $this->filialId]
                 );
                 
-                $isOwner = ($orderData && $orderData['cliente_telefone'] === $this->customerPhone);
+                $isOwner = false;
+                if ($orderData && $orderData['cliente_telefone']) {
+                    $orderPhoneClean = preg_replace('/[^0-9]/', '', $orderData['cliente_telefone']);
+                    $variacoes = \System\TelefoneHelper::getVariacoes($this->customerPhone);
+                    $isOwner = in_array($orderPhoneClean, $variacoes) || $orderPhoneClean === preg_replace('/[^0-9]/', '', $this->customerPhone);
+                }
                 $isInDraft = (($draft['pedido_id'] ?? null) == $pedidoId);
 
                 if ($isOwner || $isInDraft) {
@@ -413,9 +423,16 @@ class ClienteWhatsAppAgent extends BaseAgent {
         }
 
         if ($name === 'consultar_pedidos_cliente') {
+            $variacoes = \System\TelefoneHelper::getVariacoes($this->customerPhone);
+            if (empty($variacoes)) {
+                return ['success' => true, 'message' => 'Nenhum pedido ativo encontrado para este cliente.'];
+            }
+            $placeholders = implode(',', array_fill(0, count($variacoes), '?'));
+            $params = array_merge([$this->tenantId, $this->filialId], $variacoes);
+            
             $pedidos = $this->db->fetchAll(
-                "SELECT idpedido, data, hora_pedido, valor_total, status, idmesa FROM pedido WHERE tenant_id = ? AND filial_id = ? AND cliente_telefone = ? AND status NOT IN ('Cancelado', 'Entregue', 'Finalizado') ORDER BY idpedido DESC LIMIT 5",
-                [$this->tenantId, $this->filialId, $this->customerPhone]
+                "SELECT idpedido, data, hora_pedido, valor_total, status, idmesa FROM pedido WHERE tenant_id = ? AND filial_id = ? AND REGEXP_REPLACE(COALESCE(cliente_telefone, ''), '[^0-9]', '', 'g') IN ({$placeholders}) AND status NOT IN ('Cancelado', 'Entregue', 'Finalizado') ORDER BY idpedido DESC LIMIT 5",
+                $params
             );
             
             if (empty($pedidos)) {
